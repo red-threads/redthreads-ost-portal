@@ -1,0 +1,2280 @@
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Red Threads Estimate Portal</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --ink:#111111;
+      --muted:#6b7280;
+      --line:#111111;
+      --green:#16a34a;
+      --red:#ef4444;
+      --soft:#f3f4f6;
+      --link:#1d4ed8;
+      --btn:#2563eb;
+      --btnHover:#1e40af;
+      --btnGrey:#9ca3af;
+      --btnGreyHover:#6b7280;
+      --headerBg:#cfcfcf;
+      --headerDark:#2d2d2d;
+      --accentBlue:#0ea5e9;
+      --accentOrange:#f97316;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:Arial, sans-serif;color:var(--ink)}
+    a{color:var(--link);text-decoration:underline}
+    a:hover{color:var(--red)}
+    .wrap{max-width:1260px;margin:18px auto;padding:0 14px}
+
+    /* Sticky header */
+    .stickyHeader{
+      position:sticky;
+      top:0;
+      z-index:10002;
+      background:var(--headerBg);
+      border-bottom:2px solid #111;
+      box-shadow:0 1px 0 rgba(0,0,0,.2);
+      transition:all .2s ease;
+    }
+    .headerExpanded,
+    .headerCondensed{
+      display:grid;
+      gap:12px;
+      align-items:center;
+      padding:10px 14px;
+    }
+    .headerExpanded{
+      grid-template-columns:340px 1.2fr 0.8fr auto;
+      gap:18px;
+      align-items:center;
+    }
+    .headerCondensed{
+      grid-template-columns:auto 1fr 1fr auto;
+      display:none;
+      align-items:center;
+    }
+    .stickyHeader.condensed .headerExpanded{display:none;}
+    .stickyHeader.condensed .headerCondensed{display:grid;}
+
+    .headerLeft{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+    }
+    .headerAvatarBtn,
+    .headerBubbleBtn,
+    .headerSmallLogoBtn{
+      border:none;
+      background:transparent;
+      padding:0;
+      cursor:pointer;
+    }
+    .headerAvatarImg{
+      width:78px;
+      height:78px;
+      object-fit:contain;
+      display:block;
+    }
+    .headerSmallLogo{
+      width:46px;
+      height:46px;
+      object-fit:contain;
+      display:block;
+    }
+    .headerBubbleImg{
+      width:38px;
+      height:38px;
+      object-fit:contain;
+      display:block;
+    }
+    .headerBubbleBtn{
+      align-self:flex-start;
+      margin-top:2px;
+    }
+    .headerClient{
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+      font-weight:800;
+      font-size:17px;
+      color:#111;
+      margin-left:4px;
+    }
+    .headerClient span{
+      font-weight:800;
+    }
+    .headerDeal,
+    .headerDeadline{
+      font-weight:700;
+      font-size:14px;
+      color:#111;
+    }
+    .headerProjects{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      font-size:16px;
+    }
+    .headerProjectRow{
+      font-weight:900;
+      letter-spacing:.02em;
+      font-size:16px;
+    }
+    .headerProjectMeta{
+      font-weight:800;
+      color:#111;
+      display:inline-block;
+      margin-left:10px;
+    }
+    .headerTotals{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      font-size:18px;
+      font-weight:900;
+      text-align:left;
+      justify-self:end;
+    }
+    .headerTotals .value{
+      color:var(--green);
+      font-weight:900;
+    }
+    .headerAch{
+      font-size:12px;
+      font-weight:800;
+      color:#0f7a2c;
+    }
+    .headerFreeShip{
+      font-size:13px;
+      font-weight:900;
+      color:#dc2626;
+      display:none;
+    }
+    .headerActions{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      align-items:flex-end;
+    }
+    .headerBtn{
+      border:none;
+      border-radius:6px;
+      padding:8px 14px;
+      font-size:16px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .headerBtnGrey{
+      background:#8b939f;
+      color:#fff;
+    }
+    .headerBtnGrey:hover{background:#6b7280}
+    .headerBtnBlue{
+      background:#0ea5e9;
+      color:#fff;
+    }
+    .headerBtnBlue:hover{background:#0284c7}
+
+    .headerCondensedLeft{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .headerClientMini{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      font-weight:800;
+    }
+    .headerCondensedTotals{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      font-size:15px;
+      font-weight:900;
+      text-align:left;
+    }
+    .headerCondensedPromos{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      align-items:flex-start;
+      font-size:12px;
+      font-weight:800;
+      text-align:left;
+    }
+    .stickyHeader.condensed .headerCondensed{
+      padding:4px 10px;
+      grid-template-columns:auto 1fr 1fr auto;
+      align-items:center;
+    }
+    .stickyHeader.condensed .headerBtn{
+      padding:6px 10px;
+      font-size:14px;
+    }
+    .stickyHeader.condensed .headerCondensedTotals{
+      font-size:14px;
+    }
+    .stickyHeader.condensed .headerCondensedPromos{
+      font-size:11px;
+    }
+    .stickyHeader.condensed .headerCondensed .headerActions{
+      flex-direction:row;
+      gap:8px;
+    }
+    .stickyHeader.condensed .headerSmallLogo{
+      width:38px;
+      height:38px;
+    }
+    .stickyHeader.condensed .headerBubbleImg{
+      width:30px;
+      height:30px;
+    }
+
+    /* Intro modal */
+    .introModal{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.45);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:10005;
+      padding:20px;
+    }
+    .introModal.open{display:flex;}
+    .introCard{
+      position:relative;
+      max-width:880px;
+      width:100%;
+      background:rgba(255,255,255,.95);
+      border-radius:16px;
+      border:2px solid #111;
+      padding:26px 28px 26px 130px;
+      box-shadow:0 18px 40px rgba(0,0,0,.25);
+    }
+    .introClose{
+      position:absolute;
+      top:12px;
+      right:14px;
+      border:none;
+      background:#fff;
+      font-weight:900;
+      font-size:20px;
+      cursor:pointer;
+    }
+    .introHeader{
+      position:relative;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      margin-bottom:12px;
+    }
+    .introAvatar{
+      width:120px;
+      height:120px;
+      object-fit:contain;
+      display:block;
+      position:absolute;
+      left:-110px;
+      top:-10px;
+    }
+    .introTitle{
+      font-size:20px;
+      font-weight:900;
+      line-height:1.25;
+    }
+    .introMessage{
+      font-size:16px;
+      line-height:1.6;
+      color:#111;
+      white-space:pre-wrap;
+    }
+
+    .topRowNew{
+      display:grid;
+      grid-template-columns:1fr 1.8fr;
+      gap:14px;
+      align-items:stretch;
+      margin-bottom:10px;
+    }
+    .card{
+      border:2px solid var(--line);
+      border-radius:8px;
+      background:#fff;
+      padding:10px 12px;
+    }
+
+    .mockupBlock{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .mockupFrame{
+      position:relative;
+      border:2px solid var(--line);
+      border-radius:8px;
+      overflow:hidden;
+      height:250px;
+      background:#f8fafc;
+    }
+    .mockupFrame.clickable{cursor:zoom-in}
+    .mockupFrame.disabled{cursor:default; opacity:.7}
+    .mockupImg{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
+    .mockupEmpty{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      color:var(--muted);
+      background:#f8fafc;
+      text-align:center;
+      padding:0 10px;
+    }
+
+    .mockupControls{
+      position:absolute;
+      left:10px;
+      right:10px;
+      bottom:10px;
+      height:36px;
+      background:rgba(255,255,255,.8);
+      border-radius:999px;
+      display:grid;
+      grid-template-columns:auto 1fr auto 1fr auto;
+      align-items:center;
+      padding:0 10px;
+      gap:8px;
+    }
+    .mockupControls.hidden{display:none}
+    .mockupSlot{display:flex;align-items:center;justify-content:center;}
+    .mockupSlot.left{justify-content:flex-start}
+    .mockupSlot.right{justify-content:flex-end}
+    .mockupLabel{
+      font-size:13px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:#111;
+    }
+    .mockupBtn{
+      width:30px;height:30px;
+      border-radius:999px;
+      border:1px solid #111;
+      background:#fff;
+      font-weight:900;
+      cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .mockupBtn:active{transform:scale(0.98)}
+    .mockupBtn.hidden{display:none}
+    .mockupBtn.disabled{opacity:.5;cursor:not-allowed}
+
+    .detailsCard{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-height:250px;
+      overflow:hidden;
+    }
+    .projectHeader{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .projectTitle{
+      font-size:24px;
+      font-weight:900;
+    }
+    .projectLabel{
+      letter-spacing:.08em;
+    }
+    .revisionBtn{
+      border:none;
+      background:#ef4444;
+      color:#fff;
+      font-weight:900;
+      border-radius:6px;
+      padding:6px 10px;
+      cursor:pointer;
+      transition:transform .12s ease, background .12s ease;
+    }
+    .revisionBtn:hover{background:#dc2626}
+    .revisionBtn:active{transform:scale(0.98)}
+    .decorList{
+      font-size:18px;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .decorLine{font-weight:800;}
+    .decorLine span{font-weight:700;}
+
+    .notesBlock{
+      border-top:2px solid #d1d5db;
+      padding:8px 10px;
+      font-size:13px;
+      margin-top:auto;
+      background:#f1f5f9;
+      border-radius:6px;
+    }
+    .notesTitle{font-weight:900;margin-bottom:4px}
+
+    .lightbox{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.86);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:10050;
+    }
+    .lightbox.open{display:flex;}
+    .lightboxInner{
+      position:relative;
+      width:100%;
+      height:100%;
+    }
+    .lightboxStage{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .lightboxImgWrap{
+      width:100%;
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+    }
+    .lightboxImg{
+      max-width:95vw;
+      max-height:90vh;
+      object-fit:contain;
+      box-shadow:0 10px 30px rgba(0,0,0,.5);
+      transform:translate(0px,0px) scale(1);
+      transform-origin:center center;
+      touch-action:none;
+      cursor:default;
+      user-select:none;
+    }
+    .lightboxClose{
+      position:absolute;
+      top:18px;
+      right:20px;
+      background:none;
+      border:none;
+      color:var(--red);
+      font-size:34px;
+      font-weight:900;
+      cursor:pointer;
+      z-index:2;
+    }
+    .lightboxControls{
+      position:absolute;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:24px;
+      height:60px;
+      min-width:380px;
+      background:rgba(255,255,255,.85);
+      border-radius:999px;
+      display:grid;
+      grid-template-columns:1fr auto 1fr;
+      align-items:center;
+      padding:0 16px;
+      gap:12px;
+      z-index:2;
+      border:2px solid #111;
+    }
+    .lightboxControls.hidden{display:none}
+    .lightboxSlot{display:flex;align-items:center;justify-content:center}
+    .lightboxSlot.left{justify-content:flex-start}
+    .lightboxSlot.right{justify-content:flex-end}
+    .lightboxBtn{
+      width:42px;height:42px;
+      border-radius:999px;
+      border:1px solid #111;
+      background:#fff;
+      font-weight:900;
+      cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .lightboxBtn.hidden{display:none}
+    .zoomLabel{
+      font-size:14px;
+      font-weight:800;
+      padding:0 6px;
+      min-width:46px;
+      text-align:center;
+    }
+
+    .tableWrap{
+      border-top:2px solid #111;
+      margin-top:6px;
+      overflow:auto;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:980px;
+    }
+    thead th{
+      text-align:left;
+      font-size:20px;
+      font-weight:800;
+      padding:10px 8px;
+      border-bottom:2px solid #111;
+      white-space:nowrap;
+    }
+    thead th.sizeHead{ text-align:center; }
+    thead th.qtyHead{ text-align:center; }
+    thead th.totalHead{ text-align:right; color:var(--green); }
+
+    tbody td{
+      padding:10px 6px;
+      vertical-align:middle;
+      border-bottom:2px solid #111;
+      font-size:16px;
+    }
+
+    .pcCell{min-width:300px}
+    .pcTop{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      width:100%;
+    }
+
+    .xBtn{
+      width:22px;
+      min-width:22px;
+      text-align:left;
+      font-weight:900;
+      font-size:22px;
+      line-height:1;
+      color:#111;
+      cursor:pointer;
+      user-select:none;
+    }
+    .xBtn:hover{ color:var(--red); }
+
+    .colorInput{
+      width:100%;
+      max-width:200px;
+      padding:8px 10px;
+      border:2px solid #111;
+      font-size:16px;
+      border-radius:6px;
+      background:#fff;
+    }
+
+    .prodLink{
+      display:inline-block;
+      margin-top:6px;
+      font-size:14px;
+      font-weight:700;
+    }
+
+    .addColor{
+      display:inline-block;
+      margin-top:8px;
+      font-size:16px;
+      color:#0ea5e9;
+      text-decoration:underline;
+      cursor:pointer;
+    }
+
+    .sizeCell{ text-align:center; min-width:72px; padding:8px 4px; }
+
+    .qtyWrap{
+      position:relative;
+      display:inline-block;
+      margin:0 1px;
+    }
+    .qtyInput{
+      width:65px;
+      padding:6px 18px 6px 8px;
+      font-size:20px;
+      text-align:left;
+      border:2px solid #111;
+      border-radius:6px;
+      outline:none;
+      background:#fff;
+    }
+    .qtyInput::-webkit-outer-spin-button,
+    .qtyInput::-webkit-inner-spin-button{
+      -webkit-appearance:none;
+      margin:0;
+    }
+    .qtyInput{appearance:textfield;}
+    .qtyInput{-moz-appearance:textfield;}
+
+    .stepper{
+      position:absolute;
+      right:4px;
+      top:50%;
+      transform:translateY(-50%);
+      width:12px;
+      height:30px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      opacity:0;
+      pointer-events:none;
+    }
+    .qtyWrap:hover .stepper,
+    .qtyWrap:focus-within .stepper{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .stepBtn{
+      width:12px;height:14px;
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;
+      user-select:none;
+    }
+    .triUp, .triDown{
+      width:0;height:0;
+      border-left:5px solid transparent;
+      border-right:5px solid transparent;
+    }
+    .triUp{ border-bottom:7px solid #111; }
+    .triDown{ border-top:7px solid #111; }
+
+    .unitPrice{
+      margin-top:4px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.1;
+    }
+
+    .qtyCol{
+      text-align:center;
+      font-size:26px;
+      font-weight:800;
+      min-width:86px;
+      padding-left:4px;
+      padding-right:4px;
+    }
+    .lineTotal{
+      text-align:right;
+      font-size:26px;
+      font-weight:900;
+      color:var(--green);
+      min-width:132px;
+      padding-left:4px;
+      padding-right:4px;
+    }
+
+    .bottomRow{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:18px;
+      align-items:start;
+      margin-top:12px;
+    }
+
+    .compareCard{padding:10px 14px 12px;border-top:none;}
+    .compareTitle{
+      text-align:center;
+      color:var(--green);
+      font-size:18px;
+      font-weight:900;
+      margin:4px 0 6px;
+    }
+    .compareSubtitle{
+      text-align:center;
+      font-size:13px;
+      color:#b45309;
+      margin:0 0 10px;
+    }
+    .compareTableWrap{overflow:auto}
+    .compareTable{
+      border-collapse:collapse;
+      width:100%;
+      min-width:900px;
+    }
+    .compareTable th,.compareTable td{
+      border:1px solid #d1d5db;
+      padding:6px 8px;
+      font-size:13px;
+      text-align:center;
+      white-space:nowrap;
+    }
+    .compareTable th:first-child,.compareTable td:first-child{text-align:left;}
+    .compareTable .skuDim{color:var(--muted)}
+    .compareTable .hlCol{
+      border-left:2px solid var(--red) !important;
+      border-right:2px solid var(--red) !important;
+    }
+    .compareTable thead .hlCol{ border-top:2px solid var(--red) !important; }
+    .compareTable tbody tr:last-child .hlCol{ border-bottom:2px solid var(--red) !important; }
+
+    .tierNote{
+      display:block;
+      font-size:7px !important;
+      font-weight:700;
+      line-height:1.05;
+      margin-top:2px;
+    }
+
+    .totalsCard{
+      padding:12px 12px;
+      border-top:none;
+      text-align:right;
+      justify-self:end;
+      min-width:300px;
+      background:#f7c5a2;
+      border-radius:8px;
+      border:2px solid #111;
+    }
+    .totalsRow{
+      display:flex;
+      justify-content:flex-end;
+      gap:12px;
+      margin-top:6px;
+      font-size:14px;
+      white-space:nowrap;
+      align-items:center;
+    }
+    .totalsRow strong{font-weight:900}
+    .totalsMain{font-size:16px;font-weight:900;}
+
+    #addOnsList{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      margin-top:6px;
+      gap:2px;
+    }
+
+    .addOnRow{
+      width:100%;
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 22px 70px 18px;
+      column-gap:6px;
+      align-items:center;
+      justify-items:end;
+      margin-top:2px;
+      font-size:13px;
+      white-space:nowrap;
+    }
+    .addOnItem{margin-top:4px}
+    .addOnLabelWrap{text-align:right;justify-self:end;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .addOnLabel{font-weight:400}
+    .addOnQty{min-width:26px;text-align:right}
+    .addOnAmt{min-width:70px;text-align:right}
+    .addOnSub{display:none;}
+    .addOnRemove{
+      min-width:18px;
+      text-align:right;
+      background:none;
+      border:none;
+      color:#dc2626;
+      font-weight:900;
+      font-size:14px;
+      cursor:pointer;
+      line-height:1;
+    }
+    .addOnRemove:hover{color:#b91c1c}
+
+    .addOnReset{
+      margin-top:6px;
+      align-self:flex-end;
+      background:none;
+      border:1px solid #d1d5db;
+      color:#111;
+      font-size:12px;
+      padding:4px 8px;
+      border-radius:6px;
+      cursor:pointer;
+    }
+    .addOnReset:hover{border-color:#111}
+    .addOnReset.hidden{display:none}
+
+    .grandTotal{
+      margin-top:8px;
+      font-size:22px;
+      font-weight:900;
+    }
+    .grandTotal .value{
+      font-size:28px;
+      color:var(--green);
+      font-weight:900;
+    }
+    .turnaround{
+      margin-top:6px;
+      color:#dc2626;
+      font-size:13px;
+      font-weight:800;
+    }
+
+    .actionBtn{
+      border:none;
+      border-radius:8px;
+      padding:10px 16px;
+      font-size:16px;
+      font-weight:800;
+      cursor:pointer;
+      transition:transform .12s ease, background .12s ease, box-shadow .12s ease;
+    }
+    .actionBtn:hover{transform:translateY(-1px)}
+    .actionBtn:active{transform:translateY(0)}
+    .primaryBtn{
+      background:var(--btn);
+      color:#fff;
+      box-shadow:0 6px 16px rgba(37,99,235,.3);
+      margin-top:10px;
+    }
+    .primaryBtn:hover{background:var(--btnHover)}
+    .secondaryBtn{background:var(--btnGrey);color:#fff;}
+    .secondaryBtn:hover{background:var(--btnGreyHover)}
+
+    .actionsRow{display:none;}
+    .actionsRow .spacer{height:1px}
+
+    .modeBadge{
+      position:fixed;
+      right:16px;
+      bottom:16px;
+      background:#111;
+      color:#fff;
+      font-weight:800;
+      font-size:11px;
+      padding:6px 10px;
+      border-radius:999px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      z-index:10000;
+      opacity:.9;
+    }
+
+    .scrollTestPad{
+      height:900px;
+      background:#000;
+      margin:30px auto 40px;
+      max-width:1260px;
+      border-radius:8px;
+    }
+
+    @media (max-width:980px){
+      .topRowNew{grid-template-columns:1fr}
+      .bottomRow{grid-template-columns:1fr}
+      .actionsRow{grid-template-columns:1fr}
+      .stickyHeader .headerExpanded{display:none;}
+      .stickyHeader .headerCondensed{display:grid;}
+      .headerActions{flex-direction:row;gap:8px;}
+      .headerBtn{font-size:14px;padding:6px 10px;}
+      .headerCondensedTotals{font-size:12px;}
+    }
+    @media (min-width:981px){
+      .totalsCard{margin-top:-70px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="stickyHeader" id="stickyHeader">
+    <div class="headerExpanded" id="headerExpanded">
+      <div class="headerLeft">
+        <button class="headerAvatarBtn" id="headerAvatarBtn" type="button" aria-label="Open message">
+          <img class="headerAvatarImg" id="headerAvatarImg" alt="Sender">
+        </button>
+        <button class="headerBubbleBtn" id="headerBubbleBtn" type="button" aria-label="Open message">
+          <img class="headerBubbleImg" src="https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-03.png" alt="Message">
+        </button>
+        <div class="headerClient">
+          <span id="headerClientName"></span>
+          <span class="headerDeal" id="headerDealNum"></span>
+          <span class="headerDeadline" id="headerInHands">In-Hands Deadline: {{date}}</span>
+          <span class="headerDeadline" id="headerPlaceBy">Place your order by: {{date}}</span>
+        </div>
+      </div>
+      <div class="headerProjects">
+        <div class="headerProjectRow">
+          <span class="headerProjectLabel">PROJECT 1:</span>
+          <span id="headerProjectName"></span>
+          <span class="headerProjectMeta">Units: <span id="headerProjectUnits">0</span> &nbsp; Cost: <span id="headerProjectCost">$0.00</span></span>
+        </div>
+      </div>
+      <div class="headerTotals">
+        <div>Total of all units: <span class="value" id="headerTotalUnits">0</span></div>
+        <div>Total Pricing: <span class="value" id="headerTotalPricing">$0.00</span></div>
+        <div class="headerAch">Save 3% when you pay with ACH</div>
+        <div class="headerFreeShip" id="headerFreeShip">YOU GET FREE SHIPPING!</div>
+      </div>
+      <div class="headerActions">
+        <button class="headerBtn headerBtnGrey" type="button">Save / Share</button>
+        <button class="headerBtn headerBtnBlue" type="button">Place Order</button>
+      </div>
+    </div>
+
+    <div class="headerCondensed" id="headerCondensed">
+      <div class="headerCondensedLeft">
+        <button class="headerSmallLogoBtn" id="headerSmallLogoBtn" type="button" aria-label="Open message">
+          <img class="headerSmallLogo" src="https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-04.png" alt="Red Threads">
+        </button>
+        <button class="headerBubbleBtn" id="headerBubbleBtnMini" type="button" aria-label="Open message">
+          <img class="headerBubbleImg" src="https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-03.png" alt="Message">
+        </button>
+        <div class="headerClientMini">
+          <span id="headerClientNameMini"></span>
+          <span id="headerDealNumMini"></span>
+        </div>
+      </div>
+      <div class="headerCondensedTotals">
+        <div>Sum of all units: <span class="value" id="headerTotalUnitsMini">0</span></div>
+        <div>Sum Pricing: <span class="value" id="headerTotalPricingMini">$0.00</span></div>
+      </div>
+      <div class="headerCondensedPromos">
+        <div class="headerAch">Save 3% when you pay with ACH</div>
+        <div class="headerFreeShip" id="headerFreeShipMini">YOU GET FREE SHIPPING!</div>
+      </div>
+      <div class="headerActions">
+        <button class="headerBtn headerBtnGrey" type="button">Save / Share</button>
+        <button class="headerBtn headerBtnBlue" type="button">Place Order</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="introModal" id="introModal" aria-hidden="true">
+    <div class="introCard">
+      <button class="introClose" id="introClose" type="button">X</button>
+      <div class="introHeader">
+        <img class="introAvatar" id="introAvatar" alt="Sender">
+        <div>
+          <div class="introTitle" id="introTitle"></div>
+        </div>
+      </div>
+      <div class="introMessage" id="introMessage"></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="topRowNew" id="topRowNew">
+      <div class="mockupBlock">
+        <div class="mockupFrame" id="mockupFrame">
+          <img id="mockupImg" class="mockupImg" alt="Mockup Preview" referrerpolicy="no-referrer" draggable="false">
+          <div class="mockupEmpty" id="mockupEmpty">Mockup unavailable</div>
+          <div class="mockupControls" id="mockupControls">
+            <div class="mockupSlot left">
+              <button class="mockupBtn" id="mockupPrevBtn" type="button" aria-label="Previous image">&#9664;</button>
+            </div>
+            <div class="mockupSlot"><span class="mockupLabel">PROJECT 1</span></div>
+            <div class="mockupSlot center">
+              <button class="mockupBtn" id="mockupZoomBtn" type="button" aria-label="Open fullscreen">+</button>
+            </div>
+            <div class="mockupSlot"><span class="mockupLabel">MOCKUPS</span></div>
+            <div class="mockupSlot right">
+              <button class="mockupBtn" id="mockupNextBtn" type="button" aria-label="Next image">&#9654;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card detailsCard">
+        <div class="projectHeader">
+          <div class="projectTitle"><span class="projectLabel">PROJECT 1:</span> <span id="projectJobName"></span></div>
+          <button class="revisionBtn" type="button">Request Revision</button>
+        </div>
+        <div class="decorList" id="decorList"></div>
+        <div class="notesBlock">
+          <div class="notesTitle">Job Notes</div>
+          <div id="jobNotesText"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tableWrap">
+      <table id="mainTable">
+        <thead>
+          <tr id="headRow">
+            <th>Product Link / Color choice</th>
+            <th class="qtyHead">QTY</th>
+            <th class="totalHead">Line Total</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="bottomRow">
+      <div class="compareCard">
+        <div class="compareTitle">Compare item prices and quantity discounts. Buy in bulk and save!</div>
+        <div class="compareSubtitle" id="minMsg"></div>
+        <div class="compareTableWrap">
+          <table class="compareTable" id="compareTable"></table>
+        </div>
+      </div>
+
+      <div class="totalsCard">
+        <div id="addOnsList"></div>
+        <button class="addOnReset hidden" id="addOnsResetBtn" type="button">Restore add-ons</button>
+
+        <div class="turnaround" id="turnaroundVal"></div>
+
+        <div class="totalsRow totalsMain">
+          <strong>Totals:</strong>
+          <span><span id="itemsTotalVal">0</span> units</span>
+          <span id="orderTotalVal">$0.00</span>
+        </div>
+
+        <div class="totalsRow grandTotal">
+          <strong>Job Total:</strong>
+          <span class="value" id="grandTotalVal">$0.00</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="scrollTestPad" aria-hidden="true"></div>
+
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <div class="lightboxInner">
+      <button class="lightboxClose" id="lightboxClose" type="button">X</button>
+      <div class="lightboxStage" id="lightboxStage">
+        <div class="lightboxImgWrap" id="lightboxImgWrap">
+          <img id="lightboxImg" class="lightboxImg" alt="Mockup Fullscreen" referrerpolicy="no-referrer" draggable="false">
+        </div>
+        <div class="lightboxControls" id="lightboxControls">
+          <div class="lightboxSlot left">
+            <button class="lightboxBtn" id="lightboxPrevBtn" type="button" aria-label="Previous image">&#9664;</button>
+          </div>
+          <div class="lightboxSlot center">
+            <button class="lightboxBtn" id="zoomOutBtn" type="button" aria-label="Zoom out">-</button>
+            <span class="zoomLabel" id="zoomLabel">1x</span>
+            <button class="lightboxBtn" id="zoomInBtn" type="button" aria-label="Zoom in">+</button>
+          </div>
+          <div class="lightboxSlot right">
+            <button class="lightboxBtn" id="lightboxNextBtn" type="button" aria-label="Next image">&#9654;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modeBadge" id="modeBadge">CLIENT VIEW</div>
+
+<script>
+  const VM = JSON.parse(<?!= JSON.stringify(JSON.stringify(VM)) ?>);
+
+  const SENDER_IMAGES = {
+    josiah: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png',
+    navia: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES_NAVIA.png',
+    tyler: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png',
+    caleb: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png',
+    tommy: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png'
+  };
+
+  function safeJsonParse(maybeJson, fallback) {
+    try {
+      if (maybeJson == null) return fallback;
+      if (typeof maybeJson === 'object') return maybeJson;
+      const s = String(maybeJson).trim();
+      if (!s) return fallback;
+      return JSON.parse(s);
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function toNumber(x, d=0){
+    const n = Number(x);
+    return Number.isFinite(n) ? n : d;
+  }
+  function money(n){
+    const v = toNumber(n, 0);
+    return v.toLocaleString(undefined, {style:'currency', currency:'USD'});
+  }
+  function clampInt(x){
+    const n = parseInt(String(x||'0'), 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  function escapeHtml(s){
+    return String(s||'')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+  function formatDateShort(v){
+    if (!v) return '--';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    return d.toLocaleDateString(undefined, {year:'numeric', month:'2-digit', day:'2-digit'});
+  }
+
+  function extractDriveId(url){
+    if (!url) return '';
+    const s = String(url);
+    let m = s.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    m = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    return '';
+  }
+
+  function normalizeFileId(input){
+    const s = String(input || '').trim();
+    if (!s) return '';
+    if (s.indexOf('http') === 0) {
+      return extractDriveId(s) || '';
+    }
+    return s;
+  }
+
+  function buildDriveCandidatesFromId(fileId){
+    const id = normalizeFileId(fileId);
+    if (!id) return [];
+    const enc = encodeURIComponent(id);
+    return [
+      'https://lh3.googleusercontent.com/d/' + enc,
+      'https://drive.usercontent.google.com/download?id=' + enc + '&export=view',
+      'https://drive.google.com/uc?export=view&id=' + enc
+    ];
+  }
+
+  function loadImageWithFallback(imgEl, urls, onSuccess, onFail){
+    const list = (urls || []).filter(Boolean);
+    if (!list.length){
+      if (onFail) onFail();
+      return;
+    }
+    let i = 0;
+    const tryNext = () => {
+      if (i >= list.length){
+        if (onFail) onFail();
+        return;
+      }
+      const url = list[i++];
+      imgEl.onload = () => { if (onSuccess) onSuccess(url); };
+      imgEl.onerror = () => { tryNext(); };
+      imgEl.referrerPolicy = 'no-referrer';
+      imgEl.src = url;
+    };
+    tryNext();
+  }
+
+  const SNAPSHOT = safeJsonParse(VM.snapshot, {});
+  const MAX_COLORWAYS = toNumber(SNAPSHOT.maxColorwaysPerItem, 6);
+
+  function normalizeItems(snapshot){
+    const items = (snapshot && Array.isArray(snapshot.items)) ? snapshot.items : [];
+    return items.map((it, idx) => {
+      const out = Object.assign({}, it);
+      out.lineId = toNumber(out.lineId, idx+1);
+      out.garmentUrl = out.garmentUrl || '';
+      out.garmentName = out.garmentName || out.title || 'Item ' + (out.lineId);
+      out.skuKey = out.skuKey || it.skuKey || '';
+      out.decorations = Array.isArray(out.decorations) ? out.decorations : [];
+      out.notes = out.notes || '';
+
+      out.availableSizes = safeJsonParse(out.availableSizesJson, out.availableSizes || []);
+      out.priceTiers = safeJsonParse(out.priceTiersJson, out.priceTiers || []);
+      out.colors = safeJsonParse(out.colorsJson, out.colors || []);
+
+      out.upchargeBySize = safeJsonParse(out.upchargeBySizeJson, out.upchargeBySize || {});
+      out.printedUnitPriceByTierBySize = safeJsonParse(out.printedUnitPriceByTierBySizeJson, out.printedUnitPriceByTierBySize || {});
+
+      out.baseSelectedSize = String(out.baseSelectedSize || '').trim() || (out.availableSizes[0] || '');
+      out.estimatedQty = toNumber(out.estimatedQty, 0);
+
+      out.colorways = (Array.isArray(out.colors) && out.colors.length)
+        ? out.colors.slice(0, MAX_COLORWAYS).map(c => ({ name: String(c||'').trim(), itemLineId: out.lineId }))
+        : [{ name:'', itemLineId: out.lineId }];
+
+      return out;
+    });
+  }
+
+  const ITEMS = normalizeItems(SNAPSHOT);
+
+  function getGlobalSizes(){
+    const first = ITEMS[0] ? ITEMS[0].availableSizes : [];
+    if (first && first.length) return first;
+    const set = new Set();
+    ITEMS.forEach(it => (it.availableSizes||[]).forEach(s => set.add(s)));
+    return Array.from(set);
+  }
+  const GLOBAL_SIZES = getGlobalSizes();
+
+  function tierForQty(qty, tiers){
+    const t = (Array.isArray(tiers) ? tiers : [])
+      .map(x => toNumber(x, NaN))
+      .filter(Number.isFinite)
+      .sort((a,b)=>a-b);
+
+    if (!t.length) return null;
+
+    const q = toNumber(qty, 0);
+    if (q <= 0) return String(t[0]);
+    if (q < t[0]) return String(t[0]);
+
+    let chosen = t[0];
+    for (const v of t){
+      if (q >= v) chosen = v;
+      else break;
+    }
+    return String(chosen);
+  }
+
+  function unitPriceFor(item, tierKey, size){
+    if (!tierKey) return null;
+    const row = (item.printedUnitPriceByTierBySize || {})[tierKey];
+    if (!row) return null;
+    const v = row[size];
+    return (v == null) ? null : toNumber(v, null);
+  }
+
+  function normalizeAddOns(raw){
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      const parsed = safeJsonParse(raw, []);
+      return normalizeAddOns(parsed);
+    }
+    if (typeof raw === 'object') {
+      return Object.keys(raw).map(k => ({ name: k, qty: 1, price: raw[k] }));
+    }
+    return [];
+  }
+  const ADDONS = normalizeAddOns(VM.addOns).map((a, idx) => Object.assign({ __idx: idx }, a));
+  const REMOVED_ADDONS = new Set();
+  let ADDON_TOTAL = 0;
+
+  function isPortalDisplay(a){
+    const v = a ? a.portal_display : false;
+    return v === true || String(v).toLowerCase() === 'true';
+  }
+
+  function getAddOnLabel(a){
+    return String(a.invoice_label || a.fee_name || a.name || a.title || a.fee_key || '').trim();
+  }
+
+  function isRush(a){
+    const feeType = String(a.fee_type || '').toLowerCase();
+    const feeKey = String(a.fee_key || '').toUpperCase();
+    return feeType === 'percent' || feeKey.startsWith('RUSH');
+  }
+
+  function computeRush(addOn, orderTotal){
+    const pct = Math.max(0, Number(addOn.percent_rate || 0));
+    const min = Math.max(0, Number(addOn.min_amount || 0));
+    const calc = orderTotal * pct;
+    return Math.round(Math.max(min, calc) * 100) / 100;
+  }
+
+  function rushRuleText(a){
+    const pct = Math.max(0, Number(a.percent_rate || 0));
+    const min = Math.max(0, Number(a.min_amount || 0));
+    const pctStr = (pct * 100).toFixed(0).replace(/\.0$/, '') + '%';
+    return money(min) + ' - ' + pctStr + ' of order - whichever is greater';
+  }
+
+  function normalizePortalMode(v){
+    const s = String(v || '').trim().toLowerCase();
+    return (s === 'client' || s === 'team') ? s : '';
+  }
+  const urlMode = normalizePortalMode(new URLSearchParams(window.location.search).get('mode'));
+  const PORTAL_MODE = urlMode || normalizePortalMode(VM.portalMode) || 'client';
+
+  function getSenderAvatarUrl(){
+    const name = String(VM.sentBy || '').trim().toLowerCase();
+    if (!name) return SENDER_IMAGES.josiah;
+    if (SENDER_IMAGES[name]) return SENDER_IMAGES[name];
+    if (name.includes('navia')) return SENDER_IMAGES.navia;
+    return SENDER_IMAGES.josiah;
+  }
+  function getSenderName(){
+    const raw = String(VM.sentBy || '').trim();
+    return raw || 'Josiah';
+  }
+
+  function setHeaderDetails(){
+    const clientName = (VM.clientName || '--');
+    const orderNum = (VM.orderNumber || '--');
+    const jobName = (VM.jobName || '--');
+
+    const headerClientName = document.getElementById('headerClientName');
+    const headerDealNum = document.getElementById('headerDealNum');
+    const headerClientNameMini = document.getElementById('headerClientNameMini');
+    const headerDealNumMini = document.getElementById('headerDealNumMini');
+
+    if (headerClientName) headerClientName.textContent = clientName;
+    if (headerDealNum) headerDealNum.textContent = 'Job # ' + orderNum;
+    if (headerClientNameMini) headerClientNameMini.textContent = clientName;
+    if (headerDealNumMini) headerDealNumMini.textContent = 'Job # ' + orderNum;
+
+    const projectNameEl = document.getElementById('projectJobName');
+    const headerProjectName = document.getElementById('headerProjectName');
+    if (projectNameEl) projectNameEl.textContent = jobName;
+    if (headerProjectName) headerProjectName.textContent = jobName;
+
+    const avatarUrl = getSenderAvatarUrl();
+    const avatarImg = document.getElementById('headerAvatarImg');
+    const introAvatar = document.getElementById('introAvatar');
+    if (avatarImg) avatarImg.src = avatarUrl;
+    if (introAvatar) introAvatar.src = avatarUrl;
+  }
+
+  function updateHeaderTotals(orderQty, grandTotal){
+    const totalUnits = document.getElementById('headerTotalUnits');
+    const totalPricing = document.getElementById('headerTotalPricing');
+    const totalUnitsMini = document.getElementById('headerTotalUnitsMini');
+    const totalPricingMini = document.getElementById('headerTotalPricingMini');
+
+    if (totalUnits) totalUnits.textContent = String(orderQty);
+    if (totalPricing) totalPricing.textContent = money(grandTotal);
+    if (totalUnitsMini) totalUnitsMini.textContent = String(orderQty);
+    if (totalPricingMini) totalPricingMini.textContent = money(grandTotal);
+
+    const projectUnits = document.getElementById('headerProjectUnits');
+    const projectCost = document.getElementById('headerProjectCost');
+    if (projectUnits) projectUnits.textContent = String(orderQty);
+    if (projectCost) projectCost.textContent = money(grandTotal);
+
+    const qualifies = grandTotal >= 500;
+    const freeShip = document.getElementById('headerFreeShip');
+    const freeShipMini = document.getElementById('headerFreeShipMini');
+    if (freeShip) freeShip.style.display = qualifies ? 'block' : 'none';
+    if (freeShipMini) freeShipMini.style.display = qualifies ? 'block' : 'none';
+  }
+
+  function renderModeBadge(){
+    const badge = document.getElementById('modeBadge');
+    if (!badge) return;
+    badge.textContent = (PORTAL_MODE === 'team') ? 'TEAM VIEW' : 'CLIENT VIEW';
+  }
+
+  function buildHead(){
+    const headRow = document.getElementById('headRow');
+    while (headRow.children.length > 3) headRow.removeChild(headRow.children[1]);
+
+    const qtyTh = headRow.querySelector('.qtyHead');
+    GLOBAL_SIZES.forEach(sz => {
+      const th = document.createElement('th');
+      th.className = 'sizeHead';
+      th.textContent = String(sz);
+      th.style.textAlign = 'center';
+      headRow.insertBefore(th, qtyTh);
+    });
+  }
+
+  let activeItemLineId = (ITEMS[0] ? ITEMS[0].lineId : 0);
+  const ROWS = new Map();
+  function rowKey(itemLineId, rowIndex){ return itemLineId + '::' + rowIndex; }
+
+  function qtyForRow(state){
+    let s = 0;
+    GLOBAL_SIZES.forEach(sz => { s += clampInt(state.sizeQty[sz]); });
+    return s;
+  }
+  function qtyForItem(itemLineId){
+    let total = 0;
+    [...ROWS.values()].forEach(st => {
+      if (st.itemLineId === itemLineId) total += qtyForRow(st);
+    });
+    return total;
+  }
+  function lineTotalForRow(item, rowState, tierKey){
+    let total = 0;
+    GLOBAL_SIZES.forEach(sz => {
+      const q = clampInt(rowState.sizeQty[sz]);
+      if (q <= 0) return;
+      const unit = unitPriceFor(item, tierKey, sz);
+      if (unit == null) return;
+      total += q * unit;
+    });
+    return total;
+  }
+
+  function setActiveItem(lineId){
+    activeItemLineId = lineId;
+    renderTopPanels();
+  }
+
+  // Mockup carousel (row-level only)
+  const MOCKUP_IDS = [
+    normalizeFileId(VM.previewMockupFileId),
+    normalizeFileId(VM.artMockupFileId),
+    normalizeFileId(VM.garmentMockupFileId)
+  ].filter(Boolean);
+
+  let mockupIndex = 0;
+  const FAILED_MOCKUP_IDS = new Set();
+
+  const mockupFrame = document.getElementById('mockupFrame');
+  const mockupImg = document.getElementById('mockupImg');
+  const mockupEmpty = document.getElementById('mockupEmpty');
+  const mockupControls = document.getElementById('mockupControls');
+  const mockupPrevBtn = document.getElementById('mockupPrevBtn');
+  const mockupNextBtn = document.getElementById('mockupNextBtn');
+  const mockupZoomBtn = document.getElementById('mockupZoomBtn');
+
+  function getAvailableMockupIds(){
+    return MOCKUP_IDS.filter(id => id && !FAILED_MOCKUP_IDS.has(id));
+  }
+
+  function findNextIndex(start, dir){
+    if (!MOCKUP_IDS.length) return -1;
+    for (let i = 1; i <= MOCKUP_IDS.length; i++){
+      const idx = (start + dir * i + MOCKUP_IDS.length) % MOCKUP_IDS.length;
+      const id = MOCKUP_IDS[idx];
+      if (id && !FAILED_MOCKUP_IDS.has(id)) return idx;
+    }
+    return -1;
+  }
+
+  function updateMockupControls(){
+    const availableCount = getAvailableMockupIds().length;
+    mockupControls.classList.remove('hidden');
+    const showArrows = availableCount > 1;
+    mockupPrevBtn.classList.toggle('hidden', !showArrows);
+    mockupNextBtn.classList.toggle('hidden', !showArrows);
+    if (availableCount <= 0){
+      mockupZoomBtn.classList.add('disabled');
+    } else {
+      mockupZoomBtn.classList.remove('disabled');
+    }
+  }
+
+  function showMockupUnavailable(){
+    mockupImg.removeAttribute('src');
+    mockupImg.style.display = 'none';
+    mockupEmpty.style.display = 'flex';
+    mockupFrame.classList.add('disabled');
+    mockupFrame.classList.remove('clickable');
+    updateMockupControls();
+  }
+
+  function loadPreviewByIndex(idx){
+    if (!MOCKUP_IDS.length){
+      showMockupUnavailable();
+      return;
+    }
+    const id = MOCKUP_IDS[idx];
+    if (!id){
+      showMockupUnavailable();
+      return;
+    }
+
+    const candidates = buildDriveCandidatesFromId(id);
+    loadImageWithFallback(
+      mockupImg,
+      candidates,
+      () => {
+        mockupImg.style.display = 'block';
+        mockupEmpty.style.display = 'none';
+        mockupFrame.classList.remove('disabled');
+        mockupFrame.classList.add('clickable');
+        updateMockupControls();
+      },
+      () => {
+        FAILED_MOCKUP_IDS.add(id);
+        const next = findNextIndex(idx, 1);
+        if (next === -1){
+          showMockupUnavailable();
+        } else {
+          mockupIndex = next;
+          loadPreviewByIndex(mockupIndex);
+          if (lightbox.classList.contains('open')) loadLightboxByIndex(mockupIndex);
+        }
+      }
+    );
+  }
+
+  function stepMockup(dir){
+    const next = findNextIndex(mockupIndex, dir);
+    if (next === -1) return;
+    mockupIndex = next;
+    loadPreviewByIndex(mockupIndex);
+    if (lightbox.classList.contains('open')) loadLightboxByIndex(mockupIndex);
+  }
+
+  function initMockups(){
+    if (!MOCKUP_IDS.length){
+      showMockupUnavailable();
+      return;
+    }
+    mockupIndex = 0;
+    loadPreviewByIndex(mockupIndex);
+  }
+
+  function formatDecorationLine(d, idx){
+    const label = 'Deco ' + (idx + 1) + ': ';
+    if (d == null) return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
+    if (typeof d === 'string'){
+      const cleaned = String(d).replace(/\s*\n\s*/g, ' ').trim();
+      if (!cleaned) return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
+      return label + cleaned;
+    }
+    if (typeof d === 'object'){
+      const type = d.type || d.decoType || d.decorationType || d.deco_type || '';
+      const loc = d.location || d.decoLocation || d.deco_location || '';
+      const size = d.size || d.decoSize || d.deco_size || '';
+      const colors = d.colors || d.stitches || d.colorsStitches || d.colors_stitches || '';
+      const parts = [type, loc, size, colors].map(x => String(x || '').trim()).filter(Boolean);
+      if (!parts.length) return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
+      return label + parts.join(', ');
+    }
+    return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
+  }
+
+  function renderTopPanels(){
+    const item = ITEMS.find(x => x.lineId === activeItemLineId) || ITEMS[0];
+    if (!item) return;
+
+    const decorList = document.getElementById('decorList');
+    decorList.innerHTML = '';
+    const decos = Array.isArray(item.decorations) ? item.decorations.filter(Boolean) : [];
+    const decoSet = decos.length ? decos.slice(0,4) : [null];
+
+    decoSet.forEach((d, i) => {
+      const line = document.createElement('div');
+      line.className = 'decorLine';
+      line.textContent = formatDecorationLine(d, i);
+      decorList.appendChild(line);
+    });
+
+    document.getElementById('jobNotesText').textContent = (VM.jobNotes || '--');
+  }
+
+  function buildBody(){
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+
+    ITEMS.forEach(item => {
+      item.colorways.forEach((cw, idx) => {
+        const key = rowKey(item.lineId, idx);
+
+        if (!ROWS.has(key)){
+          const sizeQty = {};
+          GLOBAL_SIZES.forEach(sz => sizeQty[sz] = 0);
+          ROWS.set(key, { itemLineId: item.lineId, colorName: cw.name || '', sizeQty: sizeQty });
+        }
+
+        const st = ROWS.get(key);
+
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-rowkey', key);
+        tr.addEventListener('click', () => { setActiveItem(item.lineId); });
+
+        const tdPC = document.createElement('td');
+        tdPC.className = 'pcCell';
+
+        const top = document.createElement('div');
+        top.className = 'pcTop';
+
+        const x = document.createElement('div');
+        x.className = 'xBtn';
+        x.textContent = 'X';
+        x.title = 'Remove this color row';
+        x.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          removeColorRow(item.lineId, idx);
+        });
+        top.appendChild(x);
+
+        const input = document.createElement('input');
+        input.className = 'colorInput';
+        input.type = 'text';
+        input.value = st.colorName || '';
+        input.placeholder = 'Enter exact color name';
+        input.addEventListener('input', () => { st.colorName = input.value; });
+        if (VM.mode === 'view') input.disabled = true;
+        top.appendChild(input);
+
+        tdPC.appendChild(top);
+
+        const a = document.createElement('a');
+        a.className = 'prodLink';
+        a.href = item.garmentUrl || '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
+        const sku = (VM.skuKey || item.skuKey || '').trim();
+        a.textContent = sku ? (sku + ' ' + item.garmentName) : item.garmentName;
+        tdPC.appendChild(a);
+
+        tr.appendChild(tdPC);
+
+        GLOBAL_SIZES.forEach(sz => {
+          const td = document.createElement('td');
+          td.className = 'sizeCell';
+
+          const wrap = document.createElement('div');
+          wrap.className = 'qtyWrap';
+
+          const inp = document.createElement('input');
+          inp.className = 'qtyInput';
+          inp.type = 'text';
+          inp.inputMode = 'numeric';
+          inp.pattern = '[0-9]*';
+          inp.value = String(st.sizeQty[sz] || 0);
+          if (VM.mode === 'view') inp.disabled = true;
+
+          inp.addEventListener('input', () => {
+            const cleaned = String(inp.value||'').replace(/[^\d]/g,'');
+            const n = cleaned ? parseInt(cleaned,10) : 0;
+            st.sizeQty[sz] = Number.isFinite(n) && n > 0 ? n : 0;
+            inp.value = String(st.sizeQty[sz]);
+            recalcAll();
+          });
+
+          wrap.appendChild(inp);
+
+          const step = document.createElement('div');
+          step.className = 'stepper';
+
+          const up = document.createElement('div');
+          up.className = 'stepBtn';
+          up.innerHTML = '<div class="triUp"></div>';
+          up.addEventListener('mousedown', (ev) => { ev.preventDefault(); bump(st, sz, +1, inp); });
+
+          const dn = document.createElement('div');
+          dn.className = 'stepBtn';
+          dn.innerHTML = '<div class="triDown"></div>';
+          dn.addEventListener('mousedown', (ev) => { ev.preventDefault(); bump(st, sz, -1, inp); });
+
+          step.appendChild(up);
+          step.appendChild(dn);
+          wrap.appendChild(step);
+
+          td.appendChild(wrap);
+
+          const upTxt = document.createElement('div');
+          upTxt.className = 'unitPrice';
+          upTxt.setAttribute('data-unitprice', key + '::' + sz);
+          upTxt.textContent = '';
+          td.appendChild(upTxt);
+
+          tr.appendChild(td);
+        });
+
+        const tdQty = document.createElement('td');
+        tdQty.className = 'qtyCol';
+        tdQty.setAttribute('data-qty', key);
+        tdQty.textContent = '0';
+        tr.appendChild(tdQty);
+
+        const tdTotal = document.createElement('td');
+        tdTotal.className = 'lineTotal';
+        tdTotal.setAttribute('data-total', key);
+        tdTotal.textContent = '$0.00';
+        tr.appendChild(tdTotal);
+
+        tbody.appendChild(tr);
+
+        if (idx === item.colorways.length - 1) {
+          const trAdd = document.createElement('tr');
+          const tdAdd = document.createElement('td');
+          tdAdd.colSpan = 1 + GLOBAL_SIZES.length + 2;
+          tdAdd.style.borderBottom = 'none';
+          tdAdd.style.padding = '8px 6px';
+
+          const add = document.createElement('span');
+          add.className = 'addColor';
+          add.textContent = 'Add another color';
+          add.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            addColorRow(item.lineId);
+          });
+
+          tdAdd.appendChild(add);
+          trAdd.appendChild(tdAdd);
+          tbody.appendChild(trAdd);
+        }
+      });
+    });
+
+    enforceMinRows();
+  }
+
+  function bump(st, sz, delta, inpEl){
+    const cur = clampInt(st.sizeQty[sz]);
+    const next = Math.max(0, cur + delta);
+    st.sizeQty[sz] = next;
+    inpEl.value = String(next);
+    recalcAll();
+  }
+
+  function enforceMinRows(){
+    ITEMS.forEach(item => {
+      if (item.colorways.length <= 1){
+        const key = rowKey(item.lineId, 0);
+        const tr = document.querySelector('tr[data-rowkey="' + key.replace(/"/g,'\\"') + '"]');
+        if (tr){
+          const x = tr.querySelector('.xBtn');
+          if (x){
+            x.style.opacity = '0.25';
+            x.style.cursor = 'not-allowed';
+            x.onclick = null;
+          }
+        }
+      }
+    });
+  }
+
+  function addColorRow(itemLineId){
+    const item = ITEMS.find(x => x.lineId === itemLineId);
+    if (!item) return;
+    if (item.colorways.length >= MAX_COLORWAYS) return;
+    item.colorways.push({ name:'', itemLineId: itemLineId });
+    buildBody();
+    recalcAll();
+  }
+
+  function snapshotRowsFromDom(itemLineId){
+    const rows = [];
+    document.querySelectorAll('tr[data-rowkey]').forEach(tr => {
+      const k = tr.getAttribute('data-rowkey');
+      const lid = toNumber(k.split('::')[0], 0);
+      if (lid !== itemLineId) return;
+
+      const sizeQty = {};
+      GLOBAL_SIZES.forEach(sz => {
+        const unitEl = tr.querySelector('.unitPrice[data-unitprice="' + (k+'::'+sz).replace(/"/g,'\\"') + '"]');
+        const td = unitEl ? unitEl.parentElement : null;
+        const q = td ? td.querySelector('input.qtyInput') : null;
+        sizeQty[sz] = q ? clampInt(q.value) : 0;
+      });
+
+      const colorInp = tr.querySelector('.colorInput');
+      rows.push({ colorName: colorInp ? colorInp.value : '', sizeQty: sizeQty });
+    });
+
+    const item = ITEMS.find(x => x.lineId === itemLineId);
+    if (item) item.__rowsSnapshot = rows;
+  }
+
+  function rebuildRowsForItem(itemLineId){
+    const item = ITEMS.find(x => x.lineId === itemLineId);
+    if (!item) return;
+    const snap = Array.isArray(item.__rowsSnapshot) ? item.__rowsSnapshot : [];
+
+    [...ROWS.keys()].forEach(k => {
+      const lid = toNumber(k.split('::')[0],0);
+      if (lid === itemLineId) ROWS.delete(k);
+    });
+
+    item.colorways.forEach((cw, idx) => {
+      const k = rowKey(itemLineId, idx);
+      const sizeQty = {};
+      GLOBAL_SIZES.forEach(sz => sizeQty[sz] = 0);
+      const src = snap[idx] || {};
+      ROWS.set(k, {
+        itemLineId: itemLineId,
+        colorName: src.colorName != null ? src.colorName : (cw.name || ''),
+        sizeQty: Object.assign(sizeQty, src.sizeQty || {})
+      });
+    });
+
+    delete item.__rowsSnapshot;
+  }
+
+  function removeColorRow(itemLineId, rowIndex){
+    const item = ITEMS.find(x => x.lineId === itemLineId);
+    if (!item) return;
+    if (item.colorways.length <= 1) return;
+
+    snapshotRowsFromDom(itemLineId);
+    item.colorways.splice(rowIndex, 1);
+    rebuildRowsForItem(itemLineId);
+
+    buildBody();
+    recalcAll();
+  }
+
+  function buildCompareTable(){
+    const tbl = document.getElementById('compareTable');
+    tbl.innerHTML = '';
+
+    const tierSet = new Set();
+    ITEMS.forEach(it => (it.priceTiers||[]).forEach(t => tierSet.add(toNumber(t, NaN))));
+    const tiers = Array.from(tierSet).filter(Number.isFinite).sort((a,b)=>a-b);
+    const displayTiers = tiers.filter(t => t <= 2000);
+
+    const thead = document.createElement('thead');
+    const hr = document.createElement('tr');
+
+    const th0 = document.createElement('th');
+    th0.textContent = 'SKU/QTY';
+    hr.appendChild(th0);
+
+    displayTiers.forEach(t => {
+      const th = document.createElement('th');
+      if (t === 2000){
+        th.innerHTML = '2000+';
+      } else {
+        th.textContent = String(t);
+      }
+      th.setAttribute('data-tier', String(t));
+      hr.appendChild(th);
+    });
+
+    thead.appendChild(hr);
+    tbl.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+
+    ITEMS.forEach(it => {
+      const tr = document.createElement('tr');
+
+      const skuCell = document.createElement('td');
+      const sku = (VM.skuKey || it.skuKey || '').trim() || ('Item ' + it.lineId);
+      const url = it.garmentUrl || '#';
+      skuCell.innerHTML = '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener"><strong>' + escapeHtml(sku) + '</strong></a>';
+      tr.appendChild(skuCell);
+
+      const baseSize = it.baseSelectedSize || (it.availableSizes[0] || '');
+
+      displayTiers.forEach(t => {
+        const td = document.createElement('td');
+        td.setAttribute('data-tier', String(t));
+
+        if (t === 2000){
+          td.innerHTML = '<span class="tierNote">special<br>pricing</span>';
+        } else {
+          const unit = unitPriceFor(it, String(t), baseSize);
+          td.textContent = (unit == null) ? '--' : money(unit);
+        }
+
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    tbl.appendChild(tbody);
+  }
+
+  function applyCompareHighlight(activeTier){
+    const tbl = document.getElementById('compareTable');
+    tbl.querySelectorAll('.hlCol').forEach(el => el.classList.remove('hlCol'));
+    if (!activeTier) return;
+    tbl.querySelectorAll('[data-tier="' + activeTier + '"]').forEach(el => el.classList.add('hlCol'));
+  }
+
+  function renderAddOns(orderSubtotal){
+    const list = document.getElementById('addOnsList');
+    list.innerHTML = '';
+    ADDON_TOTAL = 0;
+
+    const visible = ADDONS.filter(a => isPortalDisplay(a) && !REMOVED_ADDONS.has(a.__idx));
+
+    let staticTotal = 0;
+    visible.forEach(a => {
+      if (!isRush(a)){
+        staticTotal += Math.max(0, toNumber(a.amount, 0));
+      }
+    });
+
+    const rushBasis = Math.max(0, toNumber(orderSubtotal, 0) + staticTotal);
+
+    visible.forEach(a => {
+      const labelText = getAddOnLabel(a);
+      if (!labelText) return;
+
+      const rush = isRush(a);
+      const amount = rush ? computeRush(a, rushBasis) : Math.max(0, toNumber(a.amount, 0));
+      ADDON_TOTAL += amount;
+
+      const row = document.createElement('div');
+      row.className = 'addOnRow addOnItem';
+
+      const labelWrap = document.createElement('div');
+      labelWrap.className = 'addOnLabelWrap';
+
+      const label = document.createElement('div');
+      label.className = 'addOnLabel';
+      label.textContent = labelText + (rush ? ' - ' + rushRuleText(a) : '');
+      labelWrap.appendChild(label);
+
+      const qty = document.createElement('span');
+      qty.className = 'addOnQty';
+      qty.textContent = 'x1';
+
+      const val = document.createElement('span');
+      val.className = 'addOnAmt';
+      val.textContent = money(amount);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'addOnRemove';
+      remove.textContent = 'x';
+      remove.title = 'Remove fee';
+      remove.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        REMOVED_ADDONS.add(a.__idx);
+        recalcAll();
+      });
+
+      row.appendChild(labelWrap);
+      row.appendChild(qty);
+      row.appendChild(val);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+
+    const resetBtn = document.getElementById('addOnsResetBtn');
+    if (resetBtn){
+      if (REMOVED_ADDONS.size > 0){
+        resetBtn.classList.remove('hidden');
+      } else {
+        resetBtn.classList.add('hidden');
+      }
+    }
+  }
+
+  function getRushTurnaroundText(){
+    const rushItems = ADDONS.filter(a => isPortalDisplay(a) && !REMOVED_ADDONS.has(a.__idx) && isRush(a));
+    if (!rushItems.length) return null;
+
+    let minDays = Infinity;
+    rushItems.forEach(a => {
+      const label = getAddOnLabel(a);
+      const nums = String(label).match(/\d+/g) || [];
+      nums.forEach(n => {
+        const v = Number(n);
+        if (Number.isFinite(v) && v > 0) minDays = Math.min(minDays, v);
+      });
+    });
+
+    if (!Number.isFinite(minDays)) return null;
+    return (minDays === 1) ? '1 business day (rush)' : (minDays + ' business days (rush)');
+  }
+
+  function setTurnaround(){
+    const el = document.getElementById('turnaroundVal');
+    const rushText = getRushTurnaroundText();
+    if (rushText){
+      el.textContent = 'Turnaround Time: ' + rushText + ' from payment';
+      el.style.display = 'block';
+      return;
+    }
+
+    const val = String(VM.productionTime || '').trim();
+    if (val){
+      const needsSuffix = !/from payment/i.test(val);
+      el.textContent = 'Turnaround Time: ' + val + (needsSuffix ? ' from payment' : '');
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  function recalcAll(){
+    let orderQty = 0;
+    let orderTotal = 0;
+
+    const allQty = ITEMS.reduce((sum, it) => sum + qtyForItem(it.lineId), 0);
+
+    const tierSet = new Set();
+    ITEMS.forEach(it => (it.priceTiers||[]).forEach(t => tierSet.add(toNumber(t, NaN))));
+    const tiersUnion = Array.from(tierSet).filter(Number.isFinite).sort((a,b)=>a-b);
+
+    const effectiveQty = allQty > 0 ? allQty : 0;
+    const minTier = tiersUnion.length ? String(tiersUnion[0]) : '15';
+
+    const effectiveTier = tierForQty(effectiveQty, tiersUnion);
+
+    const msg = document.getElementById('minMsg');
+    if (effectiveQty > 0 && effectiveQty < toNumber(minTier, 15)){
+      msg.textContent = 'Minimum order is ' + minTier + ' pieces. Prices shown at that tier until you reach the next break.';
+    } else {
+      msg.textContent = '';
+    }
+
+    [...ROWS.entries()].forEach(([k, st]) => {
+      const item = ITEMS.find(x => x.lineId === st.itemLineId);
+      if (!item) return;
+
+      const rowQty = qtyForRow(st);
+      const rowTotal = lineTotalForRow(item, st, effectiveTier);
+
+      orderQty += rowQty;
+      orderTotal += rowTotal;
+
+      const qtyEl = document.querySelector('[data-qty="' + k.replace(/"/g,'\\"') + '"]');
+      if (qtyEl) qtyEl.textContent = String(rowQty);
+
+      const totalEl = document.querySelector('[data-total="' + k.replace(/"/g,'\\"') + '"]');
+      if (totalEl) totalEl.textContent = money(rowTotal);
+
+      GLOBAL_SIZES.forEach(sz => {
+        const unitEl = document.querySelector('[data-unitprice="' + (k+'::'+sz).replace(/"/g,'\\"') + '"]');
+        if (!unitEl) return;
+        const unit = unitPriceFor(item, effectiveTier, sz);
+        unitEl.textContent = (unit == null) ? '' : (toNumber(unit,0).toFixed(2) + ' ea.');
+      });
+    });
+
+    document.getElementById('itemsTotalVal').textContent = String(orderQty);
+    document.getElementById('orderTotalVal').textContent = money(orderTotal);
+
+    renderAddOns(orderTotal);
+
+    const grandTotal = orderTotal + ADDON_TOTAL;
+    document.getElementById('grandTotalVal').textContent = money(grandTotal);
+
+    updateHeaderTotals(orderQty, grandTotal);
+
+    applyCompareHighlight(effectiveTier);
+    setTurnaround();
+  }
+
+  // Lightbox + zoom
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightboxImg');
+  const lightboxClose = document.getElementById('lightboxClose');
+  const lightboxControls = document.getElementById('lightboxControls');
+  const lightboxPrevBtn = document.getElementById('lightboxPrevBtn');
+  const lightboxNextBtn = document.getElementById('lightboxNextBtn');
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomLabel = document.getElementById('zoomLabel');
+  const lightboxStage = document.getElementById('lightboxStage');
+
+  let zoomLevel = 1;
+  let panX = 0;
+  let panY = 0;
+  let dragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let startPanX = 0;
+  let startPanY = 0;
+
+  function applyZoomPan(){
+    lightboxImg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
+    const label = (Math.round(zoomLevel * 10) / 10).toString();
+    zoomLabel.textContent = label.replace(/\.0$/, '') + 'x';
+    lightboxImg.style.cursor = (zoomLevel > 1) ? (dragging ? 'grabbing' : 'grab') : 'default';
+  }
+
+  function setZoom(next){
+    zoomLevel = Math.max(1, Math.min(4, next));
+    if (zoomLevel === 1){
+      panX = 0;
+      panY = 0;
+    }
+    applyZoomPan();
+  }
+
+  function resetZoom(){
+    zoomLevel = 1;
+    panX = 0;
+    panY = 0;
+    dragging = false;
+    applyZoomPan();
+  }
+
+  function loadLightboxByIndex(idx){
+    if (!MOCKUP_IDS.length){
+      return;
+    }
+    const id = MOCKUP_IDS[idx];
+    if (!id) return;
+
+    const candidates = buildDriveCandidatesFromId(id);
+    loadImageWithFallback(
+      lightboxImg,
+      candidates,
+      () => {
+        updateLightboxControls();
+        resetZoom();
+      },
+      () => {
+        FAILED_MOCKUP_IDS.add(id);
+        const next = findNextIndex(idx, 1);
+        if (next === -1){
+          lightboxImg.removeAttribute('src');
+          lightboxControls.classList.add('hidden');
+        } else {
+          mockupIndex = next;
+          loadPreviewByIndex(mockupIndex);
+          loadLightboxByIndex(mockupIndex);
+        }
+      }
+    );
+  }
+
+  function updateLightboxControls(){
+    const availableCount = getAvailableMockupIds().length;
+    if (availableCount <= 0){
+      lightboxControls.classList.add('hidden');
+      return;
+    }
+    lightboxControls.classList.remove('hidden');
+    const showArrows = availableCount > 1;
+    lightboxPrevBtn.classList.toggle('hidden', !showArrows);
+    lightboxNextBtn.classList.toggle('hidden', !showArrows);
+  }
+
+  function openLightbox(){
+    if (!getAvailableMockupIds().length) return;
+    lightbox.classList.add('open');
+    lightbox.setAttribute('aria-hidden', 'false');
+    loadLightboxByIndex(mockupIndex);
+  }
+  function closeLightbox(){
+    lightbox.classList.remove('open');
+    lightbox.setAttribute('aria-hidden', 'true');
+    lightboxImg.removeAttribute('src');
+  }
+
+  function updateHeaderState(){
+    const header = document.getElementById('stickyHeader');
+    const topRow = document.getElementById('topRowNew');
+    if (!header || !topRow) return;
+
+    const isMobile = window.matchMedia('(max-width: 980px)').matches;
+    if (isMobile){
+      header.classList.add('condensed');
+      return;
+    }
+
+    const rect = topRow.getBoundingClientRect();
+    if (rect.top <= -60 || window.scrollY > 80){
+      header.classList.add('condensed');
+    } else {
+      header.classList.remove('condensed');
+    }
+  }
+
+  // Intro modal
+  const introModal = document.getElementById('introModal');
+  const introClose = document.getElementById('introClose');
+  const introMessage = document.getElementById('introMessage');
+  const introTitle = document.getElementById('introTitle');
+  const headerAvatarBtn = document.getElementById('headerAvatarBtn');
+  const headerBubbleBtn = document.getElementById('headerBubbleBtn');
+  const headerBubbleBtnMini = document.getElementById('headerBubbleBtnMini');
+  const headerSmallLogoBtn = document.getElementById('headerSmallLogoBtn');
+
+  function openIntroModal(){
+    if (!introModal) return;
+    introModal.classList.add('open');
+    introModal.setAttribute('aria-hidden', 'false');
+  }
+  function closeIntroModal(){
+    if (!introModal) return;
+    introModal.classList.remove('open');
+    introModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function init(){
+    setHeaderDetails();
+    buildHead();
+    buildBody();
+    buildCompareTable();
+    renderTopPanels();
+    initMockups();
+    recalcAll();
+    renderModeBadge();
+    const clientName = (VM.clientName || 'there');
+    const senderName = getSenderName();
+    if (introTitle) introTitle.textContent = `Hey ${clientName}, "${senderName}" from Red Threads, and I've got some important information for you.`;
+    if (introMessage) introMessage.textContent = (VM.jobNotes || '');
+    updateHeaderState();
+    openIntroModal();
+  }
+
+  // Disable right-click + native drag on preview and fullscreen images
+  mockupImg.addEventListener('contextmenu', (e) => e.preventDefault());
+  mockupImg.addEventListener('dragstart', (e) => e.preventDefault());
+  lightboxImg.addEventListener('contextmenu', (e) => e.preventDefault());
+  lightboxImg.addEventListener('dragstart', (e) => e.preventDefault());
+
+  // Mockup controls
+  mockupPrevBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(-1); });
+  mockupNextBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(1); });
+  mockupZoomBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!mockupZoomBtn.classList.contains('disabled')) openLightbox();
+  });
+  mockupFrame.addEventListener('click', (e) => {
+    if (e.target.closest('.mockupBtn')) return;
+    openLightbox();
+  });
+
+  // Lightbox controls
+  lightboxClose.addEventListener('click', closeLightbox);
+  lightboxPrevBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(-1); loadLightboxByIndex(mockupIndex); });
+  lightboxNextBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(1); loadLightboxByIndex(mockupIndex); });
+
+  zoomInBtn.addEventListener('click', (e) => { e.stopPropagation(); setZoom(zoomLevel + 0.5); });
+  zoomOutBtn.addEventListener('click', (e) => { e.stopPropagation(); setZoom(zoomLevel - 0.5); });
+
+  lightboxImg.addEventListener('pointerdown', (e) => {
+    if (zoomLevel <= 1) return;
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    startPanX = panX;
+    startPanY = panY;
+    applyZoomPan();
+    lightboxImg.setPointerCapture(e.pointerId);
+  });
+  lightboxImg.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    panX = startPanX + (e.clientX - dragStartX);
+    panY = startPanY + (e.clientY - dragStartY);
+    applyZoomPan();
+  });
+  lightboxImg.addEventListener('pointerup', (e) => {
+    dragging = false;
+    applyZoomPan();
+    try { lightboxImg.releasePointerCapture(e.pointerId); } catch (_) {}
+  });
+  lightboxImg.addEventListener('pointercancel', () => {
+    dragging = false;
+    applyZoomPan();
+  });
+
+  lightboxStage.addEventListener('click', (e) => {
+    if (e.target.closest('#lightboxImg')) return;
+    if (e.target.closest('.lightboxControls')) return;
+    if (e.target.closest('#lightboxClose')) return;
+    closeLightbox();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox();
+  });
+
+  document.getElementById('addOnsResetBtn').addEventListener('click', () => {
+    REMOVED_ADDONS.clear();
+    recalcAll();
+  });
+
+  // Intro modal controls
+  introClose.addEventListener('click', closeIntroModal);
+  introModal.addEventListener('click', (e) => {
+    if (e.target === introModal) closeIntroModal();
+  });
+  if (headerAvatarBtn) headerAvatarBtn.addEventListener('click', openIntroModal);
+  if (headerBubbleBtn) headerBubbleBtn.addEventListener('click', openIntroModal);
+  if (headerBubbleBtnMini) headerBubbleBtnMini.addEventListener('click', openIntroModal);
+  if (headerSmallLogoBtn) headerSmallLogoBtn.addEventListener('click', openIntroModal);
+
+  window.addEventListener('scroll', updateHeaderState, { passive: true });
+  window.addEventListener('resize', updateHeaderState);
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
