@@ -36,7 +36,18 @@
       background:var(--headerBg);
       border-bottom:2px solid #111;
       box-shadow:0 1px 0 rgba(0,0,0,.2);
-      transition:all .2s ease;
+      transition:background-color .24s ease, box-shadow .24s ease, border-color .24s ease;
+    }
+    .stickyHeader::after{
+      content:'';
+      display:block;
+      height:2px;
+      background:linear-gradient(90deg,#111 0%, #0ea5e9 50%, #111 100%);
+      opacity:.35;
+    }
+    .stickyHeader.condensed{
+      background:rgba(207,207,207,.97);
+      box-shadow:0 8px 20px rgba(0,0,0,.2);
     }
     .headerExpanded,
     .headerCondensed{
@@ -128,6 +139,28 @@
       font-weight:700;
       font-size:14px;
       color:#111;
+    }
+    .headerFriendly{
+      margin-top:4px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      width:max-content;
+      padding:2px 8px;
+      border:1px solid rgba(17,17,17,.22);
+      border-radius:999px;
+      background:rgba(255,255,255,.5);
+      font-size:11px;
+      font-weight:800;
+      color:#1f2937;
+      letter-spacing:.01em;
+    }
+    .headerFriendlyDot{
+      width:6px;
+      height:6px;
+      border-radius:999px;
+      background:#22c55e;
+      box-shadow:0 0 0 3px rgba(34,197,94,.15);
     }
     .headerProjects{
       display:flex;
@@ -222,6 +255,15 @@
       font-size:12px;
       font-weight:800;
       text-align:left;
+    }
+    .headerFriendlyMini{
+      display:inline-flex;
+      align-items:center;
+      gap:5px;
+      font-size:10px;
+      font-weight:800;
+      color:#1f2937;
+      opacity:.9;
     }
     .stickyHeader.condensed .headerCondensed{
       padding:4px 10px;
@@ -737,7 +779,7 @@
       grid-template-columns:1fr auto;
       gap:18px;
       align-items:start;
-      margin-top:12px;
+      margin-top:0;
     }
 
     .compareCard{padding:10px 14px 12px;border-top:none;}
@@ -811,7 +853,7 @@
       display:flex;
       flex-direction:column;
       align-items:flex-end;
-      margin-top:6px;
+      margin-top:0;
       gap:2px;
     }
 
@@ -842,8 +884,8 @@
       margin-top:2px;
       font-size:11px;
       line-height:1.15;
-      color:#b45309;
-      font-weight:700;
+      color:#dc2626;
+      font-weight:400;
       white-space:nowrap;
     }
     .addOnRemove{
@@ -931,7 +973,11 @@
     }
 
     .scrollTestPad{
-      display:none;
+      height:1200px;
+      background:#000;
+      margin:30px auto 40px;
+      max-width:1260px;
+      border-radius:8px;
     }
 
     @media (max-width:980px){
@@ -964,6 +1010,7 @@
           <span class="headerDeal" id="headerDealNum"></span>
           <span class="headerDeadline" id="headerInHands">In-Hands Deadline: {{date}}</span>
           <span class="headerDeadline" id="headerPlaceBy">Place your order by: {{date}}</span>
+          <span class="headerFriendly"><span class="headerFriendlyDot"></span>Need help? Tap chat bubble</span>
         </div>
       </div>
       <div class="headerProjects">
@@ -1005,6 +1052,7 @@
       <div class="headerCondensedPromos">
         <div class="headerAch">Save 3% when you pay with ACH</div>
         <div class="headerFreeShip" id="headerFreeShipMini">YOU GET FREE SHIPPING!</div>
+        <div class="headerFriendlyMini"><span class="headerFriendlyDot"></span>Need help? Tap chat</div>
       </div>
       <div class="headerActions">
         <button class="headerBtn headerBtnGrey" type="button">Save / Share</button>
@@ -2227,6 +2275,16 @@
     lightboxImg.removeAttribute('src');
   }
 
+  let headerCondensed = false;
+  let headerUpdateQueued = false;
+
+  function setHeaderCondensed(next, header){
+    if (!header) return;
+    if (headerCondensed === next) return;
+    headerCondensed = next;
+    header.classList.toggle('condensed', next);
+  }
+
   function updateHeaderState(){
     const header = document.getElementById('stickyHeader');
     const topRow = document.getElementById('topRowNew');
@@ -2234,16 +2292,27 @@
 
     const isMobile = window.matchMedia('(max-width: 980px)').matches;
     if (isMobile){
-      header.classList.add('condensed');
+      setHeaderCondensed(true, header);
       return;
     }
 
     const rect = topRow.getBoundingClientRect();
-    if (rect.top <= -60 || window.scrollY > 80){
-      header.classList.add('condensed');
-    } else {
-      header.classList.remove('condensed');
-    }
+    const scrollY = window.scrollY || 0;
+
+    // Hysteresis prevents rapid state-flip at the threshold.
+    const enterCondensed = (scrollY > 120) || (rect.top <= -95);
+    const leaveCondensed = (scrollY < 45) && (rect.top > -35);
+    const next = headerCondensed ? !leaveCondensed : enterCondensed;
+    setHeaderCondensed(next, header);
+  }
+
+  function requestHeaderStateUpdate(){
+    if (headerUpdateQueued) return;
+    headerUpdateQueued = true;
+    window.requestAnimationFrame(() => {
+      headerUpdateQueued = false;
+      updateHeaderState();
+    });
   }
 
   // Intro modal
@@ -2361,8 +2430,8 @@
   if (headerBubbleBtnMini) headerBubbleBtnMini.addEventListener('click', openIntroModal);
   if (headerSmallLogoBtn) headerSmallLogoBtn.addEventListener('click', openIntroModal);
 
-  window.addEventListener('scroll', updateHeaderState, { passive: true });
-  window.addEventListener('resize', updateHeaderState);
+  window.addEventListener('scroll', requestHeaderStateUpdate, { passive: true });
+  window.addEventListener('resize', requestHeaderStateUpdate);
 
   document.addEventListener('DOMContentLoaded', init);
 </script>
