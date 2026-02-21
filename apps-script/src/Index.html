@@ -71,11 +71,29 @@
       padding:0;
       cursor:pointer;
     }
-    .headerAvatarImg{
+    .headerAvatarStack{
+      position:relative;
+      width:78px;
+      height:78px;
+      display:block;
+    }
+    .headerAvatarBase{
       width:78px;
       height:78px;
       object-fit:contain;
       display:block;
+    }
+    .headerAvatarImg{
+      position:absolute;
+      width:48px;
+      height:48px;
+      object-fit:cover;
+      display:block;
+      left:15px;
+      top:16px;
+      border-radius:999px;
+      border:2px solid #fff;
+      box-shadow:0 2px 6px rgba(0,0,0,.22);
     }
     .headerSmallLogo{
       width:46px;
@@ -238,13 +256,22 @@
       position:fixed;
       inset:0;
       background:rgba(0,0,0,.45);
-      display:none;
+      display:flex;
       align-items:center;
       justify-content:center;
       z-index:10005;
       padding:20px;
+      opacity:0;
+      visibility:hidden;
+      pointer-events:none;
+      transition:opacity .22s ease, visibility 0s linear .22s;
     }
-    .introModal.open{display:flex;}
+    .introModal.open{
+      opacity:1;
+      visibility:visible;
+      pointer-events:auto;
+      transition:opacity .22s ease, visibility 0s linear 0s;
+    }
     .introCard{
       position:relative;
       max-width:880px;
@@ -254,6 +281,13 @@
       border:2px solid #111;
       padding:26px 28px 26px 130px;
       box-shadow:0 18px 40px rgba(0,0,0,.25);
+      transform:translateY(12px) scale(.98);
+      opacity:.92;
+      transition:transform .22s ease, opacity .22s ease;
+    }
+    .introModal.open .introCard{
+      transform:translateY(0) scale(1);
+      opacity:1;
     }
     .introClose{
       position:absolute;
@@ -271,15 +305,33 @@
       align-items:center;
       gap:14px;
       margin-bottom:12px;
+      min-height:110px;
     }
-    .introAvatar{
+    .introAvatarStack{
       width:120px;
       height:120px;
-      object-fit:contain;
       display:block;
       position:absolute;
       left:-110px;
       top:-10px;
+    }
+    .introAvatarBase{
+      width:120px;
+      height:120px;
+      object-fit:contain;
+      display:block;
+    }
+    .introAvatar{
+      width:68px;
+      height:68px;
+      object-fit:cover;
+      display:block;
+      position:absolute;
+      left:26px;
+      top:25px;
+      border-radius:999px;
+      border:2px solid #fff;
+      box-shadow:0 3px 8px rgba(0,0,0,.22);
     }
     .introTitle{
       font-size:20px;
@@ -808,12 +860,12 @@
 
     .grandTotal{
       margin-top:8px;
-      font-size:22px;
+      font-size:36px;
       font-weight:900;
     }
     .grandTotal .value{
-      font-size:28px;
-      color:var(--green);
+      font-size:40px;
+      color:#111;
       font-weight:900;
     }
     .turnaround{
@@ -864,11 +916,7 @@
     }
 
     .scrollTestPad{
-      height:900px;
-      background:#000;
-      margin:30px auto 40px;
-      max-width:1260px;
-      border-radius:8px;
+      display:none;
     }
 
     @media (max-width:980px){
@@ -891,7 +939,10 @@
     <div class="headerExpanded" id="headerExpanded">
       <div class="headerLeft">
         <button class="headerAvatarBtn" id="headerAvatarBtn" type="button" aria-label="Open message">
-          <img class="headerAvatarImg" id="headerAvatarImg" alt="Sender">
+          <span class="headerAvatarStack">
+            <img class="headerAvatarBase" id="headerAvatarBase" alt="Red Threads">
+            <img class="headerAvatarImg" id="headerAvatarImg" alt="Sender">
+          </span>
         </button>
         <button class="headerBubbleBtn" id="headerBubbleBtn" type="button" aria-label="Open message">
           <img class="headerBubbleImg" src="https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-03.png" alt="Message">
@@ -954,7 +1005,10 @@
     <div class="introCard">
       <button class="introClose" id="introClose" type="button">X</button>
       <div class="introHeader">
-        <img class="introAvatar" id="introAvatar" alt="Sender">
+        <span class="introAvatarStack">
+          <img class="introAvatarBase" id="introAvatarBase" alt="Red Threads">
+          <img class="introAvatar" id="introAvatar" alt="Sender">
+        </span>
         <div>
           <div class="introTitle" id="introTitle"></div>
         </div>
@@ -1026,12 +1080,6 @@
 
         <div class="turnaround" id="turnaroundVal"></div>
 
-        <div class="totalsRow totalsMain">
-          <strong>Totals:</strong>
-          <span><span id="itemsTotalVal">0</span> units</span>
-          <span id="orderTotalVal">$0.00</span>
-        </div>
-
         <div class="totalsRow grandTotal">
           <strong>Job Total:</strong>
           <span class="value" id="grandTotalVal">$0.00</span>
@@ -1078,6 +1126,10 @@
     tyler: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png',
     caleb: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png',
     tommy: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png'
+  };
+  const BRAND_IMAGES = {
+    headerBase: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-04.png',
+    introBase: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-04.png'
   };
 
   function safeJsonParse(maybeJson, fallback) {
@@ -1169,6 +1221,19 @@
       imgEl.src = url;
     };
     tryNext();
+  }
+
+  function setImageSrcWithFallback(imgEl, src, fallback){
+    if (!imgEl) return;
+    const primary = String(src || '').trim();
+    const backstop = String(fallback || '').trim();
+    imgEl.onerror = () => {
+      if (imgEl.dataset.failedOnce === '1') return;
+      imgEl.dataset.failedOnce = '1';
+      if (backstop) imgEl.src = backstop;
+    };
+    imgEl.dataset.failedOnce = '0';
+    imgEl.src = primary || backstop || '';
   }
 
   const SNAPSHOT = safeJsonParse(VM.snapshot, {});
@@ -1326,11 +1391,15 @@
     if (projectNameEl) projectNameEl.textContent = jobName;
     if (headerProjectName) headerProjectName.textContent = jobName;
 
+    const headerAvatarBase = document.getElementById('headerAvatarBase');
+    const introAvatarBase = document.getElementById('introAvatarBase');
     const avatarUrl = getSenderAvatarUrl();
     const avatarImg = document.getElementById('headerAvatarImg');
     const introAvatar = document.getElementById('introAvatar');
-    if (avatarImg) avatarImg.src = avatarUrl;
-    if (introAvatar) introAvatar.src = avatarUrl;
+    setImageSrcWithFallback(headerAvatarBase, BRAND_IMAGES.headerBase, BRAND_IMAGES.headerBase);
+    setImageSrcWithFallback(introAvatarBase, BRAND_IMAGES.introBase, BRAND_IMAGES.introBase);
+    setImageSrcWithFallback(avatarImg, avatarUrl, SENDER_IMAGES.josiah);
+    setImageSrcWithFallback(introAvatar, avatarUrl, SENDER_IMAGES.josiah);
   }
 
   function updateHeaderTotals(orderQty, grandTotal){
@@ -1543,7 +1612,7 @@
     const decorList = document.getElementById('decorList');
     decorList.innerHTML = '';
     const decos = Array.isArray(item.decorations) ? item.decorations.filter(Boolean) : [];
-    const decoSet = decos.length ? decos.slice(0,4) : [null];
+    const decoSet = decos.slice(0,4);
 
     decoSet.forEach((d, i) => {
       const line = document.createElement('div');
@@ -2024,13 +2093,11 @@
       });
     });
 
-    document.getElementById('itemsTotalVal').textContent = String(orderQty);
-    document.getElementById('orderTotalVal').textContent = money(orderTotal);
-
     renderAddOns(orderTotal);
 
     const grandTotal = orderTotal + ADDON_TOTAL;
-    document.getElementById('grandTotalVal').textContent = money(grandTotal);
+    const grandTotalEl = document.getElementById('grandTotalVal');
+    if (grandTotalEl) grandTotalEl.textContent = money(grandTotal);
 
     updateHeaderTotals(orderQty, grandTotal);
 
