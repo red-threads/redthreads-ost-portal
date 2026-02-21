@@ -785,14 +785,14 @@
     }
 
     .totalsCard{
-      padding:12px 12px;
+      padding:0;
       border-top:none;
       text-align:right;
       justify-self:end;
       min-width:300px;
-      background:#f7c5a2;
-      border-radius:8px;
-      border:2px solid #111;
+      background:transparent;
+      border-radius:0;
+      border:none;
     }
     .totalsRow{
       display:flex;
@@ -819,18 +819,25 @@
       display:grid;
       grid-template-columns:minmax(0,1fr) 22px 70px 18px;
       column-gap:6px;
-      align-items:center;
+      align-items:start;
       justify-items:end;
       margin-top:2px;
       font-size:13px;
-      white-space:nowrap;
     }
     .addOnItem{margin-top:4px}
-    .addOnLabelWrap{text-align:right;justify-self:end;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .addOnLabel{font-weight:400}
+    .addOnLabelWrap{text-align:right;justify-self:end;min-width:0;}
+    .addOnLabel{font-weight:400;font-size:13px;line-height:1.2;white-space:normal;}
     .addOnQty{min-width:26px;text-align:right}
     .addOnAmt{min-width:70px;text-align:right}
-    .addOnSub{display:none;}
+    .addOnSub{
+      display:block;
+      margin-top:2px;
+      font-size:11px;
+      line-height:1.15;
+      color:#b45309;
+      font-weight:700;
+      white-space:normal;
+    }
     .addOnRemove{
       min-width:18px;
       text-align:right;
@@ -1971,8 +1978,14 @@
 
       const label = document.createElement('div');
       label.className = 'addOnLabel';
-      label.textContent = labelText + (rush ? ' - ' + rushRuleText(a) : '');
+      label.textContent = labelText;
       labelWrap.appendChild(label);
+      if (rush){
+        const sub = document.createElement('div');
+        sub.className = 'addOnSub';
+        sub.textContent = rushRuleText(a);
+        labelWrap.appendChild(sub);
+      }
 
       const qty = document.createElement('span');
       qty.className = 'addOnQty';
