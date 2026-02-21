@@ -789,7 +789,8 @@
       border-top:none;
       text-align:right;
       justify-self:end;
-      min-width:300px;
+      width:300px;
+      max-width:300px;
       background:transparent;
       border-radius:0;
       border:none;
@@ -817,18 +818,25 @@
     .addOnRow{
       width:100%;
       display:grid;
-      grid-template-columns:minmax(0,1fr) 22px 70px 18px;
-      column-gap:6px;
+      grid-template-columns:minmax(0,1fr) 18px;
+      column-gap:8px;
       align-items:start;
-      justify-items:end;
       margin-top:2px;
-      font-size:13px;
+      font-size:12px;
     }
     .addOnItem{margin-top:4px}
-    .addOnLabelWrap{text-align:right;justify-self:end;min-width:0;}
-    .addOnLabel{font-weight:400;font-size:13px;line-height:1.2;white-space:normal;}
-    .addOnQty{min-width:26px;text-align:right}
-    .addOnAmt{min-width:70px;text-align:right}
+    .addOnMainWrap{text-align:right;justify-self:end;min-width:0;}
+    .addOnMainLine{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      white-space:nowrap;
+      line-height:1.2;
+    }
+    .addOnLabel{font-weight:400;white-space:nowrap;}
+    .addOnMainQty{min-width:20px;text-align:right;}
+    .addOnMainAmt{min-width:64px;text-align:right;}
     .addOnSub{
       display:block;
       margin-top:2px;
@@ -836,7 +844,7 @@
       line-height:1.15;
       color:#b45309;
       font-weight:700;
-      white-space:normal;
+      white-space:nowrap;
     }
     .addOnRemove{
       min-width:18px;
@@ -867,11 +875,11 @@
 
     .grandTotal{
       margin-top:8px;
-      font-size:36px;
+      font-size:18px;
       font-weight:900;
     }
     .grandTotal .value{
-      font-size:40px;
+      font-size:20px;
       color:#111;
       font-weight:900;
     }
@@ -935,9 +943,6 @@
       .headerActions{flex-direction:row;gap:8px;}
       .headerBtn{font-size:14px;padding:6px 10px;}
       .headerCondensedTotals{font-size:12px;}
-    }
-    @media (min-width:981px){
-      .totalsCard{margin-top:-70px;}
     }
   </style>
 </head>
@@ -1973,27 +1978,34 @@
       const row = document.createElement('div');
       row.className = 'addOnRow addOnItem';
 
-      const labelWrap = document.createElement('div');
-      labelWrap.className = 'addOnLabelWrap';
+      const mainWrap = document.createElement('div');
+      mainWrap.className = 'addOnMainWrap';
+
+      const mainLine = document.createElement('div');
+      mainLine.className = 'addOnMainLine';
 
       const label = document.createElement('div');
       label.className = 'addOnLabel';
       label.textContent = labelText;
-      labelWrap.appendChild(label);
+      mainLine.appendChild(label);
+
+      const qty = document.createElement('span');
+      qty.className = 'addOnMainQty';
+      qty.textContent = 'x1';
+      mainLine.appendChild(qty);
+
+      const val = document.createElement('span');
+      val.className = 'addOnMainAmt';
+      val.textContent = money(amount);
+      mainLine.appendChild(val);
+
+      mainWrap.appendChild(mainLine);
       if (rush){
         const sub = document.createElement('div');
         sub.className = 'addOnSub';
         sub.textContent = rushRuleText(a);
-        labelWrap.appendChild(sub);
+        mainWrap.appendChild(sub);
       }
-
-      const qty = document.createElement('span');
-      qty.className = 'addOnQty';
-      qty.textContent = 'x1';
-
-      const val = document.createElement('span');
-      val.className = 'addOnAmt';
-      val.textContent = money(amount);
 
       const remove = document.createElement('button');
       remove.type = 'button';
@@ -2006,9 +2018,7 @@
         recalcAll();
       });
 
-      row.appendChild(labelWrap);
-      row.appendChild(qty);
-      row.appendChild(val);
+      row.appendChild(mainWrap);
       row.appendChild(remove);
       list.appendChild(row);
     });
@@ -2045,15 +2055,15 @@
     const el = document.getElementById('turnaroundVal');
     const rushText = getRushTurnaroundText();
     if (rushText){
-      el.textContent = 'Turnaround Time: ' + rushText + ' from payment';
+      el.textContent = 'Turnaround Time: ' + rushText;
       el.style.display = 'block';
       return;
     }
 
     const val = String(VM.productionTime || '').trim();
     if (val){
-      const needsSuffix = !/from payment/i.test(val);
-      el.textContent = 'Turnaround Time: ' + val + (needsSuffix ? ' from payment' : '');
+      const cleanVal = val.replace(/\s*from payment\s*/i, '').trim();
+      el.textContent = 'Turnaround Time: ' + cleanVal;
       el.style.display = 'block';
     } else {
       el.style.display = 'none';
