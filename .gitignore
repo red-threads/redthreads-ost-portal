@@ -1,0 +1,9 @@
+.DS_Store
+node_modules/
+.env
+*.log
+data/
+*.xlsx
+*.csv
+*.jsonl
+EXPORT_LOG*
