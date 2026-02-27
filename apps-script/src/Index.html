@@ -1680,6 +1680,140 @@
       border-radius:8px;
     }
 
+    /* Phase 1 layout system (structure-first, minimal polish) */
+    .portalPageShell{
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+    .portalShell{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .portalSection{
+      border:1px solid #d6deea;
+      border-radius:12px;
+      background:#fff;
+      box-shadow:0 8px 20px rgba(15,23,42,.05);
+    }
+    .portalMetaSection{
+      padding:0;
+      overflow:hidden;
+    }
+    .portalJobsSection{
+      display:grid;
+      grid-template-columns:260px minmax(0,1fr);
+      gap:12px;
+      align-items:start;
+      border:none;
+      box-shadow:none;
+      background:transparent;
+      padding:0;
+    }
+    .portalJobsNav{
+      border:1px solid #d6deea;
+      border-radius:12px;
+      background:#fff;
+      box-shadow:0 8px 20px rgba(15,23,42,.05);
+      padding:10px;
+      position:sticky;
+      top:88px;
+      max-height:calc(100vh - 110px);
+      overflow:auto;
+    }
+    .portalJobsNavHead{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:8px;
+      padding-bottom:8px;
+      border-bottom:1px solid #e2e8f0;
+    }
+    .portalJobsNavTitle{
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:#334155;
+    }
+    .portalJobsNavList{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .portalJobsNavItem{
+      display:block;
+      width:100%;
+      border:1px solid #d0d8e3;
+      border-radius:8px;
+      background:#f8fafc;
+      color:#0f172a;
+      padding:8px;
+      text-decoration:none;
+      line-height:1.25;
+      font-size:12px;
+      font-weight:800;
+    }
+    .portalJobsNavItem:hover{
+      border-color:#0f4fa8;
+      background:#edf2f9;
+    }
+    .portalJobsNavItemMeta{
+      display:block;
+      margin-top:2px;
+      font-size:11px;
+      color:#64748b;
+      font-weight:700;
+    }
+    .portalJobsContent{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .pjCard{
+      margin-bottom:0;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .pjCardHeader{
+      margin-bottom:0;
+    }
+    .pjSegment{
+      border:1px solid #dce4ef;
+      border-radius:10px;
+      background:#fff;
+      padding:10px;
+    }
+    .pjSegmentTitle{
+      margin:0 0 8px;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:#334155;
+    }
+    .pjOverviewGrid{
+      margin-bottom:0;
+    }
+    .pjDecorList{
+      gap:4px;
+      font-size:13px;
+    }
+    .pjSkus .skuSection:first-of-type{
+      margin-top:0;
+    }
+    .pjPricing .bottomRow{
+      margin-top:0;
+    }
+    .portalJobsNav .hiddenControlRow{
+      margin-top:0;
+      margin-bottom:8px;
+    }
+
     @media (max-width:980px){
       .snapshotGrid{
         grid-template-columns:repeat(2,minmax(0,1fr));
@@ -1701,11 +1835,19 @@
       .headerActions{flex-direction:row;gap:8px;}
       .headerBtn{font-size:14px;padding:6px 10px;}
       .headerCondensedTotals{font-size:12px;}
+      .portalJobsSection{
+        grid-template-columns:1fr;
+      }
+      .portalJobsNav{
+        position:static;
+        max-height:none;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="stickyHeader" id="stickyHeader">
+  <div class="portalPageShell" id="portalPageShell">
+  <div class="stickyHeader portalHeader" id="stickyHeader">
     <div class="headerExpanded" id="headerExpanded">
       <div class="headerLeft">
         <button class="headerAvatarBtn" id="headerAvatarBtn" type="button" aria-label="Open message">
@@ -1787,8 +1929,8 @@
     </div>
   </div>
 
-  <div class="wrap">
-    <div class="snapshotBand" id="snapshotBand">
+  <main class="portalShell wrap" id="portalShell">
+    <section class="portalSection portalMetaSection snapshotBand" id="snapshotBand">
       <div class="snapshotBandHead">
         <div class="snapshotBandTitle">Snapshot Record</div>
         <div class="snapshotToken" id="snapshotToken">Token: --</div>
@@ -1819,7 +1961,7 @@
           <span class="snapshotVal" id="snapshotStatusVal">--</span>
         </div>
       </div>
-    </div>
+    </section>
 
     <div class="teamDiagWrap" id="teamDiagWrap" hidden>
       <button class="teamDiagBtn" id="teamDiagToggle" type="button">TEAM Diagnostics</button>
@@ -1830,9 +1972,20 @@
     </div>
 
     <div class="saveNotice" id="saveNotice" hidden></div>
-    <div class="hiddenControlBar" id="hiddenPrintJobsBar"></div>
-    <div id="jobsRoot"></div>
-  </div>
+
+    <section class="portalSection portalJobsSection" id="portalJobsSection">
+      <aside class="portalJobsNav" id="printJobNav">
+        <div class="portalJobsNavHead">
+          <div class="portalJobsNavTitle">Print Jobs</div>
+        </div>
+        <div class="hiddenControlBar" id="hiddenPrintJobsBar"></div>
+        <nav class="portalJobsNavList" id="printJobNavList" aria-label="Print job navigation"></nav>
+      </aside>
+      <section class="portalJobsContent" id="jobsContentPanel">
+        <div id="jobsRoot"></div>
+      </section>
+    </section>
+  </main>
 
   <div class="scrollTestPad" aria-hidden="true"></div>
 
@@ -1861,6 +2014,7 @@
   </div>
 
   <div class="modeBadge" id="modeBadge">CLIENT VIEW</div>
+  </div>
 
 <script>
   const VM = JSON.parse(<?!= JSON.stringify(JSON.stringify(VM)) ?>);
@@ -2210,6 +2364,8 @@
 
   const jobsRoot = document.getElementById('jobsRoot');
   const hiddenPrintJobsBar = document.getElementById('hiddenPrintJobsBar');
+  const printJobNav = document.getElementById('printJobNav');
+  const printJobNavList = document.getElementById('printJobNavList');
   const saveNotice = document.getElementById('saveNotice');
   const snapshotTokenEl = document.getElementById('snapshotToken');
   const snapshotIdVal = document.getElementById('snapshotIdVal');
@@ -2397,6 +2553,18 @@
     if (!t) return '--';
     if (t.length <= 14) return t;
     return t.slice(0, 8) + '...' + t.slice(-4);
+  }
+
+  function domSafeIdPart(value){
+    return String(value || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'item';
+  }
+
+  function jobSectionId(jobId){
+    return 'print-job-' + domSafeIdPart(jobId);
   }
 
   function makeRowKey(jobId, skuId, color){
@@ -2616,10 +2784,11 @@
   }
 
   function buildJobSection(job, visibleIndex){
-    const section = createEl('section', 'printJobSection');
+    const section = createEl('section', 'pjCard printJobSection');
     section.dataset.jobId = job.printJobId;
+    section.id = jobSectionId(job.printJobId);
 
-    const shellHead = createEl('div', 'printJobShellHead');
+    const shellHead = createEl('header', 'pjCardHeader printJobShellHead');
     const shellLeft = createEl('div', 'printJobShellLeft');
     shellLeft.appendChild(createEl('span', 'printJobTag', 'Print Job ' + visibleIndex));
     shellLeft.appendChild(createEl('span', 'printJobShellName', job.printJobName || ('Project ' + visibleIndex)));
@@ -2634,10 +2803,11 @@
     shellHead.appendChild(shellMeta);
     section.appendChild(shellHead);
 
-    const topRow = createEl('div', 'topRowNew');
+    const overviewSegment = createEl('section', 'pjSegment pjOverview');
+    const topRow = createEl('div', 'pjOverviewGrid topRowNew');
     if (visibleIndex === 1) topRow.id = 'topRowNew';
 
-    const mockupBlock = createEl('div', 'mockupBlock');
+    const mockupBlock = createEl('div', 'pjMockups mockupBlock');
     const mockupFrame = createEl('div', 'mockupFrame');
     const mockupImg = createEl('img', 'mockupImg');
     mockupImg.alt = 'Mockup Preview';
@@ -2682,7 +2852,7 @@
     mockupFrame.appendChild(mockupControls);
     mockupBlock.appendChild(mockupFrame);
 
-    const detailsCard = createEl('div', 'card detailsCard');
+    const detailsCard = createEl('div', 'pjOverviewCard card detailsCard');
     const projectHeader = createEl('div', 'projectHeader');
 
     const projectTitle = createEl('div', 'projectTitle');
@@ -2710,25 +2880,37 @@
     projectHeader.appendChild(projectTitle);
     projectHeader.appendChild(controls);
 
-    const decorList = createEl('div', 'decorList');
-    const decorSource = Array.isArray(job.decorations) ? job.decorations.filter(Boolean) : [];
-    decorSource.forEach((d, idx) => {
-      const line = createEl('div', 'decorLine', formatDecorationLine(d, idx));
-      decorList.appendChild(line);
-    });
-
     const notesBlock = createEl('div', 'notesBlock');
     notesBlock.appendChild(createEl('div', 'notesTitle', 'Job Notes'));
     notesBlock.appendChild(createEl('div', '', job.printJobNotes || getIntroMessage() || '--'));
 
     detailsCard.appendChild(projectHeader);
-    detailsCard.appendChild(decorList);
     detailsCard.appendChild(notesBlock);
 
     topRow.appendChild(mockupBlock);
     topRow.appendChild(detailsCard);
 
-    section.appendChild(topRow);
+    overviewSegment.appendChild(topRow);
+    section.appendChild(overviewSegment);
+
+    const decorSegment = createEl('section', 'pjSegment pjDecorations');
+    decorSegment.appendChild(createEl('h3', 'pjSegmentTitle', 'Decorations'));
+
+    const decorList = createEl('div', 'decorList pjDecorList');
+    const decorSource = Array.isArray(job.decorations) ? job.decorations.filter(Boolean) : [];
+    if (!decorSource.length) {
+      decorList.appendChild(createEl('div', 'decorLine', 'Deco 1: --'));
+    } else {
+      decorSource.forEach((d, idx) => {
+        const line = createEl('div', 'decorLine', formatDecorationLine(d, idx));
+        decorList.appendChild(line);
+      });
+    }
+    decorSegment.appendChild(decorList);
+    section.appendChild(decorSegment);
+
+    const skuSegment = createEl('section', 'pjSegment pjSkus');
+    skuSegment.appendChild(createEl('h3', 'pjSegmentTitle', 'SKUs'));
 
     const hiddenSkuItems = [];
 
@@ -2880,7 +3062,7 @@
         }
       }
 
-      section.appendChild(skuSection);
+      skuSegment.appendChild(skuSection);
     });
 
     if (CAN_EDIT() && hiddenSkuItems.length) {
@@ -2888,8 +3070,12 @@
         getSkuState(job.printJobId, item.skuId).hidden = false;
         renderPortal();
       });
-      section.appendChild(hiddenSkuRow);
+      skuSegment.appendChild(hiddenSkuRow);
     }
+    section.appendChild(skuSegment);
+
+    const pricingSegment = createEl('section', 'pjSegment pjPricing');
+    pricingSegment.appendChild(createEl('h3', 'pjSegmentTitle', 'Add-Ons and Totals'));
 
     const bottomRow = createEl('div', 'bottomRow');
 
@@ -2932,7 +3118,8 @@
 
     bottomRow.appendChild(compareCard);
     bottomRow.appendChild(totalsCard);
-    section.appendChild(bottomRow);
+    pricingSegment.appendChild(bottomRow);
+    section.appendChild(pricingSegment);
 
     JOB_DOM.set(job.printJobId, {
       section: section,
@@ -3056,6 +3243,26 @@
     hiddenPrintJobsBar.appendChild(row);
   }
 
+  function renderPrintJobNav(visibleJobs){
+    if (!printJobNav || !printJobNavList) return;
+    printJobNavList.innerHTML = '';
+
+    if (!visibleJobs.length) {
+      const empty = createEl('div', 'portalJobsNavItem', 'No visible print jobs');
+      empty.appendChild(createEl('span', 'portalJobsNavItemMeta', 'Use "Show hidden projects" to restore.'));
+      printJobNavList.appendChild(empty);
+      return;
+    }
+
+    visibleJobs.forEach((job, idx) => {
+      const item = createEl('a', 'portalJobsNavItem', 'Print Job ' + (idx + 1) + ': ' + (job.printJobName || job.printJobId || '--'));
+      item.href = '#' + jobSectionId(job.printJobId);
+      item.dataset.jobId = job.printJobId;
+      item.appendChild(createEl('span', 'portalJobsNavItemMeta', 'ID: ' + (job.printJobId || '--')));
+      printJobNavList.appendChild(item);
+    });
+  }
+
   function renderPortal(){
     JOB_DOM.clear();
     jobsRoot.innerHTML = '';
@@ -3064,6 +3271,7 @@
     renderHiddenPrintJobs();
 
     const visibleJobs = getVisibleJobs();
+    renderPrintJobNav(visibleJobs);
 
     if (!visibleJobs.length) {
       jobsRoot.appendChild(createEl('div', 'card', 'All print jobs are hidden. Use Show hidden controls to restore.'));
