@@ -1,126 +1,278 @@
+const REQUIRED_SHEET_ID = '16KrxpEv8s-U5gjLX-DZK25GbrnkeKbjgInngie8Ce_c';
+
 const CONFIG_KEYS = {
   SHEET_ID: 'SHEET_ID',
   EXPORT_LOG_SHEET: 'EXPORT_LOG_SHEET',
   MAKE_WEBHOOK_URL: 'MAKE_WEBHOOK_URL',
-  MAKE_WEBHOOK_SECRET: 'MAKE_WEBHOOK_SECRET', // optional
-  SUCCESS_REDIRECT_URL: 'SUCCESS_REDIRECT_URL' // unused now, kept for backward compatibility
+  MAKE_WEBHOOK_SECRET: 'MAKE_WEBHOOK_SECRET',
+  SUCCESS_REDIRECT_URL: 'SUCCESS_REDIRECT_URL'
+};
+
+const EXPORT_LOG_COLUMNS = {
+  chatLogJson: 28
 };
 
 function doGet(e) {
-  const token = (e && e.parameter && e.parameter.t) ? String(e.parameter.t).trim() : '';
-  if (!token) return renderMessage_('Invalid link', 'Missing token.');
-
-  const cfg = getConfig_();
-  const ss = SpreadsheetApp.openById(cfg.sheetId);
-  const sheet = ss.getSheetByName(cfg.exportLogSheetName);
-  if (!sheet) return renderMessage_('Configuration error', 'EXPORT_LOG sheet not found.');
-
-  const rowInfo = findRowByToken_(sheet, token);
-  if (!rowInfo) return renderMessage_('Link not found', 'This link is invalid or no longer available.');
-
-  const rowObj = rowInfo.rowObj;
-
-  if (String(rowObj.status).toLowerCase() === 'replaced') {
-    return renderMessage_('Link replaced', 'This estimate link has been replaced. Please use the most recent email link.');
-  }
-
-  let snapshot;
   try {
-    snapshot = JSON.parse(rowObj.itemsJSON || '{}');
-  } catch (err) {
-    return renderMessage_('Configuration error', 'Snapshot data is malformed.');
-  }
+    const token = (e && e.parameter && e.parameter.t) ? String(e.parameter.t).trim() : '';
+    if (!token) return renderMessage_('Invalid link', 'Missing token.');
 
-  // Enforce locked V1 constraints
-  snapshot.maxItems = 6;
-  snapshot.maxColorwaysPerItem = 6;
-  snapshot.warningCopy = snapshot.warningCopy || 'Changing the order quantity from the original estimate will result in a new unit price / order total.';
-  snapshot.colorwayDisclaimer = snapshot.colorwayDisclaimer || 'Print colors/locations stay the same across all colorways.';
+    const mode = normalizeMode_((e && e.parameter && e.parameter.mode) || 'client');
 
-  const rowSkuKey =
-    rowObj.skuKey || rowObj.sku_key || rowObj.SKU_KEY || rowObj.SkuKey || '';
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) return renderMessage_('Configuration error', 'EXPORT_LOG sheet not found.');
 
-  if (Array.isArray(snapshot.items)) {
-    snapshot.items = snapshot.items.slice(0, 6).map(it => {
-      const out = Object.assign({}, it);
-      out.pricingTableHtml = sanitizeHtml_(String(out.pricingTableHtml || ''));
-      out.decorations = Array.isArray(out.decorations) ? out.decorations : splitDecorations_(out.decorations);
-      out.estimatedQty = Number(out.estimatedQty || 0) || 0;
-      out.lineId = Number(out.lineId || 0) || 0;
+    const rowInfo = findRowByToken_(sheet, token);
+    if (!rowInfo) return renderMessage_('Link not found', 'This link is invalid or no longer available.');
 
-      out.skuKey = out.skuKey || out.sku_key || rowSkuKey || '';
+    const row = rowInfo.rowObjNormalized;
+    const status = String(row.status || '').toLowerCase();
 
-      return out;
-    });
-  } else {
-    snapshot.items = [];
-  }
-
-  const status = String(rowObj.status || '').toLowerCase();
-
-  let submitted = null;
-  if (status === 'submitted') {
-    try {
-      submitted = JSON.parse(rowObj.submittedItemsJSON || '{}');
-    } catch (err) {
-      submitted = null;
+    if (status === 'replaced') {
+      return renderMessage_('Link replaced', 'This estimate link has been replaced. Please use the most recent email link.');
     }
+
+    const snapshotRaw = String(row.snapshotjson || '').trim();
+    if (!snapshotRaw) {
+      return renderMessage_('Configuration error', 'Snapshot data is missing.');
+    }
+
+    const snapshot = safeJsonParse_(snapshotRaw, null);
+    if (!snapshot || typeof snapshot !== 'object') {
+      return renderMessage_('Configuration error', 'Snapshot data is malformed.');
+    }
+    const rawPrintJobs = Array.isArray(snapshot.printJobs)
+      ? snapshot.printJobs
+      : ((snapshot.printJobs && typeof snapshot.printJobs === 'object')
+        ? Object.keys(snapshot.printJobs).map(key => snapshot.printJobs[key])
+        : []);
+    const printJobIds = rawPrintJobs
+      .map((job, idx) => {
+        if (!job || typeof job !== 'object') return '';
+        return String(job.printJobId || ('PJ' + (idx + 1))).trim();
+      })
+      .filter(Boolean);
+
+    const contractVersion = String(
+      row.contractversion ||
+      (snapshot.meta && snapshot.meta.contractVersion) ||
+      ''
+    ).trim();
+
+    if (majorVersion_(contractVersion) !== 2) {
+      if (mode === 'team') {
+        return renderTeamContractMessage_({
+          token: token,
+          status: status,
+          contractVersion: contractVersion,
+          snapshotId: String(row.snapshotid || '').trim(),
+          exportedAt: String(row.exportedat || '').trim(),
+          snapshotSnippet: snapshotRaw.slice(0, 500)
+        });
+      }
+      return renderMessage_(
+        'Unsupported Estimate Link',
+        'This portal link is on an unsupported contract version. Please request a fresh estimate link.'
+      );
+    }
+
+    const portalState = safeJsonParse_(row.portalstatejson, null);
+    const chatLog = normalizeChatLog_(safeJsonParse_(row.chatlogjson, []));
+    const readOnly =
+      status === 'saved' ||
+      status === 'submitted' ||
+      Boolean(portalState && portalState.isReadOnly === true);
+
+    const tpl = HtmlService.createTemplateFromFile('Index');
+    tpl.VM = {
+      token: token,
+      mode: mode,
+      status: status,
+      readOnly: readOnly,
+      row: row,
+      snapshot: snapshot,
+      portalState: portalState,
+      chatLog: chatLog,
+      postUrl: getWebAppUrl_(),
+      diagnostics: {
+        token: token,
+        status: status,
+        contractVersion: contractVersion,
+        snapshotId: String(row.snapshotid || '').trim(),
+        exportedAt: String(row.exportedat || '').trim(),
+        printJobsCount: printJobIds.length,
+        printJobIds: printJobIds,
+        snapshotSnippet: snapshotRaw.slice(0, 500)
+      }
+    };
+
+    return tpl.evaluate()
+      .setTitle('Red Threads Estimate Portal')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  } catch (err) {
+    return renderMessage_('Runtime error', String((err && err.message) || err));
   }
+}
 
-  const addOns = normalizeAddOns_(rowObj.addOns || rowObj.add_ons || rowObj['Add Ons'] || '');
+function appendChatMessage(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = String(p.token || '').trim();
+    const text = String(p.text || '').trim();
+    const sender = String(p.sender || '').trim().toLowerCase();
 
-  const tpl = HtmlService.createTemplateFromFile('Index');
-  tpl.VM = {
-    token,
-    jobName: rowObj.jobName || snapshot.jobName || '',
-    clientName: rowObj.clientName || rowObj.ClientName || rowObj['Client Name'] || '',
-    recipientEmail: rowObj.recipientEmail || rowObj.clientEmail || rowObj.ClientEmail || rowObj['Client Email'] || '',
-    orderNumber: rowObj.pipedriveDealId || rowObj.orderNumber || rowObj.jobKey || '',
-    createdAt: rowObj.createdAt || '',
-    jobNotes: rowObj.internalNotes || '',
-    skuKey: rowSkuKey || '',
-    snapshot,
-    postUrl: getWebAppUrl_(),
-    mode: (status === 'submitted') ? 'view' : 'edit',
-    submitted, // may be null
-    productionTime: rowObj.productionTime || '',
-    addOns,
+    const validSender = sender === 'client' || sender === 'team';
+    if (!token || !text || text.length > 1000 || !validSender) {
+      return { ok: false, error: 'Invalid input' };
+    }
 
-    // New row-level image fields (row wins)
-    previewMockupFileId: String(rowObj.previewMockupFileId || rowObj.previewMockupFileID || '').trim(),
-    artMockupFileId: String(rowObj.artMockupFileId || rowObj.artMockupFileID || '').trim(),
-    garmentMockupFileId: String(rowObj.garmentMockupFileId || rowObj.garmentMockupFileID || '').trim(),
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) return { ok: false, error: 'Invalid input' };
 
-    // New portal fields
-    baseUrl: String(rowObj.baseUrl || '').trim(),
-    schemaVersion: String(rowObj.schemaVersion || '').trim(),
-    portalMode: String(rowObj.portalMode || '').trim(),
-    submittedByName: String(rowObj.submittedByName || '').trim(),
-    submittedByEmail: String(rowObj.submittedByEmail || '').trim(),
-    sentBy: String(rowObj.sentBy || rowObj.SentBy || rowObj['Sent By'] || '').trim()
-  };
+    const rowInfo = findRowByToken_(sheet, token);
+    if (!rowInfo) return { ok: false, error: 'Invalid input' };
 
-  return tpl.evaluate()
-    .setTitle('Red Threads Estimate Portal')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    const row = rowInfo.row;
+    const colMap = rowInfo.colMap || {};
+    const chatCol = colMap.chatlogjson || EXPORT_LOG_COLUMNS.chatLogJson;
+    if (!chatCol) return { ok: false, error: 'Invalid input' };
+
+    const existingRaw = sheet.getRange(row, chatCol).getValue();
+    const existingParsed = safeJsonParse_(existingRaw, []);
+    const chatLog = Array.isArray(existingParsed) ? existingParsed : [];
+
+    const nextMsg = {
+      id: 'msg_' + Utilities.getUuid(),
+      ts: new Date().toISOString(),
+      sender: sender,
+      text: text
+    };
+
+    chatLog.push(nextMsg);
+    sheet.getRange(row, chatCol).setValue(JSON.stringify(chatLog));
+
+    return { ok: true, chatLog: normalizeChatLog_(chatLog) };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function savePortalState(token, portalStateInput) {
+  try {
+    const tokenValue = String(token || '').trim();
+    if (!tokenValue) {
+      return { ok: false, error: 'Missing token.' };
+    }
+
+    const portalState = safeJsonParse_(portalStateInput, null);
+    if (!portalState || typeof portalState !== 'object' || Array.isArray(portalState)) {
+      return { ok: false, error: 'portalState must be an object.' };
+    }
+    if (!portalState.printJobs || typeof portalState.printJobs !== 'object' || Array.isArray(portalState.printJobs)) {
+      return { ok: false, error: 'portalState.printJobs must be an object.' };
+    }
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) {
+      return { ok: false, error: 'EXPORT_LOG sheet not found.' };
+    }
+
+    const rowInfo = findRowByToken_(sheet, tokenValue);
+    if (!rowInfo) {
+      return { ok: false, error: 'Token not found.' };
+    }
+
+    return persistPortalStateForRow_(sheet, rowInfo, portalState, tokenValue);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 }
 
 function doPost(e) {
-  return renderMessage_('Disabled', 'Submission is disabled in this build.');
+  try {
+    const payload = safeJsonParse_(e && e.postData && e.postData.contents, null);
+    if (!payload || typeof payload !== 'object') {
+      return jsonOutput_({ ok: false, error: 'Invalid JSON body.' });
+    }
+
+    const action = String(payload.action || '').toLowerCase();
+    if (action !== 'save') {
+      return jsonOutput_({ ok: false, error: 'Unsupported action.' });
+    }
+
+    const token = String(payload.token || '').trim();
+    if (!token) {
+      return jsonOutput_({ ok: false, error: 'Missing token.' });
+    }
+
+    const result = savePortalState(token, payload.portalState);
+    return jsonOutput_(result);
+  } catch (err) {
+    return jsonOutput_({ ok: false, error: String((err && err.message) || err) });
+  }
 }
 
 /* ---------------- Helpers ---------------- */
 
+function persistPortalStateForRow_(sheet, rowInfo, portalState, token) {
+  const colMap = rowInfo.colMap || {};
+  const row = rowInfo.row;
+
+  const portalStateCol = colMap.portalstatejson;
+  const statusCol = colMap.status;
+  const submittedAtCol = colMap.submittedat;
+
+  if (!portalStateCol || !statusCol || !submittedAtCol) {
+    return { ok: false, error: 'Required columns missing (portalStateJson/status/submittedAt).' };
+  }
+
+  const nowIso = new Date().toISOString();
+  const stateToStore = JSON.parse(JSON.stringify(portalState));
+  stateToStore.version = String(stateToStore.version || '1');
+  stateToStore.savedAt = nowIso;
+  stateToStore.isReadOnly = true;
+
+  sheet.getRange(row, portalStateCol).setValue(JSON.stringify(stateToStore));
+  sheet.getRange(row, statusCol).setValue('saved');
+  sheet.getRange(row, submittedAtCol).setValue(nowIso);
+
+  return { ok: true, token: token, status: 'saved', submittedAt: nowIso };
+}
+
+function normalizeMode_(value) {
+  const s = String(value || '').trim().toLowerCase();
+  return (s === 'team') ? 'team' : 'client';
+}
+
 function getConfig_() {
   const props = PropertiesService.getScriptProperties();
-  const sheetId = props.getProperty(CONFIG_KEYS.SHEET_ID);
+
+  // Keep script property aligned to the required bound sheet.
+  if (props.getProperty(CONFIG_KEYS.SHEET_ID) !== REQUIRED_SHEET_ID) {
+    try {
+      props.setProperty(CONFIG_KEYS.SHEET_ID, REQUIRED_SHEET_ID);
+    } catch (_) {
+      // Continue using REQUIRED_SHEET_ID even if property write is unavailable.
+    }
+  }
+
+  const sheetId = REQUIRED_SHEET_ID;
   const exportLogSheetName = props.getProperty(CONFIG_KEYS.EXPORT_LOG_SHEET) || 'EXPORT_LOG';
   const makeWebhookUrl = props.getProperty(CONFIG_KEYS.MAKE_WEBHOOK_URL);
   const makeWebhookSecret = props.getProperty(CONFIG_KEYS.MAKE_WEBHOOK_SECRET) || '';
 
-  if (!sheetId) throw new Error('Missing SHEET_ID script property.');
-
-  return { sheetId, exportLogSheetName, makeWebhookUrl: makeWebhookUrl || '', makeWebhookSecret };
+  return {
+    sheetId: sheetId,
+    exportLogSheetName: exportLogSheetName,
+    makeWebhookUrl: makeWebhookUrl || '',
+    makeWebhookSecret: makeWebhookSecret
+  };
 }
 
 function getWebAppUrl_() {
@@ -129,26 +281,98 @@ function getWebAppUrl_() {
 
 function findRowByToken_(sheet, token) {
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const colMap = {};
-  header.forEach((h, i) => { colMap[String(h).trim()] = i + 1; });
+  const colMap = buildColumnMap_(header);
 
-  const tokenCol = colMap['token'];
-  if (!tokenCol) throw new Error('EXPORT_LOG must have a "token" column in row 1.');
+  const tokenCol = colMap.token;
+  if (!tokenCol) {
+    throw new Error('EXPORT_LOG must have a "token" column in row 1.');
+  }
 
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
 
   const tokenRange = sheet.getRange(2, tokenCol, lastRow - 1, 1);
-  const finder = tokenRange.createTextFinder(token).matchEntireCell(true);
+  const finder = tokenRange.createTextFinder(String(token)).matchEntireCell(true);
   const cell = finder.findNext();
   if (!cell) return null;
 
   const row = cell.getRow();
   const rowVals = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const rowObj = {};
-  header.forEach((h, idx) => { rowObj[String(h).trim()] = rowVals[idx]; });
 
-  return { row, rowObj, colMap };
+  const rowObj = {};
+  const rowObjNormalized = {};
+  header.forEach((h, idx) => {
+    const rawKey = String(h || '').trim();
+    rowObj[rawKey] = rowVals[idx];
+    rowObjNormalized[normalizeHeaderKey_(rawKey)] = rowVals[idx];
+  });
+
+  return {
+    row: row,
+    rowObj: rowObj,
+    rowObjNormalized: rowObjNormalized,
+    colMap: colMap
+  };
+}
+
+function buildColumnMap_(headerRow) {
+  const out = {};
+  (headerRow || []).forEach((h, idx) => {
+    const key = normalizeHeaderKey_(h);
+    if (!key) return;
+    if (!out[key]) out[key] = idx + 1;
+  });
+  return out;
+}
+
+function normalizeHeaderKey_(h) {
+  return String(h || '')
+    .trim()
+    .toLowerCase();
+}
+
+function majorVersion_(version) {
+  const m = String(version || '').trim().match(/^(\d+)/);
+  return m ? Number(m[1]) : 0;
+}
+
+function safeJsonParse_(input, fallback) {
+  try {
+    if (input == null) return fallback;
+    if (typeof input === 'object') return input;
+    const s = String(input).trim();
+    if (!s) return fallback;
+    return JSON.parse(s);
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function normalizeChatLog_(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((m) => {
+      if (!m || typeof m !== 'object') return null;
+      const text = String(m.text || '').trim();
+      const senderRaw = String(m.sender || '').trim().toLowerCase();
+      const sender = senderRaw === 'team' ? 'team' : 'client';
+      if (!text) return null;
+      const tsRaw = String(m.ts || m.tsIso || '').trim();
+      const ts = tsRaw && !isNaN(new Date(tsRaw).getTime()) ? tsRaw : new Date().toISOString();
+      return {
+        id: String(m.id || ('msg_' + Utilities.getUuid())),
+        ts: ts,
+        sender: sender,
+        text: text
+      };
+    })
+    .filter(Boolean);
+}
+
+function jsonOutput_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj || {}))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function escapeHtml_(s) {
@@ -166,29 +390,39 @@ function sanitizeHtml_(html) {
   return out;
 }
 
-function splitDecorations_(val) {
-  const s = String(val || '').trim();
-  if (!s) return [];
-  if (s.includes('\n')) return s.split('\n').map(x => x.trim()).filter(Boolean);
-  if (s.includes('|')) return s.split('|').map(x => x.trim()).filter(Boolean);
-  return [s];
-}
+function renderTeamContractMessage_(diag) {
+  const html = `
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1" />
+      <title>Contract Mismatch (Team)</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:0;background:#f6f7f9}
+        .wrap{max-width:900px;margin:24px auto;padding:0 16px}
+        .card{background:#fff;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:22px}
+        h1{margin:0 0 10px;font-size:20px}
+        p{margin:0 0 10px;color:#333;line-height:1.4}
+        .kv{display:grid;grid-template-columns:190px 1fr;gap:6px 12px;margin-top:12px;font-size:13px}
+        .k{font-weight:700;color:#111}
+        pre{margin-top:12px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:12px}
+      </style>
+    </head>
+    <body><div class="wrap"><div class="card">
+      <h1>Unsupported Contract Version</h1>
+      <p>This link is not on contract v2 and cannot be rendered by this build in client mode.</p>
+      <div class="kv">
+        <div class="k">token</div><div>${escapeHtml_(diag.token || '')}</div>
+        <div class="k">status</div><div>${escapeHtml_(diag.status || '')}</div>
+        <div class="k">contractVersion</div><div>${escapeHtml_(diag.contractVersion || '')}</div>
+        <div class="k">snapshotId</div><div>${escapeHtml_(diag.snapshotId || '')}</div>
+        <div class="k">exportedAt</div><div>${escapeHtml_(diag.exportedAt || '')}</div>
+      </div>
+      <pre>${escapeHtml_(diag.snapshotSnippet || '')}</pre>
+    </div></div></body>
+  </html>`;
 
-function normalizeAddOns_(raw) {
-  if (!raw) return [];
-  let v = raw;
-  if (typeof v === 'string') {
-    try {
-      v = JSON.parse(v);
-    } catch (e) {
-      return [];
-    }
-  }
-  if (Array.isArray(v)) return v;
-  if (v && typeof v === 'object') {
-    return Object.keys(v).map(k => ({ name: k, qty: 1, price: v[k] }));
-  }
-  return [];
+  return HtmlService.createHtmlOutput(html)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function renderMessage_(title, message) {
@@ -209,6 +443,7 @@ function renderMessage_(title, message) {
       <h1>${escapeHtml_(title)}</h1><p>${escapeHtml_(message)}</p>
     </div></div></body>
   </html>`;
+
   return HtmlService.createHtmlOutput(html)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
