@@ -8,6 +8,10 @@ const CONFIG_KEYS = {
   SUCCESS_REDIRECT_URL: 'SUCCESS_REDIRECT_URL'
 };
 
+const EXPORT_LOG_COLUMNS = {
+  chatLogJson: 28
+};
+
 function doGet(e) {
   try {
     const token = (e && e.parameter && e.parameter.t) ? String(e.parameter.t).trim() : '';
@@ -75,6 +79,7 @@ function doGet(e) {
     }
 
     const portalState = safeJsonParse_(row.portalstatejson, null);
+    const chatLog = normalizeChatLog_(safeJsonParse_(row.chatlogjson, []));
     const readOnly =
       status === 'saved' ||
       status === 'submitted' ||
@@ -89,6 +94,7 @@ function doGet(e) {
       row: row,
       snapshot: snapshot,
       portalState: portalState,
+      chatLog: chatLog,
       postUrl: getWebAppUrl_(),
       diagnostics: {
         token: token,
@@ -110,6 +116,84 @@ function doGet(e) {
   }
 }
 
+function appendChatMessage(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = String(p.token || '').trim();
+    const text = String(p.text || '').trim();
+    const sender = String(p.sender || '').trim().toLowerCase();
+
+    const validSender = sender === 'client' || sender === 'team';
+    if (!token || !text || text.length > 1000 || !validSender) {
+      return { ok: false, error: 'Invalid input' };
+    }
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) return { ok: false, error: 'Invalid input' };
+
+    const rowInfo = findRowByToken_(sheet, token);
+    if (!rowInfo) return { ok: false, error: 'Invalid input' };
+
+    const row = rowInfo.row;
+    const colMap = rowInfo.colMap || {};
+    const chatCol = colMap.chatlogjson || EXPORT_LOG_COLUMNS.chatLogJson;
+    if (!chatCol) return { ok: false, error: 'Invalid input' };
+
+    const existingRaw = sheet.getRange(row, chatCol).getValue();
+    const existingParsed = safeJsonParse_(existingRaw, []);
+    const chatLog = Array.isArray(existingParsed) ? existingParsed : [];
+
+    const nextMsg = {
+      id: 'msg_' + Utilities.getUuid(),
+      ts: new Date().toISOString(),
+      sender: sender,
+      text: text
+    };
+
+    chatLog.push(nextMsg);
+    sheet.getRange(row, chatCol).setValue(JSON.stringify(chatLog));
+
+    return { ok: true, chatLog: normalizeChatLog_(chatLog) };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function savePortalState(token, portalStateInput) {
+  try {
+    const tokenValue = String(token || '').trim();
+    if (!tokenValue) {
+      return { ok: false, error: 'Missing token.' };
+    }
+
+    const portalState = safeJsonParse_(portalStateInput, null);
+    if (!portalState || typeof portalState !== 'object' || Array.isArray(portalState)) {
+      return { ok: false, error: 'portalState must be an object.' };
+    }
+    if (!portalState.printJobs || typeof portalState.printJobs !== 'object' || Array.isArray(portalState.printJobs)) {
+      return { ok: false, error: 'portalState.printJobs must be an object.' };
+    }
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) {
+      return { ok: false, error: 'EXPORT_LOG sheet not found.' };
+    }
+
+    const rowInfo = findRowByToken_(sheet, tokenValue);
+    if (!rowInfo) {
+      return { ok: false, error: 'Token not found.' };
+    }
+
+    return persistPortalStateForRow_(sheet, rowInfo, portalState, tokenValue);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function doPost(e) {
   try {
     const payload = safeJsonParse_(e && e.postData && e.postData.contents, null);
@@ -127,54 +211,39 @@ function doPost(e) {
       return jsonOutput_({ ok: false, error: 'Missing token.' });
     }
 
-    const portalState = payload.portalState;
-    if (!portalState || typeof portalState !== 'object' || Array.isArray(portalState)) {
-      return jsonOutput_({ ok: false, error: 'portalState must be an object.' });
-    }
-    if (!portalState.printJobs || typeof portalState.printJobs !== 'object' || Array.isArray(portalState.printJobs)) {
-      return jsonOutput_({ ok: false, error: 'portalState.printJobs must be an object.' });
-    }
-
-    const cfg = getConfig_();
-    const ss = SpreadsheetApp.openById(cfg.sheetId);
-    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
-    if (!sheet) {
-      return jsonOutput_({ ok: false, error: 'EXPORT_LOG sheet not found.' });
-    }
-
-    const rowInfo = findRowByToken_(sheet, token);
-    if (!rowInfo) {
-      return jsonOutput_({ ok: false, error: 'Token not found.' });
-    }
-
-    const colMap = rowInfo.colMap;
-    const row = rowInfo.row;
-
-    const portalStateCol = colMap.portalstatejson;
-    const statusCol = colMap.status;
-    const submittedAtCol = colMap.submittedat;
-
-    if (!portalStateCol || !statusCol || !submittedAtCol) {
-      return jsonOutput_({ ok: false, error: 'Required columns missing (portalStateJson/status/submittedAt).' });
-    }
-
-    const nowIso = new Date().toISOString();
-    const stateToStore = JSON.parse(JSON.stringify(portalState));
-    stateToStore.version = String(stateToStore.version || '1');
-    stateToStore.savedAt = nowIso;
-    stateToStore.isReadOnly = true;
-
-    sheet.getRange(row, portalStateCol).setValue(JSON.stringify(stateToStore));
-    sheet.getRange(row, statusCol).setValue('saved');
-    sheet.getRange(row, submittedAtCol).setValue(nowIso);
-
-    return jsonOutput_({ ok: true, token: token, status: 'saved', submittedAt: nowIso });
+    const result = savePortalState(token, payload.portalState);
+    return jsonOutput_(result);
   } catch (err) {
     return jsonOutput_({ ok: false, error: String((err && err.message) || err) });
   }
 }
 
 /* ---------------- Helpers ---------------- */
+
+function persistPortalStateForRow_(sheet, rowInfo, portalState, token) {
+  const colMap = rowInfo.colMap || {};
+  const row = rowInfo.row;
+
+  const portalStateCol = colMap.portalstatejson;
+  const statusCol = colMap.status;
+  const submittedAtCol = colMap.submittedat;
+
+  if (!portalStateCol || !statusCol || !submittedAtCol) {
+    return { ok: false, error: 'Required columns missing (portalStateJson/status/submittedAt).' };
+  }
+
+  const nowIso = new Date().toISOString();
+  const stateToStore = JSON.parse(JSON.stringify(portalState));
+  stateToStore.version = String(stateToStore.version || '1');
+  stateToStore.savedAt = nowIso;
+  stateToStore.isReadOnly = true;
+
+  sheet.getRange(row, portalStateCol).setValue(JSON.stringify(stateToStore));
+  sheet.getRange(row, statusCol).setValue('saved');
+  sheet.getRange(row, submittedAtCol).setValue(nowIso);
+
+  return { ok: true, token: token, status: 'saved', submittedAt: nowIso };
+}
 
 function normalizeMode_(value) {
   const s = String(value || '').trim().toLowerCase();
@@ -277,6 +346,27 @@ function safeJsonParse_(input, fallback) {
   } catch (err) {
     return fallback;
   }
+}
+
+function normalizeChatLog_(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((m) => {
+      if (!m || typeof m !== 'object') return null;
+      const text = String(m.text || '').trim();
+      const senderRaw = String(m.sender || '').trim().toLowerCase();
+      const sender = senderRaw === 'team' ? 'team' : 'client';
+      if (!text) return null;
+      const tsRaw = String(m.ts || m.tsIso || '').trim();
+      const ts = tsRaw && !isNaN(new Date(tsRaw).getTime()) ? tsRaw : new Date().toISOString();
+      return {
+        id: String(m.id || ('msg_' + Utilities.getUuid())),
+        ts: ts,
+        sender: sender,
+        text: text
+      };
+    })
+    .filter(Boolean);
 }
 
 function jsonOutput_(obj) {

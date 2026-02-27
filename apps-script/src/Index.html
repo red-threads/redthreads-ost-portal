@@ -219,6 +219,15 @@
       color:#fff;
     }
     .headerBtnBlue:hover{background:#0284c7}
+    .headerBtnChat{
+      background:#fff;
+      color:#0f172a;
+      border:1px solid #cbd5e1;
+    }
+    .headerBtnChat:hover{
+      background:#f8fafc;
+      border-color:#94a3b8;
+    }
 
     .headerCondensedLeft{
       display:flex;
@@ -371,6 +380,180 @@
       line-height:1.6;
       color:#111;
       white-space:pre-wrap;
+    }
+
+    .chatDrawerBackdrop{
+      position:fixed;
+      inset:0;
+      background:rgba(15,23,42,.35);
+      z-index:10030;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .2s ease;
+    }
+    .chatDrawerBackdrop.open{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .chatDrawer{
+      position:fixed;
+      top:0;
+      right:0;
+      height:100vh;
+      width:min(420px,100vw);
+      background:#fff;
+      border-left:1px solid #d0d8e3;
+      box-shadow:-12px 0 30px rgba(15,23,42,.22);
+      z-index:10040;
+      transform:translateX(100%);
+      transition:transform .22s ease;
+      display:flex;
+      flex-direction:column;
+    }
+    .chatDrawer.open{
+      transform:translateX(0);
+    }
+    .chatDrawerHead{
+      padding:14px 14px 10px;
+      border-bottom:1px solid #e2e8f0;
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      align-items:start;
+    }
+    .chatDrawerTitle{
+      font-size:16px;
+      font-weight:900;
+      color:#0f172a;
+      margin:0;
+    }
+    .chatDrawerSub{
+      margin:2px 0 0;
+      font-size:12px;
+      color:#475569;
+      font-weight:700;
+    }
+    .chatDrawerDate{
+      margin-top:6px;
+      font-size:11px;
+      color:#64748b;
+      font-weight:700;
+    }
+    .chatDrawerClose{
+      border:1px solid #cbd5e1;
+      border-radius:999px;
+      background:#fff;
+      color:#0f172a;
+      width:28px;
+      height:28px;
+      font-weight:900;
+      cursor:pointer;
+      line-height:1;
+    }
+    .chatDrawerBody{
+      flex:1;
+      overflow:auto;
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      background:#f8fafc;
+    }
+    .chatEmpty{
+      border:1px dashed #cbd5e1;
+      border-radius:8px;
+      padding:10px;
+      font-size:12px;
+      color:#64748b;
+      background:#fff;
+    }
+    .chatMessage{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      max-width:92%;
+    }
+    .chatMessage.team{
+      align-self:flex-start;
+    }
+    .chatMessage.client{
+      align-self:flex-end;
+    }
+    .chatMeta{
+      font-size:11px;
+      color:#64748b;
+      font-weight:700;
+    }
+    .chatBubble{
+      border-radius:10px;
+      padding:8px 10px;
+      font-size:13px;
+      line-height:1.35;
+      white-space:pre-wrap;
+      word-break:break-word;
+      border:1px solid #d0d8e3;
+      background:#fff;
+      color:#0f172a;
+    }
+    .chatMessage.client .chatBubble{
+      background:#e9f2ff;
+      border-color:#bfd2ef;
+    }
+    .chatDrawerFoot{
+      border-top:1px solid #e2e8f0;
+      padding:10px;
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      background:#fff;
+      align-items:end;
+    }
+    .chatInput{
+      resize:none;
+      width:100%;
+      min-height:44px;
+      max-height:140px;
+      border:1px solid #cbd5e1;
+      border-radius:8px;
+      padding:8px 10px;
+      font-size:13px;
+      font-family:inherit;
+      color:#0f172a;
+      background:#fff;
+    }
+    .chatSendBtn{
+      border:1px solid #0f4fa8;
+      border-radius:8px;
+      background:#0f4fa8;
+      color:#fff;
+      font-size:12px;
+      font-weight:900;
+      padding:8px 12px;
+      cursor:pointer;
+    }
+    .chatSendBtn:disabled{
+      opacity:.5;
+      cursor:not-allowed;
+    }
+    .chatFab{
+      position:fixed;
+      right:16px;
+      bottom:16px;
+      z-index:10045;
+      border:1px solid #0f4fa8;
+      border-radius:999px;
+      background:#0f4fa8;
+      color:#fff;
+      font-size:13px;
+      font-weight:900;
+      letter-spacing:.02em;
+      padding:10px 14px;
+      cursor:pointer;
+      box-shadow:0 10px 20px rgba(15,79,168,.35);
+    }
+    .chatFab:hover{
+      background:#0b3d84;
+      border-color:#0b3d84;
     }
 
     .topRowNew{
@@ -1697,75 +1880,69 @@
       background:#fff;
       box-shadow:0 8px 20px rgba(15,23,42,.05);
     }
-    .portalMetaSection{
-      padding:0;
-      overflow:hidden;
+    .headerProjects{display:none}
+    .headerExpanded{grid-template-columns:320px minmax(0,1fr) auto}
+    .portalMetaSection{display:none}
+    .printJobTabsSection{
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .printJobTabsList{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .printJobTab{
+      border:1px solid #cbd5e1;
+      border-radius:10px;
+      background:#f8fafc;
+      color:#0f172a;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 10px;
+      cursor:pointer;
+      font-size:12px;
+      line-height:1.2;
+    }
+    .printJobTab[aria-selected="true"]{
+      border-color:#0f4fa8;
+      background:#e9f2ff;
+      box-shadow:inset 0 0 0 1px rgba(15,79,168,.1);
+    }
+    .printJobTabPill{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:2px 7px;
+      border:1px solid #cbd5e1;
+      border-radius:999px;
+      background:#fff;
+      color:#334155;
+      font-size:10px;
+      font-weight:900;
+      letter-spacing:.05em;
+      text-transform:uppercase;
+    }
+    .printJobTabName{
+      font-size:12px;
+      font-weight:800;
+      color:#0f172a;
+    }
+    .printJobHiddenControlBar{
+      margin:0;
     }
     .portalJobsSection{
-      display:grid;
-      grid-template-columns:260px minmax(0,1fr);
-      gap:12px;
-      align-items:start;
+      display:block;
       border:none;
       box-shadow:none;
       background:transparent;
       padding:0;
     }
     .portalJobsNav{
-      border:1px solid #d6deea;
-      border-radius:12px;
-      background:#fff;
-      box-shadow:0 8px 20px rgba(15,23,42,.05);
-      padding:10px;
-      position:sticky;
-      top:88px;
-      max-height:calc(100vh - 110px);
-      overflow:auto;
-    }
-    .portalJobsNavHead{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-      margin-bottom:8px;
-      padding-bottom:8px;
-      border-bottom:1px solid #e2e8f0;
-    }
-    .portalJobsNavTitle{
-      font-size:12px;
-      font-weight:900;
-      letter-spacing:.08em;
-      text-transform:uppercase;
-      color:#334155;
-    }
-    .portalJobsNavList{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    }
-    .portalJobsNavItem{
-      display:block;
-      width:100%;
-      border:1px solid #d0d8e3;
-      border-radius:8px;
-      background:#f8fafc;
-      color:#0f172a;
-      padding:8px;
-      text-decoration:none;
-      line-height:1.25;
-      font-size:12px;
-      font-weight:800;
-    }
-    .portalJobsNavItem:hover{
-      border-color:#0f4fa8;
-      background:#edf2f9;
-    }
-    .portalJobsNavItemMeta{
-      display:block;
-      margin-top:2px;
-      font-size:11px;
-      color:#64748b;
-      font-weight:700;
+      display:none;
     }
     .portalJobsContent{
       min-width:0;
@@ -1809,9 +1986,8 @@
     .pjPricing .bottomRow{
       margin-top:0;
     }
-    .portalJobsNav .hiddenControlRow{
-      margin-top:0;
-      margin-bottom:8px;
+    .printJobTabsSection .hiddenControlRow{
+      margin:0;
     }
 
     @media (max-width:980px){
@@ -1882,6 +2058,7 @@
       <div class="headerActions">
         <button class="headerBtn headerBtnGrey" id="saveBtn" type="button">Save</button>
         <button class="headerBtn headerBtnBlue" id="placeOrderBtn" type="button">Place Order</button>
+        <button class="headerBtn headerBtnChat" id="chatBtn" type="button">Chat</button>
       </div>
     </div>
 
@@ -1910,6 +2087,7 @@
       <div class="headerActions">
         <button class="headerBtn headerBtnGrey" id="saveBtnMini" type="button">Save</button>
         <button class="headerBtn headerBtnBlue" id="placeOrderBtnMini" type="button">Place Order</button>
+        <button class="headerBtn headerBtnChat" id="chatBtnMini" type="button">Chat</button>
       </div>
     </div>
   </div>
@@ -1973,14 +2151,12 @@
 
     <div class="saveNotice" id="saveNotice" hidden></div>
 
+    <section class="portalSection printJobTabsSection" id="printJobTabsSection">
+      <div class="printJobTabsList" id="printJobTabsList" role="tablist" aria-label="Print Jobs"></div>
+      <div class="hiddenControlBar printJobHiddenControlBar" id="hiddenPrintJobsBar"></div>
+    </section>
+
     <section class="portalSection portalJobsSection" id="portalJobsSection">
-      <aside class="portalJobsNav" id="printJobNav">
-        <div class="portalJobsNavHead">
-          <div class="portalJobsNavTitle">Print Jobs</div>
-        </div>
-        <div class="hiddenControlBar" id="hiddenPrintJobsBar"></div>
-        <nav class="portalJobsNavList" id="printJobNavList" aria-label="Print job navigation"></nav>
-      </aside>
       <section class="portalJobsContent" id="jobsContentPanel">
         <div id="jobsRoot"></div>
       </section>
@@ -2012,6 +2188,27 @@
       </div>
     </div>
   </div>
+
+  <div class="chatDrawerBackdrop" id="chatBackdrop"></div>
+  <aside class="chatDrawer" id="chatPanel" aria-hidden="true" aria-label="Messages">
+    <div class="chatDrawerHead">
+      <div>
+        <h2 class="chatDrawerTitle">Messages</h2>
+        <p class="chatDrawerSub">Chat with your Red Threads team</p>
+        <div class="chatDrawerDate" id="chatDate"></div>
+      </div>
+      <button class="chatDrawerClose" id="chatPanelClose" type="button" aria-label="Close chat">X</button>
+    </div>
+    <div class="chatDrawerBody" id="chatBody">
+      <div class="chatEmpty" id="chatEmpty">No messages yet. Start the conversation.</div>
+      <div id="chatMessages"></div>
+    </div>
+    <div class="chatDrawerFoot">
+      <textarea class="chatInput" id="chatInput" placeholder="Type a message..." rows="2"></textarea>
+      <button class="chatSendBtn" id="chatSend" type="button" disabled>Send</button>
+    </div>
+  </aside>
+  <button id="chatFab" class="chatFab" type="button">Chat</button>
 
   <div class="modeBadge" id="modeBadge">CLIENT VIEW</div>
   </div>
@@ -2244,8 +2441,146 @@
   const PRINT_JOBS = normalizePrintJobs(SNAPSHOT.printJobs);
   const PORTAL_MODE = normalizePortalMode(VM.mode);
   const IS_TEAM = PORTAL_MODE === 'team';
+  const SOURCE_PORTAL_STATE = safeJsonParse(VM.portalState, {});
+  const INITIAL_TOKEN = String(VM.token || '').trim();
 
   let IS_READ_ONLY = Boolean(VM.readOnly);
+
+  function detectMessageLogKey(stateObj){
+    if (!stateObj || typeof stateObj !== 'object') return 'messageLog';
+    if (Array.isArray(stateObj.messageLog)) return 'messageLog';
+    if (Array.isArray(stateObj.chatLog)) return 'chatLog';
+    if (Array.isArray(stateObj.messages)) return 'messages';
+    return 'messageLog';
+  }
+
+  let MESSAGE_LOG_KEY = detectMessageLogKey(SOURCE_PORTAL_STATE);
+
+  function parseActivePrintJobId(stateObj){
+    if (!stateObj || typeof stateObj !== 'object') return '';
+    const byId = String(stateObj.activePrintJobId || '').trim();
+    if (byId) return byId;
+
+    const byIndexRaw = toNumber(stateObj.activePrintJobIndex, NaN);
+    if (Number.isFinite(byIndexRaw)) {
+      const byIndex = Math.max(0, Math.floor(byIndexRaw));
+      const job = PRINT_JOBS[byIndex];
+      return job ? job.printJobId : '';
+    }
+    return '';
+  }
+
+  function quantityStateKey(jobId, skuId, colorway, size){
+    return [
+      encodeURIComponent(String(INITIAL_TOKEN || '')),
+      encodeURIComponent(String(jobId || '')),
+      encodeURIComponent(String(skuId || '')),
+      encodeURIComponent(String(colorway || '')),
+      encodeURIComponent(String(size || ''))
+    ].join('|');
+  }
+
+  function decodeQuantityStateKey(key){
+    const parts = String(key || '').split('|');
+    if (parts.length !== 5) return null;
+    try {
+      return {
+        token: decodeURIComponent(parts[0] || ''),
+        jobId: decodeURIComponent(parts[1] || ''),
+        skuId: decodeURIComponent(parts[2] || ''),
+        colorway: decodeURIComponent(parts[3] || ''),
+        size: decodeURIComponent(parts[4] || '')
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function normalizeMessage(raw){
+    if (!raw || typeof raw !== 'object') return null;
+    const text = String(raw.text || '').trim();
+    if (!text) return null;
+    const authorRaw = String(raw.authorType || raw.sender || '').trim().toLowerCase();
+    const authorType = authorRaw === 'team' ? 'team' : 'client';
+    const createdAtRaw = String(raw.createdAt || raw.tsIso || raw.ts || '').trim();
+    const createdAt = !Number.isNaN(new Date(createdAtRaw).getTime()) ? createdAtRaw : new Date().toISOString();
+    return {
+      id: String(raw.id || ('msg_' + Date.now() + '_' + Math.random().toString(36).slice(2))),
+      createdAt: createdAt,
+      authorType: authorType,
+      text: text
+    };
+  }
+
+  function normalizeMessageLog(rawLog){
+    if (!Array.isArray(rawLog)) return [];
+    return rawLog.map(normalizeMessage).filter(Boolean);
+  }
+
+  function readMessageLogFromState(stateObj){
+    if (!stateObj || typeof stateObj !== 'object') return [];
+    const fromResolvedKey = normalizeMessageLog(stateObj[MESSAGE_LOG_KEY]);
+    if (fromResolvedKey.length) return fromResolvedKey;
+    const fromMessageLog = normalizeMessageLog(stateObj.messageLog);
+    if (fromMessageLog.length) return fromMessageLog;
+    const fromChatLog = normalizeMessageLog(stateObj.chatLog);
+    if (fromChatLog.length) return fromChatLog;
+    return normalizeMessageLog(stateObj.messages);
+  }
+
+  function createClientMessage(text){
+    return normalizeMessage({
+      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+      createdAt: new Date().toISOString(),
+      authorType: IS_TEAM ? 'team' : 'client',
+      text: String(text || '').trim()
+    });
+  }
+
+  function collectQuantityMapFromState(stateObj){
+    const source = (stateObj && typeof stateObj === 'object') ? stateObj : {};
+    const quantities = {};
+    PRINT_JOBS.forEach(job => {
+      const jobState = source.printJobs && source.printJobs[job.printJobId] ? source.printJobs[job.printJobId] : {};
+      job.skus.forEach(sku => {
+        const skuState = jobState.skus && jobState.skus[sku.skuId] ? jobState.skus[sku.skuId] : {};
+        sku.colorways.forEach(color => {
+          const colorState = skuState.colorways && skuState.colorways[color] ? skuState.colorways[color] : {};
+          sku.sizesAllowed.forEach(size => {
+            const qty = clampInt(colorState && colorState.qtyBySize ? colorState.qtyBySize[size] : 0);
+            quantities[quantityStateKey(job.printJobId, sku.skuId, color, size)] = qty;
+          });
+        });
+      });
+    });
+    return quantities;
+  }
+
+  function applyQuantitiesMapToState(outState, quantitiesMap){
+    if (!quantitiesMap || typeof quantitiesMap !== 'object') return;
+    Object.keys(quantitiesMap).forEach(key => {
+      const decoded = decodeQuantityStateKey(key);
+      if (!decoded) return;
+      if (decoded.token && INITIAL_TOKEN && decoded.token !== INITIAL_TOKEN) return;
+      const qty = clampInt(quantitiesMap[key]);
+      const job = PRINT_JOBS.find(j => j.printJobId === decoded.jobId);
+      if (!job) return;
+      const sku = (job.skus || []).find(s => s.skuId === decoded.skuId);
+      if (!sku) return;
+      if (!sku.colorways.includes(decoded.colorway)) return;
+      if (!sku.sizesAllowed.includes(decoded.size)) return;
+      const colorState = outState
+        && outState.printJobs
+        && outState.printJobs[job.printJobId]
+        && outState.printJobs[job.printJobId].skus
+        && outState.printJobs[job.printJobId].skus[sku.skuId]
+        && outState.printJobs[job.printJobId].skus[sku.skuId].colorways
+        ? outState.printJobs[job.printJobId].skus[sku.skuId].colorways[decoded.colorway]
+        : null;
+      if (!colorState || !colorState.qtyBySize) return;
+      colorState.qtyBySize[decoded.size] = qty;
+    });
+  }
 
   function normalizePortalState(rawState){
     const parsed = safeJsonParse(rawState, {});
@@ -2253,6 +2588,9 @@
       version: String(parsed && parsed.version ? parsed.version : '1'),
       savedAt: String(parsed && parsed.savedAt ? parsed.savedAt : ''),
       isReadOnly: Boolean(parsed && parsed.isReadOnly === true),
+      activePrintJobId: parseActivePrintJobId(parsed),
+      messageLog: readMessageLogFromState(parsed),
+      quantities: {},
       printJobs: {}
     };
 
@@ -2287,6 +2625,9 @@
 
       out.printJobs[job.printJobId] = jobState;
     });
+
+    applyQuantitiesMapToState(out, parsed && parsed.quantities ? parsed.quantities : null);
+    out.quantities = collectQuantityMapFromState(out);
 
     return out;
   }
@@ -2364,8 +2705,7 @@
 
   const jobsRoot = document.getElementById('jobsRoot');
   const hiddenPrintJobsBar = document.getElementById('hiddenPrintJobsBar');
-  const printJobNav = document.getElementById('printJobNav');
-  const printJobNavList = document.getElementById('printJobNavList');
+  const printJobTabsList = document.getElementById('printJobTabsList');
   const saveNotice = document.getElementById('saveNotice');
   const snapshotTokenEl = document.getElementById('snapshotToken');
   const snapshotIdVal = document.getElementById('snapshotIdVal');
@@ -2399,12 +2739,32 @@
   const saveBtnMini = document.getElementById('saveBtnMini');
   const placeOrderBtn = document.getElementById('placeOrderBtn');
   const placeOrderBtnMini = document.getElementById('placeOrderBtnMini');
+  const chatBtn = document.getElementById('chatBtn');
+  const chatBtnMini = document.getElementById('chatBtnMini');
+  const chatFab = document.getElementById('chatFab');
+
+  const chatPanel = document.getElementById('chatPanel');
+  const chatBackdrop = document.getElementById('chatBackdrop');
+  const chatPanelClose = document.getElementById('chatPanelClose');
+  const chatDate = document.getElementById('chatDate');
+  const chatMessages = document.getElementById('chatMessages');
+  const chatEmpty = document.getElementById('chatEmpty');
+  const chatInput = document.getElementById('chatInput');
+  const chatSend = document.getElementById('chatSend');
+  const chatBody = document.getElementById('chatBody');
 
   const teamDiagWrap = document.getElementById('teamDiagWrap');
   const teamDiagToggle = document.getElementById('teamDiagToggle');
   const teamDiagPanel = document.getElementById('teamDiagPanel');
   const teamDiagGrid = document.getElementById('teamDiagGrid');
   const teamDiagPre = document.getElementById('teamDiagPre');
+
+  const LOCAL_STATE_STORAGE_PREFIX = 'rtPortalState';
+  const LOCAL_STATE_VERSION = '1';
+
+  const CURRENT_TOKEN = INITIAL_TOKEN;
+  let CHAT_MESSAGES = [];
+  let activePrintJobId = '';
 
   function showNotice(message, type){
     if (!saveNotice) return;
@@ -2425,7 +2785,8 @@
   function syncOverlayScrollLock(){
     const lock =
       (introModal && introModal.classList.contains('open')) ||
-      (lightbox && lightbox.classList.contains('open'));
+      (lightbox && lightbox.classList.contains('open')) ||
+      (chatPanel && chatPanel.classList.contains('open'));
     document.body.classList.toggle('modalLocked', Boolean(lock));
   }
 
@@ -2553,6 +2914,253 @@
     if (!t) return '--';
     if (t.length <= 14) return t;
     return t.slice(0, 8) + '...' + t.slice(-4);
+  }
+
+  function storageToken(){
+    return CURRENT_TOKEN;
+  }
+
+  function scopedStorageKey(prefix){
+    const token = storageToken();
+    if (!token) return '';
+    return prefix + ':' + token;
+  }
+
+  function readStorageJson(key){
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (_) {
+      try { localStorage.removeItem(key); } catch (_) {}
+      return null;
+    }
+  }
+
+  function writeStorageJson(key, value){
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (_) {}
+  }
+
+  function removeStorageKey(key){
+    if (!key) return;
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {}
+  }
+
+  function localStateStorageKey(){
+    return scopedStorageKey(LOCAL_STATE_STORAGE_PREFIX);
+  }
+
+  function formatChatTime(value){
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '--';
+    return d.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  function todayLabel(){
+    const d = new Date();
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+
+  function renderChat(chatLog){
+    if (!chatMessages || !chatEmpty) return;
+    chatMessages.innerHTML = '';
+    const list = normalizeMessageLog(chatLog);
+
+    if (!list.length) {
+      chatEmpty.style.display = 'block';
+      return;
+    }
+
+    chatEmpty.style.display = 'none';
+
+    list.forEach(msg => {
+      const isTeam = msg.authorType === 'team';
+      const row = createEl('div', 'chatMessage ' + (isTeam ? 'team' : 'client'));
+      const senderLabel = isTeam ? 'Red Threads' : 'You';
+      const meta = createEl('div', 'chatMeta', senderLabel + ' • ' + formatChatTime(msg.createdAt));
+      const bubble = createEl('div', 'chatBubble', msg.text);
+      row.appendChild(meta);
+      row.appendChild(bubble);
+      chatMessages.appendChild(row);
+    });
+
+    if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+  }
+
+  function setChatSendEnabled(){
+    if (!chatSend || !chatInput) return;
+    chatSend.disabled = !String(chatInput.value || '').trim();
+  }
+
+  function openChat(){
+    if (!chatPanel || !chatBackdrop) return;
+    const isOpen = chatPanel.classList.contains('open');
+    if (isOpen) {
+      closeChat();
+      return;
+    }
+    chatPanel.classList.add('open');
+    chatPanel.setAttribute('aria-hidden', 'false');
+    chatBackdrop.classList.add('open');
+    syncOverlayScrollLock();
+    renderChat(CHAT_MESSAGES);
+    setChatSendEnabled();
+    if (chatInput) chatInput.focus();
+  }
+
+  function closeChat(){
+    if (!chatPanel || !chatBackdrop) return;
+    chatPanel.classList.remove('open');
+    chatPanel.setAttribute('aria-hidden', 'true');
+    chatBackdrop.classList.remove('open');
+    syncOverlayScrollLock();
+  }
+
+  function syncStateFromQtyInputs(){
+    document.querySelectorAll('.qtyInput[data-print-job-id][data-sku-id][data-colorway][data-size]').forEach(inp => {
+      const jobId = String(inp.dataset.printJobId || '').trim();
+      const skuId = String(inp.dataset.skuId || '').trim();
+      const colorway = String(inp.dataset.colorway || '').trim();
+      const size = String(inp.dataset.size || '').trim();
+      if (!jobId || !skuId || !colorway || !size) return;
+
+      const job = PRINT_JOBS.find(j => j.printJobId === jobId);
+      if (!job) return;
+      const sku = (job.skus || []).find(s => s.skuId === skuId);
+      if (!sku) return;
+      if (!sku.colorways.includes(colorway)) return;
+      if (!sku.sizesAllowed.includes(size)) return;
+
+      const colorState = getColorState(jobId, sku, colorway);
+      colorState.qtyBySize[size] = clampInt(inp.value);
+      inp.value = String(colorState.qtyBySize[size]);
+    });
+  }
+
+  function buildPortalStateFromUI(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    syncStateFromQtyInputs();
+
+    const nextState = normalizePortalState(PORTAL_STATE);
+    nextState.version = String(nextState.version || '1');
+    nextState.savedAt = new Date().toISOString();
+    nextState.activePrintJobId = String(activePrintJobId || nextState.activePrintJobId || '');
+    const activeIndex = PRINT_JOBS.findIndex(job => job.printJobId === nextState.activePrintJobId);
+    if (activeIndex >= 0) {
+      nextState.activePrintJobIndex = activeIndex;
+    } else {
+      delete nextState.activePrintJobIndex;
+    }
+    nextState.isReadOnly = Boolean(opts.forceReadOnly === true ? true : IS_READ_ONLY);
+
+    const nextLog = normalizeMessageLog(opts.messageLog || CHAT_MESSAGES);
+    if (MESSAGE_LOG_KEY !== 'messageLog') delete nextState.messageLog;
+    if (MESSAGE_LOG_KEY !== 'chatLog') delete nextState.chatLog;
+    if (MESSAGE_LOG_KEY !== 'messages') delete nextState.messages;
+    nextState[MESSAGE_LOG_KEY] = nextLog;
+    if (MESSAGE_LOG_KEY === 'messageLog') nextState.messageLog = nextLog;
+
+    nextState.quantities = collectQuantityMapFromState(nextState);
+    return nextState;
+  }
+
+  function hydrateUIFromPortalState(rawState){
+    const normalized = normalizePortalState(rawState);
+    normalized.isReadOnly = IS_READ_ONLY || normalized.isReadOnly;
+    PORTAL_STATE = normalized;
+    CHAT_MESSAGES = normalizeMessageLog(normalized.messageLog);
+    if (!CHAT_MESSAGES.length) {
+      CHAT_MESSAGES = normalizeMessageLog(VM.chatLog);
+    }
+
+    const hydratedActive = String(normalized.activePrintJobId || '').trim();
+    if (hydratedActive) {
+      activePrintJobId = hydratedActive;
+    } else if (!activePrintJobId && PRINT_JOBS.length) {
+      activePrintJobId = PRINT_JOBS[0].printJobId;
+    }
+  }
+
+  function persistPortalState(nextState){
+    return new Promise((resolve, reject) => {
+      if (!CURRENT_TOKEN) {
+        reject(new Error('Missing token.'));
+        return;
+      }
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        reject(new Error('Apps Script runtime unavailable.'));
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(resp => {
+          if (!resp || resp.ok !== true) {
+            reject(new Error(String((resp && resp.error) || 'Save failed.')));
+            return;
+          }
+          resolve(resp);
+        })
+        .withFailureHandler(err => {
+          reject(new Error(String((err && err.message) || err || 'Save failed.')));
+        })
+        .savePortalState(CURRENT_TOKEN, JSON.stringify(nextState));
+    });
+  }
+
+  async function sendChat(){
+    if (!chatInput) return;
+    const text = String(chatInput.value || '').trim();
+    if (!text) return;
+    if (!CURRENT_TOKEN) {
+      showNotice('Message send failed: missing token.', 'err');
+      return;
+    }
+
+    const message = createClientMessage(text);
+    if (!message) return;
+
+    const prevLog = CHAT_MESSAGES.slice();
+    CHAT_MESSAGES = normalizeMessageLog(prevLog.concat([message]));
+    chatInput.value = '';
+    renderChat(CHAT_MESSAGES);
+
+    chatInput.disabled = true;
+    if (chatSend) chatSend.disabled = true;
+
+    try {
+      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES, forceReadOnly: true });
+      const resp = await persistPortalState(nextState);
+      IS_READ_ONLY = true;
+      nextState.isReadOnly = true;
+      nextState.savedAt = String(resp.submittedAt || nextState.savedAt || new Date().toISOString());
+      PORTAL_STATE = normalizePortalState(nextState);
+      PORTAL_STATE.isReadOnly = true;
+      setSaveControls();
+      renderPortal();
+      renderChat(CHAT_MESSAGES);
+      clearNotice();
+    } catch (err) {
+      console.error('Message send failed:', err);
+      CHAT_MESSAGES = prevLog;
+      renderChat(CHAT_MESSAGES);
+      showNotice('Message send failed: ' + String((err && err.message) || err), 'err');
+    } finally {
+      chatInput.disabled = false;
+      setChatSendEnabled();
+    }
   }
 
   function domSafeIdPart(value){
@@ -2787,6 +3395,8 @@
     const section = createEl('section', 'pjCard printJobSection');
     section.dataset.jobId = job.printJobId;
     section.id = jobSectionId(job.printJobId);
+    section.setAttribute('role', 'tabpanel');
+    section.setAttribute('aria-labelledby', 'print-job-tab-' + domSafeIdPart(job.printJobId));
 
     const shellHead = createEl('header', 'pjCardHeader printJobShellHead');
     const shellLeft = createEl('div', 'printJobShellLeft');
@@ -2794,13 +3404,21 @@
     shellLeft.appendChild(createEl('span', 'printJobShellName', job.printJobName || ('Project ' + visibleIndex)));
     shellHead.appendChild(shellLeft);
 
-    const shellMeta = createEl('div', 'printJobMeta');
-    shellMeta.appendChild(createEl('span', 'printJobMetaPill', 'ID: ' + (job.printJobId || '--')));
-    if (job.deliveryEstimate) {
-      shellMeta.appendChild(createEl('span', 'printJobMetaPill', 'In-Hands: ' + job.deliveryEstimate));
+    const shellActions = createEl('div', 'projectControls');
+    const revisionBtn = createEl('button', 'revisionBtn', 'Request Revision');
+    revisionBtn.type = 'button';
+    shellActions.appendChild(revisionBtn);
+    if (CAN_EDIT()) {
+      const hideBtn = createEl('button', 'hideEntityBtn', 'X');
+      hideBtn.type = 'button';
+      hideBtn.title = 'Hide project';
+      hideBtn.addEventListener('click', () => {
+        getJobState(job.printJobId).hidden = true;
+        renderPortal();
+      });
+      shellActions.appendChild(hideBtn);
     }
-    shellMeta.appendChild(createEl('span', 'printJobMetaPill', CAN_EDIT() ? 'Status: Editable' : 'Status: Read-Only'));
-    shellHead.appendChild(shellMeta);
+    shellHead.appendChild(shellActions);
     section.appendChild(shellHead);
 
     const overviewSegment = createEl('section', 'pjSegment pjOverview');
@@ -2853,49 +3471,8 @@
     mockupBlock.appendChild(mockupFrame);
 
     const detailsCard = createEl('div', 'pjOverviewCard card detailsCard');
-    const projectHeader = createEl('div', 'projectHeader');
 
-    const projectTitle = createEl('div', 'projectTitle');
-    const label = createEl('span', 'projectLabel', 'PROJECT ' + visibleIndex + ': ');
-    const name = createEl('span', '', job.printJobName || ('Project ' + visibleIndex));
-    projectTitle.appendChild(label);
-    projectTitle.appendChild(name);
-
-    const controls = createEl('div', 'projectControls');
-    const revisionBtn = createEl('button', 'revisionBtn', 'Request Revision');
-    revisionBtn.type = 'button';
-    controls.appendChild(revisionBtn);
-
-    if (CAN_EDIT()) {
-      const hideBtn = createEl('button', 'hideEntityBtn', 'X');
-      hideBtn.type = 'button';
-      hideBtn.title = 'Hide project';
-      hideBtn.addEventListener('click', () => {
-        getJobState(job.printJobId).hidden = true;
-        renderPortal();
-      });
-      controls.appendChild(hideBtn);
-    }
-
-    projectHeader.appendChild(projectTitle);
-    projectHeader.appendChild(controls);
-
-    const notesBlock = createEl('div', 'notesBlock');
-    notesBlock.appendChild(createEl('div', 'notesTitle', 'Job Notes'));
-    notesBlock.appendChild(createEl('div', '', job.printJobNotes || getIntroMessage() || '--'));
-
-    detailsCard.appendChild(projectHeader);
-    detailsCard.appendChild(notesBlock);
-
-    topRow.appendChild(mockupBlock);
-    topRow.appendChild(detailsCard);
-
-    overviewSegment.appendChild(topRow);
-    section.appendChild(overviewSegment);
-
-    const decorSegment = createEl('section', 'pjSegment pjDecorations');
-    decorSegment.appendChild(createEl('h3', 'pjSegmentTitle', 'Decorations'));
-
+    const decorTitle = createEl('h3', 'pjSegmentTitle', 'Decorations');
     const decorList = createEl('div', 'decorList pjDecorList');
     const decorSource = Array.isArray(job.decorations) ? job.decorations.filter(Boolean) : [];
     if (!decorSource.length) {
@@ -2906,8 +3483,20 @@
         decorList.appendChild(line);
       });
     }
-    decorSegment.appendChild(decorList);
-    section.appendChild(decorSegment);
+
+    const notesBlock = createEl('div', 'notesBlock');
+    notesBlock.appendChild(createEl('div', 'notesTitle', 'Job Notes'));
+    notesBlock.appendChild(createEl('div', '', job.printJobNotes || getIntroMessage() || '--'));
+
+    detailsCard.appendChild(decorTitle);
+    detailsCard.appendChild(decorList);
+    detailsCard.appendChild(notesBlock);
+
+    topRow.appendChild(mockupBlock);
+    topRow.appendChild(detailsCard);
+
+    overviewSegment.appendChild(topRow);
+    section.appendChild(overviewSegment);
 
     const skuSegment = createEl('section', 'pjSegment pjSkus');
     skuSegment.appendChild(createEl('h3', 'pjSegmentTitle', 'SKUs'));
@@ -3017,6 +3606,10 @@
           inp.pattern = '[0-9]*';
           inp.value = String(clampInt(colorState.qtyBySize[size]));
           inp.disabled = !CAN_EDIT();
+          inp.dataset.printJobId = job.printJobId;
+          inp.dataset.skuId = sku.skuId;
+          inp.dataset.colorway = color;
+          inp.dataset.size = size;
 
           inp.addEventListener('input', () => {
             const cleaned = String(inp.value || '').replace(/[^\d]/g, '');
@@ -3243,24 +3836,64 @@
     hiddenPrintJobsBar.appendChild(row);
   }
 
-  function renderPrintJobNav(visibleJobs){
-    if (!printJobNav || !printJobNavList) return;
-    printJobNavList.innerHTML = '';
-
+  function ensureActivePrintJob(visibleJobs){
     if (!visibleJobs.length) {
-      const empty = createEl('div', 'portalJobsNavItem', 'No visible print jobs');
-      empty.appendChild(createEl('span', 'portalJobsNavItemMeta', 'Use "Show hidden projects" to restore.'));
-      printJobNavList.appendChild(empty);
+      activePrintJobId = '';
+      PORTAL_STATE.activePrintJobId = '';
       return;
     }
+    const exists = visibleJobs.some(job => job.printJobId === activePrintJobId);
+    if (!exists) activePrintJobId = visibleJobs[0].printJobId;
+    PORTAL_STATE.activePrintJobId = activePrintJobId;
+  }
+
+  function applyActivePrintJobVisibility(){
+    JOB_DOM.forEach((dom, jobId) => {
+      if (!dom || !dom.section) return;
+      const isActive = jobId === activePrintJobId;
+      dom.section.style.display = isActive ? '' : 'none';
+      dom.section.hidden = !isActive;
+    });
+
+    if (!printJobTabsList) return;
+    printJobTabsList.querySelectorAll('.printJobTab').forEach((tab, idx) => {
+      const selected = tab.dataset.jobId === activePrintJobId;
+      tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+      tab.tabIndex = selected ? 0 : -1;
+      tab.setAttribute('aria-posinset', String(idx + 1));
+    });
+  }
+
+  function renderPrintJobTabs(visibleJobs){
+    if (!printJobTabsList) return;
+    printJobTabsList.innerHTML = '';
+
+    ensureActivePrintJob(visibleJobs);
 
     visibleJobs.forEach((job, idx) => {
-      const item = createEl('a', 'portalJobsNavItem', 'Print Job ' + (idx + 1) + ': ' + (job.printJobName || job.printJobId || '--'));
-      item.href = '#' + jobSectionId(job.printJobId);
-      item.dataset.jobId = job.printJobId;
-      item.appendChild(createEl('span', 'portalJobsNavItemMeta', 'ID: ' + (job.printJobId || '--')));
-      printJobNavList.appendChild(item);
+      const tab = createEl('button', 'printJobTab');
+      tab.type = 'button';
+      tab.setAttribute('role', 'tab');
+      tab.id = 'print-job-tab-' + domSafeIdPart(job.printJobId);
+      tab.setAttribute('aria-controls', jobSectionId(job.printJobId));
+      tab.dataset.jobId = job.printJobId;
+
+      const tabPill = createEl('span', 'printJobTabPill', 'Print Job ' + (idx + 1));
+      const tabName = createEl('span', 'printJobTabName', job.printJobName || '--');
+      tab.appendChild(tabPill);
+      tab.appendChild(tabName);
+
+      tab.addEventListener('click', () => {
+        activePrintJobId = job.printJobId;
+        PORTAL_STATE.activePrintJobId = activePrintJobId;
+        applyActivePrintJobVisibility();
+        requestHeaderStateUpdate();
+      });
+
+      printJobTabsList.appendChild(tab);
     });
+
+    applyActivePrintJobVisibility();
   }
 
   function renderPortal(){
@@ -3271,15 +3904,17 @@
     renderHiddenPrintJobs();
 
     const visibleJobs = getVisibleJobs();
-    renderPrintJobNav(visibleJobs);
 
     if (!visibleJobs.length) {
+      renderPrintJobTabs(visibleJobs);
       jobsRoot.appendChild(createEl('div', 'card', 'All print jobs are hidden. Use Show hidden controls to restore.'));
       renderHeaderProjects([]);
       updateHeaderTotals(0, 0, false);
       requestHeaderStateUpdate();
       return;
     }
+
+    ensureActivePrintJob(visibleJobs);
 
     visibleJobs.forEach((job, idx) => {
       job.slides = buildMockupSlides(job);
@@ -3289,6 +3924,7 @@
       loadPreviewForJob(job);
     });
 
+    renderPrintJobTabs(visibleJobs);
     recalcAll();
     requestHeaderStateUpdate();
   }
@@ -3630,17 +4266,6 @@
   async function savePortalState(){
     if (!CAN_EDIT()) return;
 
-    const payloadState = JSON.parse(JSON.stringify(PORTAL_STATE));
-    payloadState.version = '1';
-    payloadState.savedAt = new Date().toISOString();
-    payloadState.isReadOnly = true;
-
-    const payload = {
-      token: String(VM.token || ''),
-      action: 'save',
-      portalState: payloadState
-    };
-
     [saveBtn, saveBtnMini].forEach(btn => {
       if (!btn) return;
       btn.disabled = true;
@@ -3648,27 +4273,18 @@
     });
 
     try {
-      const resp = await fetch(VM.postUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const text = await resp.text();
-      const data = safeJsonParse(text, null);
-
-      if (!data || data.ok !== true) {
-        throw new Error((data && data.error) ? data.error : 'Save failed.');
-      }
-
-      PORTAL_STATE = normalizePortalState(payloadState);
+      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES, forceReadOnly: true });
+      const resp = await persistPortalState(nextState);
       IS_READ_ONLY = true;
+      nextState.isReadOnly = true;
+      nextState.savedAt = String(resp.submittedAt || nextState.savedAt || new Date().toISOString());
+      PORTAL_STATE = normalizePortalState(nextState);
       PORTAL_STATE.isReadOnly = true;
-
       setSaveControls();
       renderPortal();
       showNotice('Saved successfully. This portal is now read-only.', 'ok');
     } catch (err) {
+      console.error('Save failed:', err);
       showNotice('Save failed: ' + String((err && err.message) || err), 'err');
       [saveBtn, saveBtnMini].forEach(btn => {
         if (!btn) return;
@@ -3879,6 +4495,23 @@
       });
     });
 
+    [chatBtn, chatBtnMini, chatFab].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', openChat);
+    });
+    if (chatPanelClose) chatPanelClose.addEventListener('click', closeChat);
+    if (chatBackdrop) chatBackdrop.addEventListener('click', closeChat);
+    if (chatSend) chatSend.addEventListener('click', sendChat);
+    if (chatInput) {
+      chatInput.addEventListener('input', setChatSendEnabled);
+      chatInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendChat();
+        }
+      });
+    }
+
     lightboxClose.addEventListener('click', closeLightbox);
     lightboxPrevBtn.addEventListener('click', e => { e.stopPropagation(); stepLightbox(-1); });
     lightboxNextBtn.addEventListener('click', e => { e.stopPropagation(); stepLightbox(1); });
@@ -3927,6 +4560,7 @@
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
+        closeChat();
         closeLightbox();
         closeIntroModal();
       }
@@ -3969,11 +4603,19 @@
     openIntroModal();
   }
 
+  function initChat(){
+    if (chatDate) chatDate.textContent = todayLabel();
+    renderChat(CHAT_MESSAGES);
+    setChatSendEnabled();
+  }
+
   function init(){
+    hydrateUIFromPortalState(VM.portalState);
     setHeaderDetails();
     renderModeBadge();
     renderSnapshotSummary();
     renderTeamDiagnostics();
+    initChat();
     setSaveControls();
     renderPortal();
     initIntro();
