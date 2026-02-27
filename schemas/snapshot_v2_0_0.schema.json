@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Red Threads Snapshot V2 (2.0.0) — Locked",
+  "type": "object",
+  "required": ["meta", "printJobs"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "dealNumber",
+        "dealId",
+        "dealTitle",
+        "personName",
+        "personId",
+        "personEmail",
+        "orgName",
+        "orgId",
+        "sentBy",
+        "internalNotes",
+        "projectName",
+        "status",
+        "contractVersion",
+        "calculatorVersion",
+        "source",
+        "exportedAt",
+        "snapshotId"
+      ],
+      "properties": {
+        "dealNumber": { "type": "string" },
+        "dealId": { "type": "string" },
+        "dealTitle": { "type": "string" },
+        "personName": { "type": "string" },
+        "personId": { "type": "string" },
+        "personEmail": { "type": "string" },
+        "orgName": { "type": "string" },
+        "orgId": { "type": "string" },
+        "sentBy": { "type": "string" },
+        "internalNotes": { "type": "string" },
+        "projectName": { "type": "string" },
+        "status": { "type": "string" },
+        "contractVersion": { "type": "string", "const": "2.0.0" },
+        "calculatorVersion": { "type": "string" },
+        "source": { "type": "string" },
+        "exportedAt": { "type": "string" },
+        "snapshotId": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "printJobs": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["printJobId", "skus"],
+        "properties": {
+          "printJobId": { "type": "string" },
+          "printJobName": { "type": "string" },
+          "printJobNotes": { "type": "string" },
+          "deliveryEstimate": { "type": "string" },
+          "turnaroundTime": { "type": "string" },
+          "mockups": { "type": "object" },
+          "priceTiers": { "type": "array", "items": { "type": "number" } },
+          "decorations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["decorationMethod", "location"],
+              "properties": {
+                "decorationMethod": { "type": "string" },
+                "location": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "addOns": { "type": "array", "items": { "type": "object" } },
+          "skus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["skuId", "skuKey", "uiName", "colorways", "sizesAllowed", "printedUnitPriceByTierBySize", "upchargeBySize"],
+              "properties": {
+                "skuId": { "type": "string" },
+                "skuKey": { "type": "string" },
+                "uiName": { "type": "string" },
+                "vendorProductUrl": { "type": "string" },
+                "imageUrl": { "type": "string" },
+                "colorways": { "type": "array", "items": { "type": "string" } },
+                "sizesAllowed": { "type": "array", "items": { "type": "string" } },
+                "printedUnitPriceByTierBySize": { "type": "object" },
+                "upchargeBySize": { "type": "object" }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "dealNumber": "0000",
+    "dealId": "pd_test",
+    "dealTitle": "Minimal V2 1PJ",
+    "personName": "Test Person",
+    "personId": "person_test",
+    "personEmail": "test@example.com",
+    "orgName": "Test Org",
+    "orgId": "org_test",
+    "sentBy": "System",
+    "internalNotes": "",
+    "projectName": "Test",
+    "status": "sent",
+    "contractVersion": "2.0.0",
+    "calculatorVersion": "v0.0.0",
+    "source": "calculator_v2",
+    "exportedAt": "2026-02-27T00:00:00Z",
+    "snapshotId": "snap_test"
+  },
+  "printJobs": [
+    {
+      "printJobId": "PJ1",
+      "printJobName": "Test Print Job",
+      "printJobNotes": "",
+      "deliveryEstimate": "10 business days",
+      "turnaroundTime": "Standard",
+      "mockups": {
+        "previewMockupFileId": "",
+        "artMockupFileId": "",
+        "garmentMockupFileId": "",
+        "previewUrl": ""
+      },
+      "priceTiers": [15, 24, 2000],
+      "decorations": [
+        { "decorationMethod": "Screen Print 1 Color", "location": "Front" }
+      ],
+      "addOns": [],
+      "skus": [
+        {
+          "skuId": "PJ1-SKU1",
+          "skuKey": "TEST_SKU",
+          "uiName": "Test Tee",
+          "vendorProductUrl": "",
+          "imageUrl": "",
+          "colorways": ["Black"],
+          "sizesAllowed": ["S", "M", "L"],
+          "printedUnitPriceByTierBySize": {
+            "15": { "S": 10.0, "M": 10.0, "L": 10.0 },
+            "24": { "S": 9.0, "M": 9.0, "L": 9.0 },
+            "2000": { "S": 0.0, "M": 0.0, "L": 0.0 }
+          },
+          "upchargeBySize": { "S": 0.0, "M": 0.0, "L": 0.0 }
+        }
+      ]
+    }
+  ]
+}
