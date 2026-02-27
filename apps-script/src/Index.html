@@ -942,31 +942,757 @@
     .actionsRow{display:none;}
     .actionsRow .spacer{height:1px}
 
-    .modeBadge{
-      position:fixed;
-      right:16px;
-      bottom:16px;
+    .printJobSection{
+      margin-bottom:16px;
+    }
+
+    .projectControls{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .hideEntityBtn{
+      width:30px;
+      height:30px;
+      border-radius:999px;
+      border:1px solid #111;
+      background:#fff;
+      color:#111;
+      font-weight:900;
+      cursor:pointer;
+      line-height:1;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .hideEntityBtn:hover{
+      color:#fff;
+      background:#dc2626;
+      border-color:#dc2626;
+    }
+
+    .skuSection{
+      margin-top:8px;
+    }
+    .skuHeader{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:8px 4px 2px;
+    }
+    .skuTitle{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:14px;
+      font-weight:800;
+      flex-wrap:wrap;
+    }
+    .skuTitle .skuKey{
+      font-weight:900;
+      color:#111;
+    }
+    .skuMetaNote{
+      font-size:12px;
+      color:#6b7280;
+      font-weight:700;
+    }
+    .colorLabel{
+      width:100%;
+      max-width:200px;
+      padding:8px 10px;
+      border:2px solid #111;
+      font-size:16px;
+      border-radius:6px;
+      background:#fff;
+      min-height:42px;
+      display:flex;
+      align-items:center;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .hiddenControlBar,
+    .hiddenControlRow{
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      gap:8px;
+      margin:8px 0;
+    }
+    .hiddenControlLabel{
+      font-size:12px;
+      font-weight:800;
+      color:#6b7280;
+      letter-spacing:.02em;
+      text-transform:uppercase;
+    }
+    .showHiddenBtn{
+      border:1px solid #111;
+      border-radius:999px;
+      background:#fff;
+      color:#111;
+      font-size:12px;
+      font-weight:800;
+      padding:5px 10px;
+      cursor:pointer;
+    }
+    .showHiddenBtn:hover{
       background:#111;
       color:#fff;
-      font-weight:800;
+    }
+
+    .teamDiagWrap{
+      margin-bottom:10px;
+    }
+    .teamDiagBtn{
+      border:1px solid #111;
+      border-radius:999px;
+      background:#fff;
+      color:#111;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      padding:7px 12px;
+      cursor:pointer;
+    }
+    .teamDiagBtn:hover{
+      background:#111;
+      color:#fff;
+    }
+    .teamDiagPanel{
+      margin-top:8px;
+      border:1px solid #d1d5db;
+      border-radius:8px;
+      background:#f8fafc;
+      padding:10px;
+    }
+    .teamDiagGrid{
+      display:grid;
+      grid-template-columns:180px 1fr;
+      gap:4px 12px;
+      font-size:12px;
+      margin-bottom:8px;
+    }
+    .teamDiagKey{
+      font-weight:900;
+      color:#111;
+    }
+    .teamDiagVal{
+      color:#111;
+      word-break:break-word;
+    }
+    .teamDiagPre{
+      margin:0;
+      border:1px solid #d1d5db;
+      background:#fff;
+      border-radius:6px;
+      padding:8px;
       font-size:11px;
+      line-height:1.35;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+
+    .saveNotice{
+      margin:0 0 10px;
+      padding:8px 10px;
+      border-radius:8px;
+      font-size:13px;
+      font-weight:800;
+      border:1px solid #d1d5db;
+      background:#f8fafc;
+      color:#111;
+    }
+    .saveNotice.ok{
+      border-color:#16a34a;
+      color:#166534;
+      background:#f0fdf4;
+    }
+    .saveNotice.err{
+      border-color:#ef4444;
+      color:#991b1b;
+      background:#fef2f2;
+    }
+
+    /* Enterprise redesign layer (presentation-only) */
+    :root{
+      --bg:#f3f5f8;
+      --ink:#0f172a;
+      --line:#d0d8e3;
+      --muted:#475569;
+      --soft:#f8fafc;
+      --headerBg:#ffffff;
+      --green:#15803d;
+      --red:#dc2626;
+      --btn:#0f4fa8;
+      --btnHover:#0b3d84;
+      --btnGrey:#475569;
+      --btnGreyHover:#334155;
+      --link:#1d4ed8;
+    }
+    body{
+      background:
+        radial-gradient(circle at 0% 0%, rgba(15,79,168,.08), transparent 38%),
+        radial-gradient(circle at 100% 0%, rgba(15,23,42,.06), transparent 34%),
+        #f3f5f8;
+      color:var(--ink);
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    }
+    .wrap{
+      max-width:1320px;
+      margin:16px auto 24px;
+      padding:0 16px;
+    }
+    .stickyHeader{
+      background:rgba(255,255,255,.96);
+      border-bottom:1px solid #d0d8e3;
+      box-shadow:0 10px 24px rgba(15,23,42,.08);
+      backdrop-filter: blur(6px);
+    }
+    .stickyHeader::after{
+      height:1px;
+      background:linear-gradient(90deg, transparent 0%, rgba(15,79,168,.45) 48%, transparent 100%);
+      opacity:.9;
+    }
+    .stickyHeader.condensed{
+      background:rgba(255,255,255,.98);
+      border-bottom-color:#cad5e3;
+      box-shadow:0 8px 20px rgba(15,23,42,.12);
+    }
+    .headerExpanded{
+      grid-template-columns:320px 1.2fr 0.9fr auto;
+      gap:16px;
+      padding:12px 16px;
+    }
+    .headerCondensed{
+      grid-template-columns:auto 1fr 1fr auto;
+      gap:10px;
+      padding:8px 12px;
+    }
+    .headerAvatarImg{
+      border:2px solid #fff;
+      box-shadow:0 8px 18px rgba(15,23,42,.18);
+    }
+    .headerFriendly{
+      border:1px solid #d0d8e3;
+      background:#f8fafc;
+      color:#334155;
+    }
+    .headerProjects{
+      padding:8px 10px;
+      border:1px solid #dce3ec;
+      border-radius:10px;
+      background:#f8fafc;
+      min-height:64px;
+      overflow:auto;
+      max-height:110px;
+    }
+    .headerProjectRow{
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      gap:8px 12px;
+      font-size:14px;
+      line-height:1.2;
+      font-weight:800;
+    }
+    .headerProjectLabel{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:3px 8px;
+      border-radius:999px;
+      border:1px solid #c3cfdf;
+      background:#edf2f8;
+      font-size:11px;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      color:#334155;
+    }
+    .headerProjectMeta{
+      margin-left:0;
+      font-size:12px;
+      font-weight:800;
+      color:#334155;
+    }
+    .headerTotals{
+      gap:2px;
+      font-size:16px;
+      background:#f8fafc;
+      border:1px solid #dce3ec;
+      border-radius:10px;
+      padding:8px 10px;
+      min-width:250px;
+      align-self:stretch;
+      justify-content:center;
+    }
+    .headerAch{font-size:11px}
+    .headerFreeShip{font-size:12px}
+    .headerBtn{
+      border-radius:8px;
+      font-size:15px;
+      min-width:138px;
+      box-shadow:0 4px 10px rgba(15,23,42,.1);
+    }
+    .headerBtn:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
+
+    .snapshotBand{
+      border:1px solid #d6deea;
+      border-radius:12px;
+      background:#ffffff;
+      margin-bottom:12px;
+      box-shadow:0 8px 20px rgba(15,23,42,.05);
+      padding:10px 12px;
+    }
+    .snapshotBandHead{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:8px;
+      padding-bottom:8px;
+      border-bottom:1px dashed #d6deea;
+    }
+    .snapshotBandTitle{
+      font-size:13px;
+      font-weight:900;
+      letter-spacing:.09em;
+      color:#334155;
+      text-transform:uppercase;
+    }
+    .snapshotToken{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid #d0d8e3;
+      background:#f8fafc;
+      font-size:11px;
+      color:#334155;
+      font-weight:800;
+    }
+    .snapshotGrid{
+      display:grid;
+      grid-template-columns:repeat(6,minmax(0,1fr));
+      gap:8px;
+    }
+    .snapshotCell{
+      border:1px solid #e2e8f0;
+      border-radius:8px;
+      background:#f8fafc;
+      padding:8px;
+      min-height:54px;
+    }
+    .snapshotKey{
+      display:block;
+      font-size:10px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      font-weight:800;
+      color:#64748b;
+      margin-bottom:4px;
+    }
+    .snapshotVal{
+      display:block;
+      font-size:13px;
+      font-weight:800;
+      color:#0f172a;
+      line-height:1.25;
+      word-break:break-word;
+    }
+
+    .saveNotice{
+      border:1px solid #d6deea;
+      border-radius:10px;
+      box-shadow:0 6px 14px rgba(15,23,42,.05);
+    }
+    .printJobSection{
+      border:1px solid #d6deea;
+      border-radius:14px;
+      background:#ffffff;
+      box-shadow:0 12px 28px rgba(15,23,42,.07);
+      margin-bottom:18px;
+      padding:12px;
+    }
+    .printJobShellHead{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+      padding:8px 10px;
+      border:1px solid #dce4ef;
+      border-radius:10px;
+      background:linear-gradient(180deg,#f8fafc 0%, #f1f5f9 100%);
+    }
+    .printJobShellLeft{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+      flex-wrap:wrap;
+    }
+    .printJobTag{
+      font-size:11px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      font-weight:900;
+      color:#0f4fa8;
+      padding:4px 9px;
+      border-radius:999px;
+      border:1px solid #bfd2ef;
+      background:#ebf2fb;
+    }
+    .printJobShellName{
+      font-size:16px;
+      font-weight:900;
+      color:#0f172a;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:480px;
+    }
+    .printJobMeta{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .printJobMetaPill{
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      border:1px solid #d0d8e3;
+      border-radius:999px;
+      padding:3px 8px;
+      font-size:11px;
+      font-weight:800;
+      color:#334155;
+      background:#ffffff;
+    }
+
+    .topRowNew{
+      gap:12px;
+      margin-bottom:10px;
+    }
+    .mockupFrame,
+    .detailsCard{
+      border:1px solid #d6deea;
+      border-radius:10px;
+      background:#fff;
+    }
+    .mockupFrame{height:265px}
+    .mockupControls{
+      left:12px;
+      right:12px;
+      bottom:12px;
+      border:1px solid #d0d8e3;
+      background:rgba(255,255,255,.92);
+      backdrop-filter: blur(3px);
+    }
+    .projectHeader{
+      border-bottom:1px solid #e2e8f0;
+      padding-bottom:8px;
+      margin-bottom:2px;
+    }
+    .projectTitle{
+      font-size:20px;
+      line-height:1.2;
+      color:#0f172a;
+    }
+    .projectLabel{
+      color:#475569;
+      font-size:13px;
+      display:inline-flex;
+      align-items:center;
+      margin-right:5px;
+      padding:2px 7px;
+      border-radius:999px;
+      border:1px solid #d0d8e3;
+      background:#f8fafc;
+    }
+    .revisionBtn{
+      background:#0f4fa8;
+      border:1px solid #0f4fa8;
+      padding:7px 11px;
+    }
+    .revisionBtn:hover{background:#0b3d84}
+    .decorList{font-size:14px;gap:5px}
+    .decorLine{
+      font-weight:700;
+      color:#1e293b;
+      padding-left:3px;
+    }
+    .notesBlock{
+      border-top:1px solid #dce4ef;
+      background:#f8fafc;
+    }
+
+    .skuSection{
+      margin-top:10px;
+      border:1px solid #dce4ef;
+      border-radius:10px;
+      background:#f8fafc;
+      padding:8px;
+    }
+    .skuHeader{
+      border-bottom:1px solid #e2e8f0;
+      padding:2px 4px 8px;
+      margin-bottom:6px;
+    }
+    .skuTitle{
+      font-size:13px;
+      gap:10px;
+    }
+    .skuTitle .skuKey{
+      color:#0f4fa8;
+      font-size:12px;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .skuMetaNote{
+      font-size:11px;
+      color:#64748b;
+    }
+    .tableWrap{
+      border-top:none;
+      margin-top:0;
+      border:1px solid #dce4ef;
+      border-radius:8px;
+      background:#ffffff;
+    }
+    table{
+      min-width:940px;
+    }
+    thead th{
+      background:#f1f5f9;
+      font-size:14px;
+      border-bottom:1px solid #dce4ef;
+      color:#334155;
+      text-transform:uppercase;
+      letter-spacing:.02em;
+      font-weight:900;
+      padding:9px 8px;
+    }
+    tbody td{
+      border-bottom:1px solid #e2e8f0;
+      font-size:14px;
+      color:#1e293b;
+    }
+    .pcCell{min-width:260px}
+    .hideEntityBtn{
+      width:24px;
+      height:24px;
+      font-size:11px;
+      border:1px solid #cbd5e1;
+      color:#475569;
+      background:#fff;
+    }
+    .hideEntityBtn:hover{
+      border-color:#ef4444;
+      background:#ef4444;
+      color:#fff;
+    }
+    .colorLabel{
+      border:1px solid #cbd5e1;
+      background:#fff;
+      font-size:14px;
+      min-height:38px;
+    }
+    .qtyInput{
+      width:62px;
+      border:1px solid #cbd5e1;
+      font-size:16px;
+      padding:6px 8px;
+    }
+    .qtyCol{
+      font-size:20px;
+      font-weight:900;
+      color:#0f172a;
+    }
+    .lineTotal{
+      font-size:20px;
+      color:#15803d;
+    }
+    .unitPrice{
+      font-size:11px;
+      color:#64748b;
+    }
+
+    .hiddenControlRow{
+      border:1px dashed #cbd5e1;
+      border-radius:8px;
+      background:#fff;
+      padding:6px 8px;
+      margin-top:8px;
+    }
+    .hiddenControlLabel{
+      color:#475569;
+    }
+
+    .bottomRow{
+      gap:12px;
+      margin-top:10px;
+      grid-template-columns:1fr 320px;
+    }
+    .compareCard,
+    .totalsCard{
+      border:1px solid #dce4ef;
+      border-radius:10px;
+      background:#fff;
+      box-shadow:0 4px 10px rgba(15,23,42,.04);
+    }
+    .compareCard{padding:10px 12px}
+    .compareTitle{
+      font-size:14px;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      color:#334155;
+      margin:0 0 6px;
+    }
+    .compareSubtitle{
+      text-align:left;
+      margin:0 0 8px;
+      font-size:12px;
+    }
+    .compareTable{
+      min-width:860px;
+    }
+    .compareTable th,.compareTable td{
+      font-size:12px;
+      border:1px solid #dce4ef;
+      padding:7px 8px;
+    }
+    .compareTable thead th{
+      background:#f1f5f9;
+      border-bottom:1px solid #dce4ef;
+      color:#334155;
+      font-weight:900;
+    }
+    .compareTable .hlCol{
+      background:#e9f2ff;
+      border-left:2px solid #0f4fa8 !important;
+      border-right:2px solid #0f4fa8 !important;
+    }
+
+    .totalsCard{
+      width:100%;
+      max-width:320px;
+      justify-self:stretch;
+      padding:10px;
+    }
+    #addOnsList{
+      align-items:stretch;
+      gap:4px;
+    }
+    .addOnRow{
+      grid-template-columns:minmax(0,1fr) 16px;
+      font-size:12px;
+    }
+    .addOnMainWrap{text-align:left}
+    .addOnMainLine{
+      justify-content:space-between;
+      gap:10px;
+      width:100%;
+    }
+    .addOnLabel{
+      font-weight:700;
+      color:#1f2937;
+      white-space:normal;
+    }
+    .addOnMainQty,.addOnMainAmt{
+      min-width:auto;
+      font-weight:800;
+      color:#0f172a;
+    }
+    .addOnSub{
+      font-size:11px;
+      color:#dc2626;
+      white-space:normal;
+    }
+    .turnaround{
+      margin-top:8px;
+      font-size:12px;
+      border-top:1px dashed #d0d8e3;
+      padding-top:6px;
+    }
+    .grandTotal{
+      border-top:1px solid #d0d8e3;
+      padding-top:8px;
+      margin-top:8px;
+      justify-content:space-between;
+      font-size:15px;
+    }
+    .grandTotal .value{
+      font-size:28px;
+      line-height:1;
+      font-weight:900;
+      color:#0f172a;
+    }
+
+    .teamDiagWrap{
+      margin-bottom:8px;
+    }
+    .teamDiagBtn{
+      border:1px solid #cbd5e1;
+      background:#fff;
+      color:#334155;
+    }
+    .teamDiagPanel{
+      border:1px solid #dce4ef;
+      background:#f8fafc;
+    }
+    .teamDiagGrid{
+      grid-template-columns:160px 1fr;
+    }
+    .modeBadge{
+      position:fixed;
+      right:12px;
+      bottom:12px;
+      background:#0f172a;
+      border:1px solid #1e293b;
+      color:#fff;
+      font-weight:800;
+      font-size:10px;
       padding:6px 10px;
       border-radius:999px;
-      letter-spacing:.08em;
+      letter-spacing:.11em;
       text-transform:uppercase;
       z-index:10000;
       opacity:.9;
     }
 
     .scrollTestPad{
-      height:1200px;
-      background:#000;
+      height:320px;
+      background:transparent;
       margin:30px auto 40px;
       max-width:1260px;
       border-radius:8px;
     }
 
     @media (max-width:980px){
+      .snapshotGrid{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+      .printJobShellName{
+        max-width:100%;
+      }
+      .bottomRow{
+        grid-template-columns:1fr;
+      }
+      .totalsCard{
+        max-width:none;
+      }
       .topRowNew{grid-template-columns:1fr}
       .bottomRow{grid-template-columns:1fr}
       .actionsRow{grid-template-columns:1fr}
@@ -1012,8 +1738,8 @@
         <div class="headerFreeShip" id="headerFreeShip">YOU GET FREE SHIPPING!</div>
       </div>
       <div class="headerActions">
-        <button class="headerBtn headerBtnGrey" type="button">Save / Share</button>
-        <button class="headerBtn headerBtnBlue" type="button">Place Order</button>
+        <button class="headerBtn headerBtnGrey" id="saveBtn" type="button">Save</button>
+        <button class="headerBtn headerBtnBlue" id="placeOrderBtn" type="button">Place Order</button>
       </div>
     </div>
 
@@ -1040,8 +1766,8 @@
         <div class="headerFriendlyMini"><span class="headerFriendlyDot"></span>Need help? Tap chat</div>
       </div>
       <div class="headerActions">
-        <button class="headerBtn headerBtnGrey" type="button">Save / Share</button>
-        <button class="headerBtn headerBtnBlue" type="button">Place Order</button>
+        <button class="headerBtn headerBtnGrey" id="saveBtnMini" type="button">Save</button>
+        <button class="headerBtn headerBtnBlue" id="placeOrderBtnMini" type="button">Place Order</button>
       </div>
     </div>
   </div>
@@ -1062,75 +1788,50 @@
   </div>
 
   <div class="wrap">
-    <div class="topRowNew" id="topRowNew">
-      <div class="mockupBlock">
-        <div class="mockupFrame" id="mockupFrame">
-          <img id="mockupImg" class="mockupImg" alt="Mockup Preview" referrerpolicy="no-referrer" draggable="false">
-          <div class="mockupEmpty" id="mockupEmpty">Mockup unavailable</div>
-          <div class="mockupControls" id="mockupControls">
-            <div class="mockupSlot left">
-              <button class="mockupBtn" id="mockupPrevBtn" type="button" aria-label="Previous image">&#9664;</button>
-            </div>
-            <div class="mockupSlot"><span class="mockupLabel">PROJECT 1</span></div>
-            <div class="mockupSlot center">
-              <button class="mockupBtn" id="mockupZoomBtn" type="button" aria-label="Open fullscreen">+</button>
-            </div>
-            <div class="mockupSlot"><span class="mockupLabel">MOCKUPS</span></div>
-            <div class="mockupSlot right">
-              <button class="mockupBtn" id="mockupNextBtn" type="button" aria-label="Next image">&#9654;</button>
-            </div>
-          </div>
-        </div>
+    <div class="snapshotBand" id="snapshotBand">
+      <div class="snapshotBandHead">
+        <div class="snapshotBandTitle">Snapshot Record</div>
+        <div class="snapshotToken" id="snapshotToken">Token: --</div>
       </div>
-
-      <div class="card detailsCard">
-        <div class="projectHeader">
-          <div class="projectTitle"><span class="projectLabel">PROJECT 1:</span> <span id="projectJobName"></span></div>
-          <button class="revisionBtn" type="button">Request Revision</button>
+      <div class="snapshotGrid">
+        <div class="snapshotCell">
+          <span class="snapshotKey">Snapshot ID</span>
+          <span class="snapshotVal" id="snapshotIdVal">--</span>
         </div>
-        <div class="decorList" id="decorList"></div>
-        <div class="notesBlock">
-          <div class="notesTitle">Job Notes</div>
-          <div id="jobNotesText"></div>
+        <div class="snapshotCell">
+          <span class="snapshotKey">Exported At</span>
+          <span class="snapshotVal" id="snapshotExportedVal">--</span>
         </div>
-      </div>
-    </div>
-
-    <div class="tableWrap">
-      <table id="mainTable">
-        <thead>
-          <tr id="headRow">
-            <th>Product Link / Color choice</th>
-            <th class="qtyHead">QTY</th>
-            <th class="totalHead">Line Total</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-
-    <div class="bottomRow">
-      <div class="compareCard">
-        <div class="compareTitle">Compare item prices and quantity discounts. Buy in bulk and save!</div>
-        <div class="compareSubtitle" id="minMsg"></div>
-        <div class="compareTableWrap">
-          <table class="compareTable" id="compareTable"></table>
+        <div class="snapshotCell">
+          <span class="snapshotKey">Contract Version</span>
+          <span class="snapshotVal" id="snapshotContractVal">--</span>
         </div>
-      </div>
-
-      <div class="totalsCard">
-        <div id="addOnsList"></div>
-        <button class="addOnReset hidden" id="addOnsResetBtn" type="button">Restore add-ons</button>
-
-        <div class="turnaround" id="turnaroundVal"></div>
-
-        <div class="totalsRow grandTotal">
-          <strong>Job Total:</strong>
-          <span class="value" id="grandTotalVal">$0.00</span>
+        <div class="snapshotCell">
+          <span class="snapshotKey">Calculator Version</span>
+          <span class="snapshotVal" id="snapshotCalculatorVal">--</span>
+        </div>
+        <div class="snapshotCell">
+          <span class="snapshotKey">Source</span>
+          <span class="snapshotVal" id="snapshotSourceVal">--</span>
+        </div>
+        <div class="snapshotCell">
+          <span class="snapshotKey">Status</span>
+          <span class="snapshotVal" id="snapshotStatusVal">--</span>
         </div>
       </div>
     </div>
 
+    <div class="teamDiagWrap" id="teamDiagWrap" hidden>
+      <button class="teamDiagBtn" id="teamDiagToggle" type="button">TEAM Diagnostics</button>
+      <div class="teamDiagPanel" id="teamDiagPanel" hidden>
+        <div class="teamDiagGrid" id="teamDiagGrid"></div>
+        <pre class="teamDiagPre" id="teamDiagPre"></pre>
+      </div>
+    </div>
+
+    <div class="saveNotice" id="saveNotice" hidden></div>
+    <div class="hiddenControlBar" id="hiddenPrintJobsBar"></div>
+    <div id="jobsRoot"></div>
   </div>
 
   <div class="scrollTestPad" aria-hidden="true"></div>
@@ -1179,35 +1880,45 @@
       const s = String(maybeJson).trim();
       if (!s) return fallback;
       return JSON.parse(s);
-    } catch (e) {
+    } catch (_) {
       return fallback;
     }
   }
-  function toNumber(x, d=0){
+
+  function toNumber(x, d){
     const n = Number(x);
     return Number.isFinite(n) ? n : d;
   }
-  function money(n){
-    const v = toNumber(n, 0);
-    return v.toLocaleString(undefined, {style:'currency', currency:'USD'});
-  }
+
   function clampInt(x){
-    const n = parseInt(String(x||'0'), 10);
+    const n = parseInt(String(x == null ? '' : x), 10);
     return Number.isFinite(n) && n > 0 ? n : 0;
   }
+
+  function money(n){
+    const v = toNumber(n, 0);
+    return v.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+  }
+
   function escapeHtml(s){
-    return String(s||'')
+    return String(s || '')
       .replace(/&/g,'&amp;')
       .replace(/</g,'&lt;')
       .replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;')
       .replace(/'/g,'&#39;');
   }
-  function formatDateShort(v){
-    if (!v) return '--';
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return String(v);
-    return d.toLocaleDateString(undefined, {year:'numeric', month:'2-digit', day:'2-digit'});
+
+  function normalizePortalMode(v){
+    const s = String(v || '').trim().toLowerCase();
+    return (s === 'team') ? 'team' : 'client';
+  }
+
+  function normalizeFileId(input){
+    const s = String(input || '').trim();
+    if (!s) return '';
+    if (s.indexOf('http') === 0) return extractDriveId(s);
+    return s;
   }
 
   function extractDriveId(url){
@@ -1222,45 +1933,358 @@
     return '';
   }
 
-  function normalizeFileId(input){
-    const s = String(input || '').trim();
-    if (!s) return '';
-    if (s.indexOf('http') === 0) {
-      return extractDriveId(s) || '';
-    }
-    return s;
-  }
-
   function buildDriveCandidatesFromId(fileId){
     const id = normalizeFileId(fileId);
     if (!id) return [];
     const enc = encodeURIComponent(id);
     return [
-      'https://lh3.googleusercontent.com/d/' + enc,
       'https://drive.usercontent.google.com/download?id=' + enc + '&export=view',
+      'https://lh3.googleusercontent.com/d/' + enc,
       'https://drive.google.com/uc?export=view&id=' + enc
     ];
   }
 
-  function loadImageWithFallback(imgEl, urls, onSuccess, onFail){
-    const list = (urls || []).filter(Boolean);
-    if (!list.length){
-      if (onFail) onFail();
-      return;
-    }
-    let i = 0;
-    const tryNext = () => {
-      if (i >= list.length){
-        if (onFail) onFail();
-        return;
-      }
-      const url = list[i++];
-      imgEl.onload = () => { if (onSuccess) onSuccess(url); };
-      imgEl.onerror = () => { tryNext(); };
-      imgEl.referrerPolicy = 'no-referrer';
-      imgEl.src = url;
+  function uniqueList(values){
+    const seen = new Set();
+    const out = [];
+    (values || []).forEach(v => {
+      const k = String(v);
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(v);
+    });
+    return out;
+  }
+
+  function normalizePriceMap(raw){
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    Object.keys(raw).forEach(tierKey => {
+      const tierObj = raw[tierKey];
+      if (!tierObj || typeof tierObj !== 'object') return;
+      const nTier = toNumber(tierKey, NaN);
+      if (!Number.isFinite(nTier)) return;
+      const row = {};
+      Object.keys(tierObj).forEach(size => {
+        const v = toNumber(tierObj[size], NaN);
+        if (Number.isFinite(v)) row[String(size)] = v;
+      });
+      out[String(nTier)] = row;
+    });
+    return out;
+  }
+
+  function normalizeTierList(jobTiers, skus){
+    const set = new Set();
+    (Array.isArray(jobTiers) ? jobTiers : []).forEach(t => {
+      const n = toNumber(t, NaN);
+      if (Number.isFinite(n) && n > 0 && n <= 2000) set.add(n);
+    });
+    (skus || []).forEach(sku => {
+      Object.keys(sku.printedUnitPriceByTierBySize || {}).forEach(t => {
+        const n = toNumber(t, NaN);
+        if (Number.isFinite(n) && n > 0 && n <= 2000) set.add(n);
+      });
+    });
+    set.add(2000);
+    return Array.from(set).sort((a, b) => a - b);
+  }
+
+  function normalizeSkus(rawSkus, jobId){
+    const out = [];
+    const used = new Set();
+    (Array.isArray(rawSkus) ? rawSkus : []).forEach((raw, idx) => {
+      if (!raw || typeof raw !== 'object') return;
+      const baseId = String(raw.skuId || (jobId + '-SKU' + (idx + 1))).trim() || (jobId + '-SKU' + (idx + 1));
+      let skuId = baseId;
+      let i = 2;
+      while (used.has(skuId)) { skuId = baseId + '_' + i; i += 1; }
+      used.add(skuId);
+
+      const sizesAllowed = uniqueList((Array.isArray(raw.sizesAllowed) ? raw.sizesAllowed : [])
+        .map(s => String(s || '').trim())
+        .filter(Boolean));
+
+      const colorways = uniqueList((Array.isArray(raw.colorways) ? raw.colorways : [])
+        .map(c => String(c || '').trim())
+        .filter(Boolean));
+
+      out.push({
+        skuId: skuId,
+        skuKey: String(raw.skuKey || '').trim(),
+        uiName: String(raw.uiName || 'Unnamed SKU').trim(),
+        vendorProductUrl: String(raw.vendorProductUrl || '').trim(),
+        imageUrl: String(raw.imageUrl || '').trim(),
+        sizesAllowed: sizesAllowed.length ? sizesAllowed : ['OSFM'],
+        colorways: colorways.length ? colorways : ['Default'],
+        printedUnitPriceByTierBySize: normalizePriceMap(raw.printedUnitPriceByTierBySize),
+        upchargeBySize: (raw.upchargeBySize && typeof raw.upchargeBySize === 'object') ? raw.upchargeBySize : {}
+      });
+    });
+    return out;
+  }
+
+  function normalizePrintJobArray(rawPrintJobs){
+    if (Array.isArray(rawPrintJobs)) return rawPrintJobs;
+    if (!rawPrintJobs || typeof rawPrintJobs !== 'object') return [];
+
+    return Object.keys(rawPrintJobs)
+      .sort((a, b) => {
+        const aNum = toNumber(String(a || '').replace(/[^\d]/g, ''), NaN);
+        const bNum = toNumber(String(b || '').replace(/[^\d]/g, ''), NaN);
+        if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) return aNum - bNum;
+        return String(a || '').localeCompare(String(b || ''));
+      })
+      .map(key => rawPrintJobs[key]);
+  }
+
+  function normalizePrintJobs(rawPrintJobs){
+    const out = [];
+    const used = new Set();
+    const printJobList = normalizePrintJobArray(rawPrintJobs);
+
+    printJobList.forEach((rawJob, idx) => {
+      if (!rawJob || typeof rawJob !== 'object') return;
+      const rawSkus = Array.isArray(rawJob.skus) ? rawJob.skus : [];
+      if (Object.keys(rawJob).length === 0 && rawSkus.length === 0) return;
+
+      const baseId = String(rawJob.printJobId || ('PJ' + (idx + 1))).trim() || ('PJ' + (idx + 1));
+      let printJobId = baseId;
+      let i = 2;
+      while (used.has(printJobId)) { printJobId = baseId + '_' + i; i += 1; }
+      used.add(printJobId);
+
+      const skus = normalizeSkus(rawSkus, printJobId);
+      if (!skus.length) return;
+
+      const mockups = (rawJob.mockups && typeof rawJob.mockups === 'object') ? rawJob.mockups : {};
+
+      const normalized = {
+        printJobId: printJobId,
+        printJobName: String(rawJob.printJobName || ('Project ' + (idx + 1))).trim(),
+        printJobNotes: String(rawJob.printJobNotes || '').trim(),
+        deliveryEstimate: String(rawJob.deliveryEstimate || '').trim(),
+        turnaroundTime: String(rawJob.turnaroundTime || '').trim(),
+        decorations: Array.isArray(rawJob.decorations) ? rawJob.decorations : [],
+        addOns: Array.isArray(rawJob.addOns) ? rawJob.addOns.map((a, aIdx) => Object.assign({ __idx: aIdx }, a || {})) : [],
+        skus: skus,
+        mockups: {
+          previewMockupFileId: normalizeFileId(mockups.previewMockupFileId),
+          artMockupFileId: normalizeFileId(mockups.artMockupFileId),
+          garmentMockupFileId: normalizeFileId(mockups.garmentMockupFileId),
+          previewUrl: String(mockups.previewUrl || '').trim()
+        },
+        priceTiers: []
+      };
+
+      normalized.priceTiers = normalizeTierList(rawJob.priceTiers, normalized.skus);
+      out.push(normalized);
+    });
+
+    return out;
+  }
+
+  const ROW = (VM.row && typeof VM.row === 'object') ? VM.row : {};
+  const SNAPSHOT = safeJsonParse(VM.snapshot, {});
+  const META = (SNAPSHOT && typeof SNAPSHOT.meta === 'object' && SNAPSHOT.meta) ? SNAPSHOT.meta : {};
+  const PRINT_JOBS = normalizePrintJobs(SNAPSHOT.printJobs);
+  const PORTAL_MODE = normalizePortalMode(VM.mode);
+  const IS_TEAM = PORTAL_MODE === 'team';
+
+  let IS_READ_ONLY = Boolean(VM.readOnly);
+
+  function normalizePortalState(rawState){
+    const parsed = safeJsonParse(rawState, {});
+    const out = {
+      version: String(parsed && parsed.version ? parsed.version : '1'),
+      savedAt: String(parsed && parsed.savedAt ? parsed.savedAt : ''),
+      isReadOnly: Boolean(parsed && parsed.isReadOnly === true),
+      printJobs: {}
     };
-    tryNext();
+
+    PRINT_JOBS.forEach(job => {
+      const srcJob = parsed && parsed.printJobs && parsed.printJobs[job.printJobId] ? parsed.printJobs[job.printJobId] : {};
+      const jobState = {
+        hidden: Boolean(srcJob && srcJob.hidden === true),
+        skus: {}
+      };
+
+      job.skus.forEach(sku => {
+        const srcSku = srcJob && srcJob.skus && srcJob.skus[sku.skuId] ? srcJob.skus[sku.skuId] : {};
+        const skuState = {
+          hidden: Boolean(srcSku && srcSku.hidden === true),
+          colorways: {}
+        };
+
+        sku.colorways.forEach(color => {
+          const srcColor = srcSku && srcSku.colorways && srcSku.colorways[color] ? srcSku.colorways[color] : {};
+          const qtyBySize = {};
+          sku.sizesAllowed.forEach(size => {
+            qtyBySize[size] = clampInt(srcColor && srcColor.qtyBySize ? srcColor.qtyBySize[size] : 0);
+          });
+          skuState.colorways[color] = {
+            hidden: Boolean(srcColor && srcColor.hidden === true),
+            qtyBySize: qtyBySize
+          };
+        });
+
+        jobState.skus[sku.skuId] = skuState;
+      });
+
+      out.printJobs[job.printJobId] = jobState;
+    });
+
+    return out;
+  }
+
+  let PORTAL_STATE = normalizePortalState(VM.portalState);
+  if (PORTAL_STATE.isReadOnly) IS_READ_ONLY = true;
+  if (String(VM.status || '').toLowerCase() === 'saved' || String(VM.status || '').toLowerCase() === 'submitted') {
+    IS_READ_ONLY = true;
+  }
+  PORTAL_STATE.isReadOnly = IS_READ_ONLY;
+
+  const CAN_EDIT = () => PORTAL_MODE === 'client' && !IS_READ_ONLY;
+
+  const REMOVED_ADDONS_BY_JOB = {};
+  const JOB_DOM = new Map();
+  const JOB_SUMMARIES = new Map();
+  const MOCKUP_STATE_BY_JOB = {};
+
+  function getJobState(jobId){
+    if (!PORTAL_STATE.printJobs[jobId]) {
+      PORTAL_STATE.printJobs[jobId] = { hidden: false, skus: {} };
+    }
+    return PORTAL_STATE.printJobs[jobId];
+  }
+
+  function getSkuState(jobId, skuId){
+    const jobState = getJobState(jobId);
+    if (!jobState.skus[skuId]) {
+      jobState.skus[skuId] = { hidden: false, colorways: {} };
+    }
+    return jobState.skus[skuId];
+  }
+
+  function getColorState(jobId, sku, color){
+    const skuState = getSkuState(jobId, sku.skuId);
+    if (!skuState.colorways[color]) {
+      const qtyBySize = {};
+      sku.sizesAllowed.forEach(size => { qtyBySize[size] = 0; });
+      skuState.colorways[color] = { hidden: false, qtyBySize: qtyBySize };
+    }
+    return skuState.colorways[color];
+  }
+
+  function rowField(name){
+    return String(ROW[name] == null ? '' : ROW[name]).trim();
+  }
+
+  function metaField(name){
+    return String(META[name] == null ? '' : META[name]).trim();
+  }
+
+  function getClientName(){
+    return metaField('personName') || rowField('personname') || rowField('clientname') || '--';
+  }
+
+  function getDealNumber(){
+    return metaField('dealNumber') || rowField('dealnumber') || '--';
+  }
+
+  function getSenderName(){
+    return metaField('sentBy') || rowField('sentby') || 'Josiah';
+  }
+
+  function getSenderAvatarUrl(){
+    const name = getSenderName().toLowerCase();
+    if (!name) return SENDER_IMAGES.josiah;
+    if (SENDER_IMAGES[name]) return SENDER_IMAGES[name];
+    if (name.includes('navia')) return SENDER_IMAGES.navia;
+    return SENDER_IMAGES.josiah;
+  }
+
+  function getIntroMessage(){
+    return metaField('internalNotes') || rowField('internalnotes') || '';
+  }
+
+  const jobsRoot = document.getElementById('jobsRoot');
+  const hiddenPrintJobsBar = document.getElementById('hiddenPrintJobsBar');
+  const saveNotice = document.getElementById('saveNotice');
+  const snapshotTokenEl = document.getElementById('snapshotToken');
+  const snapshotIdVal = document.getElementById('snapshotIdVal');
+  const snapshotExportedVal = document.getElementById('snapshotExportedVal');
+  const snapshotContractVal = document.getElementById('snapshotContractVal');
+  const snapshotCalculatorVal = document.getElementById('snapshotCalculatorVal');
+  const snapshotSourceVal = document.getElementById('snapshotSourceVal');
+  const snapshotStatusVal = document.getElementById('snapshotStatusVal');
+
+  const introModal = document.getElementById('introModal');
+  const introClose = document.getElementById('introClose');
+  const introMessage = document.getElementById('introMessage');
+  const introTitle = document.getElementById('introTitle');
+  const headerAvatarBtn = document.getElementById('headerAvatarBtn');
+  const headerBubbleBtn = document.getElementById('headerBubbleBtn');
+  const headerBubbleBtnMini = document.getElementById('headerBubbleBtnMini');
+  const headerSmallLogoBtn = document.getElementById('headerSmallLogoBtn');
+
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightboxImg');
+  const lightboxClose = document.getElementById('lightboxClose');
+  const lightboxControls = document.getElementById('lightboxControls');
+  const lightboxPrevBtn = document.getElementById('lightboxPrevBtn');
+  const lightboxNextBtn = document.getElementById('lightboxNextBtn');
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomLabel = document.getElementById('zoomLabel');
+  const lightboxStage = document.getElementById('lightboxStage');
+
+  const saveBtn = document.getElementById('saveBtn');
+  const saveBtnMini = document.getElementById('saveBtnMini');
+  const placeOrderBtn = document.getElementById('placeOrderBtn');
+  const placeOrderBtnMini = document.getElementById('placeOrderBtnMini');
+
+  const teamDiagWrap = document.getElementById('teamDiagWrap');
+  const teamDiagToggle = document.getElementById('teamDiagToggle');
+  const teamDiagPanel = document.getElementById('teamDiagPanel');
+  const teamDiagGrid = document.getElementById('teamDiagGrid');
+  const teamDiagPre = document.getElementById('teamDiagPre');
+
+  function showNotice(message, type){
+    if (!saveNotice) return;
+    saveNotice.hidden = false;
+    saveNotice.textContent = String(message || '');
+    saveNotice.classList.remove('ok', 'err');
+    if (type === 'ok') saveNotice.classList.add('ok');
+    if (type === 'err') saveNotice.classList.add('err');
+  }
+
+  function clearNotice(){
+    if (!saveNotice) return;
+    saveNotice.hidden = true;
+    saveNotice.classList.remove('ok', 'err');
+    saveNotice.textContent = '';
+  }
+
+  function syncOverlayScrollLock(){
+    const lock =
+      (introModal && introModal.classList.contains('open')) ||
+      (lightbox && lightbox.classList.contains('open'));
+    document.body.classList.toggle('modalLocked', Boolean(lock));
+  }
+
+  function openIntroModal(){
+    if (!introModal) return;
+    introModal.classList.add('open');
+    introModal.setAttribute('aria-hidden', 'false');
+    syncOverlayScrollLock();
+  }
+
+  function closeIntroModal(){
+    if (!introModal) return;
+    introModal.classList.remove('open');
+    introModal.setAttribute('aria-hidden', 'true');
+    syncOverlayScrollLock();
   }
 
   function setImageSrcWithFallback(imgEl, src, fallback){
@@ -1276,893 +2300,1196 @@
     imgEl.src = primary || backstop || '';
   }
 
-  const SNAPSHOT = safeJsonParse(VM.snapshot, {});
-  const MAX_COLORWAYS = toNumber(SNAPSHOT.maxColorwaysPerItem, 6);
-
-  function normalizeItems(snapshot){
-    const items = (snapshot && Array.isArray(snapshot.items)) ? snapshot.items : [];
-    return items.map((it, idx) => {
-      const out = Object.assign({}, it);
-      out.lineId = toNumber(out.lineId, idx+1);
-      out.garmentUrl = out.garmentUrl || '';
-      out.garmentName = out.garmentName || out.title || 'Item ' + (out.lineId);
-      out.skuKey = out.skuKey || it.skuKey || '';
-      out.decorations = Array.isArray(out.decorations) ? out.decorations : [];
-      out.notes = out.notes || '';
-
-      out.availableSizes = safeJsonParse(out.availableSizesJson, out.availableSizes || []);
-      out.priceTiers = safeJsonParse(out.priceTiersJson, out.priceTiers || []);
-      out.colors = safeJsonParse(out.colorsJson, out.colors || []);
-
-      out.upchargeBySize = safeJsonParse(out.upchargeBySizeJson, out.upchargeBySize || {});
-      out.printedUnitPriceByTierBySize = safeJsonParse(out.printedUnitPriceByTierBySizeJson, out.printedUnitPriceByTierBySize || {});
-
-      out.baseSelectedSize = String(out.baseSelectedSize || '').trim() || (out.availableSizes[0] || '');
-      out.estimatedQty = toNumber(out.estimatedQty, 0);
-
-      out.colorways = (Array.isArray(out.colors) && out.colors.length)
-        ? out.colors.slice(0, MAX_COLORWAYS).map(c => ({ name: String(c||'').trim(), itemLineId: out.lineId }))
-        : [{ name:'', itemLineId: out.lineId }];
-
-      return out;
-    });
-  }
-
-  const ITEMS = normalizeItems(SNAPSHOT);
-
-  function getGlobalSizes(){
-    const first = ITEMS[0] ? ITEMS[0].availableSizes : [];
-    if (first && first.length) return first;
-    const set = new Set();
-    ITEMS.forEach(it => (it.availableSizes||[]).forEach(s => set.add(s)));
-    return Array.from(set);
-  }
-  const GLOBAL_SIZES = getGlobalSizes();
-
-  function tierForQty(qty, tiers){
-    const t = (Array.isArray(tiers) ? tiers : [])
-      .map(x => toNumber(x, NaN))
-      .filter(Number.isFinite)
-      .sort((a,b)=>a-b);
-
-    if (!t.length) return null;
-
-    const q = toNumber(qty, 0);
-    if (q <= 0) return String(t[0]);
-    if (q < t[0]) return String(t[0]);
-
-    let chosen = t[0];
-    for (const v of t){
-      if (q >= v) chosen = v;
-      else break;
-    }
-    return String(chosen);
-  }
-
-  function unitPriceFor(item, tierKey, size){
-    if (!tierKey) return null;
-    const row = (item.printedUnitPriceByTierBySize || {})[tierKey];
-    if (!row) return null;
-    const v = row[size];
-    return (v == null) ? null : toNumber(v, null);
-  }
-
-  function normalizeAddOns(raw){
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw;
-    if (typeof raw === 'string') {
-      const parsed = safeJsonParse(raw, []);
-      return normalizeAddOns(parsed);
-    }
-    if (typeof raw === 'object') {
-      return Object.keys(raw).map(k => ({ name: k, qty: 1, price: raw[k] }));
-    }
-    return [];
-  }
-  const ADDONS = normalizeAddOns(VM.addOns).map((a, idx) => Object.assign({ __idx: idx }, a));
-  const REMOVED_ADDONS = new Set();
-  let ADDON_TOTAL = 0;
-
-  function isPortalDisplay(a){
-    const v = a ? a.portal_display : false;
-    return v === true || String(v).toLowerCase() === 'true';
-  }
-
-  function getAddOnLabel(a){
-    return String(a.invoice_label || a.fee_name || a.name || a.title || a.fee_key || '').trim();
-  }
-
-  function isRush(a){
-    const feeType = String(a.fee_type || '').toLowerCase();
-    const feeKey = String(a.fee_key || '').toUpperCase();
-    return feeType === 'percent' || feeKey.startsWith('RUSH');
-  }
-
-  function computeRush(addOn, orderTotal){
-    const pct = Math.max(0, Number(addOn.percent_rate || 0));
-    const min = Math.max(0, Number(addOn.min_amount || 0));
-    const calc = orderTotal * pct;
-    return Math.round(Math.max(min, calc) * 100) / 100;
-  }
-
-  function rushRuleText(a){
-    const pct = Math.max(0, Number(a.percent_rate || 0));
-    const min = Math.max(0, Number(a.min_amount || 0));
-    const pctStr = (pct * 100).toFixed(0).replace(/\.0$/, '') + '%';
-    return money(min) + ' - ' + pctStr + ' of order - whichever is greater';
-  }
-
-  function normalizePortalMode(v){
-    const s = String(v || '').trim().toLowerCase();
-    return (s === 'client' || s === 'team') ? s : '';
-  }
-  const urlMode = normalizePortalMode(new URLSearchParams(window.location.search).get('mode'));
-  const PORTAL_MODE = urlMode || normalizePortalMode(VM.portalMode) || 'client';
-
-  function getSenderAvatarUrl(){
-    const name = String(VM.sentBy || '').trim().toLowerCase();
-    if (!name) return SENDER_IMAGES.josiah;
-    if (SENDER_IMAGES[name]) return SENDER_IMAGES[name];
-    if (name.includes('navia')) return SENDER_IMAGES.navia;
-    return SENDER_IMAGES.josiah;
-  }
-  function getSenderName(){
-    const raw = String(VM.sentBy || '').trim();
-    return raw || 'Josiah';
-  }
-
-  function setHeaderDetails(){
-    const clientName = (VM.clientName || '--');
-    const orderNum = (VM.orderNumber || '--');
-    const jobName = (VM.jobName || '--');
-
-    const headerClientName = document.getElementById('headerClientName');
-    const headerDealNum = document.getElementById('headerDealNum');
-    const headerClientNameMini = document.getElementById('headerClientNameMini');
-    const headerDealNumMini = document.getElementById('headerDealNumMini');
-
-    if (headerClientName) headerClientName.textContent = clientName;
-    if (headerDealNum) headerDealNum.textContent = 'Job # ' + orderNum;
-    if (headerClientNameMini) headerClientNameMini.textContent = clientName;
-    if (headerDealNumMini) headerDealNumMini.textContent = 'Job # ' + orderNum;
-
-    const projectNameEl = document.getElementById('projectJobName');
-    const headerProjectName = document.getElementById('headerProjectName');
-    if (projectNameEl) projectNameEl.textContent = jobName;
-    if (headerProjectName) headerProjectName.textContent = jobName;
-
-    const avatarUrl = getSenderAvatarUrl();
-    const avatarImg = document.getElementById('headerAvatarImg');
-    const introAvatar = document.getElementById('introAvatar');
-    setImageSrcWithFallback(avatarImg, avatarUrl, SENDER_IMAGES.josiah);
-    setImageSrcWithFallback(introAvatar, avatarUrl, SENDER_IMAGES.josiah);
-  }
-
-  function updateHeaderTotals(orderQty, grandTotal){
-    const totalUnits = document.getElementById('headerTotalUnits');
-    const totalPricing = document.getElementById('headerTotalPricing');
-    const totalUnitsMini = document.getElementById('headerTotalUnitsMini');
-    const totalPricingMini = document.getElementById('headerTotalPricingMini');
-
-    if (totalUnits) totalUnits.textContent = String(orderQty);
-    if (totalPricing) totalPricing.textContent = money(grandTotal);
-    if (totalUnitsMini) totalUnitsMini.textContent = String(orderQty);
-    if (totalPricingMini) totalPricingMini.textContent = money(grandTotal);
-
-    const projectUnits = document.getElementById('headerProjectUnits');
-    const projectCost = document.getElementById('headerProjectCost');
-    if (projectUnits) projectUnits.textContent = String(orderQty);
-    if (projectCost) projectCost.textContent = money(grandTotal);
-
-    const qualifies = grandTotal >= 500;
-    const freeShip = document.getElementById('headerFreeShip');
-    const freeShipMini = document.getElementById('headerFreeShipMini');
-    if (freeShip) freeShip.style.display = qualifies ? 'block' : 'none';
-    if (freeShipMini) freeShipMini.style.display = qualifies ? 'block' : 'none';
-  }
-
-  function renderModeBadge(){
-    const badge = document.getElementById('modeBadge');
-    if (!badge) return;
-    badge.textContent = (PORTAL_MODE === 'team') ? 'TEAM VIEW' : 'CLIENT VIEW';
-  }
-
-  function buildHead(){
-    const headRow = document.getElementById('headRow');
-    while (headRow.children.length > 3) headRow.removeChild(headRow.children[1]);
-
-    const qtyTh = headRow.querySelector('.qtyHead');
-    GLOBAL_SIZES.forEach(sz => {
-      const th = document.createElement('th');
-      th.className = 'sizeHead';
-      th.textContent = String(sz);
-      th.style.textAlign = 'center';
-      headRow.insertBefore(th, qtyTh);
-    });
-  }
-
-  let activeItemLineId = (ITEMS[0] ? ITEMS[0].lineId : 0);
-  const ROWS = new Map();
-  function rowKey(itemLineId, rowIndex){ return itemLineId + '::' + rowIndex; }
-
-  function qtyForRow(state){
-    let s = 0;
-    GLOBAL_SIZES.forEach(sz => { s += clampInt(state.sizeQty[sz]); });
-    return s;
-  }
-  function qtyForItem(itemLineId){
-    let total = 0;
-    [...ROWS.values()].forEach(st => {
-      if (st.itemLineId === itemLineId) total += qtyForRow(st);
-    });
-    return total;
-  }
-  function lineTotalForRow(item, rowState, tierKey){
-    let total = 0;
-    GLOBAL_SIZES.forEach(sz => {
-      const q = clampInt(rowState.sizeQty[sz]);
-      if (q <= 0) return;
-      const unit = unitPriceFor(item, tierKey, sz);
-      if (unit == null) return;
-      total += q * unit;
-    });
-    return total;
-  }
-
-  function setActiveItem(lineId){
-    activeItemLineId = lineId;
-    renderTopPanels();
-  }
-
-  // Mockup carousel (row-level only)
-  const MOCKUP_IDS = [
-    normalizeFileId(VM.previewMockupFileId),
-    normalizeFileId(VM.artMockupFileId),
-    normalizeFileId(VM.garmentMockupFileId)
-  ].filter(Boolean);
-
-  let mockupIndex = 0;
-  const FAILED_MOCKUP_IDS = new Set();
-
-  const mockupFrame = document.getElementById('mockupFrame');
-  const mockupImg = document.getElementById('mockupImg');
-  const mockupEmpty = document.getElementById('mockupEmpty');
-  const mockupControls = document.getElementById('mockupControls');
-  const mockupPrevBtn = document.getElementById('mockupPrevBtn');
-  const mockupNextBtn = document.getElementById('mockupNextBtn');
-  const mockupZoomBtn = document.getElementById('mockupZoomBtn');
-
-  function getAvailableMockupIds(){
-    return MOCKUP_IDS.filter(id => id && !FAILED_MOCKUP_IDS.has(id));
-  }
-
-  function findNextIndex(start, dir){
-    if (!MOCKUP_IDS.length) return -1;
-    for (let i = 1; i <= MOCKUP_IDS.length; i++){
-      const idx = (start + dir * i + MOCKUP_IDS.length) % MOCKUP_IDS.length;
-      const id = MOCKUP_IDS[idx];
-      if (id && !FAILED_MOCKUP_IDS.has(id)) return idx;
-    }
-    return -1;
-  }
-
-  function updateMockupControls(){
-    const availableCount = getAvailableMockupIds().length;
-    mockupControls.classList.remove('hidden');
-    const showArrows = availableCount > 1;
-    mockupPrevBtn.classList.toggle('hidden', !showArrows);
-    mockupNextBtn.classList.toggle('hidden', !showArrows);
-    if (availableCount <= 0){
-      mockupZoomBtn.classList.add('disabled');
-    } else {
-      mockupZoomBtn.classList.remove('disabled');
-    }
-  }
-
-  function showMockupUnavailable(){
-    mockupImg.removeAttribute('src');
-    mockupImg.style.display = 'none';
-    mockupEmpty.style.display = 'flex';
-    mockupFrame.classList.add('disabled');
-    mockupFrame.classList.remove('clickable');
-    updateMockupControls();
-  }
-
-  function loadPreviewByIndex(idx){
-    if (!MOCKUP_IDS.length){
-      showMockupUnavailable();
-      return;
-    }
-    const id = MOCKUP_IDS[idx];
-    if (!id){
-      showMockupUnavailable();
+  function loadImageWithFallback(imgEl, urls, onSuccess, onFail){
+    const list = (urls || []).filter(Boolean);
+    if (!list.length) {
+      if (onFail) onFail();
       return;
     }
 
-    const candidates = buildDriveCandidatesFromId(id);
-    loadImageWithFallback(
-      mockupImg,
-      candidates,
-      () => {
-        mockupImg.style.display = 'block';
-        mockupEmpty.style.display = 'none';
-        mockupFrame.classList.remove('disabled');
-        mockupFrame.classList.add('clickable');
-        updateMockupControls();
-      },
-      () => {
-        FAILED_MOCKUP_IDS.add(id);
-        const next = findNextIndex(idx, 1);
-        if (next === -1){
-          showMockupUnavailable();
-        } else {
-          mockupIndex = next;
-          loadPreviewByIndex(mockupIndex);
-          if (lightbox.classList.contains('open')) loadLightboxByIndex(mockupIndex);
-        }
+    let i = 0;
+    const tryNext = () => {
+      if (i >= list.length) {
+        if (onFail) onFail();
+        return;
       }
-    );
-  }
-
-  function stepMockup(dir){
-    const next = findNextIndex(mockupIndex, dir);
-    if (next === -1) return;
-    mockupIndex = next;
-    loadPreviewByIndex(mockupIndex);
-    if (lightbox.classList.contains('open')) loadLightboxByIndex(mockupIndex);
-  }
-
-  function initMockups(){
-    if (!MOCKUP_IDS.length){
-      showMockupUnavailable();
-      return;
-    }
-    mockupIndex = 0;
-    loadPreviewByIndex(mockupIndex);
+      const url = list[i++];
+      imgEl.onload = () => { if (onSuccess) onSuccess(url); };
+      imgEl.onerror = () => { tryNext(); };
+      imgEl.referrerPolicy = 'no-referrer';
+      imgEl.src = url;
+    };
+    tryNext();
   }
 
   function formatDecorationLine(d, idx){
     const label = 'Deco ' + (idx + 1) + ': ';
-    if (d == null) return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
-    if (typeof d === 'string'){
-      const cleaned = String(d).replace(/\s*\n\s*/g, ' ').trim();
-      if (!cleaned) return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
-      return label + cleaned;
+    if (d == null) return label + '--';
+
+    if (typeof d === 'string') {
+      const s = String(d).replace(/\s*\n\s*/g, ' ').trim();
+      return label + (s || '--');
     }
-    if (typeof d === 'object'){
-      const type = d.type || d.decoType || d.decorationType || d.deco_type || '';
-      const loc = d.location || d.decoLocation || d.deco_location || '';
-      const size = d.size || d.decoSize || d.deco_size || '';
-      const colors = d.colors || d.stitches || d.colorsStitches || d.colors_stitches || '';
-      const parts = [type, loc, size, colors].map(x => String(x || '').trim()).filter(Boolean);
-      if (!parts.length) return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
-      return label + parts.join(', ');
-    }
-    return label + '{{Deco-Type}}, {{Location}}, {{size}}, {{# colors/Stitches}}';
+
+    const method = d.decorationMethod || d.method || d.type || d.decoType || '';
+    const location = d.location || '';
+    const size = d.size || '';
+    const stitch = d.colors || d.stitches || d.colorsStitches || '';
+
+    const parts = [method, location, size, stitch].map(v => String(v || '').trim()).filter(Boolean);
+    return label + (parts.length ? parts.join(', ') : '--');
   }
 
-  function renderTopPanels(){
-    const item = ITEMS.find(x => x.lineId === activeItemLineId) || ITEMS[0];
-    if (!item) return;
+  function isPortalDisplay(addOn){
+    const v = addOn ? addOn.portal_display : false;
+    return v === true || String(v).toLowerCase() === 'true';
+  }
 
-    const decorList = document.getElementById('decorList');
-    decorList.innerHTML = '';
-    const decos = Array.isArray(item.decorations) ? item.decorations.filter(Boolean) : [];
-    const decoSet = decos.slice(0,4);
+  function isRush(addOn){
+    const feeType = String(addOn && addOn.fee_type || '').toLowerCase();
+    const feeKey = String(addOn && addOn.fee_key || '').toUpperCase();
+    return feeType === 'percent' || feeKey.indexOf('RUSH') === 0;
+  }
 
-    decoSet.forEach((d, i) => {
-      const line = document.createElement('div');
-      line.className = 'decorLine';
-      line.textContent = formatDecorationLine(d, i);
+  function getAddOnLabel(addOn){
+    return String(
+      (addOn && addOn.invoice_label) ||
+      (addOn && addOn.fee_name) ||
+      (addOn && addOn.name) ||
+      (addOn && addOn.fee_key) ||
+      ''
+    ).trim();
+  }
+
+  function computeRush(addOn, orderBasis){
+    const pct = Math.max(0, toNumber(addOn.percent_rate, 0));
+    const minAmount = Math.max(0, toNumber(addOn.min_amount, 0));
+    const calc = orderBasis * pct;
+    return Math.round(Math.max(minAmount, calc) * 100) / 100;
+  }
+
+  function rushRuleText(addOn){
+    const pct = Math.max(0, toNumber(addOn.percent_rate, 0));
+    const minAmount = Math.max(0, toNumber(addOn.min_amount, 0));
+    return money(minAmount) + ' - ' + Math.round(pct * 100) + '% of order - whichever is greater';
+  }
+
+  function formatTurnaroundText(value){
+    const s = String(value || '').replace(/\s*from payment\s*/ig, '').trim();
+    return s;
+  }
+
+  function formatDateTime(value){
+    if (!value) return '--';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  function shortToken(token){
+    const t = String(token || '').trim();
+    if (!t) return '--';
+    if (t.length <= 14) return t;
+    return t.slice(0, 8) + '...' + t.slice(-4);
+  }
+
+  function makeRowKey(jobId, skuId, color){
+    return [jobId, skuId, color].map(v => encodeURIComponent(String(v || ''))).join('::');
+  }
+
+  function makeUnitKey(rowKey, size){
+    return rowKey + '::' + encodeURIComponent(String(size || ''));
+  }
+
+  function getVisibleJobs(){
+    return PRINT_JOBS.filter(job => !getJobState(job.printJobId).hidden);
+  }
+
+  function getVisibleSkus(job){
+    return job.skus.filter(sku => !getSkuState(job.printJobId, sku.skuId).hidden);
+  }
+
+  function getVisibleColors(jobId, sku){
+    return sku.colorways.filter(color => !getColorState(jobId, sku, color).hidden);
+  }
+
+  function getHiddenColors(jobId, sku){
+    return sku.colorways.filter(color => getColorState(jobId, sku, color).hidden);
+  }
+
+  function pickActiveTier(tiers, totalQty){
+    const sorted = (Array.isArray(tiers) ? tiers : []).map(t => toNumber(t, NaN)).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+
+    const qty = clampInt(totalQty);
+    if (qty <= 0) return sorted[0];
+
+    let chosen = sorted[0];
+    sorted.forEach(t => {
+      if (qty >= t) chosen = t;
+    });
+
+    return chosen;
+  }
+
+  function unitPriceFor(sku, tier, size){
+    const map = sku.printedUnitPriceByTierBySize || {};
+    const keys = Object.keys(map).map(k => toNumber(k, NaN)).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!keys.length) return null;
+
+    const wanted = toNumber(tier, keys[0]);
+    let chosen = keys[0];
+    keys.forEach(k => {
+      if (wanted >= k) chosen = k;
+    });
+
+    const row = map[String(chosen)] || null;
+    if (!row) return null;
+    const v = toNumber(row[size], NaN);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  function rowQty(jobId, sku, color){
+    const state = getColorState(jobId, sku, color);
+    return sku.sizesAllowed.reduce((sum, size) => sum + clampInt(state.qtyBySize[size]), 0);
+  }
+
+  function lineTotal(jobId, sku, color, activeTier){
+    const state = getColorState(jobId, sku, color);
+    let total = 0;
+    sku.sizesAllowed.forEach(size => {
+      const qty = clampInt(state.qtyBySize[size]);
+      if (qty <= 0) return;
+      const unit = unitPriceFor(sku, activeTier, size);
+      if (unit == null) return;
+      total += qty * unit;
+    });
+    return total;
+  }
+
+  function createEl(tag, cls, txt){
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (txt != null) el.textContent = String(txt);
+    return el;
+  }
+
+  function buildHiddenControl(labelText, items, onClick){
+    const row = createEl('div', 'hiddenControlRow');
+    if (!items.length) return row;
+
+    const label = createEl('span', 'hiddenControlLabel', labelText);
+    row.appendChild(label);
+
+    items.forEach(item => {
+      const btn = createEl('button', 'showHiddenBtn', item.label);
+      btn.type = 'button';
+      btn.addEventListener('click', () => onClick(item));
+      row.appendChild(btn);
+    });
+
+    return row;
+  }
+
+  function buildMockupSlides(job){
+    const slides = [];
+    const previewCandidates = [];
+
+    if (job.mockups.previewUrl) previewCandidates.push(job.mockups.previewUrl);
+    if (job.mockups.previewMockupFileId) {
+      buildDriveCandidatesFromId(job.mockups.previewMockupFileId).forEach(u => previewCandidates.push(u));
+    }
+    if (previewCandidates.length) slides.push({ key: 'preview', candidates: uniqueList(previewCandidates) });
+
+    if (job.mockups.artMockupFileId) {
+      slides.push({ key: 'art', candidates: buildDriveCandidatesFromId(job.mockups.artMockupFileId) });
+    }
+
+    if (job.mockups.garmentMockupFileId) {
+      slides.push({ key: 'garment', candidates: buildDriveCandidatesFromId(job.mockups.garmentMockupFileId) });
+    }
+
+    return slides;
+  }
+
+  function getMockupState(jobId){
+    if (!MOCKUP_STATE_BY_JOB[jobId]) {
+      MOCKUP_STATE_BY_JOB[jobId] = { index: 0, failed: {} };
+    }
+    return MOCKUP_STATE_BY_JOB[jobId];
+  }
+
+  function loadPreviewForJob(job){
+    const dom = JOB_DOM.get(job.printJobId);
+    if (!dom || !dom.mockup) return;
+
+    const state = getMockupState(job.printJobId);
+    const slides = job.slides;
+
+    const img = dom.mockup.img;
+    const empty = dom.mockup.empty;
+    const frame = dom.mockup.frame;
+
+    function showUnavailable(){
+      img.removeAttribute('src');
+      img.style.display = 'none';
+      empty.style.display = 'flex';
+      frame.classList.add('disabled');
+      frame.classList.remove('clickable');
+      dom.mockup.zoomBtn.classList.add('disabled');
+      dom.mockup.prevBtn.classList.add('hidden');
+      dom.mockup.nextBtn.classList.add('hidden');
+    }
+
+    if (!slides.length) {
+      showUnavailable();
+      return;
+    }
+
+    const availableIndexes = slides
+      .map((_, i) => i)
+      .filter(i => !state.failed[i]);
+
+    if (!availableIndexes.length) {
+      showUnavailable();
+      return;
+    }
+
+    if (state.failed[state.index] || state.index >= slides.length) {
+      state.index = availableIndexes[0];
+    }
+
+    const showArrows = availableIndexes.length > 1;
+    dom.mockup.prevBtn.classList.toggle('hidden', !showArrows);
+    dom.mockup.nextBtn.classList.toggle('hidden', !showArrows);
+    dom.mockup.zoomBtn.classList.remove('disabled');
+
+    const slide = slides[state.index];
+
+    loadImageWithFallback(
+      img,
+      slide.candidates,
+      () => {
+        img.style.display = 'block';
+        empty.style.display = 'none';
+        frame.classList.remove('disabled');
+        frame.classList.add('clickable');
+      },
+      () => {
+        state.failed[state.index] = true;
+        const next = availableIndexes.find(i => !state.failed[i]);
+        if (next == null) {
+          showUnavailable();
+          return;
+        }
+        state.index = next;
+        loadPreviewForJob(job);
+      }
+    );
+  }
+
+  function stepPreview(job, dir){
+    const state = getMockupState(job.printJobId);
+    const slides = job.slides;
+    if (slides.length <= 1) return;
+
+    const available = slides.map((_, i) => i).filter(i => !state.failed[i]);
+    if (available.length <= 1) return;
+
+    let pos = available.indexOf(state.index);
+    if (pos < 0) pos = 0;
+    pos = (pos + dir + available.length) % available.length;
+    state.index = available[pos];
+
+    loadPreviewForJob(job);
+
+    if (LIGHTBOX.jobId === job.printJobId && lightbox.classList.contains('open')) {
+      LIGHTBOX.index = state.index;
+      loadLightboxForCurrent();
+    }
+  }
+
+  function buildJobSection(job, visibleIndex){
+    const section = createEl('section', 'printJobSection');
+    section.dataset.jobId = job.printJobId;
+
+    const shellHead = createEl('div', 'printJobShellHead');
+    const shellLeft = createEl('div', 'printJobShellLeft');
+    shellLeft.appendChild(createEl('span', 'printJobTag', 'Print Job ' + visibleIndex));
+    shellLeft.appendChild(createEl('span', 'printJobShellName', job.printJobName || ('Project ' + visibleIndex)));
+    shellHead.appendChild(shellLeft);
+
+    const shellMeta = createEl('div', 'printJobMeta');
+    shellMeta.appendChild(createEl('span', 'printJobMetaPill', 'ID: ' + (job.printJobId || '--')));
+    if (job.deliveryEstimate) {
+      shellMeta.appendChild(createEl('span', 'printJobMetaPill', 'In-Hands: ' + job.deliveryEstimate));
+    }
+    shellMeta.appendChild(createEl('span', 'printJobMetaPill', CAN_EDIT() ? 'Status: Editable' : 'Status: Read-Only'));
+    shellHead.appendChild(shellMeta);
+    section.appendChild(shellHead);
+
+    const topRow = createEl('div', 'topRowNew');
+    if (visibleIndex === 1) topRow.id = 'topRowNew';
+
+    const mockupBlock = createEl('div', 'mockupBlock');
+    const mockupFrame = createEl('div', 'mockupFrame');
+    const mockupImg = createEl('img', 'mockupImg');
+    mockupImg.alt = 'Mockup Preview';
+    mockupImg.referrerPolicy = 'no-referrer';
+    mockupImg.draggable = false;
+
+    const mockupEmpty = createEl('div', 'mockupEmpty', 'Mockup unavailable');
+
+    const mockupControls = createEl('div', 'mockupControls');
+    const slotLeft = createEl('div', 'mockupSlot left');
+    const prevBtn = createEl('button', 'mockupBtn', '\u25c0');
+    prevBtn.type = 'button';
+    prevBtn.setAttribute('aria-label', 'Previous image');
+    slotLeft.appendChild(prevBtn);
+
+    const slotProject = createEl('div', 'mockupSlot');
+    slotProject.appendChild(createEl('span', 'mockupLabel', 'PROJECT ' + visibleIndex));
+
+    const slotZoom = createEl('div', 'mockupSlot center');
+    const zoomBtn = createEl('button', 'mockupBtn', '+');
+    zoomBtn.type = 'button';
+    zoomBtn.setAttribute('aria-label', 'Open fullscreen');
+    slotZoom.appendChild(zoomBtn);
+
+    const slotMockups = createEl('div', 'mockupSlot');
+    slotMockups.appendChild(createEl('span', 'mockupLabel', 'MOCKUPS'));
+
+    const slotRight = createEl('div', 'mockupSlot right');
+    const nextBtn = createEl('button', 'mockupBtn', '\u25b6');
+    nextBtn.type = 'button';
+    nextBtn.setAttribute('aria-label', 'Next image');
+    slotRight.appendChild(nextBtn);
+
+    mockupControls.appendChild(slotLeft);
+    mockupControls.appendChild(slotProject);
+    mockupControls.appendChild(slotZoom);
+    mockupControls.appendChild(slotMockups);
+    mockupControls.appendChild(slotRight);
+
+    mockupFrame.appendChild(mockupImg);
+    mockupFrame.appendChild(mockupEmpty);
+    mockupFrame.appendChild(mockupControls);
+    mockupBlock.appendChild(mockupFrame);
+
+    const detailsCard = createEl('div', 'card detailsCard');
+    const projectHeader = createEl('div', 'projectHeader');
+
+    const projectTitle = createEl('div', 'projectTitle');
+    const label = createEl('span', 'projectLabel', 'PROJECT ' + visibleIndex + ': ');
+    const name = createEl('span', '', job.printJobName || ('Project ' + visibleIndex));
+    projectTitle.appendChild(label);
+    projectTitle.appendChild(name);
+
+    const controls = createEl('div', 'projectControls');
+    const revisionBtn = createEl('button', 'revisionBtn', 'Request Revision');
+    revisionBtn.type = 'button';
+    controls.appendChild(revisionBtn);
+
+    if (CAN_EDIT()) {
+      const hideBtn = createEl('button', 'hideEntityBtn', 'X');
+      hideBtn.type = 'button';
+      hideBtn.title = 'Hide project';
+      hideBtn.addEventListener('click', () => {
+        getJobState(job.printJobId).hidden = true;
+        renderPortal();
+      });
+      controls.appendChild(hideBtn);
+    }
+
+    projectHeader.appendChild(projectTitle);
+    projectHeader.appendChild(controls);
+
+    const decorList = createEl('div', 'decorList');
+    const decorSource = Array.isArray(job.decorations) ? job.decorations.filter(Boolean) : [];
+    decorSource.forEach((d, idx) => {
+      const line = createEl('div', 'decorLine', formatDecorationLine(d, idx));
       decorList.appendChild(line);
     });
 
-    document.getElementById('jobNotesText').textContent = (VM.jobNotes || '--');
-  }
+    const notesBlock = createEl('div', 'notesBlock');
+    notesBlock.appendChild(createEl('div', 'notesTitle', 'Job Notes'));
+    notesBlock.appendChild(createEl('div', '', job.printJobNotes || getIntroMessage() || '--'));
 
-  function buildBody(){
-    const tbody = document.getElementById('tbody');
-    tbody.innerHTML = '';
+    detailsCard.appendChild(projectHeader);
+    detailsCard.appendChild(decorList);
+    detailsCard.appendChild(notesBlock);
 
-    ITEMS.forEach(item => {
-      item.colorways.forEach((cw, idx) => {
-        const key = rowKey(item.lineId, idx);
+    topRow.appendChild(mockupBlock);
+    topRow.appendChild(detailsCard);
 
-        if (!ROWS.has(key)){
-          const sizeQty = {};
-          GLOBAL_SIZES.forEach(sz => sizeQty[sz] = 0);
-          ROWS.set(key, { itemLineId: item.lineId, colorName: cw.name || '', sizeQty: sizeQty });
+    section.appendChild(topRow);
+
+    const hiddenSkuItems = [];
+
+    job.skus.forEach(sku => {
+      const skuState = getSkuState(job.printJobId, sku.skuId);
+      if (skuState.hidden) {
+        hiddenSkuItems.push({ label: sku.skuKey || sku.uiName || sku.skuId, skuId: sku.skuId });
+        return;
+      }
+
+      const skuSection = createEl('div', 'skuSection');
+
+      const skuHeader = createEl('div', 'skuHeader');
+      const skuTitle = createEl('div', 'skuTitle');
+
+      const skuKeySpan = createEl('span', 'skuKey', sku.skuKey || sku.skuId);
+      skuTitle.appendChild(skuKeySpan);
+
+      const skuLink = createEl('a', 'prodLink', sku.uiName);
+      skuLink.href = sku.vendorProductUrl || '#';
+      skuLink.target = '_blank';
+      skuLink.rel = 'noopener';
+      skuTitle.appendChild(skuLink);
+
+      if (sku.sizesAllowed.length) {
+        skuTitle.appendChild(createEl('span', 'skuMetaNote', 'Sizes: ' + sku.sizesAllowed.join(', ')));
+      }
+
+      skuHeader.appendChild(skuTitle);
+
+      if (CAN_EDIT()) {
+        const hideSkuBtn = createEl('button', 'hideEntityBtn', 'X');
+        hideSkuBtn.type = 'button';
+        hideSkuBtn.title = 'Hide SKU';
+        hideSkuBtn.addEventListener('click', () => {
+          getSkuState(job.printJobId, sku.skuId).hidden = true;
+          renderPortal();
+        });
+        skuHeader.appendChild(hideSkuBtn);
+      }
+
+      skuSection.appendChild(skuHeader);
+
+      const tableWrap = createEl('div', 'tableWrap');
+      const table = createEl('table', 'mainTable');
+      table.dataset.jobId = job.printJobId;
+      table.dataset.skuId = sku.skuId;
+
+      const thead = createEl('thead', '');
+      const headRow = createEl('tr', '');
+      headRow.appendChild(createEl('th', '', 'Product Link / Color choice'));
+      sku.sizesAllowed.forEach(size => {
+        const th = createEl('th', 'sizeHead', size);
+        th.style.textAlign = 'center';
+        headRow.appendChild(th);
+      });
+      headRow.appendChild(createEl('th', 'qtyHead', 'QTY'));
+      headRow.appendChild(createEl('th', 'totalHead', 'Line Total'));
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = createEl('tbody', '');
+      const visibleColors = getVisibleColors(job.printJobId, sku);
+
+      if (!visibleColors.length) {
+        const trEmpty = createEl('tr', '');
+        const tdEmpty = createEl('td', 'pcCell', 'All colorways hidden. Use Show hidden controls to restore.');
+        tdEmpty.colSpan = sku.sizesAllowed.length + 3;
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+      }
+
+      visibleColors.forEach(color => {
+        const rowKey = makeRowKey(job.printJobId, sku.skuId, color);
+        const colorState = getColorState(job.printJobId, sku, color);
+
+        const tr = createEl('tr', '');
+        tr.dataset.rowKey = rowKey;
+
+        const tdPc = createEl('td', 'pcCell');
+        const top = createEl('div', 'pcTop');
+
+        if (CAN_EDIT()) {
+          const hideColorBtn = createEl('button', 'hideEntityBtn', 'X');
+          hideColorBtn.type = 'button';
+          hideColorBtn.title = 'Hide colorway';
+          hideColorBtn.addEventListener('click', () => {
+            getColorState(job.printJobId, sku, color).hidden = true;
+            renderPortal();
+          });
+          top.appendChild(hideColorBtn);
         }
 
-        const st = ROWS.get(key);
+        top.appendChild(createEl('div', 'colorLabel', color));
+        tdPc.appendChild(top);
+        tr.appendChild(tdPc);
 
-        const tr = document.createElement('tr');
-        tr.setAttribute('data-rowkey', key);
-        tr.addEventListener('click', () => { setActiveItem(item.lineId); });
-
-        const tdPC = document.createElement('td');
-        tdPC.className = 'pcCell';
-
-        const top = document.createElement('div');
-        top.className = 'pcTop';
-
-        const x = document.createElement('div');
-        x.className = 'xBtn';
-        x.textContent = 'X';
-        x.title = 'Remove this color row';
-        x.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          removeColorRow(item.lineId, idx);
-        });
-        top.appendChild(x);
-
-        const input = document.createElement('input');
-        input.className = 'colorInput';
-        input.type = 'text';
-        input.value = st.colorName || '';
-        input.placeholder = 'Enter exact color name';
-        input.addEventListener('input', () => { st.colorName = input.value; });
-        if (VM.mode === 'view') input.disabled = true;
-        top.appendChild(input);
-
-        tdPC.appendChild(top);
-
-        const a = document.createElement('a');
-        a.className = 'prodLink';
-        a.href = item.garmentUrl || '#';
-        a.target = '_blank';
-        a.rel = 'noopener';
-        const sku = (VM.skuKey || item.skuKey || '').trim();
-        a.textContent = sku ? (sku + ' ' + item.garmentName) : item.garmentName;
-        tdPC.appendChild(a);
-
-        tr.appendChild(tdPC);
-
-        GLOBAL_SIZES.forEach(sz => {
-          const td = document.createElement('td');
-          td.className = 'sizeCell';
-
-          const wrap = document.createElement('div');
-          wrap.className = 'qtyWrap';
-
-          const inp = document.createElement('input');
-          inp.className = 'qtyInput';
+        sku.sizesAllowed.forEach(size => {
+          const td = createEl('td', 'sizeCell');
+          const wrap = createEl('div', 'qtyWrap');
+          const inp = createEl('input', 'qtyInput');
           inp.type = 'text';
           inp.inputMode = 'numeric';
           inp.pattern = '[0-9]*';
-          inp.value = String(st.sizeQty[sz] || 0);
-          if (VM.mode === 'view') inp.disabled = true;
+          inp.value = String(clampInt(colorState.qtyBySize[size]));
+          inp.disabled = !CAN_EDIT();
 
           inp.addEventListener('input', () => {
-            const cleaned = String(inp.value||'').replace(/[^\d]/g,'');
-            const n = cleaned ? parseInt(cleaned,10) : 0;
-            st.sizeQty[sz] = Number.isFinite(n) && n > 0 ? n : 0;
-            inp.value = String(st.sizeQty[sz]);
+            const cleaned = String(inp.value || '').replace(/[^\d]/g, '');
+            const next = cleaned ? parseInt(cleaned, 10) : 0;
+            colorState.qtyBySize[size] = Number.isFinite(next) && next > 0 ? next : 0;
+            inp.value = String(colorState.qtyBySize[size]);
             recalcAll();
           });
 
           wrap.appendChild(inp);
-
-          const step = document.createElement('div');
-          step.className = 'stepper';
-
-          const up = document.createElement('div');
-          up.className = 'stepBtn';
-          up.innerHTML = '<div class="triUp"></div>';
-          up.addEventListener('mousedown', (ev) => { ev.preventDefault(); bump(st, sz, +1, inp); });
-
-          const dn = document.createElement('div');
-          dn.className = 'stepBtn';
-          dn.innerHTML = '<div class="triDown"></div>';
-          dn.addEventListener('mousedown', (ev) => { ev.preventDefault(); bump(st, sz, -1, inp); });
-
-          step.appendChild(up);
-          step.appendChild(dn);
-          wrap.appendChild(step);
-
           td.appendChild(wrap);
 
-          const upTxt = document.createElement('div');
-          upTxt.className = 'unitPrice';
-          upTxt.setAttribute('data-unitprice', key + '::' + sz);
-          upTxt.textContent = '';
-          td.appendChild(upTxt);
+          const unit = createEl('div', 'unitPrice', '');
+          unit.dataset.unitKey = makeUnitKey(rowKey, size);
+          td.appendChild(unit);
 
           tr.appendChild(td);
         });
 
-        const tdQty = document.createElement('td');
-        tdQty.className = 'qtyCol';
-        tdQty.setAttribute('data-qty', key);
-        tdQty.textContent = '0';
+        const tdQty = createEl('td', 'qtyCol', '0');
+        tdQty.dataset.rowQty = rowKey;
         tr.appendChild(tdQty);
 
-        const tdTotal = document.createElement('td');
-        tdTotal.className = 'lineTotal';
-        tdTotal.setAttribute('data-total', key);
-        tdTotal.textContent = '$0.00';
+        const tdTotal = createEl('td', 'lineTotal', '$0.00');
+        tdTotal.dataset.rowTotal = rowKey;
         tr.appendChild(tdTotal);
 
         tbody.appendChild(tr);
+      });
 
-        if (idx === item.colorways.length - 1) {
-          const trAdd = document.createElement('tr');
-          const tdAdd = document.createElement('td');
-          tdAdd.colSpan = 1 + GLOBAL_SIZES.length + 2;
-          tdAdd.style.borderBottom = 'none';
-          tdAdd.style.padding = '8px 6px';
+      table.appendChild(tbody);
+      tableWrap.appendChild(table);
+      skuSection.appendChild(tableWrap);
 
-          const add = document.createElement('span');
-          add.className = 'addColor';
-          add.textContent = 'Add another color';
-          add.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            addColorRow(item.lineId);
+      if (CAN_EDIT()) {
+        const hiddenColors = getHiddenColors(job.printJobId, sku).map(color => ({ label: color, color: color }));
+        if (hiddenColors.length) {
+          const hiddenColorRow = buildHiddenControl('Show hidden colors', hiddenColors, item => {
+            getColorState(job.printJobId, sku, item.color).hidden = false;
+            renderPortal();
           });
-
-          tdAdd.appendChild(add);
-          trAdd.appendChild(tdAdd);
-          tbody.appendChild(trAdd);
-        }
-      });
-    });
-
-    enforceMinRows();
-  }
-
-  function bump(st, sz, delta, inpEl){
-    const cur = clampInt(st.sizeQty[sz]);
-    const next = Math.max(0, cur + delta);
-    st.sizeQty[sz] = next;
-    inpEl.value = String(next);
-    recalcAll();
-  }
-
-  function enforceMinRows(){
-    ITEMS.forEach(item => {
-      if (item.colorways.length <= 1){
-        const key = rowKey(item.lineId, 0);
-        const tr = document.querySelector('tr[data-rowkey="' + key.replace(/"/g,'\\"') + '"]');
-        if (tr){
-          const x = tr.querySelector('.xBtn');
-          if (x){
-            x.style.opacity = '0.25';
-            x.style.cursor = 'not-allowed';
-            x.onclick = null;
-          }
+          skuSection.appendChild(hiddenColorRow);
         }
       }
+
+      section.appendChild(skuSection);
     });
-  }
 
-  function addColorRow(itemLineId){
-    const item = ITEMS.find(x => x.lineId === itemLineId);
-    if (!item) return;
-    if (item.colorways.length >= MAX_COLORWAYS) return;
-    item.colorways.push({ name:'', itemLineId: itemLineId });
-    buildBody();
-    recalcAll();
-  }
-
-  function snapshotRowsFromDom(itemLineId){
-    const rows = [];
-    document.querySelectorAll('tr[data-rowkey]').forEach(tr => {
-      const k = tr.getAttribute('data-rowkey');
-      const lid = toNumber(k.split('::')[0], 0);
-      if (lid !== itemLineId) return;
-
-      const sizeQty = {};
-      GLOBAL_SIZES.forEach(sz => {
-        const unitEl = tr.querySelector('.unitPrice[data-unitprice="' + (k+'::'+sz).replace(/"/g,'\\"') + '"]');
-        const td = unitEl ? unitEl.parentElement : null;
-        const q = td ? td.querySelector('input.qtyInput') : null;
-        sizeQty[sz] = q ? clampInt(q.value) : 0;
+    if (CAN_EDIT() && hiddenSkuItems.length) {
+      const hiddenSkuRow = buildHiddenControl('Show hidden SKUs', hiddenSkuItems, item => {
+        getSkuState(job.printJobId, item.skuId).hidden = false;
+        renderPortal();
       });
+      section.appendChild(hiddenSkuRow);
+    }
 
-      const colorInp = tr.querySelector('.colorInput');
-      rows.push({ colorName: colorInp ? colorInp.value : '', sizeQty: sizeQty });
+    const bottomRow = createEl('div', 'bottomRow');
+
+    const compareCard = createEl('div', 'compareCard');
+    compareCard.appendChild(createEl('div', 'compareTitle', 'Compare item prices and quantity discounts. Buy in bulk and save!'));
+    const minMsg = createEl('div', 'compareSubtitle', '');
+    minMsg.dataset.compareHint = job.printJobId;
+    compareCard.appendChild(minMsg);
+
+    const compareWrap = createEl('div', 'compareTableWrap');
+    const compareTable = createEl('table', 'compareTable');
+    compareTable.dataset.compareTable = job.printJobId;
+    compareWrap.appendChild(compareTable);
+    compareCard.appendChild(compareWrap);
+
+    const totalsCard = createEl('div', 'totalsCard');
+    const addOnsList = createEl('div', '');
+    addOnsList.dataset.addOnsList = job.printJobId;
+    totalsCard.appendChild(addOnsList);
+
+    const resetBtn = createEl('button', 'addOnReset hidden', 'Restore add-ons');
+    resetBtn.type = 'button';
+    resetBtn.dataset.addOnReset = job.printJobId;
+    resetBtn.addEventListener('click', () => {
+      REMOVED_ADDONS_BY_JOB[job.printJobId] = new Set();
+      recalcAll();
     });
+    totalsCard.appendChild(resetBtn);
 
-    const item = ITEMS.find(x => x.lineId === itemLineId);
-    if (item) item.__rowsSnapshot = rows;
-  }
+    const turnaround = createEl('div', 'turnaround', '');
+    turnaround.dataset.turnaround = job.printJobId;
+    totalsCard.appendChild(turnaround);
 
-  function rebuildRowsForItem(itemLineId){
-    const item = ITEMS.find(x => x.lineId === itemLineId);
-    if (!item) return;
-    const snap = Array.isArray(item.__rowsSnapshot) ? item.__rowsSnapshot : [];
+    const totalRow = createEl('div', 'totalsRow grandTotal');
+    totalRow.appendChild(createEl('strong', '', 'Job Total:'));
+    const totalVal = createEl('span', 'value', '$0.00');
+    totalVal.dataset.jobTotal = job.printJobId;
+    totalRow.appendChild(totalVal);
+    totalsCard.appendChild(totalRow);
 
-    [...ROWS.keys()].forEach(k => {
-      const lid = toNumber(k.split('::')[0],0);
-      if (lid === itemLineId) ROWS.delete(k);
-    });
+    bottomRow.appendChild(compareCard);
+    bottomRow.appendChild(totalsCard);
+    section.appendChild(bottomRow);
 
-    item.colorways.forEach((cw, idx) => {
-      const k = rowKey(itemLineId, idx);
-      const sizeQty = {};
-      GLOBAL_SIZES.forEach(sz => sizeQty[sz] = 0);
-      const src = snap[idx] || {};
-      ROWS.set(k, {
-        itemLineId: itemLineId,
-        colorName: src.colorName != null ? src.colorName : (cw.name || ''),
-        sizeQty: Object.assign(sizeQty, src.sizeQty || {})
-      });
-    });
-
-    delete item.__rowsSnapshot;
-  }
-
-  function removeColorRow(itemLineId, rowIndex){
-    const item = ITEMS.find(x => x.lineId === itemLineId);
-    if (!item) return;
-    if (item.colorways.length <= 1) return;
-
-    snapshotRowsFromDom(itemLineId);
-    item.colorways.splice(rowIndex, 1);
-    rebuildRowsForItem(itemLineId);
-
-    buildBody();
-    recalcAll();
-  }
-
-  function buildCompareTable(){
-    const tbl = document.getElementById('compareTable');
-    tbl.innerHTML = '';
-
-    const tierSet = new Set();
-    ITEMS.forEach(it => (it.priceTiers||[]).forEach(t => tierSet.add(toNumber(t, NaN))));
-    const tiers = Array.from(tierSet).filter(Number.isFinite).sort((a,b)=>a-b);
-    const displayTiers = tiers.filter(t => t <= 2000);
-
-    const thead = document.createElement('thead');
-    const hr = document.createElement('tr');
-
-    const th0 = document.createElement('th');
-    th0.textContent = 'SKU/QTY';
-    hr.appendChild(th0);
-
-    displayTiers.forEach(t => {
-      const th = document.createElement('th');
-      if (t === 2000){
-        th.innerHTML = '2000+';
-      } else {
-        th.textContent = String(t);
+    JOB_DOM.set(job.printJobId, {
+      section: section,
+      compareTable: compareTable,
+      addOnsList: addOnsList,
+      addOnsResetBtn: resetBtn,
+      turnaround: turnaround,
+      jobTotal: totalVal,
+      compareHint: minMsg,
+      mockup: {
+        frame: mockupFrame,
+        img: mockupImg,
+        empty: mockupEmpty,
+        prevBtn: prevBtn,
+        nextBtn: nextBtn,
+        zoomBtn: zoomBtn
       }
-      th.setAttribute('data-tier', String(t));
+    });
+
+    prevBtn.addEventListener('click', e => { e.stopPropagation(); stepPreview(job, -1); });
+    nextBtn.addEventListener('click', e => { e.stopPropagation(); stepPreview(job, 1); });
+    zoomBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (zoomBtn.classList.contains('disabled')) return;
+      openLightbox(job.printJobId);
+    });
+
+    mockupFrame.addEventListener('click', e => {
+      if (e.target.closest('.mockupBtn')) return;
+      if (zoomBtn.classList.contains('disabled')) return;
+      openLightbox(job.printJobId);
+    });
+
+    mockupImg.addEventListener('contextmenu', e => e.preventDefault());
+    mockupImg.addEventListener('dragstart', e => e.preventDefault());
+
+    return section;
+  }
+
+  function buildCompareTable(job){
+    const dom = JOB_DOM.get(job.printJobId);
+    if (!dom || !dom.compareTable) return;
+
+    const table = dom.compareTable;
+    table.innerHTML = '';
+
+    const visibleSkus = getVisibleSkus(job);
+    const tiers = normalizeTierList(job.priceTiers, job.skus);
+
+    const thead = createEl('thead', '');
+    const hr = createEl('tr', '');
+    hr.appendChild(createEl('th', '', 'SKU/QTY'));
+
+    tiers.forEach(tier => {
+      const th = createEl('th', '', tier === 2000 ? '2000+ / Call for price' : String(tier));
+      th.dataset.tier = String(tier);
       hr.appendChild(th);
     });
 
     thead.appendChild(hr);
-    tbl.appendChild(thead);
+    table.appendChild(thead);
 
-    const tbody = document.createElement('tbody');
+    const tbody = createEl('tbody', '');
 
-    ITEMS.forEach(it => {
-      const tr = document.createElement('tr');
-
-      const skuCell = document.createElement('td');
-      const sku = (VM.skuKey || it.skuKey || '').trim() || ('Item ' + it.lineId);
-      const url = it.garmentUrl || '#';
-      skuCell.innerHTML = '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener"><strong>' + escapeHtml(sku) + '</strong></a>';
+    visibleSkus.forEach(sku => {
+      const tr = createEl('tr', '');
+      const skuCell = createEl('td', '');
+      const link = createEl('a', '', sku.skuKey || sku.skuId);
+      link.href = sku.vendorProductUrl || '#';
+      link.target = '_blank';
+      link.rel = 'noopener';
+      skuCell.appendChild(link);
       tr.appendChild(skuCell);
 
-      const baseSize = it.baseSelectedSize || (it.availableSizes[0] || '');
+      const baseSize = sku.sizesAllowed[0] || '';
 
-      displayTiers.forEach(t => {
-        const td = document.createElement('td');
-        td.setAttribute('data-tier', String(t));
-
-        if (t === 2000){
-          td.innerHTML = '<span class="tierNote">special<br>pricing</span>';
+      tiers.forEach(tier => {
+        const td = createEl('td', '', '');
+        td.dataset.tier = String(tier);
+        if (tier === 2000) {
+          td.textContent = '2000+ / Call for price';
         } else {
-          const unit = unitPriceFor(it, String(t), baseSize);
+          const unit = unitPriceFor(sku, tier, baseSize);
           td.textContent = (unit == null) ? '--' : money(unit);
         }
-
         tr.appendChild(td);
       });
 
       tbody.appendChild(tr);
     });
 
-    tbl.appendChild(tbody);
+    table.appendChild(tbody);
   }
 
-  function applyCompareHighlight(activeTier){
-    const tbl = document.getElementById('compareTable');
-    tbl.querySelectorAll('.hlCol').forEach(el => el.classList.remove('hlCol'));
+  function applyCompareHighlight(jobId, activeTier){
+    const dom = JOB_DOM.get(jobId);
+    if (!dom || !dom.compareTable) return;
+
+    dom.compareTable.querySelectorAll('.hlCol').forEach(el => el.classList.remove('hlCol'));
     if (!activeTier) return;
-    tbl.querySelectorAll('[data-tier="' + activeTier + '"]').forEach(el => el.classList.add('hlCol'));
+
+    dom.compareTable.querySelectorAll('[data-tier="' + String(activeTier) + '"]').forEach(el => el.classList.add('hlCol'));
   }
 
-  function renderAddOns(orderSubtotal){
-    const list = document.getElementById('addOnsList');
-    list.innerHTML = '';
-    ADDON_TOTAL = 0;
+  function renderHiddenPrintJobs(){
+    hiddenPrintJobsBar.innerHTML = '';
 
-    const visible = ADDONS.filter(a => isPortalDisplay(a) && !REMOVED_ADDONS.has(a.__idx));
+    if (!CAN_EDIT()) return;
 
-    let staticTotal = 0;
-    visible.forEach(a => {
-      if (!isRush(a)){
-        staticTotal += Math.max(0, toNumber(a.amount, 0));
-      }
+    const hiddenItems = PRINT_JOBS
+      .filter(job => getJobState(job.printJobId).hidden)
+      .map(job => ({ label: job.printJobName || job.printJobId, jobId: job.printJobId }));
+
+    if (!hiddenItems.length) return;
+
+    const row = buildHiddenControl('Show hidden projects', hiddenItems, item => {
+      getJobState(item.jobId).hidden = false;
+      renderPortal();
     });
 
-    const rushBasis = Math.max(0, toNumber(orderSubtotal, 0) + staticTotal);
-
-    visible.forEach(a => {
-      const labelText = getAddOnLabel(a);
-      if (!labelText) return;
-
-      const rush = isRush(a);
-      const amount = rush ? computeRush(a, rushBasis) : Math.max(0, toNumber(a.amount, 0));
-      ADDON_TOTAL += amount;
-
-      const row = document.createElement('div');
-      row.className = 'addOnRow addOnItem';
-
-      const mainWrap = document.createElement('div');
-      mainWrap.className = 'addOnMainWrap';
-
-      const mainLine = document.createElement('div');
-      mainLine.className = 'addOnMainLine';
-
-      const label = document.createElement('div');
-      label.className = 'addOnLabel';
-      label.textContent = labelText;
-      mainLine.appendChild(label);
-
-      const qty = document.createElement('span');
-      qty.className = 'addOnMainQty';
-      qty.textContent = 'x1';
-      mainLine.appendChild(qty);
-
-      const val = document.createElement('span');
-      val.className = 'addOnMainAmt';
-      val.textContent = money(amount);
-      mainLine.appendChild(val);
-
-      mainWrap.appendChild(mainLine);
-      if (rush){
-        const sub = document.createElement('div');
-        sub.className = 'addOnSub';
-        sub.textContent = rushRuleText(a);
-        mainWrap.appendChild(sub);
-      }
-
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'addOnRemove';
-      remove.textContent = 'x';
-      remove.title = 'Remove fee';
-      remove.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        REMOVED_ADDONS.add(a.__idx);
-        recalcAll();
-      });
-
-      row.appendChild(mainWrap);
-      row.appendChild(remove);
-      list.appendChild(row);
-    });
-
-    const resetBtn = document.getElementById('addOnsResetBtn');
-    if (resetBtn){
-      if (REMOVED_ADDONS.size > 0){
-        resetBtn.classList.remove('hidden');
-      } else {
-        resetBtn.classList.add('hidden');
-      }
-    }
+    hiddenPrintJobsBar.appendChild(row);
   }
 
-  function getRushTurnaroundText(){
-    const rushItems = ADDONS.filter(a => isPortalDisplay(a) && !REMOVED_ADDONS.has(a.__idx) && isRush(a));
-    if (!rushItems.length) return null;
+  function renderPortal(){
+    JOB_DOM.clear();
+    jobsRoot.innerHTML = '';
 
-    let minDays = Infinity;
-    rushItems.forEach(a => {
-      const label = getAddOnLabel(a);
-      const nums = String(label).match(/\d+/g) || [];
-      nums.forEach(n => {
-        const v = Number(n);
-        if (Number.isFinite(v) && v > 0) minDays = Math.min(minDays, v);
-      });
-    });
+    setHeaderDetails();
+    renderHiddenPrintJobs();
 
-    if (!Number.isFinite(minDays)) return null;
-    return (minDays === 1) ? '1 business day (rush)' : (minDays + ' business days (rush)');
-  }
+    const visibleJobs = getVisibleJobs();
 
-  function setTurnaround(){
-    const el = document.getElementById('turnaroundVal');
-    const rushText = getRushTurnaroundText();
-    if (rushText){
-      el.textContent = 'Turnaround Time: ' + rushText;
-      el.style.display = 'block';
+    if (!visibleJobs.length) {
+      jobsRoot.appendChild(createEl('div', 'card', 'All print jobs are hidden. Use Show hidden controls to restore.'));
+      renderHeaderProjects([]);
+      updateHeaderTotals(0, 0, false);
+      requestHeaderStateUpdate();
       return;
     }
 
-    const val = String(VM.productionTime || '').trim();
-    if (val){
-      const cleanVal = val.replace(/\s*from payment\s*/i, '').trim();
-      el.textContent = 'Turnaround Time: ' + cleanVal;
-      el.style.display = 'block';
-    } else {
-      el.style.display = 'none';
+    visibleJobs.forEach((job, idx) => {
+      job.slides = buildMockupSlides(job);
+      const section = buildJobSection(job, idx + 1);
+      jobsRoot.appendChild(section);
+      buildCompareTable(job);
+      loadPreviewForJob(job);
+    });
+
+    recalcAll();
+    requestHeaderStateUpdate();
+  }
+
+  function renderHeaderProjects(summaries){
+    const host = document.querySelector('.headerProjects');
+    if (!host) return;
+
+    host.innerHTML = '';
+
+    if (!summaries.length) {
+      const row = createEl('div', 'headerProjectRow');
+      row.appendChild(createEl('span', 'headerProjectLabel', 'PROJECT 1:'));
+      row.appendChild(createEl('span', '', '--'));
+      host.appendChild(row);
+      return;
     }
+
+    summaries.forEach((s, idx) => {
+      const row = createEl('div', 'headerProjectRow');
+      row.appendChild(createEl('span', 'headerProjectLabel', 'PROJECT ' + (idx + 1) + ':'));
+      row.appendChild(createEl('span', '', s.name || '--'));
+      row.appendChild(createEl('span', 'headerProjectMeta', 'Units: ' + s.units + '   Cost: ' + money(s.total)));
+      host.appendChild(row);
+    });
+  }
+
+  function updateHeaderTotals(totalUnits, grandTotal, hasQty){
+    const totalUnitsEl = document.getElementById('headerTotalUnits');
+    const totalPricingEl = document.getElementById('headerTotalPricing');
+    const totalUnitsMiniEl = document.getElementById('headerTotalUnitsMini');
+    const totalPricingMiniEl = document.getElementById('headerTotalPricingMini');
+
+    if (totalUnitsEl) totalUnitsEl.textContent = String(totalUnits || 0);
+    if (totalUnitsMiniEl) totalUnitsMiniEl.textContent = String(totalUnits || 0);
+
+    const pricingText = hasQty ? money(grandTotal) : '--';
+    if (totalPricingEl) totalPricingEl.textContent = pricingText;
+    if (totalPricingMiniEl) totalPricingMiniEl.textContent = pricingText;
+
+    const freeShip = document.getElementById('headerFreeShip');
+    const freeShipMini = document.getElementById('headerFreeShipMini');
+    const qualifies = hasQty && grandTotal >= 500;
+
+    if (freeShip) freeShip.style.display = qualifies ? 'block' : 'none';
+    if (freeShipMini) freeShipMini.style.display = qualifies ? 'block' : 'none';
+  }
+
+  function renderAddOnsForJob(job, rowSubtotal){
+    const dom = JOB_DOM.get(job.printJobId);
+    if (!dom) return { addOnTotal: 0, turnaround: '' };
+
+    const list = dom.addOnsList;
+    list.innerHTML = '';
+
+    if (!REMOVED_ADDONS_BY_JOB[job.printJobId]) REMOVED_ADDONS_BY_JOB[job.printJobId] = new Set();
+    const removed = REMOVED_ADDONS_BY_JOB[job.printJobId];
+
+    const visible = job.addOns
+      .filter(addOn => isPortalDisplay(addOn))
+      .filter(addOn => !removed.has(addOn.__idx));
+
+    let staticPositive = 0;
+    visible.forEach(addOn => {
+      if (isRush(addOn)) return;
+      staticPositive += Math.max(0, toNumber(addOn.amount, 0));
+    });
+
+    const rushBasis = Math.max(0, rowSubtotal + staticPositive);
+
+    let addOnTotal = 0;
+    const rushLabels = [];
+
+    visible.forEach(addOn => {
+      const labelText = getAddOnLabel(addOn);
+      if (!labelText) return;
+
+      const rush = isRush(addOn);
+      const amount = rush ? computeRush(addOn, rushBasis) : toNumber(addOn.amount, 0);
+      addOnTotal += amount;
+
+      if (rush) rushLabels.push(labelText);
+
+      const row = createEl('div', 'addOnRow addOnItem');
+
+      const mainWrap = createEl('div', 'addOnMainWrap');
+      const mainLine = createEl('div', 'addOnMainLine');
+      mainLine.appendChild(createEl('div', 'addOnLabel', labelText));
+      mainLine.appendChild(createEl('span', 'addOnMainQty', 'x1'));
+      mainLine.appendChild(createEl('span', 'addOnMainAmt', money(amount)));
+      mainWrap.appendChild(mainLine);
+
+      if (rush) {
+        mainWrap.appendChild(createEl('div', 'addOnSub', rushRuleText(addOn)));
+      }
+
+      row.appendChild(mainWrap);
+
+      if (CAN_EDIT()) {
+        const remove = createEl('button', 'addOnRemove', 'x');
+        remove.type = 'button';
+        remove.title = 'Remove fee';
+        remove.addEventListener('click', e => {
+          e.stopPropagation();
+          removed.add(addOn.__idx);
+          recalcAll();
+        });
+        row.appendChild(remove);
+      }
+
+      list.appendChild(row);
+    });
+
+    if (dom.addOnsResetBtn) {
+      if (CAN_EDIT() && removed.size > 0) {
+        dom.addOnsResetBtn.classList.remove('hidden');
+      } else {
+        dom.addOnsResetBtn.classList.add('hidden');
+      }
+    }
+
+    let turnaround = '';
+    if (rushLabels.length) {
+      let minDays = Infinity;
+      rushLabels.forEach(label => {
+        const nums = String(label).match(/\d+/g) || [];
+        nums.forEach(n => {
+          const v = Number(n);
+          if (Number.isFinite(v) && v > 0) minDays = Math.min(minDays, v);
+        });
+      });
+      if (Number.isFinite(minDays)) {
+        turnaround = 'Turnaround Time: ' + (minDays === 1 ? '1 business day (rush)' : (minDays + ' business days (rush)'));
+      }
+    }
+
+    if (!turnaround) {
+      const value = formatTurnaroundText(job.turnaroundTime || job.deliveryEstimate || '');
+      if (value) turnaround = 'Turnaround Time: ' + value;
+    }
+
+    return { addOnTotal: addOnTotal, turnaround: turnaround };
   }
 
   function recalcAll(){
-    let orderQty = 0;
-    let orderTotal = 0;
+    JOB_SUMMARIES.clear();
 
-    const allQty = ITEMS.reduce((sum, it) => sum + qtyForItem(it.lineId), 0);
+    let totalUnits = 0;
+    let grandTotal = 0;
 
-    const tierSet = new Set();
-    ITEMS.forEach(it => (it.priceTiers||[]).forEach(t => tierSet.add(toNumber(t, NaN))));
-    const tiersUnion = Array.from(tierSet).filter(Number.isFinite).sort((a,b)=>a-b);
+    getVisibleJobs().forEach(job => {
+      const dom = JOB_DOM.get(job.printJobId);
+      if (!dom) return;
 
-    const effectiveQty = allQty > 0 ? allQty : 0;
-    const minTier = tiersUnion.length ? String(tiersUnion[0]) : '15';
+      const visibleSkus = getVisibleSkus(job);
+      let jobQty = 0;
 
-    const effectiveTier = tierForQty(effectiveQty, tiersUnion);
+      visibleSkus.forEach(sku => {
+        getVisibleColors(job.printJobId, sku).forEach(color => {
+          jobQty += rowQty(job.printJobId, sku, color);
+        });
+      });
 
-    const msg = document.getElementById('minMsg');
-    if (effectiveQty > 0 && effectiveQty < toNumber(minTier, 15)){
-      msg.textContent = 'Minimum order is ' + minTier + ' pieces. Prices shown at that tier until you reach the next break.';
-    } else {
-      msg.textContent = '';
-    }
+      const activeTier = pickActiveTier(job.priceTiers, jobQty);
 
-    [...ROWS.entries()].forEach(([k, st]) => {
-      const item = ITEMS.find(x => x.lineId === st.itemLineId);
-      if (!item) return;
+      let subtotal = 0;
 
-      const rowQty = qtyForRow(st);
-      const rowTotal = lineTotalForRow(item, st, effectiveTier);
+      visibleSkus.forEach(sku => {
+        getVisibleColors(job.printJobId, sku).forEach(color => {
+          const key = makeRowKey(job.printJobId, sku.skuId, color);
+          const rq = rowQty(job.printJobId, sku, color);
+          const lt = lineTotal(job.printJobId, sku, color, activeTier);
+          subtotal += lt;
 
-      orderQty += rowQty;
-      orderTotal += rowTotal;
+          const qtyEl = dom.section.querySelector('[data-row-qty="' + key + '"]');
+          if (qtyEl) qtyEl.textContent = String(rq);
 
-      const qtyEl = document.querySelector('[data-qty="' + k.replace(/"/g,'\\"') + '"]');
-      if (qtyEl) qtyEl.textContent = String(rowQty);
+          const totalEl = dom.section.querySelector('[data-row-total="' + key + '"]');
+          if (totalEl) totalEl.textContent = money(lt);
 
-      const totalEl = document.querySelector('[data-total="' + k.replace(/"/g,'\\"') + '"]');
-      if (totalEl) totalEl.textContent = money(rowTotal);
+          sku.sizesAllowed.forEach(size => {
+            const unitEl = dom.section.querySelector('[data-unit-key="' + makeUnitKey(key, size) + '"]');
+            if (!unitEl) return;
+            const unit = unitPriceFor(sku, activeTier, size);
+            unitEl.textContent = (unit == null) ? '' : (unit.toFixed(2) + ' ea.');
+          });
+        });
+      });
 
-      GLOBAL_SIZES.forEach(sz => {
-        const unitEl = document.querySelector('[data-unitprice="' + (k+'::'+sz).replace(/"/g,'\\"') + '"]');
-        if (!unitEl) return;
-        const unit = unitPriceFor(item, effectiveTier, sz);
-        unitEl.textContent = (unit == null) ? '' : (toNumber(unit,0).toFixed(2) + ' ea.');
+      const addOnData = renderAddOnsForJob(job, subtotal);
+      const jobTotal = subtotal + addOnData.addOnTotal;
+
+      if (dom.turnaround) {
+        if (addOnData.turnaround) {
+          dom.turnaround.textContent = addOnData.turnaround;
+          dom.turnaround.style.display = 'block';
+        } else {
+          dom.turnaround.style.display = 'none';
+        }
+      }
+
+      if (dom.jobTotal) dom.jobTotal.textContent = money(jobTotal);
+
+      applyCompareHighlight(job.printJobId, activeTier);
+
+      const minTier = job.priceTiers.length ? job.priceTiers[0] : 0;
+      if (dom.compareHint) {
+        if (jobQty > 0 && minTier > 0 && jobQty < minTier) {
+          dom.compareHint.textContent = 'Minimum order is ' + minTier + ' pieces. Prices shown at that tier until you reach the next break.';
+        } else {
+          dom.compareHint.textContent = '';
+        }
+      }
+
+      totalUnits += jobQty;
+      grandTotal += jobTotal;
+
+      JOB_SUMMARIES.set(job.printJobId, {
+        name: job.printJobName,
+        units: jobQty,
+        total: jobTotal
       });
     });
 
-    renderAddOns(orderTotal);
-
-    const grandTotal = orderTotal + ADDON_TOTAL;
-    const grandTotalEl = document.getElementById('grandTotalVal');
-    if (grandTotalEl) grandTotalEl.textContent = money(grandTotal);
-
-    updateHeaderTotals(orderQty, grandTotal);
-
-    applyCompareHighlight(effectiveTier);
-    setTurnaround();
+    renderHeaderProjects(Array.from(JOB_SUMMARIES.values()));
+    updateHeaderTotals(totalUnits, grandTotal, totalUnits > 0);
   }
 
-  // Lightbox + zoom
-  const lightbox = document.getElementById('lightbox');
-  const lightboxImg = document.getElementById('lightboxImg');
-  const lightboxClose = document.getElementById('lightboxClose');
-  const lightboxControls = document.getElementById('lightboxControls');
-  const lightboxPrevBtn = document.getElementById('lightboxPrevBtn');
-  const lightboxNextBtn = document.getElementById('lightboxNextBtn');
-  const zoomInBtn = document.getElementById('zoomInBtn');
-  const zoomOutBtn = document.getElementById('zoomOutBtn');
-  const zoomLabel = document.getElementById('zoomLabel');
-  const lightboxStage = document.getElementById('lightboxStage');
+  function setHeaderDetails(){
+    const clientName = getClientName();
+    const dealNum = getDealNumber();
+    const visibleJobs = getVisibleJobs();
+    const firstVisibleWithDelivery = visibleJobs.find(job => String(job.deliveryEstimate || '').trim());
+    const firstJob =
+      firstVisibleWithDelivery ||
+      visibleJobs[0] ||
+      PRINT_JOBS.find(job => String(job.deliveryEstimate || '').trim()) ||
+      PRINT_JOBS[0] ||
+      null;
+
+    const headerClientName = document.getElementById('headerClientName');
+    const headerDealNum = document.getElementById('headerDealNum');
+    const headerClientNameMini = document.getElementById('headerClientNameMini');
+    const headerDealNumMini = document.getElementById('headerDealNumMini');
+    const headerInHands = document.getElementById('headerInHands');
+    const headerPlaceBy = document.getElementById('headerPlaceBy');
+
+    if (headerClientName) headerClientName.textContent = clientName;
+    if (headerDealNum) headerDealNum.textContent = 'Job # ' + dealNum;
+    if (headerClientNameMini) headerClientNameMini.textContent = clientName;
+    if (headerDealNumMini) headerDealNumMini.textContent = 'Job # ' + dealNum;
+    if (headerInHands) {
+      const inHands = (firstJob && firstJob.deliveryEstimate) ? firstJob.deliveryEstimate : '--';
+      headerInHands.textContent = 'In-Hands Deadline: ' + inHands;
+    }
+    if (headerPlaceBy) {
+      const placeBy = metaField('exportedAt') || rowField('submittedat') || '';
+      headerPlaceBy.textContent = 'Place your order by: ' + formatDateTime(placeBy);
+    }
+
+    const avatarUrl = getSenderAvatarUrl();
+    const headerAvatarImg = document.getElementById('headerAvatarImg');
+    const introAvatar = document.getElementById('introAvatar');
+
+    setImageSrcWithFallback(headerAvatarImg, avatarUrl, SENDER_IMAGES.josiah);
+    setImageSrcWithFallback(introAvatar, avatarUrl, SENDER_IMAGES.josiah);
+  }
+
+  function renderModeBadge(){
+    const badge = document.getElementById('modeBadge');
+    if (!badge) return;
+    badge.textContent = IS_TEAM ? 'TEAM VIEW' : 'CLIENT VIEW';
+  }
+
+  function renderSnapshotSummary(){
+    const snapshotId = metaField('snapshotId') || rowField('snapshotid') || '--';
+    const exportedAt = metaField('exportedAt') || rowField('exportedat') || '';
+    const contractVersion = metaField('contractVersion') || rowField('contractversion') || '--';
+    const calculatorVersion = metaField('calculatorVersion') || rowField('calculatorversion') || '--';
+    const source = metaField('source') || rowField('source') || '--';
+    const status = String(VM.status || rowField('status') || '--').toUpperCase();
+    const token = String(VM.token || '');
+
+    if (snapshotTokenEl){
+      snapshotTokenEl.textContent = 'Token: ' + shortToken(token);
+      snapshotTokenEl.title = token;
+    }
+    if (snapshotIdVal){
+      snapshotIdVal.textContent = snapshotId;
+      snapshotIdVal.title = snapshotId;
+    }
+    if (snapshotExportedVal) snapshotExportedVal.textContent = formatDateTime(exportedAt);
+    if (snapshotContractVal) snapshotContractVal.textContent = contractVersion;
+    if (snapshotCalculatorVal) snapshotCalculatorVal.textContent = calculatorVersion;
+    if (snapshotSourceVal) snapshotSourceVal.textContent = source;
+    if (snapshotStatusVal) snapshotStatusVal.textContent = status;
+  }
+
+  function renderTeamDiagnostics(){
+    if (!teamDiagWrap) return;
+
+    if (!IS_TEAM) {
+      teamDiagWrap.hidden = true;
+      return;
+    }
+
+    teamDiagWrap.hidden = false;
+
+    const diag = (VM.diagnostics && typeof VM.diagnostics === 'object') ? VM.diagnostics : {};
+    const diagPrintJobIds = Array.isArray(diag.printJobIds)
+      ? diag.printJobIds.map(v => String(v || '').trim()).filter(Boolean)
+      : PRINT_JOBS.map(job => job.printJobId).filter(Boolean);
+    const diagPrintJobsCountRaw = toNumber(diag.printJobsCount, NaN);
+    const diagPrintJobsCount = Number.isFinite(diagPrintJobsCountRaw)
+      ? Math.max(0, Math.floor(diagPrintJobsCountRaw))
+      : diagPrintJobIds.length;
+
+    teamDiagGrid.innerHTML = '';
+
+    const rows = [
+      ['token', String(diag.token || VM.token || '')],
+      ['status', String(diag.status || VM.status || '')],
+      ['contractVersion', String(diag.contractVersion || metaField('contractVersion') || rowField('contractversion') || '')],
+      ['snapshotId', String(diag.snapshotId || metaField('snapshotId') || rowField('snapshotid') || '')],
+      ['exportedAt', String(diag.exportedAt || metaField('exportedAt') || rowField('exportedat') || '')],
+      ['printJobs', 'count=' + diagPrintJobsCount + '; ids=' + (diagPrintJobIds.length ? diagPrintJobIds.join(', ') : '--')]
+    ];
+
+    rows.forEach(([k, v]) => {
+      const key = createEl('div', 'teamDiagKey', k);
+      const val = createEl('div', 'teamDiagVal', v || '--');
+      teamDiagGrid.appendChild(key);
+      teamDiagGrid.appendChild(val);
+    });
+
+    teamDiagPre.textContent = String(diag.snapshotSnippet || '').slice(0, 500);
+  }
+
+  async function savePortalState(){
+    if (!CAN_EDIT()) return;
+
+    const payloadState = JSON.parse(JSON.stringify(PORTAL_STATE));
+    payloadState.version = '1';
+    payloadState.savedAt = new Date().toISOString();
+    payloadState.isReadOnly = true;
+
+    const payload = {
+      token: String(VM.token || ''),
+      action: 'save',
+      portalState: payloadState
+    };
+
+    [saveBtn, saveBtnMini].forEach(btn => {
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+    });
+
+    try {
+      const resp = await fetch(VM.postUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await resp.text();
+      const data = safeJsonParse(text, null);
+
+      if (!data || data.ok !== true) {
+        throw new Error((data && data.error) ? data.error : 'Save failed.');
+      }
+
+      PORTAL_STATE = normalizePortalState(payloadState);
+      IS_READ_ONLY = true;
+      PORTAL_STATE.isReadOnly = true;
+
+      setSaveControls();
+      renderPortal();
+      showNotice('Saved successfully. This portal is now read-only.', 'ok');
+    } catch (err) {
+      showNotice('Save failed: ' + String((err && err.message) || err), 'err');
+      [saveBtn, saveBtnMini].forEach(btn => {
+        if (!btn) return;
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      });
+    }
+  }
+
+  function setSaveControls(){
+    const showSave = CAN_EDIT();
+
+    [saveBtn, saveBtnMini].forEach(btn => {
+      if (!btn) return;
+      btn.style.display = showSave ? '' : 'none';
+      btn.disabled = false;
+      btn.textContent = 'Save';
+    });
+
+    [placeOrderBtn, placeOrderBtnMini].forEach(btn => {
+      if (!btn) return;
+      btn.disabled = false;
+    });
+  }
+
+  let LIGHTBOX = {
+    jobId: '',
+    index: 0
+  };
 
   let zoomLevel = 1;
   let panX = 0;
@@ -2175,18 +3502,9 @@
 
   function applyZoomPan(){
     lightboxImg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
-    const label = (Math.round(zoomLevel * 10) / 10).toString();
-    zoomLabel.textContent = label.replace(/\.0$/, '') + 'x';
+    const label = (Math.round(zoomLevel * 10) / 10).toString().replace(/\.0$/, '');
+    zoomLabel.textContent = label + 'x';
     lightboxImg.style.cursor = (zoomLevel > 1) ? (dragging ? 'grabbing' : 'grab') : 'default';
-  }
-
-  function setZoom(next){
-    zoomLevel = Math.max(1, Math.min(4, next));
-    if (zoomLevel === 1){
-      panX = 0;
-      panY = 0;
-    }
-    applyZoomPan();
   }
 
   function resetZoom(){
@@ -2197,60 +3515,105 @@
     applyZoomPan();
   }
 
-  function loadLightboxByIndex(idx){
-    if (!MOCKUP_IDS.length){
+  function setZoom(next){
+    zoomLevel = Math.max(1, Math.min(4, next));
+    if (zoomLevel === 1) {
+      panX = 0;
+      panY = 0;
+    }
+    applyZoomPan();
+  }
+
+  function getJobById(jobId){
+    return PRINT_JOBS.find(j => j.printJobId === jobId) || null;
+  }
+
+  function loadLightboxForCurrent(){
+    const job = getJobById(LIGHTBOX.jobId);
+    if (!job) return;
+
+    const state = getMockupState(job.printJobId);
+    const slides = job.slides || [];
+
+    const available = slides.map((_, i) => i).filter(i => !state.failed[i]);
+    if (!available.length) {
+      lightboxImg.removeAttribute('src');
+      lightboxControls.classList.add('hidden');
       return;
     }
-    const id = MOCKUP_IDS[idx];
-    if (!id) return;
 
-    const candidates = buildDriveCandidatesFromId(id);
+    if (state.failed[LIGHTBOX.index] || LIGHTBOX.index >= slides.length) {
+      LIGHTBOX.index = available[0];
+      state.index = LIGHTBOX.index;
+    }
+
+    lightboxControls.classList.remove('hidden');
+    const showArrows = available.length > 1;
+    lightboxPrevBtn.classList.toggle('hidden', !showArrows);
+    lightboxNextBtn.classList.toggle('hidden', !showArrows);
+
+    const slide = slides[LIGHTBOX.index];
+
     loadImageWithFallback(
       lightboxImg,
-      candidates,
+      slide.candidates,
       () => {
-        updateLightboxControls();
         resetZoom();
       },
       () => {
-        FAILED_MOCKUP_IDS.add(id);
-        const next = findNextIndex(idx, 1);
-        if (next === -1){
+        state.failed[LIGHTBOX.index] = true;
+        const next = available.find(i => !state.failed[i]);
+        if (next == null) {
           lightboxImg.removeAttribute('src');
           lightboxControls.classList.add('hidden');
-        } else {
-          mockupIndex = next;
-          loadPreviewByIndex(mockupIndex);
-          loadLightboxByIndex(mockupIndex);
+          return;
         }
+        LIGHTBOX.index = next;
+        state.index = next;
+        loadPreviewForJob(job);
+        loadLightboxForCurrent();
       }
     );
   }
 
-  function updateLightboxControls(){
-    const availableCount = getAvailableMockupIds().length;
-    if (availableCount <= 0){
-      lightboxControls.classList.add('hidden');
-      return;
-    }
-    lightboxControls.classList.remove('hidden');
-    const showArrows = availableCount > 1;
-    lightboxPrevBtn.classList.toggle('hidden', !showArrows);
-    lightboxNextBtn.classList.toggle('hidden', !showArrows);
-  }
+  function openLightbox(jobId){
+    const job = getJobById(jobId);
+    if (!job || !(job.slides && job.slides.length)) return;
 
-  function openLightbox(){
-    if (!getAvailableMockupIds().length) return;
+    const state = getMockupState(jobId);
+    LIGHTBOX.jobId = jobId;
+    LIGHTBOX.index = state.index || 0;
+
     lightbox.classList.add('open');
     lightbox.setAttribute('aria-hidden', 'false');
-    loadLightboxByIndex(mockupIndex);
     syncOverlayScrollLock();
+    loadLightboxForCurrent();
   }
+
   function closeLightbox(){
     lightbox.classList.remove('open');
     lightbox.setAttribute('aria-hidden', 'true');
     lightboxImg.removeAttribute('src');
     syncOverlayScrollLock();
+  }
+
+  function stepLightbox(dir){
+    const job = getJobById(LIGHTBOX.jobId);
+    if (!job) return;
+
+    const state = getMockupState(job.printJobId);
+    const slides = job.slides || [];
+    const available = slides.map((_, i) => i).filter(i => !state.failed[i]);
+    if (available.length <= 1) return;
+
+    let pos = available.indexOf(LIGHTBOX.index);
+    if (pos < 0) pos = 0;
+    pos = (pos + dir + available.length) % available.length;
+    LIGHTBOX.index = available[pos];
+    state.index = LIGHTBOX.index;
+
+    loadPreviewForJob(job);
+    loadLightboxForCurrent();
   }
 
   let headerCondensed = false;
@@ -2266,18 +3629,22 @@
   function updateHeaderState(){
     const header = document.getElementById('stickyHeader');
     const topRow = document.getElementById('topRowNew');
-    if (!header || !topRow) return;
+    if (!header) return;
 
     const isMobile = window.matchMedia('(max-width: 980px)').matches;
-    if (isMobile){
+    if (isMobile) {
       setHeaderCondensed(true, header);
+      return;
+    }
+
+    if (!topRow) {
+      setHeaderCondensed(window.scrollY > 120, header);
       return;
     }
 
     const rect = topRow.getBoundingClientRect();
     const scrollY = window.scrollY || 0;
 
-    // Hysteresis prevents rapid state-flip at the threshold.
     const enterCondensed = (scrollY > 120) || (rect.top <= -95);
     const leaveCondensed = (scrollY < 45) && (rect.top > -35);
     const next = headerCondensed ? !leaveCondensed : enterCondensed;
@@ -2293,132 +3660,117 @@
     });
   }
 
-  // Intro modal
-  const introModal = document.getElementById('introModal');
-  const introClose = document.getElementById('introClose');
-  const introMessage = document.getElementById('introMessage');
-  const introTitle = document.getElementById('introTitle');
-  const headerAvatarBtn = document.getElementById('headerAvatarBtn');
-  const headerBubbleBtn = document.getElementById('headerBubbleBtn');
-  const headerBubbleBtnMini = document.getElementById('headerBubbleBtnMini');
-  const headerSmallLogoBtn = document.getElementById('headerSmallLogoBtn');
+  function wireEvents(){
+    if (saveBtn) saveBtn.addEventListener('click', savePortalState);
+    if (saveBtnMini) saveBtnMini.addEventListener('click', savePortalState);
 
-  function syncOverlayScrollLock(){
-    const lock =
-      (introModal && introModal.classList.contains('open')) ||
-      (lightbox && lightbox.classList.contains('open'));
-    document.body.classList.toggle('modalLocked', Boolean(lock));
+    [placeOrderBtn, placeOrderBtnMini].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        showNotice('Place Order action is not active yet in this build.', 'err');
+      });
+    });
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    lightboxPrevBtn.addEventListener('click', e => { e.stopPropagation(); stepLightbox(-1); });
+    lightboxNextBtn.addEventListener('click', e => { e.stopPropagation(); stepLightbox(1); });
+
+    zoomInBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel + 0.5); });
+    zoomOutBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel - 0.5); });
+
+    lightboxImg.addEventListener('contextmenu', e => e.preventDefault());
+    lightboxImg.addEventListener('dragstart', e => e.preventDefault());
+
+    lightboxImg.addEventListener('pointerdown', e => {
+      if (zoomLevel <= 1) return;
+      dragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      startPanX = panX;
+      startPanY = panY;
+      applyZoomPan();
+      lightboxImg.setPointerCapture(e.pointerId);
+    });
+
+    lightboxImg.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      panX = startPanX + (e.clientX - dragStartX);
+      panY = startPanY + (e.clientY - dragStartY);
+      applyZoomPan();
+    });
+
+    lightboxImg.addEventListener('pointerup', e => {
+      dragging = false;
+      applyZoomPan();
+      try { lightboxImg.releasePointerCapture(e.pointerId); } catch (_) {}
+    });
+
+    lightboxImg.addEventListener('pointercancel', () => {
+      dragging = false;
+      applyZoomPan();
+    });
+
+    lightboxStage.addEventListener('click', e => {
+      if (e.target.closest('#lightboxImg')) return;
+      if (e.target.closest('.lightboxControls')) return;
+      if (e.target.closest('#lightboxClose')) return;
+      closeLightbox();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeLightbox();
+        closeIntroModal();
+      }
+    });
+
+    introClose.addEventListener('click', closeIntroModal);
+    introModal.addEventListener('click', e => {
+      if (e.target === introModal) closeIntroModal();
+    });
+
+    if (headerAvatarBtn) headerAvatarBtn.addEventListener('click', openIntroModal);
+    if (headerBubbleBtn) headerBubbleBtn.addEventListener('click', openIntroModal);
+    if (headerBubbleBtnMini) headerBubbleBtnMini.addEventListener('click', openIntroModal);
+    if (headerSmallLogoBtn) headerSmallLogoBtn.addEventListener('click', openIntroModal);
+
+    if (teamDiagToggle) {
+      teamDiagToggle.addEventListener('click', () => {
+        if (!teamDiagPanel) return;
+        const next = teamDiagPanel.hidden;
+        teamDiagPanel.hidden = !next;
+      });
+    }
+
+    window.addEventListener('scroll', requestHeaderStateUpdate, { passive: true });
+    window.addEventListener('resize', requestHeaderStateUpdate);
   }
 
-  function openIntroModal(){
-    if (!introModal) return;
-    introModal.classList.add('open');
-    introModal.setAttribute('aria-hidden', 'false');
-    syncOverlayScrollLock();
-  }
-  function closeIntroModal(){
-    if (!introModal) return;
-    introModal.classList.remove('open');
-    introModal.setAttribute('aria-hidden', 'true');
-    syncOverlayScrollLock();
+  function initIntro(){
+    const clientName = getClientName();
+    const senderName = getSenderName();
+
+    if (introTitle) {
+      introTitle.textContent = 'Hey ' + clientName + ', "' + senderName + '" from Red Threads, and I\'ve got some important information for you.';
+    }
+
+    if (introMessage) {
+      introMessage.textContent = getIntroMessage();
+    }
+
+    openIntroModal();
   }
 
   function init(){
     setHeaderDetails();
-    buildHead();
-    buildBody();
-    buildCompareTable();
-    renderTopPanels();
-    initMockups();
-    recalcAll();
     renderModeBadge();
-    const clientName = (VM.clientName || 'there');
-    const senderName = getSenderName();
-    if (introTitle) introTitle.textContent = `Hey ${clientName}, "${senderName}" from Red Threads, and I've got some important information for you.`;
-    if (introMessage) introMessage.textContent = (VM.jobNotes || '');
-    updateHeaderState();
-    openIntroModal();
+    renderSnapshotSummary();
+    renderTeamDiagnostics();
+    setSaveControls();
+    renderPortal();
+    initIntro();
+    wireEvents();
   }
-
-  // Disable right-click + native drag on preview and fullscreen images
-  mockupImg.addEventListener('contextmenu', (e) => e.preventDefault());
-  mockupImg.addEventListener('dragstart', (e) => e.preventDefault());
-  lightboxImg.addEventListener('contextmenu', (e) => e.preventDefault());
-  lightboxImg.addEventListener('dragstart', (e) => e.preventDefault());
-
-  // Mockup controls
-  mockupPrevBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(-1); });
-  mockupNextBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(1); });
-  mockupZoomBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!mockupZoomBtn.classList.contains('disabled')) openLightbox();
-  });
-  mockupFrame.addEventListener('click', (e) => {
-    if (e.target.closest('.mockupBtn')) return;
-    openLightbox();
-  });
-
-  // Lightbox controls
-  lightboxClose.addEventListener('click', closeLightbox);
-  lightboxPrevBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(-1); loadLightboxByIndex(mockupIndex); });
-  lightboxNextBtn.addEventListener('click', (e) => { e.stopPropagation(); stepMockup(1); loadLightboxByIndex(mockupIndex); });
-
-  zoomInBtn.addEventListener('click', (e) => { e.stopPropagation(); setZoom(zoomLevel + 0.5); });
-  zoomOutBtn.addEventListener('click', (e) => { e.stopPropagation(); setZoom(zoomLevel - 0.5); });
-
-  lightboxImg.addEventListener('pointerdown', (e) => {
-    if (zoomLevel <= 1) return;
-    dragging = true;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    startPanX = panX;
-    startPanY = panY;
-    applyZoomPan();
-    lightboxImg.setPointerCapture(e.pointerId);
-  });
-  lightboxImg.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    panX = startPanX + (e.clientX - dragStartX);
-    panY = startPanY + (e.clientY - dragStartY);
-    applyZoomPan();
-  });
-  lightboxImg.addEventListener('pointerup', (e) => {
-    dragging = false;
-    applyZoomPan();
-    try { lightboxImg.releasePointerCapture(e.pointerId); } catch (_) {}
-  });
-  lightboxImg.addEventListener('pointercancel', () => {
-    dragging = false;
-    applyZoomPan();
-  });
-
-  lightboxStage.addEventListener('click', (e) => {
-    if (e.target.closest('#lightboxImg')) return;
-    if (e.target.closest('.lightboxControls')) return;
-    if (e.target.closest('#lightboxClose')) return;
-    closeLightbox();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeLightbox();
-  });
-
-  document.getElementById('addOnsResetBtn').addEventListener('click', () => {
-    REMOVED_ADDONS.clear();
-    recalcAll();
-  });
-
-  // Intro modal controls
-  introClose.addEventListener('click', closeIntroModal);
-  introModal.addEventListener('click', (e) => {
-    if (e.target === introModal) closeIntroModal();
-  });
-  if (headerAvatarBtn) headerAvatarBtn.addEventListener('click', openIntroModal);
-  if (headerBubbleBtn) headerBubbleBtn.addEventListener('click', openIntroModal);
-  if (headerBubbleBtnMini) headerBubbleBtnMini.addEventListener('click', openIntroModal);
-  if (headerSmallLogoBtn) headerSmallLogoBtn.addEventListener('click', openIntroModal);
-
-  window.addEventListener('scroll', requestHeaderStateUpdate, { passive: true });
-  window.addEventListener('resize', requestHeaderStateUpdate);
 
   document.addEventListener('DOMContentLoaded', init);
 </script>
