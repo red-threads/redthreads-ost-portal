@@ -46,29 +46,16 @@
       background:linear-gradient(90deg,#111 0%, #0ea5e9 50%, #111 100%);
       opacity:.35;
     }
-    .stickyHeader.condensed{
-      background:rgba(207,207,207,.97);
-      box-shadow:0 8px 20px rgba(0,0,0,.2);
-    }
-    .headerExpanded,
-    .headerCondensed{
-      display:grid;
-      gap:12px;
-      align-items:center;
-      padding:10px 14px;
-    }
     .headerExpanded{
-      grid-template-columns:340px 1.2fr 0.8fr auto;
-      gap:18px;
-      align-items:center;
+      display:none !important;
     }
     .headerCondensed{
       grid-template-columns:auto 1fr 1fr auto;
-      display:none;
-      align-items:center;
+      display:grid;
+      gap:10px;
+      align-items:flex-start;
+      padding:6px 12px 6px 8px;
     }
-    .stickyHeader.condensed .headerExpanded{display:none;}
-    .stickyHeader.condensed .headerCondensed{display:grid;}
 
     .headerLeft{
       display:flex;
@@ -76,8 +63,7 @@
       gap:10px;
     }
     .headerAvatarBtn,
-    .headerBubbleBtn,
-    .headerSmallLogoBtn{
+    .headerBubbleBtn{
       border:none;
       background:transparent;
       padding:0;
@@ -88,6 +74,20 @@
       width:78px;
       height:78px;
       display:block;
+    }
+    .headerAvatarLogo{
+      position:absolute;
+      left:-2px;
+      top:-2px;
+      width:28px;
+      height:28px;
+      object-fit:contain;
+      display:block;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid rgba(148,163,184,.8);
+      box-shadow:0 2px 5px rgba(15,23,42,.18);
+      z-index:2;
     }
     .headerAvatarImg{
       width:78px;
@@ -231,7 +231,7 @@
 
     .headerCondensedLeft{
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       gap:8px;
     }
     .headerClientMini{
@@ -266,32 +266,25 @@
       color:#1f2937;
       opacity:.9;
     }
-    .stickyHeader.condensed .headerCondensed{
-      padding:4px 10px;
-      grid-template-columns:auto 1fr 1fr auto;
-      align-items:center;
-    }
-    .stickyHeader.condensed .headerBtn{
-      padding:6px 10px;
-      font-size:14px;
-    }
-    .stickyHeader.condensed .headerCondensedTotals{
-      font-size:14px;
-    }
-    .stickyHeader.condensed .headerCondensedPromos{
-      font-size:11px;
-    }
-    .stickyHeader.condensed .headerCondensed .headerActions{
+    .headerCondensed .headerActions{
+      display:flex;
       flex-direction:row;
+      align-items:center;
+      justify-content:flex-end;
       gap:8px;
     }
-    .stickyHeader.condensed .headerSmallLogo{
-      width:38px;
-      height:38px;
+    .headerCondensed #chatBtnMini{order:1;}
+    .headerCondensed #saveBtnMini{order:2;}
+    .headerCondensed #placeOrderBtnMini{order:3;}
+    .headerCondensed #saveBtnMini{
+      background:#cfd6df;
+      color:#1f2937;
+      border:1px solid #b9c4d2;
+      box-shadow:none;
     }
-    .stickyHeader.condensed .headerBubbleImg{
-      width:30px;
-      height:30px;
+    .headerCondensed #saveBtnMini:hover{
+      background:#bcc7d6;
+      border-color:#a5b4c7;
     }
 
     /* Intro modal */
@@ -502,10 +495,34 @@
     .chatDrawerFoot{
       border-top:1px solid #e2e8f0;
       padding:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      background:#fff;
+      align-items:stretch;
+    }
+    .chatPrefillRow{
+      display:flex;
+      align-items:flex-start;
+      justify-content:flex-start;
+      gap:8px;
+      border:1px solid #d0d8e3;
+      border-radius:8px;
+      background:#f8fafc;
+      padding:8px;
+    }
+    .chatPrefillChip{
+      font-size:12px;
+      font-weight:700;
+      line-height:1.35;
+      color:#1f2937;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+    .chatComposerRow{
       display:grid;
       grid-template-columns:1fr auto;
       gap:8px;
-      background:#fff;
       align-items:end;
     }
     .chatInput{
@@ -647,7 +664,119 @@
       flex-direction:column;
       gap:6px;
       min-height:250px;
-      overflow:hidden;
+      height:auto;
+      overflow:visible;
+    }
+    .detailsSummaryHost{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      align-self:flex-start;
+      gap:4px;
+      margin:0 0 2px;
+      width:100%;
+      max-width:340px;
+      max-height:none;
+      overflow:visible;
+      padding-right:0;
+      flex-shrink:0;
+    }
+    .jobSummaryTitle{
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:#64748b;
+    }
+    .detailsCard .totalsCard{
+      width:100%;
+      max-width:340px;
+      max-height:100%;
+      overflow:auto;
+      padding:10px;
+      border:1px solid #dce4ef;
+      border-radius:10px;
+      background:#fff;
+      box-shadow:0 4px 10px rgba(15,23,42,.04);
+      text-align:right;
+      justify-self:stretch;
+    }
+    .detailsCard .addOnsList{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:4px;
+    }
+    .detailsCard .addOnMainWrap{
+      text-align:right;
+      justify-self:end;
+    }
+    .detailsCard .addOnMainLine{
+      justify-content:flex-end;
+      gap:8px;
+    }
+    .detailsCard .addOnLabel{
+      white-space:nowrap;
+      font-weight:400;
+      color:#0f172a;
+    }
+    .detailsCard .addOnMainQty,
+    .detailsCard .addOnMainAmt{
+      min-width:20px;
+      text-align:right;
+      font-weight:700;
+      color:#0f172a;
+    }
+    .detailsCard .totalsRow{
+      justify-content:flex-end;
+      gap:10px;
+      white-space:nowrap;
+    }
+    .detailsCard .turnaround{
+      border-top:0;
+      padding-top:0;
+    }
+    .detailsCard .grandTotal{
+      border-top:1px solid #d0d8e3;
+      padding-top:8px;
+      margin-top:8px;
+      font-size:15px;
+    }
+    .detailsCard .grandTotal .value{
+      font-size:22px;
+      color:#0f172a;
+      font-weight:900;
+    }
+    .detailsTopBar{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:2px;
+    }
+    .detailsTopLeft{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+      flex-wrap:wrap;
+    }
+    .detailsTopLeft .printJobShellName{
+      font-size:15px;
+      font-weight:900;
+      max-width:100%;
+    }
+    .printJobTurnaround{
+      display:inline-flex;
+      align-items:center;
+      font-size:12px;
+      font-weight:600;
+      color:#64748b;
+      line-height:1.2;
+      white-space:nowrap;
+    }
+    .printJobTurnaround.rush{
+      color:#b91c1c;
     }
     .projectHeader{
       display:flex;
@@ -687,9 +816,12 @@
       border-top:2px solid #d1d5db;
       padding:8px 10px;
       font-size:13px;
-      margin-top:auto;
+      margin-top:0;
+      flex:1;
+      min-height:0;
       background:#f1f5f9;
       border-radius:6px;
+      overflow:auto;
     }
     .notesTitle{font-weight:900;margin-bottom:4px}
 
@@ -805,7 +937,7 @@
     }
     thead th.sizeHead{ text-align:center; }
     thead th.qtyHead{ text-align:center; }
-    thead th.totalHead{ text-align:right; color:var(--green); }
+    thead th.totalHead{ text-align:center; color:#0f172a; }
 
     tbody td{
       padding:10px 6px;
@@ -816,10 +948,22 @@
 
     .pcCell{min-width:300px}
     .pcTop{
-      display:flex;
+      display:grid;
+      grid-template-columns:auto minmax(0, 1fr);
       align-items:center;
       gap:8px;
       width:100%;
+    }
+
+    .colorRowRemoveBtn{
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .12s ease;
+    }
+    .colorRow:hover .colorRowRemoveBtn,
+    .colorRow:focus-within .colorRowRemoveBtn{
+      opacity:1;
+      pointer-events:auto;
     }
 
     .xBtn{
@@ -847,18 +991,129 @@
 
     .prodLink{
       display:inline-block;
-      margin-top:6px;
       font-size:14px;
-      font-weight:700;
+      font-weight:600;
     }
 
     .addColor{
-      display:inline-block;
-      margin-top:8px;
-      font-size:16px;
-      color:#0ea5e9;
-      text-decoration:underline;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+      font-weight:700;
+      color:#1e40af;
+      border:none;
+      border-radius:0;
+      background:transparent;
+      height:auto;
+      min-height:0;
+      width:auto;
+      max-width:none;
+      padding:0;
       cursor:pointer;
+      justify-self:center;
+      grid-column:2;
+      line-height:1.2;
+    }
+    .addColor:hover{
+      color:#1e3a8a;
+      text-decoration:underline;
+    }
+    .addColor:focus-visible{
+      outline:2px solid #93c5fd;
+      outline-offset:2px;
+      border-radius:4px;
+    }
+    .skuColorFooter{
+      display:grid;
+      grid-template-columns:24px clamp(140px, 18vw, 220px);
+      align-items:center;
+      gap:0;
+      margin-top:0;
+    }
+    .skuColorSummary{
+      grid-column:3;
+      margin-left:0;
+      color:#0f172a;
+      font-size:13px;
+      font-weight:600;
+      text-align:right;
+      white-space:nowrap;
+      justify-self:end;
+    }
+
+    .skuHeaderMain{
+      display:grid;
+      grid-template-columns:minmax(0, 1fr);
+      align-items:start;
+      gap:10px;
+      width:100%;
+    }
+    .skuHeaderMain.hasThumb{
+      grid-template-columns:minmax(0, 1fr) 52px;
+    }
+    .skuHeaderInfo{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      min-width:0;
+    }
+    .skuPrimaryName{
+      font-size:15px;
+      font-weight:600;
+      color:#0f172a;
+      line-height:1.25;
+      word-break:break-word;
+    }
+    .skuSecondaryKey{
+      font-size:12px;
+      color:#64748b;
+      line-height:1.2;
+    }
+    .skuProductLink{
+      font-size:12px;
+      color:#475569;
+      text-decoration:underline;
+      text-underline-offset:2px;
+      width:fit-content;
+    }
+    .skuThumb{
+      width:52px;
+      height:52px;
+      border:1px solid #dce4ef;
+      border-radius:8px;
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      flex-shrink:0;
+    }
+    .skuThumb img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    .colorNameInput{
+      width:100%;
+      max-width:220px;
+      min-height:42px;
+      padding:8px 10px;
+      border:1px solid #cbd5e1;
+      border-radius:6px;
+      background:#fff;
+      color:#0f172a;
+      font-size:15px;
+      outline:none;
+      transition:border-color .12s ease, box-shadow .12s ease;
+    }
+    .colorNameInput::placeholder{
+      color:#94a3b8;
+    }
+    .colorNameInput:focus{
+      border-color:#dc2626;
+      box-shadow:0 0 0 2px rgba(220,38,38,.14);
     }
 
     .sizeCell{ text-align:center; min-width:72px; padding:8px 4px; }
@@ -870,12 +1125,23 @@
     }
     .qtyInput{
       width:65px;
-      padding:6px 18px 6px 8px;
+      padding:6px 10px;
       font-size:20px;
-      text-align:left;
-      border:2px solid #111;
-      border-radius:6px;
+      text-align:center;
+      border:1px solid #cbd5e1;
+      border-radius:8px;
       outline:none;
+      background:#f8fafc;
+      color:#0f172a;
+      transition:border-color .12s ease, box-shadow .12s ease, background .12s ease;
+    }
+    .skuSection .qtyInput::placeholder{
+      color:#94a3b8;
+      text-align:center;
+    }
+    .skuSection .qtyInput:focus{
+      border-color:#dc2626;
+      box-shadow:0 0 0 2px rgba(220,38,38,.14);
       background:#fff;
     }
     .qtyInput::-webkit-outer-spin-button,
@@ -925,19 +1191,19 @@
       line-height:1.1;
     }
 
-    .qtyCol{
+    .skuSection .qtyCol{
       text-align:center;
       font-size:26px;
-      font-weight:800;
+      font-weight:400;
       min-width:86px;
       padding-left:4px;
       padding-right:4px;
     }
-    .lineTotal{
-      text-align:right;
+    .skuSection .lineTotal{
+      text-align:center;
       font-size:26px;
-      font-weight:900;
-      color:var(--green);
+      font-weight:400;
+      color:#0f172a;
       min-width:132px;
       padding-left:4px;
       padding-right:4px;
@@ -960,32 +1226,72 @@
       margin:4px 0 6px;
     }
     .compareSubtitle{
-      text-align:center;
+      text-align:left;
       font-size:13px;
-      color:#b45309;
-      margin:0 0 10px;
+      color:#64748b;
+      margin:0 0 8px;
+    }
+    .compareSubtitleEmphasis{
+      color:#166534;
+      font-weight:800;
     }
     .compareTableWrap{overflow:auto}
     .compareTable{
-      border-collapse:collapse;
+      border-collapse:separate;
+      border-spacing:0;
       width:100%;
       min-width:900px;
     }
     .compareTable th,.compareTable td{
-      border:1px solid #d1d5db;
-      padding:6px 8px;
+      border:none;
+      border-right:1px solid #e2e8f0;
+      border-bottom:1px solid #eef2f7;
+      padding:7px 10px;
       font-size:13px;
       text-align:center;
       white-space:nowrap;
     }
-    .compareTable th:first-child,.compareTable td:first-child{text-align:left;}
+    .compareTable th{
+      background:#f8fafc;
+      color:#475569;
+      font-weight:700;
+      border-bottom:1px solid #e2e8f0;
+    }
+    .compareTable td{
+      background:#ffffff;
+      color:#1e293b;
+    }
+    .compareTable th:first-child,.compareTable td:first-child{
+      text-align:left;
+      border-right:none;
+      background:transparent;
+      padding-left:4px;
+    }
+    .compareTable tbody tr:last-child td{
+      border-bottom:none;
+    }
+    .compareTable .call-us-link{
+      color:#60a5fa;
+      font-size:inherit;
+      font-weight:inherit;
+      text-decoration:none;
+    }
+    .compareTable .call-us-link:hover{
+      text-decoration:underline;
+    }
     .compareTable .skuDim{color:var(--muted)}
     .compareTable .hlCol{
-      border-left:2px solid var(--red) !important;
-      border-right:2px solid var(--red) !important;
+      background:#e6f6ea !important;
+      color:#166534 !important;
     }
-    .compareTable thead .hlCol{ border-top:2px solid var(--red) !important; }
-    .compareTable tbody tr:last-child .hlCol{ border-bottom:2px solid var(--red) !important; }
+    .compareTable thead .hlCol{
+      background:#dcf1e2 !important;
+      color:#14532d !important;
+    }
+    .pjCompareInline{
+      margin:2px 0 3px;
+      padding:0;
+    }
 
     .tierNote{
       display:block;
@@ -1072,7 +1378,7 @@
 
     .addOnReset{
       margin-top:6px;
-      align-self:flex-end;
+      align-self:flex-start;
       background:none;
       border:1px solid #d1d5db;
       color:#111;
@@ -1289,6 +1595,36 @@
       border:1px solid #d1d5db;
       background:#f8fafc;
       color:#111;
+      position:relative;
+      padding-right:34px;
+    }
+    .saveNoticeMessage{
+      display:block;
+      line-height:1.35;
+    }
+    .saveNoticeDismiss{
+      position:absolute;
+      top:6px;
+      right:6px;
+      width:20px;
+      height:20px;
+      border:1px solid #fca5a5;
+      border-radius:999px;
+      background:transparent;
+      color:#dc2626;
+      font-size:12px;
+      line-height:1;
+      font-weight:800;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      padding:0;
+    }
+    .saveNoticeDismiss:hover{
+      background:#fee2e2;
+      border-color:#f87171;
+      color:#b91c1c;
     }
     .saveNotice.ok{
       border-color:#16a34a;
@@ -1331,9 +1667,9 @@
       padding:0 16px;
     }
     .stickyHeader{
-      background:rgba(255,255,255,.96);
-      border-bottom:1px solid #d0d8e3;
-      box-shadow:0 10px 24px rgba(15,23,42,.08);
+      background:linear-gradient(180deg, #e7f5ff 0%, #d5ecff 100%);
+      border-bottom:1px solid #9ec6e8;
+      box-shadow:0 6px 14px rgba(15,23,42,.1);
       backdrop-filter: blur(6px);
     }
     .stickyHeader::after{
@@ -1341,20 +1677,14 @@
       background:linear-gradient(90deg, transparent 0%, rgba(15,79,168,.45) 48%, transparent 100%);
       opacity:.9;
     }
-    .stickyHeader.condensed{
-      background:rgba(255,255,255,.98);
-      border-bottom-color:#cad5e3;
-      box-shadow:0 8px 20px rgba(15,23,42,.12);
-    }
     .headerExpanded{
-      grid-template-columns:320px 1.2fr 0.9fr auto;
-      gap:16px;
-      padding:12px 16px;
+      display:none !important;
     }
     .headerCondensed{
       grid-template-columns:auto 1fr 1fr auto;
       gap:10px;
-      padding:8px 12px;
+      align-items:flex-start;
+      padding:6px 12px 6px 8px;
     }
     .headerAvatarImg{
       border:2px solid #fff;
@@ -1425,6 +1755,26 @@
       opacity:.55;
       cursor:not-allowed;
       box-shadow:none;
+    }
+    .headerCondensed .headerActions{
+      display:flex;
+      flex-direction:row;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+    }
+    .headerCondensed #chatBtnMini{order:1;}
+    .headerCondensed #saveBtnMini{order:2;}
+    .headerCondensed #placeOrderBtnMini{order:3;}
+    .headerCondensed #saveBtnMini{
+      background:#cfd6df;
+      color:#1f2937;
+      border:1px solid #b9c4d2;
+      box-shadow:none;
+    }
+    .headerCondensed #saveBtnMini:hover{
+      background:#bcc7d6;
+      border-color:#a5b4c7;
     }
 
     .snapshotBand{
@@ -1575,6 +1925,7 @@
       background:#fff;
     }
     .mockupFrame{height:265px}
+    .detailsCard{min-height:265px;height:auto}
     .mockupControls{
       left:12px;
       right:12px;
@@ -1622,30 +1973,78 @@
     }
 
     .skuSection{
-      margin-top:10px;
+      margin-top:6px;
       border:1px solid #dce4ef;
       border-radius:10px;
       background:#f8fafc;
-      padding:8px;
+      padding:4px;
     }
     .skuHeader{
+      display:flex;
+      align-items:center;
+      gap:8px;
       border-bottom:1px solid #e2e8f0;
-      padding:2px 4px 8px;
-      margin-bottom:6px;
+      padding:0 2px 3px;
+      margin-bottom:2px;
     }
-    .skuTitle{
+    .skuHeaderMain{
+      display:grid;
+      grid-template-columns:minmax(0, 1fr);
+      gap:8px;
+      flex:1;
+      min-width:0;
+      align-items:center;
+    }
+    .skuHeaderSummary{
+      margin-left:auto;
+      text-align:right;
+      white-space:nowrap;
+      color:#506785;
       font-size:13px;
-      gap:10px;
+      font-weight:700;
+      line-height:1.2;
+      padding-right:2px;
     }
-    .skuTitle .skuKey{
-      color:#0f4fa8;
-      font-size:12px;
-      letter-spacing:.04em;
-      text-transform:uppercase;
+    .skuHeaderMain.hasThumb{
+      grid-template-columns:minmax(0, 1fr) 48px;
     }
-    .skuMetaNote{
-      font-size:11px;
-      color:#64748b;
+    .skuPrimaryName{
+      font-size:14px;
+      font-weight:600;
+      color:#0f172a;
+      line-height:1.25;
+      word-break:break-word;
+    }
+    .skuPrimaryNameLink{
+      display:inline;
+      font-size:14px;
+      font-weight:700;
+      color:#1d4ed8;
+      text-decoration:underline;
+      text-underline-offset:2px;
+      line-height:1.25;
+      word-break:break-word;
+      width:fit-content;
+      max-width:100%;
+    }
+    .skuPrimaryNameLink:hover{
+      color:#1e40af;
+    }
+    .skuPrimaryNameExt{
+      display:inline;
+      margin-left:2px;
+      font-size:1em;
+      line-height:inherit;
+      vertical-align:baseline;
+      text-decoration:inherit;
+    }
+    .skuProductLink{
+      display:none;
+    }
+    .skuThumb{
+      width:48px;
+      height:48px;
+      border-color:#dce4ef;
     }
     .tableWrap{
       border-top:none;
@@ -1681,6 +2080,12 @@
       color:#475569;
       background:#fff;
     }
+    .skuHeader > .hideEntityBtn{
+      margin-top:0;
+      align-self:center;
+      flex-shrink:0;
+      order:-1;
+    }
     .hideEntityBtn:hover{
       border-color:#ef4444;
       background:#ef4444;
@@ -1692,20 +2097,40 @@
       font-size:14px;
       min-height:38px;
     }
+    .colorNameInput{
+      border:1px solid #cbd5e1;
+      background:#fff;
+      font-size:14px;
+      min-height:38px;
+    }
     .qtyInput{
       width:62px;
       border:1px solid #cbd5e1;
       font-size:16px;
       padding:6px 8px;
+      text-align:center;
+      background:#f8fafc;
+      border-radius:8px;
     }
-    .qtyCol{
+    .skuSection .qtyInput::placeholder{
+      color:#94a3b8;
+      text-align:center;
+    }
+    .skuSection .qtyInput:focus{
+      border-color:#dc2626;
+      box-shadow:0 0 0 2px rgba(220,38,38,.14);
+      background:#fff;
+    }
+    .skuSection .qtyCol{
       font-size:20px;
-      font-weight:900;
+      font-weight:400;
       color:#0f172a;
     }
-    .lineTotal{
+    .skuSection .lineTotal{
       font-size:20px;
-      color:#15803d;
+      text-align:center;
+      font-weight:400;
+      color:#0f172a;
     }
     .unitPrice{
       font-size:11px;
@@ -1717,10 +2142,20 @@
       border-radius:8px;
       background:#fff;
       padding:6px 8px;
-      margin-top:8px;
+      margin-top:2px;
     }
     .hiddenControlLabel{
       color:#475569;
+    }
+    .hiddenSkuRow .showHiddenBtn{
+      background:#475569;
+      border-color:#334155;
+      color:#e2e8f0;
+    }
+    .hiddenSkuRow .showHiddenBtn:hover{
+      background:#0f172a;
+      border-color:#020617;
+      color:#ffffff;
     }
 
     .bottomRow{
@@ -1747,25 +2182,49 @@
       text-align:left;
       margin:0 0 8px;
       font-size:12px;
+      color:#64748b;
+    }
+    .compareSubtitle .compareSubtitleEmphasis{
+      color:#166534;
+      font-weight:800;
     }
     .compareTable{
       min-width:860px;
+      border-collapse:separate;
+      border-spacing:0;
     }
     .compareTable th,.compareTable td{
       font-size:12px;
-      border:1px solid #dce4ef;
-      padding:7px 8px;
+      border:none;
+      border-right:1px solid #e2e8f0;
+      border-bottom:1px solid #eef2f7;
+      padding:7px 10px;
     }
     .compareTable thead th{
-      background:#f1f5f9;
-      border-bottom:1px solid #dce4ef;
-      color:#334155;
-      font-weight:900;
+      background:#f8fafc;
+      border-bottom:1px solid #e2e8f0;
+      color:#475569;
+      font-weight:700;
+    }
+    .compareTable tbody td{
+      background:#ffffff;
+      color:#1e293b;
+    }
+    .compareTable th:first-child,.compareTable td:first-child{
+      border-right:none;
+      background:transparent;
+      padding-left:4px;
+    }
+    .compareTable tbody tr:last-child td{
+      border-bottom:none;
     }
     .compareTable .hlCol{
-      background:#e9f2ff;
-      border-left:2px solid #0f4fa8 !important;
-      border-right:2px solid #0f4fa8 !important;
+      background:#e6f6ea !important;
+      color:#166534 !important;
+    }
+    .compareTable thead .hlCol{
+      background:#dcf1e2 !important;
+      color:#14532d !important;
     }
 
     .totalsCard{
@@ -1856,9 +2315,9 @@
     }
 
     .scrollTestPad{
-      height:320px;
+      height:80px;
       background:transparent;
-      margin:30px auto 40px;
+      margin:10px auto 16px;
       max-width:1260px;
       border-radius:8px;
     }
@@ -1884,10 +2343,14 @@
     .headerExpanded{grid-template-columns:320px minmax(0,1fr) auto}
     .portalMetaSection{display:none}
     .printJobTabsSection{
-      padding:10px;
+      padding:2px 0;
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:4px;
+      border:none;
+      border-radius:0;
+      background:transparent;
+      box-shadow:none;
     }
     .printJobTabsList{
       display:flex;
@@ -1906,11 +2369,43 @@
       cursor:pointer;
       font-size:12px;
       line-height:1.2;
+      min-height:36px;
+    }
+    .printJobTabBody{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      min-width:0;
+      padding-left:2px;
+    }
+    .printJobTabMain{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
     }
     .printJobTab[aria-selected="true"]{
       border-color:#0f4fa8;
       background:#e9f2ff;
       box-shadow:inset 0 0 0 1px rgba(15,79,168,.1);
+    }
+    .printJobTab[data-hidden="true"]{
+      opacity:1;
+      background:#475569;
+      border-color:#334155;
+      box-shadow:inset 0 0 0 1px rgba(15,23,42,.18);
+    }
+    .printJobTab[data-hidden="true"] .printJobTabPill{
+      background:#64748b;
+      border-color:#94a3b8;
+      color:#f8fafc;
+    }
+    .printJobTab[data-hidden="true"] .printJobTabName{
+      color:#f8fafc;
+    }
+    .printJobTab[data-hidden="true"] .printJobTabSummary,
+    .printJobTab[data-hidden="true"] .printJobHiddenBadge{
+      color:#e2e8f0;
     }
     .printJobTabPill{
       display:inline-flex;
@@ -1930,6 +2425,73 @@
       font-size:12px;
       font-weight:800;
       color:#0f172a;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:180px;
+    }
+    .printJobTabSummary{
+      font-size:10px;
+      line-height:1.1;
+      color:#64748b;
+      font-weight:700;
+      white-space:nowrap;
+      margin-left:0;
+    }
+    .printJobTabActions{
+      margin-left:auto;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .printJobHiddenBadge{
+      font-size:10px;
+      font-weight:900;
+      letter-spacing:.04em;
+      color:#64748b;
+      text-transform:uppercase;
+    }
+    .printJobTabActionBtn{
+      border:1px solid #cbd5e1;
+      border-radius:999px;
+      background:#fff;
+      color:#475569;
+      font-size:10px;
+      font-weight:900;
+      line-height:1;
+      padding:4px 7px;
+      cursor:pointer;
+      transition:background .12s ease, border-color .12s ease, color .12s ease, opacity .12s ease;
+    }
+    .printJobTabHide{
+      padding:4px 6px;
+      opacity:0;
+      pointer-events:none;
+    }
+    .printJobTab:hover .printJobTabHide,
+    .printJobTab[aria-selected="true"] .printJobTabHide{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .printJobTabActionBtn:hover{
+      border-color:#94a3b8;
+      color:#1e293b;
+    }
+    .printJobTabRestore{
+      border-color:#94a3b8;
+      color:#1e293b;
+      background:#fff;
+    }
+    .printJobTab[data-hidden="true"] .printJobTabRestore{
+      border-color:#cbd5e1;
+      color:#0f172a;
+      background:#f8fafc;
+      box-shadow:0 1px 0 rgba(15,23,42,.08);
+      opacity:1;
+    }
+    .printJobTabRestore:hover{
+      border-color:#0f4fa8;
+      color:#0f4fa8;
     }
     .printJobHiddenControlBar{
       margin:0;
@@ -1980,14 +2542,758 @@
       gap:4px;
       font-size:13px;
     }
-    .pjSkus .skuSection:first-of-type{
+    .pjSkusList{
+      display:flex;
+      flex-direction:column;
+      margin-top:3px;
+    }
+    .pjSkusList .skuSection:first-of-type{
       margin-top:0;
     }
     .pjPricing .bottomRow{
       margin-top:0;
+      grid-template-columns:1fr;
     }
     .printJobTabsSection .hiddenControlRow{
       margin:0;
+    }
+
+    /* Revision Set #1: color choice alignment + X defaults + details layout */
+    .mainTable thead th.colorChoiceHead{
+      text-align:center;
+    }
+    .mainTable td.colorChoiceCell{
+      text-align:center;
+    }
+    .mainTable td.colorChoiceCell .pcTop{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      width:100%;
+    }
+    .mainTable td.colorChoiceCell .colorLabel,
+    .mainTable td.colorChoiceCell .colorNameInput{
+      margin-left:auto;
+      margin-right:auto;
+      text-align:center;
+    }
+    .mainTable td.colorChoiceCell .colorLabel{
+      justify-content:center;
+    }
+    .mainTable td.colorChoiceCell .colorNameInput::placeholder{
+      text-align:center;
+    }
+
+    .sku-entry-panel{
+      --sku-grid-cols:24px clamp(140px,18vw,220px) repeat(5, minmax(64px, 1fr)) 68px 132px;
+      background:transparent;
+      border:none;
+      border-radius:0;
+      padding:0;
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+      overflow-x:auto;
+      width:100%;
+    }
+    .sku-grid-header,
+    .sku-grid-row{
+      display:grid;
+      grid-template-columns:var(--sku-grid-cols);
+      column-gap:12px;
+      align-items:center;
+      justify-items:center;
+      width:100%;
+      min-width:100%;
+    }
+    .sku-grid-header{
+      background:transparent;
+      border:none;
+      padding:0;
+      margin-bottom:0;
+    }
+    .sku-grid-head{
+      font-size:14px;
+      font-weight:700;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      color:#475569;
+      white-space:nowrap;
+      text-align:center;
+    }
+    .sku-grid-head.rowRemoveHead{
+      font-size:0;
+      line-height:0;
+    }
+    .sku-grid-body{
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+    }
+    .sku-grid-row{
+      border:none;
+      background:transparent;
+      padding:0;
+      align-items:start;
+    }
+    .sku-grid-cell{
+      min-width:0;
+    }
+    .sku-grid-empty{
+      padding:8px 2px;
+      color:#64748b;
+      font-size:13px;
+    }
+    .sku-entry-panel .rowRemoveCell{
+      width:24px;
+      min-width:24px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .sku-entry-panel .colorChoiceCell{
+      width:100%;
+      min-width:0;
+    }
+    .sku-entry-panel .pcTop{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:0;
+      width:100%;
+      min-height:36px;
+    }
+    .sku-entry-panel .skuCellInput{
+      height:36px;
+      min-height:36px;
+      padding:5px 10px;
+      line-height:24px;
+      border-radius:8px;
+      box-sizing:border-box;
+    }
+    .sku-entry-panel .colorChoiceCell .colorLabel,
+    .sku-entry-panel .colorChoiceCell .colorNameInput{
+      width:100%;
+      max-width:clamp(140px,18vw,220px);
+      text-align:center;
+      margin:0 auto;
+      justify-content:center;
+      font-size:14px;
+    }
+    .sku-entry-panel .colorChoiceCell .colorLabel{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .sku-entry-panel .sizeCell{
+      display:grid;
+      grid-template-rows:36px auto;
+      align-items:start;
+      justify-items:center;
+      gap:1px;
+      text-align:center;
+      padding:0;
+      min-width:0;
+    }
+    .sku-entry-panel .qtyWrap{
+      width:100%;
+      max-width:clamp(64px,7vw,84px);
+      display:block;
+      margin:0;
+    }
+    .sku-entry-panel .qtyInput{
+      width:100%;
+      max-width:clamp(64px,7vw,84px);
+      text-align:center;
+      font-size:14px;
+    }
+    .sku-entry-panel .unitPrice{
+      margin-top:0;
+      font-size:10px;
+      text-align:center;
+      width:100%;
+      line-height:1.2;
+    }
+    .sku-entry-panel .qtyCol{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      justify-self:center;
+      min-height:36px;
+      text-align:center;
+      width:100%;
+      padding:0;
+      font-size:16px;
+      font-weight:400;
+      color:#0f172a;
+      white-space:nowrap;
+    }
+    .sku-entry-panel .lineTotal{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      justify-self:end;
+      min-height:36px;
+      text-align:center;
+      width:100%;
+      padding:0;
+      font-size:16px;
+      font-weight:400;
+      color:#0f172a;
+      white-space:nowrap;
+    }
+    .sku-grid-header .qtyHead{
+      justify-self:center;
+      text-align:center;
+      width:auto;
+      padding-right:0;
+    }
+    .sku-grid-header .totalHead{
+      justify-self:end;
+      text-align:center;
+      width:100%;
+      padding-right:0;
+    }
+
+    .hideEntityBtn,
+    .printJobTabActionBtn.printJobTabHide,
+    .addOnRemove,
+    .xBtn,
+    .lightboxClose{
+      color:#f87171;
+    }
+    .hideEntityBtn,
+    .printJobTabActionBtn.printJobTabHide{
+      border-color:#fca5a5;
+    }
+    .printJobTabActionBtn.printJobTabHide:hover{
+      border-color:#dc2626;
+      color:#b91c1c;
+    }
+
+    /* Top App Bar v1 */
+    .headerCondensed{
+      grid-template-columns:320px minmax(0,1fr) auto;
+      gap:12px;
+      align-items:center;
+      padding:4px 12px 4px 8px;
+      min-height:52px;
+    }
+    .headerCondensedLeft{
+      display:flex;
+      align-items:center;
+      justify-content:flex-start;
+      gap:0;
+      width:100%;
+      min-width:320px;
+    }
+    .headerAvatarWrap{
+      position:fixed;
+      top:8px;
+      left:10px;
+      width:176px;
+      height:176px;
+      z-index:12020;
+      pointer-events:none;
+    }
+    .headerAvatarLogo{
+      display:none !important;
+    }
+    .headerAvatarBtn{
+      display:block;
+      width:176px;
+      height:176px;
+      border-radius:999px;
+      overflow:hidden;
+      padding:0;
+      border:none;
+      background:transparent;
+      pointer-events:auto;
+    }
+    .headerAvatarStack{
+      width:176px;
+      height:176px;
+      display:block;
+    }
+    .headerAvatarImg{
+      width:176px;
+      height:176px;
+      border-radius:999px;
+      object-fit:cover;
+      border:3px solid #fff;
+      box-shadow:0 10px 24px rgba(15,23,42,.24);
+    }
+    .headerAvatarQuickActions{
+      position:fixed;
+      left:198px;
+      top:24px;
+      transform:translateY(-50%);
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:flex-start;
+      gap:6px;
+      pointer-events:auto;
+    }
+    .headerAvatarQuickBtn{
+      border:1px solid #9ec6e8;
+      border-radius:6px;
+      background:#fff;
+      color:#0f4fa8;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:24px;
+      padding:2px 8px;
+      cursor:pointer;
+      box-shadow:0 2px 8px rgba(15,23,42,.16);
+      font-size:11px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .headerAvatarQuickBtn:hover{
+      background:#e8f2ff;
+      border-color:#3b82f6;
+      color:#1d4ed8;
+    }
+    .headerCenterContext{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      text-align:center;
+      gap:0;
+      overflow:hidden;
+      padding:0 8px;
+    }
+    .headerJobLine{
+      font-size:22px;
+      font-weight:900;
+      color:#0f172a;
+      line-height:1.05;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:100%;
+    }
+    .headerClientLine{
+      font-size:16px;
+      font-weight:700;
+      color:#334155;
+      line-height:1.1;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:100%;
+    }
+    .headerRightZone{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      justify-content:center;
+      gap:4px;
+      min-width:0;
+    }
+    .headerRightZone .headerAch{
+      font-size:10px;
+      font-weight:800;
+      color:#166534;
+      text-align:right;
+      line-height:1.2;
+    }
+    .headerActionRow{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      flex-wrap:nowrap;
+      min-width:0;
+    }
+    .headerOrderSummary{
+      display:flex;
+      flex-direction:column;
+      gap:1px;
+      padding:4px 8px;
+      border:1px solid #d6deea;
+      border-radius:8px;
+      background:#f8fafc;
+      min-width:184px;
+      max-width:220px;
+    }
+    .headerOrderSummaryRow{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:10px;
+      font-size:12px;
+      line-height:1.2;
+      color:#334155;
+      font-weight:700;
+      white-space:nowrap;
+    }
+    .headerOrderSummaryRow .value{
+      color:#0f172a;
+      font-size:13px;
+      font-weight:900;
+    }
+    .headerOrderSummarySub{
+      font-size:10px;
+      line-height:1.2;
+      color:#64748b;
+      font-weight:600;
+    }
+    .headerDeliverySummary{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      padding:4px 8px;
+      border:1px solid #d6e4f4;
+      border-radius:8px;
+      background:#f5f9ff;
+      min-width:186px;
+      max-width:248px;
+    }
+    .headerDeliveryLabel{
+      font-size:10px;
+      line-height:1.1;
+      color:#475569;
+      font-weight:900;
+      text-transform:none;
+      letter-spacing:0;
+    }
+    .headerDeliveryLines{
+      display:flex;
+      flex-direction:column;
+      gap:1px;
+      min-width:0;
+    }
+    .headerDeliveryLine{
+      font-size:11px;
+      line-height:1.2;
+      color:#334155;
+      font-weight:600;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .headerDeliveryEta{
+      color:#0f4fa8;
+      font-weight:800;
+    }
+    .headerDeliveryToggle{
+      border:none;
+      background:transparent;
+      color:#1d4ed8;
+      font-size:10px;
+      line-height:1.1;
+      font-weight:800;
+      padding:0;
+      text-align:left;
+      cursor:pointer;
+      width:max-content;
+    }
+    .headerDeliveryToggle:hover{
+      text-decoration:underline;
+    }
+    .headerRightZone #saveBtnMini{
+      background:#d5dce6;
+      color:#1f2937;
+      border:1px solid #b9c4d2;
+      box-shadow:none;
+      padding:6px 12px;
+      min-width:112px;
+      font-size:13px;
+    }
+    .headerRightZone #saveBtnMini:hover{
+      background:#c1ccda;
+      border-color:#a5b4c7;
+    }
+    .headerRightZone #placeOrderBtnMini{
+      min-width:142px;
+      padding:10px 16px;
+      font-size:16px;
+      background:#16a34a;
+      border:1px solid #15803d;
+      box-shadow:0 6px 14px rgba(22,163,74,.26);
+    }
+    .headerRightZone #placeOrderBtnMini:hover{
+      background:#15803d;
+      border-color:#166534;
+    }
+    .headerRightZone #saveBtnMini,
+    .headerRightZone #placeOrderBtnMini{
+      white-space:nowrap;
+    }
+    .headerRightZone .headerFreeShip{
+      margin-top:0;
+      font-size:11px;
+      text-align:right;
+      line-height:1.1;
+    }
+    .sendModalBackdrop{
+      position:fixed;
+      inset:0;
+      background:rgba(15,23,42,.42);
+      z-index:10060;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .16s ease;
+    }
+    .sendModalBackdrop.open{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .sendModal{
+      width:min(460px,100%);
+      background:#fff;
+      border:1px solid #d0d8e3;
+      border-radius:10px;
+      box-shadow:0 18px 30px rgba(15,23,42,.22);
+      padding:14px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .sendModalTitle{
+      font-size:16px;
+      font-weight:900;
+      color:#0f172a;
+      line-height:1.2;
+    }
+    .sendModalSub{
+      font-size:12px;
+      color:#475569;
+      line-height:1.3;
+      font-weight:600;
+    }
+    .sendModalInput{
+      width:100%;
+      min-height:92px;
+      border:1px solid #cbd5e1;
+      border-radius:8px;
+      padding:8px 10px;
+      font:inherit;
+      font-size:13px;
+      color:#0f172a;
+      resize:vertical;
+    }
+    .sendModalActions{
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+    }
+    .sendModalBtn{
+      border:1px solid #cbd5e1;
+      border-radius:8px;
+      background:#fff;
+      color:#0f172a;
+      font-size:13px;
+      font-weight:800;
+      padding:7px 12px;
+      cursor:pointer;
+    }
+    .sendModalCancel:hover{
+      background:#f8fafc;
+      border-color:#94a3b8;
+    }
+    .sendModalSend{
+      background:#0f4fa8;
+      border-color:#0f4fa8;
+      color:#fff;
+    }
+    .sendModalSend:hover{
+      background:#0b3d84;
+      border-color:#0b3d84;
+    }
+
+    .detailsCard{
+      display:flex;
+      flex-direction:column;
+      padding:10px;
+      min-height:265px;
+      height:auto;
+      overflow:visible;
+      gap:2px;
+    }
+    .detailsTopBar{
+      margin-bottom:0;
+    }
+    .detailsBodyGrid{
+      display:grid;
+      grid-template-columns:minmax(260px,0.9fr) minmax(340px,1.1fr);
+      gap:12px;
+      min-height:0;
+      flex:1;
+    }
+    .detailsMainCol{
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .detailsMainTop{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .detailsMainCol .decorList{
+      max-height:none;
+      overflow:visible;
+      padding-right:0;
+    }
+    .detailsDivider{
+      width:100%;
+      height:1px;
+      background:#dce4ef;
+      margin:0;
+    }
+    .detailsSummaryCol{
+      min-height:0;
+      display:flex;
+      justify-content:flex-start;
+      align-items:stretch;
+      flex-direction:column;
+    }
+    .detailsSummaryCol .notesBlock{
+      margin-top:0;
+      width:100%;
+      max-width:none;
+      min-height:0;
+      overflow:hidden;
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      align-self:stretch;
+    }
+    .detailsSummaryHost{
+      margin:0;
+      padding:0;
+      width:100%;
+      max-width:none;
+      max-height:none;
+      overflow:visible;
+      align-self:flex-start;
+      align-items:flex-start;
+      justify-content:flex-start;
+      gap:3px;
+    }
+    .detailsAddOnsLabel{
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.06em;
+      text-transform:none;
+      color:#64748b;
+      text-align:left;
+      width:100%;
+    }
+    .detailsCard .totalsCard{
+      width:100%;
+      max-width:none;
+      max-height:none;
+      overflow:visible;
+      border:none;
+      box-shadow:none;
+      background:transparent;
+      border-radius:0;
+      padding:0;
+    }
+    .detailsCard .addOnsList{
+      max-height:none;
+      overflow:visible;
+      padding-right:0;
+      align-items:stretch;
+      gap:4px;
+    }
+    .detailsCard .addOnRow{
+      grid-template-columns:16px minmax(180px, 260px) 44px 80px;
+      align-items:center;
+      column-gap:4px;
+      row-gap:2px;
+      margin-top:0;
+      width:100%;
+      justify-content:start;
+    }
+    .detailsCard .addOnRemoveSlot{
+      grid-column:1;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:16px;
+    }
+    .detailsCard .addOnRemove{
+      justify-self:center;
+      text-align:center;
+      min-width:14px;
+      line-height:1;
+      padding:0;
+      margin:0;
+    }
+    .detailsCard .addOnLabel{
+      grid-column:2;
+      text-align:left;
+      justify-self:stretch;
+      min-width:0;
+      white-space:normal;
+      overflow-wrap:anywhere;
+      font-weight:400;
+    }
+    .detailsCard .addOnMainQty{
+      grid-column:3;
+      align-items:center;
+      justify-self:start;
+      text-align:left;
+      min-width:0;
+    }
+    .detailsCard .addOnMainAmt{
+      grid-column:4;
+      justify-self:start;
+      text-align:left;
+      min-width:0;
+    }
+    .detailsCard .addOnSub{
+      grid-column:2 / 5;
+      margin-top:1px;
+      line-height:1.1;
+      font-size:10px;
+      white-space:normal;
+      text-align:left;
+      justify-self:start;
+    }
+    .detailsSummaryCol .notesBlock > div:last-child{
+      flex:1;
+      min-height:0;
+      overflow:auto;
+    }
+    .detailsCard .addOnReset{
+      margin-top:3px;
+      align-self:flex-start;
+      margin-left:0;
+      text-align:left;
+      justify-self:start;
+      display:inline-flex;
+    }
+    .detailsCard .addOnReset.hidden{
+      display:none;
+    }
+    .skuColorFooter{
+      gap:0;
+      margin-top:-1px;
+    }
+    .addColor{
+      height:auto;
+      min-height:0;
+      width:auto;
+      max-width:none;
+      padding:0;
+      justify-self:center;
+      margin:0;
+      line-height:1;
     }
 
     @media (max-width:980px){
@@ -2008,7 +3314,59 @@
       .actionsRow{grid-template-columns:1fr}
       .stickyHeader .headerExpanded{display:none;}
       .stickyHeader .headerCondensed{display:grid;}
-      .headerActions{flex-direction:row;gap:8px;}
+      .headerCondensed{
+        grid-template-columns:238px minmax(0,1fr) auto;
+        gap:8px;
+        padding:4px 8px;
+        min-height:44px;
+      }
+      .headerAvatarWrap,
+      .headerAvatarBtn,
+      .headerAvatarStack,
+      .headerAvatarImg{
+        width:144px;
+        height:144px;
+      }
+      .headerAvatarWrap{
+        top:6px;
+        left:8px;
+      }
+      .headerAvatarQuickActions{
+        left:158px;
+        top:22px;
+        transform:translateY(-50%);
+        gap:4px;
+      }
+      .headerAvatarQuickBtn{
+        min-height:22px;
+        font-size:10px;
+        padding:1px 7px;
+      }
+      .headerJobLine{
+        font-size:18px;
+      }
+      .headerClientLine{
+        font-size:13px;
+      }
+      .headerActionRow{
+        flex-wrap:wrap;
+        row-gap:6px;
+        justify-content:flex-end;
+      }
+      .headerOrderSummary{
+        min-width:168px;
+        max-width:100%;
+      }
+      .headerDeliverySummary{
+        min-width:168px;
+        max-width:220px;
+      }
+      .headerRightZone #saveBtnMini{
+        min-width:96px;
+      }
+      .headerRightZone #placeOrderBtnMini{
+        min-width:112px;
+      }
       .headerBtn{font-size:14px;padding:6px 10px;}
       .headerCondensedTotals{font-size:12px;}
       .portalJobsSection{
@@ -2018,76 +3376,59 @@
         position:static;
         max-height:none;
       }
+      .detailsBodyGrid{
+        grid-template-columns:1fr;
+      }
+      .detailsSummaryHost{
+        max-width:none;
+      }
     }
   </style>
 </head>
 <body>
   <div class="portalPageShell" id="portalPageShell">
   <div class="stickyHeader portalHeader" id="stickyHeader">
-    <div class="headerExpanded" id="headerExpanded">
-      <div class="headerLeft">
-        <button class="headerAvatarBtn" id="headerAvatarBtn" type="button" aria-label="Open message">
-          <span class="headerAvatarStack">
-            <img class="headerAvatarImg" id="headerAvatarImg" alt="Sender">
-          </span>
-        </button>
-        <button class="headerBubbleBtn" id="headerBubbleBtn" type="button" aria-label="Open message">
-          <img class="headerBubbleImg" src="https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-03.png" alt="Message">
-        </button>
-        <div class="headerClient">
-          <span id="headerClientName"></span>
-          <span class="headerDeal" id="headerDealNum"></span>
-          <span class="headerDeadline" id="headerInHands">In-Hands Deadline: {{date}}</span>
-          <span class="headerDeadline" id="headerPlaceBy">Place your order by: {{date}}</span>
-          <span class="headerFriendly"><span class="headerFriendlyDot"></span>Need help? Tap chat bubble</span>
-        </div>
-      </div>
-      <div class="headerProjects">
-        <div class="headerProjectRow">
-          <span class="headerProjectLabel">PROJECT 1:</span>
-          <span id="headerProjectName"></span>
-          <span class="headerProjectMeta">Units: <span id="headerProjectUnits">0</span> &nbsp; Cost: <span id="headerProjectCost">$0.00</span></span>
-        </div>
-      </div>
-      <div class="headerTotals">
-        <div>Total of all units: <span class="value" id="headerTotalUnits">0</span></div>
-        <div>Total Pricing: <span class="value" id="headerTotalPricing">$0.00</span></div>
-        <div class="headerAch">Save 3% when you pay with ACH</div>
-        <div class="headerFreeShip" id="headerFreeShip">YOU GET FREE SHIPPING!</div>
-      </div>
-      <div class="headerActions">
-        <button class="headerBtn headerBtnGrey" id="saveBtn" type="button">Save</button>
-        <button class="headerBtn headerBtnBlue" id="placeOrderBtn" type="button">Place Order</button>
-        <button class="headerBtn headerBtnChat" id="chatBtn" type="button">Chat</button>
-      </div>
-    </div>
-
     <div class="headerCondensed" id="headerCondensed">
       <div class="headerCondensedLeft">
-        <button class="headerSmallLogoBtn" id="headerSmallLogoBtn" type="button" aria-label="Open message">
-          <img class="headerSmallLogo" src="https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-04.png" alt="Red Threads">
-        </button>
-        <button class="headerBubbleBtn" id="headerBubbleBtnMini" type="button" aria-label="Open message">
-          <img class="headerBubbleImg" src="https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-03.png" alt="Message">
-        </button>
-        <div class="headerClientMini">
-          <span id="headerClientNameMini"></span>
-          <span id="headerDealNumMini"></span>
+        <div class="headerAvatarWrap">
+          <button class="headerAvatarBtn" id="headerAvatarBtn" type="button" aria-label="Open message">
+            <span class="headerAvatarStack">
+              <img class="headerAvatarImg" id="headerAvatarImg" alt="Sender">
+            </span>
+          </button>
+          <div class="headerAvatarQuickActions">
+            <button class="headerAvatarQuickBtn" id="chatBtnMini" type="button" aria-label="Open comments">Message me</button>
+            <button class="headerAvatarQuickBtn" id="headerWelcomeBtn" type="button" aria-label="Open welcome message">Welcome</button>
+          </div>
         </div>
       </div>
-      <div class="headerCondensedTotals">
-        <div>Sum of all units: <span class="value" id="headerTotalUnitsMini">0</span></div>
-        <div>Sum Pricing: <span class="value" id="headerTotalPricingMini">$0.00</span></div>
+      <div class="headerCenterContext">
+        <div class="headerJobLine" id="headerDealNumMini"></div>
+        <div class="headerClientLine" id="headerClientNameMini"></div>
       </div>
-      <div class="headerCondensedPromos">
+      <div class="headerRightZone">
         <div class="headerAch">Save 3% when you pay with ACH</div>
+        <div class="headerActionRow">
+          <div class="headerOrderSummary" aria-live="polite">
+            <div class="headerOrderSummaryRow">
+              <span class="label">Total</span>
+              <span class="value" id="headerTotalPricingMini">$0.00</span>
+            </div>
+            <div class="headerOrderSummaryRow">
+              <span class="label">Units</span>
+              <span class="value" id="headerTotalUnitsMini">0</span>
+            </div>
+            <div class="headerOrderSummarySub">Excludes tax/shipping</div>
+          </div>
+          <div class="headerDeliverySummary" id="headerDeliverySummary" aria-live="polite">
+            <div class="headerDeliveryLabel">Place order today → Order ships by:</div>
+            <div class="headerDeliveryLines" id="headerDeliveryLines"></div>
+            <button class="headerDeliveryToggle" id="headerDeliveryToggle" type="button" hidden></button>
+          </div>
+          <button class="headerBtn headerBtnGrey" id="saveBtnMini" type="button">Save / Send</button>
+          <button class="headerBtn headerBtnBlue" id="placeOrderBtnMini" type="button">Place Order</button>
+        </div>
         <div class="headerFreeShip" id="headerFreeShipMini">YOU GET FREE SHIPPING!</div>
-        <div class="headerFriendlyMini"><span class="headerFriendlyDot"></span>Need help? Tap chat</div>
-      </div>
-      <div class="headerActions">
-        <button class="headerBtn headerBtnGrey" id="saveBtnMini" type="button">Save</button>
-        <button class="headerBtn headerBtnBlue" id="placeOrderBtnMini" type="button">Place Order</button>
-        <button class="headerBtn headerBtnChat" id="chatBtnMini" type="button">Chat</button>
       </div>
     </div>
   </div>
@@ -2151,7 +3492,7 @@
 
     <div class="saveNotice" id="saveNotice" hidden></div>
 
-    <section class="portalSection printJobTabsSection" id="printJobTabsSection">
+    <section class="printJobTabsSection" id="printJobTabsSection">
       <div class="printJobTabsList" id="printJobTabsList" role="tablist" aria-label="Print Jobs"></div>
       <div class="hiddenControlBar printJobHiddenControlBar" id="hiddenPrintJobsBar"></div>
     </section>
@@ -2204,13 +3545,26 @@
       <div id="chatMessages"></div>
     </div>
     <div class="chatDrawerFoot">
-      <textarea class="chatInput" id="chatInput" placeholder="Type a message..." rows="2"></textarea>
-      <button class="chatSendBtn" id="chatSend" type="button" disabled>Send</button>
+      <div class="chatPrefillRow" id="chatPrefillRow" hidden>
+        <span class="chatPrefillChip" id="chatPrefillChip"></span>
+      </div>
+      <div class="chatComposerRow">
+        <textarea class="chatInput" id="chatInput" placeholder="Type a message..." rows="2"></textarea>
+        <button class="chatSendBtn" id="chatSend" type="button" disabled>Send</button>
+      </div>
     </div>
   </aside>
-  <button id="chatFab" class="chatFab" type="button">Chat</button>
-
-  <div class="modeBadge" id="modeBadge">CLIENT VIEW</div>
+  <div class="sendModalBackdrop" id="sendModalBackdrop" hidden>
+    <div class="sendModal" id="sendModal" role="dialog" aria-modal="true" aria-labelledby="sendModalTitle">
+      <div class="sendModalTitle" id="sendModalTitle">Send Estimate Copy</div>
+      <div class="sendModalSub">Enter one or more email addresses (comma or new line separated).</div>
+      <textarea class="sendModalInput" id="sendEmailsInput" rows="4" placeholder="name@company.com, another@company.com"></textarea>
+      <div class="sendModalActions">
+        <button class="sendModalBtn sendModalCancel" id="sendModalCancel" type="button">Cancel</button>
+        <button class="sendModalBtn sendModalSend" id="sendModalSend" type="button">Send</button>
+      </div>
+    </div>
+  </div>
   </div>
 
 <script>
@@ -2246,9 +3600,35 @@
     return Number.isFinite(n) && n > 0 ? n : 0;
   }
 
+  function parseQtyInputValue(x){
+    const cleaned = String(x == null ? '' : x).replace(/[^\d]/g, '');
+    if (!cleaned) return 0;
+    const n = parseInt(cleaned, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function qtyInputDisplayValue(x){
+    const qty = clampInt(x);
+    return qty > 0 ? String(qty) : '';
+  }
+
   function money(n){
     const v = toNumber(n, 0);
     return v.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+  }
+
+  function formatSkuSummary(units, total){
+    const qty = clampInt(units);
+    const amt = toNumber(total, 0);
+    const each = qty > 0 ? (amt / qty).toFixed(2) : '--';
+    return qty + ' Total units | ' + each + ' ea. | ' + money(amt);
+  }
+
+  function renderCompareGuidance(el){
+    if (!el) return;
+    el.textContent = '';
+    el.appendChild(document.createTextNode(COMPARE_GUIDANCE_PREFIX));
+    el.appendChild(createEl('span', 'compareSubtitleEmphasis', COMPARE_GUIDANCE_EMPHASIS));
   }
 
   function escapeHtml(s){
@@ -2442,9 +3822,70 @@
   const PORTAL_MODE = normalizePortalMode(VM.mode);
   const IS_TEAM = PORTAL_MODE === 'team';
   const SOURCE_PORTAL_STATE = safeJsonParse(VM.portalState, {});
+  const HYDRATE_BOOT_SOURCE = hasNonBlankSignalValue(VM.portalState) ? 'portalState' : 'snapshot-bootstrap';
   const INITIAL_TOKEN = String(VM.token || '').trim();
 
-  let IS_READ_ONLY = Boolean(VM.readOnly);
+  const FINAL_LOCK_STATUSES = new Set(['submitted', 'placed', 'ordered']);
+
+  function hasNonBlankSignalValue(value){
+    if (value == null) return false;
+    if (typeof value === 'string') {
+      const s = value.trim().toLowerCase();
+      if (s === '' || s === 'null' || s === 'undefined') return false;
+      if (s === '{}' || s === '[]' || s === '\"\"' || s === "''") return false;
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed == null) return false;
+        if (Array.isArray(parsed)) return parsed.length > 0;
+        if (typeof parsed === 'object') return Object.keys(parsed).length > 0;
+        if (typeof parsed === 'string') return parsed.trim() !== '';
+      } catch (_) {}
+      return true;
+    }
+    if (typeof value === 'object') {
+      return Object.keys(value).length > 0;
+    }
+    return String(value).trim() !== '';
+  }
+
+  function readPortalStatusSignal(){
+    const status = String(
+      VM.status != null ? VM.status :
+      (ROW.status != null ? ROW.status :
+      (META.status != null ? META.status : ''))
+    ).trim().toLowerCase();
+    return status;
+  }
+
+  function hasSubmittedStateSignal(){
+    const candidates = [
+      VM.submittedStateJson,
+      VM.submittedstatejson,
+      VM.submittedState,
+      VM.submittedstate,
+      ROW.submittedstatejson,
+      ROW.submitted_state_json,
+      ROW.submittedstate,
+      META.submittedStateJson,
+      META.submittedstatejson,
+      META.submittedState,
+      META.submittedstate
+    ];
+    return candidates.some(hasNonBlankSignalValue);
+  }
+
+  function isFinalizedPortal(){
+    const status = readPortalStatusSignal();
+    if (status === 'saved') return false;
+    if (hasSubmittedStateSignal()) return true;
+    if (FINAL_LOCK_STATUSES.has(status)) return true;
+    // Do not treat generic save timestamps as a lock trigger.
+    // `submittedAt` is currently written by non-final saves/chat.
+    // Only explicit final states should lock the portal.
+    return false;
+  }
+
+  let IS_READ_ONLY = isFinalizedPortal();
 
   function detectMessageLogKey(stateObj){
     if (!stateObj || typeof stateObj !== 'object') return 'messageLog';
@@ -2472,6 +3913,15 @@
 
   function quantityStateKey(jobId, skuId, colorway, size){
     return [
+      encodeURIComponent(String(jobId || '')),
+      encodeURIComponent(String(skuId || '')),
+      encodeURIComponent(String(colorway || '')),
+      encodeURIComponent(String(size || ''))
+    ].join('|');
+  }
+
+  function legacyQuantityStateKey(jobId, skuId, colorway, size){
+    return [
       encodeURIComponent(String(INITIAL_TOKEN || '')),
       encodeURIComponent(String(jobId || '')),
       encodeURIComponent(String(skuId || '')),
@@ -2482,18 +3932,60 @@
 
   function decodeQuantityStateKey(key){
     const parts = String(key || '').split('|');
-    if (parts.length !== 5) return null;
-    try {
-      return {
-        token: decodeURIComponent(parts[0] || ''),
-        jobId: decodeURIComponent(parts[1] || ''),
-        skuId: decodeURIComponent(parts[2] || ''),
-        colorway: decodeURIComponent(parts[3] || ''),
-        size: decodeURIComponent(parts[4] || '')
-      };
+    try{
+      if (parts.length === 4) {
+        return {
+          token: '',
+          jobId: decodeURIComponent(parts[0] || ''),
+          skuId: decodeURIComponent(parts[1] || ''),
+          colorway: decodeURIComponent(parts[2] || ''),
+          size: decodeURIComponent(parts[3] || '')
+        };
+      }
+      if (parts.length === 5) {
+        return {
+          token: decodeURIComponent(parts[0] || ''),
+          jobId: decodeURIComponent(parts[1] || ''),
+          skuId: decodeURIComponent(parts[2] || ''),
+          colorway: decodeURIComponent(parts[3] || ''),
+          size: decodeURIComponent(parts[4] || '')
+        };
+      }
+      return null;
     } catch (_) {
       return null;
     }
+  }
+
+  function clonePlainObject(value){
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function mergeMessageLogsAppendOnly(existingLog, nextLog){
+    const out = [];
+    const seen = new Set();
+
+    function addMessage(msg){
+      const normalized = normalizeMessage(msg);
+      if (!normalized) return;
+      const key = String(normalized.id || '') || [
+        normalized.createdAt || '',
+        normalized.authorType || '',
+        normalized.text || ''
+      ].join('|');
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(normalized);
+    }
+
+    (Array.isArray(existingLog) ? existingLog : []).forEach(addMessage);
+    (Array.isArray(nextLog) ? nextLog : []).forEach(addMessage);
+    return out;
   }
 
   function normalizeMessage(raw){
@@ -2544,7 +4036,24 @@
       const jobState = source.printJobs && source.printJobs[job.printJobId] ? source.printJobs[job.printJobId] : {};
       job.skus.forEach(sku => {
         const skuState = jobState.skus && jobState.skus[sku.skuId] ? jobState.skus[sku.skuId] : {};
-        sku.colorways.forEach(color => {
+        const colors = [];
+        const seen = new Set();
+        (Array.isArray(sku.colorways) ? sku.colorways : []).forEach(color => {
+          const name = String(color || '').trim();
+          const key = name.toLowerCase();
+          if (!name || seen.has(key)) return;
+          seen.add(key);
+          colors.push(name);
+        });
+        Object.keys((skuState && skuState.colorways) || {}).forEach(color => {
+          const name = String(color || '').trim();
+          const key = name.toLowerCase();
+          if (!name || seen.has(key)) return;
+          seen.add(key);
+          colors.push(name);
+        });
+
+        colors.forEach(color => {
           const colorState = skuState.colorways && skuState.colorways[color] ? skuState.colorways[color] : {};
           sku.sizesAllowed.forEach(size => {
             const qty = clampInt(colorState && colorState.qtyBySize ? colorState.qtyBySize[size] : 0);
@@ -2567,17 +4076,26 @@
       if (!job) return;
       const sku = (job.skus || []).find(s => s.skuId === decoded.skuId);
       if (!sku) return;
-      if (!sku.colorways.includes(decoded.colorway)) return;
+      const colorName = String(decoded.colorway || '').trim();
+      if (!colorName) return;
       if (!sku.sizesAllowed.includes(decoded.size)) return;
-      const colorState = outState
+      const skuState = outState
         && outState.printJobs
         && outState.printJobs[job.printJobId]
         && outState.printJobs[job.printJobId].skus
-        && outState.printJobs[job.printJobId].skus[sku.skuId]
-        && outState.printJobs[job.printJobId].skus[sku.skuId].colorways
-        ? outState.printJobs[job.printJobId].skus[sku.skuId].colorways[decoded.colorway]
+        ? outState.printJobs[job.printJobId].skus[sku.skuId]
         : null;
-      if (!colorState || !colorState.qtyBySize) return;
+      if (!skuState) return;
+      if (!skuState.colorways) skuState.colorways = {};
+      if (!skuState.colorways[colorName]) {
+        const qtyBySize = {};
+        sku.sizesAllowed.forEach(size => { qtyBySize[size] = 0; });
+        skuState.colorways[colorName] = { hidden: false, qtyBySize: qtyBySize };
+      }
+      const colorState = skuState.colorways[colorName];
+      if (!colorState.qtyBySize || typeof colorState.qtyBySize !== 'object') {
+        colorState.qtyBySize = {};
+      }
       colorState.qtyBySize[decoded.size] = qty;
     });
   }
@@ -2608,7 +4126,24 @@
           colorways: {}
         };
 
-        sku.colorways.forEach(color => {
+        const allColors = [];
+        const seenColors = new Set();
+        (Array.isArray(sku.colorways) ? sku.colorways : []).forEach(color => {
+          const name = String(color || '').trim();
+          const key = name.toLowerCase();
+          if (!name || seenColors.has(key)) return;
+          seenColors.add(key);
+          allColors.push(name);
+        });
+        Object.keys((srcSku && srcSku.colorways) || {}).forEach(color => {
+          const name = String(color || '').trim();
+          const key = name.toLowerCase();
+          if (!name || seenColors.has(key)) return;
+          seenColors.add(key);
+          allColors.push(name);
+        });
+
+        allColors.forEach(color => {
           const srcColor = srcSku && srcSku.colorways && srcSku.colorways[color] ? srcSku.colorways[color] : {};
           const qtyBySize = {};
           sku.sizesAllowed.forEach(size => {
@@ -2633,10 +4168,7 @@
   }
 
   let PORTAL_STATE = normalizePortalState(VM.portalState);
-  if (PORTAL_STATE.isReadOnly) IS_READ_ONLY = true;
-  if (String(VM.status || '').toLowerCase() === 'saved' || String(VM.status || '').toLowerCase() === 'submitted') {
-    IS_READ_ONLY = true;
-  }
+  IS_READ_ONLY = isFinalizedPortal();
   PORTAL_STATE.isReadOnly = IS_READ_ONLY;
 
   const CAN_EDIT = () => PORTAL_MODE === 'client' && !IS_READ_ONLY;
@@ -2645,6 +4177,8 @@
   const JOB_DOM = new Map();
   const JOB_SUMMARIES = new Map();
   const MOCKUP_STATE_BY_JOB = {};
+  const DRAFT_COLOR_ROWS_BY_SKU = {};
+  let PENDING_DRAFT_COLOR_FOCUS = null;
 
   function getJobState(jobId){
     if (!PORTAL_STATE.printJobs[jobId]) {
@@ -2669,6 +4203,84 @@
       skuState.colorways[color] = { hidden: false, qtyBySize: qtyBySize };
     }
     return skuState.colorways[color];
+  }
+
+  function getSkuColorNames(jobId, sku){
+    const names = [];
+    const seen = new Set();
+
+    (Array.isArray(sku.colorways) ? sku.colorways : []).forEach(color => {
+      const name = String(color || '').trim();
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) return;
+      seen.add(key);
+      names.push(name);
+    });
+
+    const skuState = getSkuState(jobId, sku.skuId);
+    Object.keys((skuState && skuState.colorways) || {}).forEach(color => {
+      const name = String(color || '').trim();
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) return;
+      seen.add(key);
+      names.push(name);
+    });
+
+    return names;
+  }
+
+  function draftColorRowsKey(jobId, skuId){
+    return String(jobId || '') + '::' + String(skuId || '');
+  }
+
+  function getDraftColorRows(jobId, skuId){
+    const key = draftColorRowsKey(jobId, skuId);
+    if (!Array.isArray(DRAFT_COLOR_ROWS_BY_SKU[key])) DRAFT_COLOR_ROWS_BY_SKU[key] = [];
+    return DRAFT_COLOR_ROWS_BY_SKU[key];
+  }
+
+  function createDraftColorRow(jobId, sku){
+    const row = {
+      id: 'draft_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+      name: '',
+      qtyBySize: {}
+    };
+    sku.sizesAllowed.forEach(size => { row.qtyBySize[size] = 0; });
+    getDraftColorRows(jobId, sku.skuId).push(row);
+    return row;
+  }
+
+  function removeDraftColorRow(jobId, skuId, draftId){
+    const rows = getDraftColorRows(jobId, skuId);
+    const idx = rows.findIndex(row => row && row.id === draftId);
+    if (idx >= 0) rows.splice(idx, 1);
+  }
+
+  function mergeColorQtyIntoState(jobId, sku, colorName, qtyBySize){
+    const colorState = getColorState(jobId, sku, colorName);
+    colorState.hidden = false;
+    sku.sizesAllowed.forEach(size => {
+      const incoming = clampInt(qtyBySize && qtyBySize[size]);
+      if (incoming > 0) colorState.qtyBySize[size] = clampInt(colorState.qtyBySize[size]) + incoming;
+    });
+  }
+
+  function commitDraftColorRow(jobId, sku, draftId){
+    const rows = getDraftColorRows(jobId, sku.skuId);
+    const row = rows.find(item => item && item.id === draftId);
+    if (!row) return false;
+
+    const draftName = String(row.name || '').trim();
+    if (!draftName) return false;
+
+    const allColors = getSkuColorNames(jobId, sku);
+    const lowerDraft = draftName.toLowerCase();
+    const matchedName = allColors.find(color => String(color || '').toLowerCase() === lowerDraft);
+    const targetName = matchedName || draftName;
+
+    mergeColorQtyIntoState(jobId, sku, targetName, row.qtyBySize);
+    removeDraftColorRow(jobId, sku.skuId, draftId);
+    return true;
   }
 
   function rowField(name){
@@ -2720,9 +4332,7 @@
   const introMessage = document.getElementById('introMessage');
   const introTitle = document.getElementById('introTitle');
   const headerAvatarBtn = document.getElementById('headerAvatarBtn');
-  const headerBubbleBtn = document.getElementById('headerBubbleBtn');
-  const headerBubbleBtnMini = document.getElementById('headerBubbleBtnMini');
-  const headerSmallLogoBtn = document.getElementById('headerSmallLogoBtn');
+  const headerWelcomeBtn = document.getElementById('headerWelcomeBtn');
 
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightboxImg');
@@ -2741,7 +4351,6 @@
   const placeOrderBtnMini = document.getElementById('placeOrderBtnMini');
   const chatBtn = document.getElementById('chatBtn');
   const chatBtnMini = document.getElementById('chatBtnMini');
-  const chatFab = document.getElementById('chatFab');
 
   const chatPanel = document.getElementById('chatPanel');
   const chatBackdrop = document.getElementById('chatBackdrop');
@@ -2749,9 +4358,19 @@
   const chatDate = document.getElementById('chatDate');
   const chatMessages = document.getElementById('chatMessages');
   const chatEmpty = document.getElementById('chatEmpty');
+  const chatPrefillRow = document.getElementById('chatPrefillRow');
+  const chatPrefillChip = document.getElementById('chatPrefillChip');
   const chatInput = document.getElementById('chatInput');
   const chatSend = document.getElementById('chatSend');
   const chatBody = document.getElementById('chatBody');
+  const sendModalBackdrop = document.getElementById('sendModalBackdrop');
+  const sendModal = document.getElementById('sendModal');
+  const sendEmailsInput = document.getElementById('sendEmailsInput');
+  const sendModalCancel = document.getElementById('sendModalCancel');
+  const sendModalSend = document.getElementById('sendModalSend');
+  const headerDeliverySummary = document.getElementById('headerDeliverySummary');
+  const headerDeliveryLines = document.getElementById('headerDeliveryLines');
+  const headerDeliveryToggle = document.getElementById('headerDeliveryToggle');
 
   const teamDiagWrap = document.getElementById('teamDiagWrap');
   const teamDiagToggle = document.getElementById('teamDiagToggle');
@@ -2761,18 +4380,74 @@
 
   const LOCAL_STATE_STORAGE_PREFIX = 'rtPortalState';
   const LOCAL_STATE_VERSION = '1';
+  const DEBUG_UI = true;
+  const COMPARE_GUIDANCE_PREFIX = 'Minimum order is 15 pieces. Prices shown at that tier until you reach the next break. Your unit pricing for all SKUs will be related to the total amount of SKUs in the print job. ';
+  const COMPARE_GUIDANCE_EMPHASIS = 'Buy in bulk and save.';
+  const COMPARE_GUIDANCE_TEXT = COMPARE_GUIDANCE_PREFIX + COMPARE_GUIDANCE_EMPHASIS;
 
   const CURRENT_TOKEN = INITIAL_TOKEN;
   let CHAT_MESSAGES = [];
+  let CHAT_PREFILL_PREFIX = '';
   let activePrintJobId = '';
+  let HEADER_DELIVERY_EXPANDED = false;
+
+  function debugLog(){
+    if (!DEBUG_UI) return;
+    const args = Array.prototype.slice.call(arguments);
+    args.unshift('[RT-DEBUG]');
+    console.log.apply(console, args);
+  }
+
+  function summarizeSkuState(jobId, skuId){
+    const job = PRINT_JOBS.find(j => j.printJobId === jobId);
+    if (!job) return { jobId: jobId, skuId: skuId, missing: 'job' };
+    const sku = (job.skus || []).find(s => s.skuId === skuId);
+    if (!sku) return { jobId: jobId, skuId: skuId, missing: 'sku' };
+
+    const skuState = getSkuState(jobId, skuId);
+    const colors = getSkuColorNames(jobId, sku).map(color => {
+      const colorState = skuState.colorways && skuState.colorways[color]
+        ? skuState.colorways[color]
+        : getColorState(jobId, sku, color);
+      const qtyPairs = sku.sizesAllowed
+        .map(size => [size, clampInt(colorState && colorState.qtyBySize ? colorState.qtyBySize[size] : 0)])
+        .filter(entry => entry[1] > 0)
+        .map(entry => entry[0] + ':' + entry[1]);
+      return {
+        color: color,
+        hidden: Boolean(colorState && colorState.hidden),
+        nonZero: qtyPairs
+      };
+    });
+
+    return {
+      jobId: jobId,
+      skuId: skuId,
+      colors: colors.filter(c => c.hidden || c.nonZero.length > 0)
+    };
+  }
+
+  function debugSkuState(label, jobId, skuId, extra){
+    debugLog(label, summarizeSkuState(jobId, skuId), extra || {});
+  }
 
   function showNotice(message, type){
     if (!saveNotice) return;
+    const noticeText = String(message || '');
     saveNotice.hidden = false;
-    saveNotice.textContent = String(message || '');
     saveNotice.classList.remove('ok', 'err');
     if (type === 'ok') saveNotice.classList.add('ok');
     if (type === 'err') saveNotice.classList.add('err');
+    saveNotice.innerHTML = '';
+
+    const textEl = createEl('span', 'saveNoticeMessage', noticeText);
+    const dismissBtn = createEl('button', 'saveNoticeDismiss', 'X');
+    dismissBtn.type = 'button';
+    dismissBtn.setAttribute('aria-label', 'Dismiss');
+    dismissBtn.addEventListener('click', clearNotice);
+
+    saveNotice.appendChild(textEl);
+    saveNotice.appendChild(dismissBtn);
   }
 
   function clearNotice(){
@@ -2786,7 +4461,8 @@
     const lock =
       (introModal && introModal.classList.contains('open')) ||
       (lightbox && lightbox.classList.contains('open')) ||
-      (chatPanel && chatPanel.classList.contains('open'));
+      (chatPanel && chatPanel.classList.contains('open')) ||
+      (sendModalBackdrop && !sendModalBackdrop.hidden && sendModalBackdrop.classList.contains('open'));
     document.body.classList.toggle('modalLocked', Boolean(lock));
   }
 
@@ -2896,6 +4572,164 @@
     return s;
   }
 
+  function pickBaseTurnaround(job){
+    const delivery = formatTurnaroundText(job && job.deliveryEstimate);
+    const turnaround = formatTurnaroundText(job && job.turnaroundTime);
+
+    const deliveryHasDayCount = /\b\d+\s*(business\s*)?day/i.test(delivery);
+    const turnaroundHasDayCount = /\b\d+\s*(business\s*)?day/i.test(turnaround);
+
+    if (deliveryHasDayCount) return delivery;
+    if (turnaroundHasDayCount) return turnaround;
+    if (delivery) return delivery;
+    if (turnaround && !/^standard$/i.test(turnaround)) return turnaround;
+    return turnaround || '';
+  }
+
+  function shortPrintJobName(value){
+    const s = String(value || '').trim();
+    if (!s) return '--';
+    return s.length > 18 ? (s.slice(0, 17).trimEnd() + '...') : s;
+  }
+
+  function extractExplicitDateLabel(value){
+    const text = formatTurnaroundText(value);
+    if (!text) return '';
+    if (/\b\d+\s*(business\s*)?day/i.test(text)) return '';
+    if (/^standard$/i.test(text)) return '';
+
+    const monthPattern = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,\s*\d{2,4})?/i;
+    const monthMatch = text.match(monthPattern);
+    if (monthMatch && monthMatch[0]) {
+      const parsedMonth = new Date(monthMatch[0]);
+      if (!Number.isNaN(parsedMonth.getTime())) {
+        return parsedMonth.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+      return monthMatch[0].replace(/\.$/, '');
+    }
+
+    const slashMatch = text.match(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/);
+    if (slashMatch && slashMatch[0]) {
+      const parsedSlash = new Date(slashMatch[0]);
+      if (!Number.isNaN(parsedSlash.getTime())) {
+        return parsedSlash.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+      return slashMatch[0];
+    }
+
+    const parsed = new Date(text);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    return '';
+  }
+
+  function compactEtaText(value){
+    const cleaned = formatTurnaroundText(value).replace(/^turnaround\s*:\s*/i, '').trim();
+    if (!cleaned) return '--';
+    return cleaned
+      .replace(/\bbusiness\s+days?\b/ig, 'bd')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function parseBusinessDayCount(value){
+    const text = formatTurnaroundText(value).replace(/^turnaround\s*:\s*/i, '').trim();
+    if (!text) return null;
+    const nums = text.match(/\d+/g) || [];
+    if (!nums.length) return null;
+    const dayCount = Number(nums[0]);
+    if (!Number.isFinite(dayCount) || dayCount <= 0) return null;
+    return {
+      dayCount: Math.max(1, Math.floor(dayCount)),
+      rush: /\brush\b/i.test(text)
+    };
+  }
+
+  function addBusinessDaysFromToday(dayCount){
+    if (!Number.isFinite(dayCount) || dayCount <= 0) return null;
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    let remaining = Math.floor(dayCount);
+    while (remaining > 0) {
+      date.setDate(date.getDate() + 1);
+      const day = date.getDay();
+      if (day !== 0 && day !== 6) remaining -= 1;
+    }
+    return date;
+  }
+
+  function projectedByDateLabel(value){
+    const parsed = parseBusinessDayCount(value);
+    if (!parsed) return '';
+    const target = addBusinessDaysFromToday(parsed.dayCount);
+    if (!target) return '';
+    const shortDate = target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return 'By ' + shortDate + (parsed.rush ? ' (rush)' : '');
+  }
+
+  function getHeaderEtaText(job, summary){
+    const explicitDate = extractExplicitDateLabel(job && job.deliveryEstimate) || extractExplicitDateLabel(job && job.turnaroundTime);
+    if (explicitDate) return 'By ' + explicitDate;
+
+    const renderedTurnaround = String((summary && summary.turnaround) || '').trim();
+    const projectedRendered = projectedByDateLabel(renderedTurnaround);
+    if (projectedRendered) return projectedRendered;
+    if (renderedTurnaround) return compactEtaText(renderedTurnaround);
+
+    const baseTurnaround = pickBaseTurnaround(job);
+    const projectedBase = projectedByDateLabel(baseTurnaround);
+    if (projectedBase) return projectedBase;
+
+    return compactEtaText(baseTurnaround);
+  }
+
+  function renderHeaderDeliverySummary(){
+    if (!headerDeliverySummary || !headerDeliveryLines || !headerDeliveryToggle) return;
+
+    const jobs = getVisibleJobs().slice(0, 4);
+    headerDeliveryLines.innerHTML = '';
+
+    if (!jobs.length) {
+      headerDeliverySummary.style.display = 'none';
+      headerDeliveryToggle.hidden = true;
+      headerDeliveryToggle.textContent = '';
+      return;
+    }
+
+    headerDeliverySummary.style.display = 'flex';
+
+    const canCollapse = jobs.length > 2;
+    const expanded = canCollapse && HEADER_DELIVERY_EXPANDED;
+    const renderCount = expanded ? jobs.length : Math.min(2, jobs.length);
+
+    for (let i = 0; i < renderCount; i++) {
+      const job = jobs[i];
+      const summary = JOB_SUMMARIES.get(job.printJobId);
+      const allIndex = PRINT_JOBS.findIndex(item => item.printJobId === job.printJobId);
+      const pjNumber = (allIndex >= 0 ? allIndex + 1 : i + 1);
+      const line = createEl('div', 'headerDeliveryLine');
+      const prefix = createEl('span', '', 'PJ' + pjNumber + ': ' + shortPrintJobName(job.printJobName) + ' - ');
+      const eta = createEl('span', 'headerDeliveryEta', getHeaderEtaText(job, summary));
+      line.appendChild(prefix);
+      line.appendChild(eta);
+      headerDeliveryLines.appendChild(line);
+    }
+
+    if (!canCollapse) {
+      HEADER_DELIVERY_EXPANDED = false;
+      headerDeliveryToggle.hidden = true;
+      headerDeliveryToggle.textContent = '';
+      return;
+    }
+
+    headerDeliveryToggle.hidden = false;
+    headerDeliveryToggle.textContent = expanded
+      ? 'Show less'
+      : ('+' + (jobs.length - 2) + ' more');
+  }
+
   function formatDateTime(value){
     if (!value) return '--';
     const d = new Date(value);
@@ -3000,23 +4834,54 @@
     if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
   }
 
-  function setChatSendEnabled(){
-    if (!chatSend || !chatInput) return;
-    chatSend.disabled = !String(chatInput.value || '').trim();
+  function renderChatPrefill(){
+    if (!chatPrefillRow || !chatPrefillChip) return;
+    const text = String(CHAT_PREFILL_PREFIX || '').trim();
+    if (!text) {
+      chatPrefillRow.hidden = true;
+      chatPrefillChip.textContent = '';
+      return;
+    }
+    chatPrefillChip.textContent = text;
+    chatPrefillRow.hidden = false;
   }
 
-  function openChat(){
+  function setChatPrefillPrefix(prefixText){
+    CHAT_PREFILL_PREFIX = String(prefixText || '').trim();
+    renderChatPrefill();
+    setChatSendEnabled();
+  }
+
+  function clearChatDraft(){
+    CHAT_PREFILL_PREFIX = '';
+    if (chatInput) chatInput.value = '';
+    renderChatPrefill();
+    setChatSendEnabled();
+  }
+
+  function setChatSendEnabled(){
+    if (!chatSend || !chatInput) return;
+    const typed = String(chatInput.value || '').trim();
+    const prefixed = String(CHAT_PREFILL_PREFIX || '').trim();
+    chatSend.disabled = !(typed || prefixed);
+  }
+
+  function openChat(options){
     if (!chatPanel || !chatBackdrop) return;
+    const forceOpen = !!(options && options.forceOpen);
     const isOpen = chatPanel.classList.contains('open');
-    if (isOpen) {
+    if (isOpen && !forceOpen) {
       closeChat();
       return;
     }
-    chatPanel.classList.add('open');
-    chatPanel.setAttribute('aria-hidden', 'false');
-    chatBackdrop.classList.add('open');
-    syncOverlayScrollLock();
+    if (!isOpen) {
+      chatPanel.classList.add('open');
+      chatPanel.setAttribute('aria-hidden', 'false');
+      chatBackdrop.classList.add('open');
+      syncOverlayScrollLock();
+    }
     renderChat(CHAT_MESSAGES);
+    renderChatPrefill();
     setChatSendEnabled();
     if (chatInput) chatInput.focus();
   }
@@ -3029,11 +4894,109 @@
     syncOverlayScrollLock();
   }
 
+  function openSendModal(){
+    if (!sendModalBackdrop) return;
+    sendModalBackdrop.hidden = false;
+    if (sendModal) sendModal.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => {
+      sendModalBackdrop.classList.add('open');
+      syncOverlayScrollLock();
+      if (sendEmailsInput) {
+        sendEmailsInput.focus();
+        sendEmailsInput.select();
+      }
+    });
+  }
+
+  function closeSendModal(){
+    if (!sendModalBackdrop) return;
+    sendModalBackdrop.classList.remove('open');
+    if (sendModal) sendModal.setAttribute('aria-hidden', 'true');
+    syncOverlayScrollLock();
+    setTimeout(() => {
+      if (!sendModalBackdrop.classList.contains('open')) {
+        sendModalBackdrop.hidden = true;
+      }
+    }, 160);
+  }
+
+  function parseEmailRecipients(raw){
+    const seen = new Set();
+    return String(raw || '')
+      .split(/[\n,;]+/)
+      .map(token => token.trim())
+      .filter(Boolean)
+      .filter(email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      .filter(email => {
+        const key = email.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  function launchSendMailto(){
+    if (!sendEmailsInput) return;
+    const recipients = parseEmailRecipients(sendEmailsInput.value);
+    if (!recipients.length) {
+      showNotice('Enter at least one valid email address before sending.', 'err');
+      sendEmailsInput.focus();
+      return;
+    }
+
+    const unitsEl = document.getElementById('headerTotalUnitsMini') || document.getElementById('headerTotalUnits');
+    const totalEl = document.getElementById('headerTotalPricingMini') || document.getElementById('headerTotalPricing');
+    const units = String((unitsEl && unitsEl.textContent) || '0').trim();
+    const total = String((totalEl && totalEl.textContent) || '--').trim();
+    const jobNumber = getDealNumber();
+    const portalUrl = window.location.href;
+    const subject = 'Red Threads Estimate - Job # ' + jobNumber;
+    const body = [
+      'View the estimate and enter quantities here:',
+      portalUrl,
+      '',
+      'Total units: ' + units,
+      'Total price: ' + total
+    ].join('\n');
+
+    const mailtoHref =
+      'mailto:?bcc=' + encodeURIComponent(recipients.join(',')) +
+      '&subject=' + encodeURIComponent(subject) +
+      '&body=' + encodeURIComponent(body);
+
+    window.location.href = mailtoHref;
+    closeSendModal();
+    sendEmailsInput.value = '';
+    clearNotice();
+  }
+
+  function setQuantityMapValue(jobId, skuId, colorway, size, qty){
+    if (!PORTAL_STATE.quantities || typeof PORTAL_STATE.quantities !== 'object') PORTAL_STATE.quantities = {};
+    const key = quantityStateKey(jobId, skuId, colorway, size);
+    const legacyKey = legacyQuantityStateKey(jobId, skuId, colorway, size);
+    const nextQty = clampInt(qty);
+    if (nextQty > 0) {
+      PORTAL_STATE.quantities[key] = nextQty;
+      delete PORTAL_STATE.quantities[legacyKey];
+    } else {
+      delete PORTAL_STATE.quantities[key];
+      delete PORTAL_STATE.quantities[legacyKey];
+    }
+  }
+
+  function setQtyInState(jobId, sku, colorway, size, qty){
+    const nextQty = clampInt(qty);
+    const colorState = getColorState(jobId, sku, colorway);
+    colorState.qtyBySize[size] = nextQty;
+    setQuantityMapValue(jobId, sku.skuId, colorway, size, nextQty);
+    return nextQty;
+  }
+
   function syncStateFromQtyInputs(){
-    document.querySelectorAll('.qtyInput[data-print-job-id][data-sku-id][data-colorway][data-size]').forEach(inp => {
+    document.querySelectorAll('input.qty-input[data-print-job-id][data-sku-id][data-size]').forEach(inp => {
       const jobId = String(inp.dataset.printJobId || '').trim();
       const skuId = String(inp.dataset.skuId || '').trim();
-      const colorway = String(inp.dataset.colorway || '').trim();
+      const colorway = String(inp.dataset.color || inp.dataset.colorway || '').trim();
       const size = String(inp.dataset.size || '').trim();
       if (!jobId || !skuId || !colorway || !size) return;
 
@@ -3041,57 +5004,157 @@
       if (!job) return;
       const sku = (job.skus || []).find(s => s.skuId === skuId);
       if (!sku) return;
-      if (!sku.colorways.includes(colorway)) return;
       if (!sku.sizesAllowed.includes(size)) return;
 
-      const colorState = getColorState(jobId, sku, colorway);
-      colorState.qtyBySize[size] = clampInt(inp.value);
-      inp.value = String(colorState.qtyBySize[size]);
+      const nextQty = setQtyInState(jobId, sku, colorway, size, parseQtyInputValue(inp.value));
+      inp.value = qtyInputDisplayValue(nextQty);
     });
+  }
+
+  function syncSkuDomToState(skuId, jobId){
+    const skuKey = String(skuId || '').trim();
+    if (!skuKey) return;
+    const jobKey = String(jobId || '').trim();
+
+    debugLog('syncSkuDomToState:start', { skuId: skuKey, printJobId: jobKey || '*' });
+
+    document.querySelectorAll('input.qty-input[data-print-job-id][data-sku-id][data-size]').forEach(inp => {
+      const inputSkuId = String(inp.dataset.skuId || '').trim();
+      const inputJobId = String(inp.dataset.printJobId || '').trim();
+      if (inputSkuId !== skuKey) return;
+      if (jobKey && inputJobId !== jobKey) return;
+
+      const colorway = String(inp.dataset.color || inp.dataset.colorway || '').trim();
+      const size = String(inp.dataset.size || '').trim();
+      if (!inputJobId || !colorway || !size) return;
+
+      const job = PRINT_JOBS.find(j => j.printJobId === inputJobId);
+      if (!job) return;
+      const sku = (job.skus || []).find(s => s.skuId === inputSkuId);
+      if (!sku || !sku.sizesAllowed.includes(size)) return;
+
+      const nextQty = setQtyInState(inputJobId, sku, colorway, size, parseQtyInputValue(inp.value));
+      inp.value = qtyInputDisplayValue(nextQty);
+    });
+
+    if (jobKey) debugSkuState('syncSkuDomToState:done', jobKey, skuKey);
+  }
+
+  function collectQuantitiesFromDOM(){
+    const quantities = {};
+    document.querySelectorAll('input.qty-input[data-print-job-id][data-sku-id][data-size]').forEach(inp => {
+      const jobId = String(inp.dataset.printJobId || '').trim();
+      const skuId = String(inp.dataset.skuId || '').trim();
+      const color = String(inp.dataset.color || inp.dataset.colorway || '').trim();
+      const size = String(inp.dataset.size || '').trim();
+      if (!jobId || !skuId || !color || !size) return;
+      const qty = parseQtyInputValue(inp.value);
+      if (qty <= 0) return;
+      quantities[quantityStateKey(jobId, skuId, color, size)] = qty;
+    });
+    return quantities;
+  }
+
+  function hydrateQtyInputsFromState(stateObj, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const source = String(opts.source || HYDRATE_BOOT_SOURCE || 'portalState');
+    const reason = String(opts.reason || '');
+    debugLog('HYDRATE_QTY:start', { source: source, reason: reason });
+
+    const normalized = normalizePortalState(stateObj);
+    const quantities = (normalized && normalized.quantities && typeof normalized.quantities === 'object')
+      ? normalized.quantities
+      : {};
+
+    document.querySelectorAll('input.qty-input[data-print-job-id][data-sku-id][data-size]').forEach(inp => {
+      const jobId = String(inp.dataset.printJobId || '').trim();
+      const skuId = String(inp.dataset.skuId || '').trim();
+      const color = String(inp.dataset.color || inp.dataset.colorway || '').trim();
+      const size = String(inp.dataset.size || '').trim();
+      if (!jobId || !skuId || !color || !size) return;
+
+      const key = quantityStateKey(jobId, skuId, color, size);
+      const legacyKey = legacyQuantityStateKey(jobId, skuId, color, size);
+      let qty;
+      if (Object.prototype.hasOwnProperty.call(quantities, key)) {
+        qty = clampInt(quantities[key]);
+      } else if (Object.prototype.hasOwnProperty.call(quantities, legacyKey)) {
+        qty = clampInt(quantities[legacyKey]);
+      } else {
+        qty = clampInt(
+          normalized
+          && normalized.printJobs
+          && normalized.printJobs[jobId]
+          && normalized.printJobs[jobId].skus
+          && normalized.printJobs[jobId].skus[skuId]
+          && normalized.printJobs[jobId].skus[skuId].colorways
+          && normalized.printJobs[jobId].skus[skuId].colorways[color]
+          && normalized.printJobs[jobId].skus[skuId].colorways[color].qtyBySize
+            ? normalized.printJobs[jobId].skus[skuId].colorways[color].qtyBySize[size]
+            : 0
+        );
+      }
+      inp.value = qtyInputDisplayValue(qty);
+    });
+
+    syncStateFromQtyInputs();
+    debugLog('HYDRATE_QTY:done', { source: source, reason: reason });
+    recalcAll();
   }
 
   function buildPortalStateFromUI(options){
     const opts = (options && typeof options === 'object') ? options : {};
     syncStateFromQtyInputs();
 
-    const nextState = normalizePortalState(PORTAL_STATE);
+    const existingState = clonePlainObject(PORTAL_STATE);
+    const currentState = normalizePortalState(PORTAL_STATE);
+    const nextState = clonePlainObject(existingState);
     nextState.version = String(nextState.version || '1');
     nextState.savedAt = new Date().toISOString();
-    nextState.activePrintJobId = String(activePrintJobId || nextState.activePrintJobId || '');
+    nextState.activePrintJobId = String(activePrintJobId || currentState.activePrintJobId || nextState.activePrintJobId || '');
     const activeIndex = PRINT_JOBS.findIndex(job => job.printJobId === nextState.activePrintJobId);
     if (activeIndex >= 0) {
       nextState.activePrintJobIndex = activeIndex;
     } else {
       delete nextState.activePrintJobIndex;
     }
-    nextState.isReadOnly = Boolean(opts.forceReadOnly === true ? true : IS_READ_ONLY);
+    nextState.isReadOnly = Boolean(IS_READ_ONLY);
+    nextState.printJobs = clonePlainObject(currentState.printJobs);
 
+    const existingLog = readMessageLogFromState(existingState);
     const nextLog = normalizeMessageLog(opts.messageLog || CHAT_MESSAGES);
+    const mergedLog = mergeMessageLogsAppendOnly(existingLog, nextLog);
     if (MESSAGE_LOG_KEY !== 'messageLog') delete nextState.messageLog;
     if (MESSAGE_LOG_KEY !== 'chatLog') delete nextState.chatLog;
     if (MESSAGE_LOG_KEY !== 'messages') delete nextState.messages;
-    nextState[MESSAGE_LOG_KEY] = nextLog;
-    if (MESSAGE_LOG_KEY === 'messageLog') nextState.messageLog = nextLog;
+    nextState[MESSAGE_LOG_KEY] = mergedLog;
+    if (MESSAGE_LOG_KEY === 'messageLog') nextState.messageLog = mergedLog;
 
-    nextState.quantities = collectQuantityMapFromState(nextState);
+    const domQuantities = collectQuantitiesFromDOM();
+    nextState.quantities = Object.keys(domQuantities).length
+      ? domQuantities
+      : collectQuantityMapFromState(currentState);
     return nextState;
   }
 
   function hydrateUIFromPortalState(rawState){
     const normalized = normalizePortalState(rawState);
-    normalized.isReadOnly = IS_READ_ONLY || normalized.isReadOnly;
+    normalized.isReadOnly = IS_READ_ONLY;
     PORTAL_STATE = normalized;
+    debugLog('hydrateUIFromPortalState', { source: HYDRATE_BOOT_SOURCE });
     CHAT_MESSAGES = normalizeMessageLog(normalized.messageLog);
     if (!CHAT_MESSAGES.length) {
       CHAT_MESSAGES = normalizeMessageLog(VM.chatLog);
     }
 
-    const hydratedActive = String(normalized.activePrintJobId || '').trim();
-    if (hydratedActive) {
-      activePrintJobId = hydratedActive;
-    } else if (!activePrintJobId && PRINT_JOBS.length) {
+    if (PRINT_JOBS.length) {
       activePrintJobId = PRINT_JOBS[0].printJobId;
+      PORTAL_STATE.activePrintJobId = activePrintJobId;
     }
+
+    requestAnimationFrame(() => {
+      hydrateQtyInputsFromState(PORTAL_STATE, { source: HYDRATE_BOOT_SOURCE, reason: 'init' });
+    });
   }
 
   function persistPortalState(nextState){
@@ -3122,7 +5185,9 @@
 
   async function sendChat(){
     if (!chatInput) return;
-    const text = String(chatInput.value || '').trim();
+    const typedText = String(chatInput.value || '').trim();
+    const prefixText = String(CHAT_PREFILL_PREFIX || '').trim();
+    const text = [prefixText, typedText].filter(Boolean).join('\n');
     if (!text) return;
     if (!CURRENT_TOKEN) {
       showNotice('Message send failed: missing token.', 'err');
@@ -3134,20 +5199,18 @@
 
     const prevLog = CHAT_MESSAGES.slice();
     CHAT_MESSAGES = normalizeMessageLog(prevLog.concat([message]));
-    chatInput.value = '';
+    clearChatDraft();
     renderChat(CHAT_MESSAGES);
 
     chatInput.disabled = true;
     if (chatSend) chatSend.disabled = true;
 
     try {
-      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES, forceReadOnly: true });
+      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const resp = await persistPortalState(nextState);
-      IS_READ_ONLY = true;
-      nextState.isReadOnly = true;
       nextState.savedAt = String(resp.submittedAt || nextState.savedAt || new Date().toISOString());
       PORTAL_STATE = normalizePortalState(nextState);
-      PORTAL_STATE.isReadOnly = true;
+      PORTAL_STATE.isReadOnly = IS_READ_ONLY;
       setSaveControls();
       renderPortal();
       renderChat(CHAT_MESSAGES);
@@ -3183,6 +5246,105 @@
     return rowKey + '::' + encodeURIComponent(String(size || ''));
   }
 
+  function makeSkuSummaryKey(jobId, skuId){
+    return [jobId, skuId].map(v => encodeURIComponent(String(v || ''))).join('::');
+  }
+
+  function buildInitialJobState(job){
+    const jobState = {
+      hidden: false,
+      skus: {}
+    };
+    (job && Array.isArray(job.skus) ? job.skus : []).forEach(sku => {
+      const skuState = {
+        hidden: false,
+        colorways: {}
+      };
+      (Array.isArray(sku.colorways) ? sku.colorways : []).forEach(color => {
+        const name = String(color || '').trim();
+        if (!name) return;
+        const qtyBySize = {};
+        (Array.isArray(sku.sizesAllowed) ? sku.sizesAllowed : []).forEach(size => {
+          qtyBySize[size] = 0;
+        });
+        skuState.colorways[name] = { hidden: false, qtyBySize: qtyBySize };
+      });
+      jobState.skus[sku.skuId] = skuState;
+    });
+    return jobState;
+  }
+
+  function clearDraftColorRowsForJob(jobId){
+    const prefix = String(jobId || '') + '::';
+    Object.keys(DRAFT_COLOR_ROWS_BY_SKU).forEach(key => {
+      if (key.indexOf(prefix) === 0) delete DRAFT_COLOR_ROWS_BY_SKU[key];
+    });
+  }
+
+  function getNextVisiblePrintJobId(afterJobId){
+    const ids = PRINT_JOBS.map(job => job.printJobId);
+    if (!ids.length) return '';
+    const start = Math.max(0, ids.indexOf(afterJobId));
+    for (let offset = 1; offset <= ids.length; offset += 1) {
+      const id = ids[(start + offset) % ids.length];
+      if (!getJobState(id).hidden) return id;
+    }
+    return '';
+  }
+
+  function getPrintJobDisplayNumber(jobId){
+    const idx = PRINT_JOBS.findIndex(job => job.printJobId === jobId);
+    return idx >= 0 ? (idx + 1) : 1;
+  }
+
+  function setActivePrintJob(jobId, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const visibleJobs = Array.isArray(opts.visibleJobs) ? opts.visibleJobs : getVisibleJobs();
+    const targetId = String(jobId || '').trim();
+    const canActivate = visibleJobs.some(job => job.printJobId === targetId);
+    if (!canActivate) return false;
+
+    activePrintJobId = targetId;
+    PORTAL_STATE.activePrintJobId = activePrintJobId;
+
+    if (opts.render === true) {
+      renderPortal();
+      return true;
+    }
+
+    applyActivePrintJobVisibility();
+    if (opts.hydrate !== false) {
+      hydrateQtyInputsFromState(PORTAL_STATE, { source: HYDRATE_BOOT_SOURCE, reason: 'setActivePrintJob' });
+    }
+    requestHeaderStateUpdate();
+    return true;
+  }
+
+  function hidePrintJob(jobId){
+    if (!CAN_EDIT()) return;
+    const state = getJobState(jobId);
+    state.hidden = true;
+    if (activePrintJobId === jobId) {
+      activePrintJobId = getNextVisiblePrintJobId(jobId);
+      PORTAL_STATE.activePrintJobId = activePrintJobId;
+    }
+    renderPortal();
+  }
+
+  function restorePrintJob(jobId){
+    if (!CAN_EDIT()) return;
+    const job = PRINT_JOBS.find(item => item.printJobId === jobId);
+    if (!job) return;
+    PORTAL_STATE.printJobs[jobId] = buildInitialJobState(job);
+    REMOVED_ADDONS_BY_JOB[jobId] = new Set();
+    clearDraftColorRowsForJob(jobId);
+    if (!activePrintJobId || getJobState(activePrintJobId).hidden) {
+      activePrintJobId = jobId;
+      PORTAL_STATE.activePrintJobId = activePrintJobId;
+    }
+    renderPortal();
+  }
+
   function getVisibleJobs(){
     return PRINT_JOBS.filter(job => !getJobState(job.printJobId).hidden);
   }
@@ -3192,11 +5354,11 @@
   }
 
   function getVisibleColors(jobId, sku){
-    return sku.colorways.filter(color => !getColorState(jobId, sku, color).hidden);
+    return getSkuColorNames(jobId, sku).filter(color => !getColorState(jobId, sku, color).hidden);
   }
 
   function getHiddenColors(jobId, sku){
-    return sku.colorways.filter(color => getColorState(jobId, sku, color).hidden);
+    return getSkuColorNames(jobId, sku).filter(color => getColorState(jobId, sku, color).hidden);
   }
 
   function pickActiveTier(tiers, totalQty){
@@ -3391,39 +5553,16 @@
     }
   }
 
-  function buildJobSection(job, visibleIndex){
+  function buildJobSection(job, isFirstVisible){
+    const printJobNumber = getPrintJobDisplayNumber(job.printJobId);
     const section = createEl('section', 'pjCard printJobSection');
     section.dataset.jobId = job.printJobId;
     section.id = jobSectionId(job.printJobId);
     section.setAttribute('role', 'tabpanel');
     section.setAttribute('aria-labelledby', 'print-job-tab-' + domSafeIdPart(job.printJobId));
 
-    const shellHead = createEl('header', 'pjCardHeader printJobShellHead');
-    const shellLeft = createEl('div', 'printJobShellLeft');
-    shellLeft.appendChild(createEl('span', 'printJobTag', 'Print Job ' + visibleIndex));
-    shellLeft.appendChild(createEl('span', 'printJobShellName', job.printJobName || ('Project ' + visibleIndex)));
-    shellHead.appendChild(shellLeft);
-
-    const shellActions = createEl('div', 'projectControls');
-    const revisionBtn = createEl('button', 'revisionBtn', 'Request Revision');
-    revisionBtn.type = 'button';
-    shellActions.appendChild(revisionBtn);
-    if (CAN_EDIT()) {
-      const hideBtn = createEl('button', 'hideEntityBtn', 'X');
-      hideBtn.type = 'button';
-      hideBtn.title = 'Hide project';
-      hideBtn.addEventListener('click', () => {
-        getJobState(job.printJobId).hidden = true;
-        renderPortal();
-      });
-      shellActions.appendChild(hideBtn);
-    }
-    shellHead.appendChild(shellActions);
-    section.appendChild(shellHead);
-
-    const overviewSegment = createEl('section', 'pjSegment pjOverview');
     const topRow = createEl('div', 'pjOverviewGrid topRowNew');
-    if (visibleIndex === 1) topRow.id = 'topRowNew';
+    if (isFirstVisible) topRow.id = 'topRowNew';
 
     const mockupBlock = createEl('div', 'pjMockups mockupBlock');
     const mockupFrame = createEl('div', 'mockupFrame');
@@ -3442,7 +5581,7 @@
     slotLeft.appendChild(prevBtn);
 
     const slotProject = createEl('div', 'mockupSlot');
-    slotProject.appendChild(createEl('span', 'mockupLabel', 'PROJECT ' + visibleIndex));
+    slotProject.appendChild(createEl('span', 'mockupLabel', 'PROJECT ' + printJobNumber));
 
     const slotZoom = createEl('div', 'mockupSlot center');
     const zoomBtn = createEl('button', 'mockupBtn', '+');
@@ -3471,8 +5610,42 @@
     mockupBlock.appendChild(mockupFrame);
 
     const detailsCard = createEl('div', 'pjOverviewCard card detailsCard');
+    const detailsTopBar = createEl('div', 'detailsTopBar');
+    const detailsTopLeft = createEl('div', 'detailsTopLeft');
+    detailsTopLeft.appendChild(createEl('span', 'printJobTag', 'Print Job ' + printJobNumber));
+    detailsTopLeft.appendChild(createEl('span', 'printJobShellName', job.printJobName || ('Project ' + printJobNumber)));
+    const turnaroundInline = createEl('span', 'printJobTurnaround', '');
+    turnaroundInline.dataset.turnaround = job.printJobId;
+    detailsTopLeft.appendChild(turnaroundInline);
+    detailsTopBar.appendChild(detailsTopLeft);
 
-    const decorTitle = createEl('h3', 'pjSegmentTitle', 'Decorations');
+    const revisionBtn = createEl('button', 'revisionBtn', 'Request Revision');
+    revisionBtn.type = 'button';
+    revisionBtn.addEventListener('click', evt => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const line = 'Comment on Print Job ' + printJobNumber + ' ' + (job.printJobName || ('Project ' + printJobNumber));
+      setChatPrefillPrefix(line);
+      openChat({ forceOpen: true });
+    });
+    detailsTopBar.appendChild(revisionBtn);
+
+    const detailsSummaryHost = createEl('div', 'detailsSummaryHost');
+
+    const totalsCard = createEl('div', 'totalsCard detailsTotalsCard');
+    const addOnsList = createEl('div', 'addOnsList');
+    addOnsList.dataset.addOnsList = job.printJobId;
+    totalsCard.appendChild(addOnsList);
+
+    const resetBtn = createEl('button', 'addOnReset hidden', 'Restore Additional Charges / Discounts');
+    resetBtn.type = 'button';
+    resetBtn.dataset.addOnReset = job.printJobId;
+    resetBtn.addEventListener('click', () => {
+      REMOVED_ADDONS_BY_JOB[job.printJobId] = new Set();
+      recalcAll();
+    });
+    totalsCard.appendChild(resetBtn);
+
     const decorList = createEl('div', 'decorList pjDecorList');
     const decorSource = Array.isArray(job.decorations) ? job.decorations.filter(Boolean) : [];
     if (!decorSource.length) {
@@ -3488,50 +5661,69 @@
     notesBlock.appendChild(createEl('div', 'notesTitle', 'Job Notes'));
     notesBlock.appendChild(createEl('div', '', job.printJobNotes || getIntroMessage() || '--'));
 
-    detailsCard.appendChild(decorTitle);
-    detailsCard.appendChild(decorList);
-    detailsCard.appendChild(notesBlock);
+    detailsSummaryHost.appendChild(totalsCard);
+
+    const detailsBody = createEl('div', 'detailsBodyGrid');
+    const detailsMainCol = createEl('div', 'detailsMainCol');
+    const detailsMainTop = createEl('div', 'detailsMainTop');
+    detailsMainTop.appendChild(decorList);
+    detailsMainCol.appendChild(detailsMainTop);
+    detailsMainCol.appendChild(createEl('div', 'detailsDivider'));
+    detailsMainCol.appendChild(detailsSummaryHost);
+    const detailsSummaryCol = createEl('div', 'detailsSummaryCol');
+    detailsSummaryCol.appendChild(notesBlock);
+    detailsBody.appendChild(detailsMainCol);
+    detailsBody.appendChild(detailsSummaryCol);
+
+    detailsCard.appendChild(detailsTopBar);
+    detailsCard.appendChild(detailsBody);
 
     topRow.appendChild(mockupBlock);
     topRow.appendChild(detailsCard);
 
-    overviewSegment.appendChild(topRow);
-    section.appendChild(overviewSegment);
+    section.appendChild(topRow);
 
-    const skuSegment = createEl('section', 'pjSegment pjSkus');
-    skuSegment.appendChild(createEl('h3', 'pjSegmentTitle', 'SKUs'));
+    const compareInline = createEl('div', 'pjCompareInline');
+    const minMsg = createEl('div', 'compareSubtitle', '');
+    minMsg.dataset.compareHint = job.printJobId;
+    renderCompareGuidance(minMsg);
+    compareInline.appendChild(minMsg);
+    const compareWrap = createEl('div', 'compareTableWrap');
+    const compareTable = createEl('table', 'compareTable');
+    compareTable.dataset.compareTable = job.printJobId;
+    compareWrap.appendChild(compareTable);
+    compareInline.appendChild(compareWrap);
+    section.appendChild(compareInline);
 
-    const hiddenSkuItems = [];
+    const skuList = createEl('div', 'pjSkusList');
+
+    const hiddenSkuItems = CAN_EDIT()
+      ? job.skus
+          .filter(sku => getSkuState(job.printJobId, sku.skuId).hidden)
+          .map(sku => ({ label: sku.skuKey || sku.uiName || sku.skuId, skuId: sku.skuId }))
+      : [];
+
+    if (hiddenSkuItems.length) {
+      const hiddenSkuRow = buildHiddenControl('Click to restore SKUs', hiddenSkuItems, item => {
+        getSkuState(job.printJobId, item.skuId).hidden = false;
+        renderPortal();
+      });
+      hiddenSkuRow.classList.add('hiddenSkuRow');
+      skuList.appendChild(hiddenSkuRow);
+    }
 
     job.skus.forEach(sku => {
       const skuState = getSkuState(job.printJobId, sku.skuId);
       if (skuState.hidden) {
-        hiddenSkuItems.push({ label: sku.skuKey || sku.uiName || sku.skuId, skuId: sku.skuId });
         return;
       }
 
       const skuSection = createEl('div', 'skuSection');
 
       const skuHeader = createEl('div', 'skuHeader');
-      const skuTitle = createEl('div', 'skuTitle');
-
-      const skuKeySpan = createEl('span', 'skuKey', sku.skuKey || sku.skuId);
-      skuTitle.appendChild(skuKeySpan);
-
-      const skuLink = createEl('a', 'prodLink', sku.uiName);
-      skuLink.href = sku.vendorProductUrl || '#';
-      skuLink.target = '_blank';
-      skuLink.rel = 'noopener';
-      skuTitle.appendChild(skuLink);
-
-      if (sku.sizesAllowed.length) {
-        skuTitle.appendChild(createEl('span', 'skuMetaNote', 'Sizes: ' + sku.sizesAllowed.join(', ')));
-      }
-
-      skuHeader.appendChild(skuTitle);
-
+      let hideSkuBtn = null;
       if (CAN_EDIT()) {
-        const hideSkuBtn = createEl('button', 'hideEntityBtn', 'X');
+        hideSkuBtn = createEl('button', 'hideEntityBtn', 'X');
         hideSkuBtn.type = 'button';
         hideSkuBtn.title = 'Hide SKU';
         hideSkuBtn.addEventListener('click', () => {
@@ -3540,82 +5732,230 @@
         });
         skuHeader.appendChild(hideSkuBtn);
       }
+      const skuHeaderMain = createEl('div', 'skuHeaderMain');
+      const skuHeaderInfo = createEl('div', 'skuHeaderInfo');
+      const skuHeaderTitle = [String(sku.skuKey || '').trim(), String(sku.uiName || '').trim()].filter(Boolean).join(' ');
+      if (sku.vendorProductUrl) {
+        const skuTitleLink = createEl('a', 'skuPrimaryNameLink', '');
+        skuTitleLink.href = sku.vendorProductUrl;
+        skuTitleLink.target = '_blank';
+        skuTitleLink.rel = 'noopener';
+        skuTitleLink.appendChild(document.createTextNode(skuHeaderTitle || sku.skuId));
+        skuTitleLink.appendChild(createEl('span', 'skuPrimaryNameExt', '↗'));
+        skuHeaderInfo.appendChild(skuTitleLink);
+      } else {
+        skuHeaderInfo.appendChild(createEl('div', 'skuPrimaryName', skuHeaderTitle || sku.skuId));
+      }
+      skuHeaderMain.appendChild(skuHeaderInfo);
+
+      if (sku.imageUrl) {
+        skuHeaderMain.classList.add('hasThumb');
+        const skuThumb = createEl('div', 'skuThumb');
+        const thumbImg = createEl('img', '');
+        thumbImg.src = sku.imageUrl;
+        thumbImg.alt = sku.uiName || sku.skuKey || 'SKU image';
+        thumbImg.referrerPolicy = 'no-referrer';
+        thumbImg.loading = 'lazy';
+        skuThumb.appendChild(thumbImg);
+        skuHeaderMain.appendChild(skuThumb);
+      }
+      skuHeader.appendChild(skuHeaderMain);
+      const skuSummary = createEl('div', 'skuHeaderSummary', formatSkuSummary(0, 0));
+      skuSummary.dataset.skuSummary = makeSkuSummaryKey(job.printJobId, sku.skuId);
+      skuHeader.appendChild(skuSummary);
 
       skuSection.appendChild(skuHeader);
 
-      const tableWrap = createEl('div', 'tableWrap');
-      const table = createEl('table', 'mainTable');
-      table.dataset.jobId = job.printJobId;
-      table.dataset.skuId = sku.skuId;
+      const entryPanel = createEl('div', 'sku-entry-panel');
+      entryPanel.style.setProperty('--sku-grid-cols',
+        '24px clamp(140px,18vw,220px) repeat(' + sku.sizesAllowed.length + ', minmax(64px, 1fr)) 68px 132px');
 
-      const thead = createEl('thead', '');
-      const headRow = createEl('tr', '');
-      headRow.appendChild(createEl('th', '', 'Product Link / Color choice'));
+      const gridHeader = createEl('div', 'sku-grid-header');
+      gridHeader.appendChild(createEl('div', 'sku-grid-head rowRemoveHead', ''));
+      gridHeader.appendChild(createEl('div', 'sku-grid-head colorChoiceHead', 'COLOR ENTRY'));
       sku.sizesAllowed.forEach(size => {
-        const th = createEl('th', 'sizeHead', size);
-        th.style.textAlign = 'center';
-        headRow.appendChild(th);
+        gridHeader.appendChild(createEl('div', 'sku-grid-head sizeHead', size));
       });
-      headRow.appendChild(createEl('th', 'qtyHead', 'QTY'));
-      headRow.appendChild(createEl('th', 'totalHead', 'Line Total'));
-      thead.appendChild(headRow);
-      table.appendChild(thead);
+      gridHeader.appendChild(createEl('div', 'sku-grid-head qtyHead', 'QTY'));
+      gridHeader.appendChild(createEl('div', 'sku-grid-head totalHead', 'Line Total'));
+      entryPanel.appendChild(gridHeader);
 
-      const tbody = createEl('tbody', '');
+      const gridBody = createEl('div', 'sku-grid-body');
       const visibleColors = getVisibleColors(job.printJobId, sku);
+      const draftRows = CAN_EDIT() ? getDraftColorRows(job.printJobId, sku.skuId) : [];
+      const colorRows = visibleColors
+        .map(color => ({ type: 'state', color: color }))
+        .concat(draftRows.map(row => ({ type: 'draft', row: row })));
 
-      if (!visibleColors.length) {
-        const trEmpty = createEl('tr', '');
-        const tdEmpty = createEl('td', 'pcCell', 'All colorways hidden. Use Show hidden controls to restore.');
-        tdEmpty.colSpan = sku.sizesAllowed.length + 3;
-        trEmpty.appendChild(tdEmpty);
-        tbody.appendChild(trEmpty);
+      if (!colorRows.length) {
+        const emptyRow = createEl('div', 'sku-grid-empty', 'All colorways hidden. Use Show hidden controls to restore.');
+        gridBody.appendChild(emptyRow);
       }
 
-      visibleColors.forEach(color => {
-        const rowKey = makeRowKey(job.printJobId, sku.skuId, color);
-        const colorState = getColorState(job.printJobId, sku, color);
+      colorRows.forEach(item => {
+        const isDraft = item.type === 'draft';
+        const color = isDraft ? String(item.row.name || '').trim() : item.color;
+        const rowKey = isDraft
+          ? makeRowKey(job.printJobId, sku.skuId, '__draft__' + item.row.id)
+          : makeRowKey(job.printJobId, sku.skuId, color);
+        const colorState = isDraft ? null : getColorState(job.printJobId, sku, color);
 
-        const tr = createEl('tr', '');
-        tr.dataset.rowKey = rowKey;
+        const row = createEl('div', 'sku-grid-row colorRow');
+        row.dataset.rowKey = rowKey;
 
-        const tdPc = createEl('td', 'pcCell');
+        let hideColorBtn = null;
+        const removeCell = createEl('div', 'sku-grid-cell rowRemoveCell');
+        if (CAN_EDIT()) {
+          hideColorBtn = createEl('button', 'hideEntityBtn colorRowRemoveBtn', 'X');
+          hideColorBtn.type = 'button';
+          hideColorBtn.title = 'Remove color row';
+          hideColorBtn.addEventListener('click', () => {
+            syncSkuDomToState(sku.skuId, job.printJobId);
+            debugSkuState('COLOR_REMOVE:before', job.printJobId, sku.skuId, {
+              color: color || '',
+              rowType: isDraft ? 'draft' : 'state'
+            });
+
+            if (isDraft) {
+              const draftQty = sku.sizesAllowed.reduce((sum, size) => sum + clampInt(item.row && item.row.qtyBySize ? item.row.qtyBySize[size] : 0), 0);
+              if (draftQty > 0) {
+                const proceedDraft = window.confirm('This color has quantities entered. Remove anyway?');
+                if (!proceedDraft) {
+                  debugLog('COLOR_REMOVE:cancelled', { printJobId: job.printJobId, skuId: sku.skuId, draftId: item.row.id, qty: draftQty });
+                  return;
+                }
+              }
+              removeDraftColorRow(job.printJobId, sku.skuId, item.row.id);
+              debugSkuState('COLOR_REMOVE:after-before-render', job.printJobId, sku.skuId, {
+                draftId: item.row.id,
+                removed: true
+              });
+              renderPortal();
+              debugSkuState('COLOR_REMOVE:after-render', job.printJobId, sku.skuId, {
+                draftId: item.row.id,
+                removed: true
+              });
+              return;
+            }
+            const skuStateRef = getSkuState(job.printJobId, sku.skuId);
+            const stateBeforeRemove = getColorState(job.printJobId, sku, color);
+            const rowHasQty = sku.sizesAllowed.reduce((sum, size) => sum + clampInt(stateBeforeRemove.qtyBySize[size]), 0) > 0;
+            if (rowHasQty) {
+              const proceed = window.confirm('This color has quantities entered. Remove anyway?');
+              if (!proceed) {
+                debugLog('COLOR_REMOVE:cancelled', {
+                  printJobId: job.printJobId,
+                  skuId: sku.skuId,
+                  color: color
+                });
+                return;
+              }
+            }
+            const isSnapshotColor = (Array.isArray(sku.colorways) ? sku.colorways : []).includes(color);
+            if (isSnapshotColor) {
+              const stateToHide = getColorState(job.printJobId, sku, color);
+              stateToHide.hidden = true;
+              sku.sizesAllowed.forEach(size => {
+                stateToHide.qtyBySize[size] = 0;
+                setQuantityMapValue(job.printJobId, sku.skuId, color, size, 0);
+              });
+            } else if (skuStateRef && skuStateRef.colorways && skuStateRef.colorways[color]) {
+              sku.sizesAllowed.forEach(size => {
+                setQuantityMapValue(job.printJobId, sku.skuId, color, size, 0);
+              });
+              delete skuStateRef.colorways[color];
+            }
+            debugSkuState('COLOR_REMOVE:after-before-render', job.printJobId, sku.skuId, {
+              color: color,
+              snapshotColor: isSnapshotColor
+            });
+            renderPortal();
+            debugSkuState('COLOR_REMOVE:after-render', job.printJobId, sku.skuId, {
+              color: color,
+              snapshotColor: isSnapshotColor
+            });
+          });
+          removeCell.appendChild(hideColorBtn);
+        }
+        row.appendChild(removeCell);
+
+        const tdPc = createEl('div', 'sku-grid-cell colorChoiceCell');
         const top = createEl('div', 'pcTop');
 
-        if (CAN_EDIT()) {
-          const hideColorBtn = createEl('button', 'hideEntityBtn', 'X');
-          hideColorBtn.type = 'button';
-          hideColorBtn.title = 'Hide colorway';
-          hideColorBtn.addEventListener('click', () => {
-            getColorState(job.printJobId, sku, color).hidden = true;
-            renderPortal();
+        if (isDraft) {
+          const colorInput = createEl('input', 'colorNameInput skuCellInput');
+          colorInput.type = 'text';
+          colorInput.placeholder = 'enter exact color name';
+          colorInput.value = item.row.name || '';
+          colorInput.dataset.draftColorId = item.row.id;
+          colorInput.dataset.printJobId = job.printJobId;
+          colorInput.dataset.skuId = sku.skuId;
+          colorInput.addEventListener('input', () => {
+            item.row.name = String(colorInput.value || '');
           });
-          top.appendChild(hideColorBtn);
+          colorInput.addEventListener('blur', () => {
+            item.row.name = String(colorInput.value || '');
+            if (commitDraftColorRow(job.printJobId, sku, item.row.id)) {
+              renderPortal();
+            }
+          });
+          colorInput.addEventListener('keydown', evt => {
+            if (evt.key === 'Enter') {
+              evt.preventDefault();
+              item.row.name = String(colorInput.value || '');
+              if (commitDraftColorRow(job.printJobId, sku, item.row.id)) {
+                renderPortal();
+              }
+            }
+          });
+          top.appendChild(colorInput);
+        } else {
+          top.appendChild(createEl('div', 'colorLabel skuCellInput', color));
         }
-
-        top.appendChild(createEl('div', 'colorLabel', color));
         tdPc.appendChild(top);
-        tr.appendChild(tdPc);
+        row.appendChild(tdPc);
 
         sku.sizesAllowed.forEach(size => {
-          const td = createEl('td', 'sizeCell');
+          const td = createEl('div', 'sku-grid-cell sizeCell');
           const wrap = createEl('div', 'qtyWrap');
-          const inp = createEl('input', 'qtyInput');
+          const inp = createEl('input', 'qtyInput qty-input skuCellInput');
           inp.type = 'text';
           inp.inputMode = 'numeric';
           inp.pattern = '[0-9]*';
-          inp.value = String(clampInt(colorState.qtyBySize[size]));
+          inp.placeholder = '0';
+          inp.value = qtyInputDisplayValue(isDraft ? item.row.qtyBySize[size] : colorState.qtyBySize[size]);
           inp.disabled = !CAN_EDIT();
           inp.dataset.printJobId = job.printJobId;
           inp.dataset.skuId = sku.skuId;
-          inp.dataset.colorway = color;
+          if (!isDraft) {
+            inp.dataset.color = color;
+            inp.dataset.colorway = color;
+          }
           inp.dataset.size = size;
 
           inp.addEventListener('input', () => {
-            const cleaned = String(inp.value || '').replace(/[^\d]/g, '');
-            const next = cleaned ? parseInt(cleaned, 10) : 0;
-            colorState.qtyBySize[size] = Number.isFinite(next) && next > 0 ? next : 0;
-            inp.value = String(colorState.qtyBySize[size]);
+            const nextQty = parseQtyInputValue(inp.value);
+            if (isDraft) {
+              item.row.qtyBySize[size] = nextQty;
+              debugLog('QTY_CHANGE', {
+                printJobId: job.printJobId,
+                skuId: sku.skuId,
+                rowId: item.row.id,
+                colorName: String(item.row.name || ''),
+                size: size,
+                newValue: nextQty
+              });
+            } else {
+              setQtyInState(job.printJobId, sku, color, size, nextQty);
+              debugLog('QTY_CHANGE', {
+                printJobId: job.printJobId,
+                skuId: sku.skuId,
+                colorName: color,
+                size: size,
+                newValue: nextQty
+              });
+            }
+            inp.value = qtyInputDisplayValue(nextQty);
             recalcAll();
           });
 
@@ -3626,23 +5966,47 @@
           unit.dataset.unitKey = makeUnitKey(rowKey, size);
           td.appendChild(unit);
 
-          tr.appendChild(td);
+          row.appendChild(td);
         });
 
-        const tdQty = createEl('td', 'qtyCol', '0');
-        tdQty.dataset.rowQty = rowKey;
-        tr.appendChild(tdQty);
+        const tdQty = createEl('div', 'sku-grid-cell qtyCol', '0');
+        if (!isDraft) tdQty.dataset.rowQty = rowKey;
+        row.appendChild(tdQty);
 
-        const tdTotal = createEl('td', 'lineTotal', '$0.00');
-        tdTotal.dataset.rowTotal = rowKey;
-        tr.appendChild(tdTotal);
+        const tdTotal = createEl('div', 'sku-grid-cell lineTotal', '$0.00');
+        if (!isDraft) tdTotal.dataset.rowTotal = rowKey;
+        row.appendChild(tdTotal);
 
-        tbody.appendChild(tr);
+        gridBody.appendChild(row);
       });
 
-      table.appendChild(tbody);
-      tableWrap.appendChild(table);
-      skuSection.appendChild(tableWrap);
+      entryPanel.appendChild(gridBody);
+      skuSection.appendChild(entryPanel);
+
+      const skuFooter = createEl('div', 'skuColorFooter');
+      if (CAN_EDIT()) {
+        const addColorBtn = createEl('button', 'addColor', '+ Add another color');
+        addColorBtn.type = 'button';
+        addColorBtn.addEventListener('click', () => {
+          syncSkuDomToState(sku.skuId, job.printJobId);
+          debugSkuState('ADD_COLOR:before', job.printJobId, sku.skuId);
+          const row = createDraftColorRow(job.printJobId, sku);
+          PENDING_DRAFT_COLOR_FOCUS = {
+            jobId: job.printJobId,
+            skuId: sku.skuId,
+            draftId: row.id
+          };
+          debugLog('ADD_COLOR:created-draft', {
+            printJobId: job.printJobId,
+            skuId: sku.skuId,
+            draftId: row.id
+          });
+          renderPortal();
+          debugSkuState('ADD_COLOR:after-render', job.printJobId, sku.skuId);
+        });
+        skuFooter.appendChild(addColorBtn);
+      }
+      if (skuFooter.children.length) skuSection.appendChild(skuFooter);
 
       if (CAN_EDIT()) {
         const hiddenColors = getHiddenColors(job.printJobId, sku).map(color => ({ label: color, color: color }));
@@ -3655,72 +6019,17 @@
         }
       }
 
-      skuSegment.appendChild(skuSection);
+      skuList.appendChild(skuSection);
     });
 
-    if (CAN_EDIT() && hiddenSkuItems.length) {
-      const hiddenSkuRow = buildHiddenControl('Show hidden SKUs', hiddenSkuItems, item => {
-        getSkuState(job.printJobId, item.skuId).hidden = false;
-        renderPortal();
-      });
-      skuSegment.appendChild(hiddenSkuRow);
-    }
-    section.appendChild(skuSegment);
-
-    const pricingSegment = createEl('section', 'pjSegment pjPricing');
-    pricingSegment.appendChild(createEl('h3', 'pjSegmentTitle', 'Add-Ons and Totals'));
-
-    const bottomRow = createEl('div', 'bottomRow');
-
-    const compareCard = createEl('div', 'compareCard');
-    compareCard.appendChild(createEl('div', 'compareTitle', 'Compare item prices and quantity discounts. Buy in bulk and save!'));
-    const minMsg = createEl('div', 'compareSubtitle', '');
-    minMsg.dataset.compareHint = job.printJobId;
-    compareCard.appendChild(minMsg);
-
-    const compareWrap = createEl('div', 'compareTableWrap');
-    const compareTable = createEl('table', 'compareTable');
-    compareTable.dataset.compareTable = job.printJobId;
-    compareWrap.appendChild(compareTable);
-    compareCard.appendChild(compareWrap);
-
-    const totalsCard = createEl('div', 'totalsCard');
-    const addOnsList = createEl('div', '');
-    addOnsList.dataset.addOnsList = job.printJobId;
-    totalsCard.appendChild(addOnsList);
-
-    const resetBtn = createEl('button', 'addOnReset hidden', 'Restore add-ons');
-    resetBtn.type = 'button';
-    resetBtn.dataset.addOnReset = job.printJobId;
-    resetBtn.addEventListener('click', () => {
-      REMOVED_ADDONS_BY_JOB[job.printJobId] = new Set();
-      recalcAll();
-    });
-    totalsCard.appendChild(resetBtn);
-
-    const turnaround = createEl('div', 'turnaround', '');
-    turnaround.dataset.turnaround = job.printJobId;
-    totalsCard.appendChild(turnaround);
-
-    const totalRow = createEl('div', 'totalsRow grandTotal');
-    totalRow.appendChild(createEl('strong', '', 'Job Total:'));
-    const totalVal = createEl('span', 'value', '$0.00');
-    totalVal.dataset.jobTotal = job.printJobId;
-    totalRow.appendChild(totalVal);
-    totalsCard.appendChild(totalRow);
-
-    bottomRow.appendChild(compareCard);
-    bottomRow.appendChild(totalsCard);
-    pricingSegment.appendChild(bottomRow);
-    section.appendChild(pricingSegment);
+    section.appendChild(skuList);
 
     JOB_DOM.set(job.printJobId, {
       section: section,
       compareTable: compareTable,
       addOnsList: addOnsList,
       addOnsResetBtn: resetBtn,
-      turnaround: turnaround,
-      jobTotal: totalVal,
+      turnaround: turnaroundInline,
       compareHint: minMsg,
       mockup: {
         frame: mockupFrame,
@@ -3767,7 +6076,7 @@
     hr.appendChild(createEl('th', '', 'SKU/QTY'));
 
     tiers.forEach(tier => {
-      const th = createEl('th', '', tier === 2000 ? '2000+ / Call for price' : String(tier));
+      const th = createEl('th', '', Number(tier) === 2000 ? '2000+' : String(tier));
       th.dataset.tier = String(tier);
       hr.appendChild(th);
     });
@@ -3792,8 +6101,12 @@
       tiers.forEach(tier => {
         const td = createEl('td', '', '');
         td.dataset.tier = String(tier);
-        if (tier === 2000) {
-          td.textContent = '2000+ / Call for price';
+        if (Number(tier) === 2000) {
+          const callLink = createEl('a', 'call-us-link', 'Call us');
+          callLink.href = 'https://www.redthreads.com';
+          callLink.target = '_blank';
+          callLink.rel = 'noopener';
+          td.appendChild(callLink);
         } else {
           const unit = unitPriceFor(sku, tier, baseSize);
           td.textContent = (unit == null) ? '--' : money(unit);
@@ -3819,21 +6132,7 @@
 
   function renderHiddenPrintJobs(){
     hiddenPrintJobsBar.innerHTML = '';
-
-    if (!CAN_EDIT()) return;
-
-    const hiddenItems = PRINT_JOBS
-      .filter(job => getJobState(job.printJobId).hidden)
-      .map(job => ({ label: job.printJobName || job.printJobId, jobId: job.printJobId }));
-
-    if (!hiddenItems.length) return;
-
-    const row = buildHiddenControl('Show hidden projects', hiddenItems, item => {
-      getJobState(item.jobId).hidden = false;
-      renderPortal();
-    });
-
-    hiddenPrintJobsBar.appendChild(row);
+    hiddenPrintJobsBar.style.display = 'none';
   }
 
   function ensureActivePrintJob(visibleJobs){
@@ -3842,9 +6141,9 @@
       PORTAL_STATE.activePrintJobId = '';
       return;
     }
-    const exists = visibleJobs.some(job => job.printJobId === activePrintJobId);
-    if (!exists) activePrintJobId = visibleJobs[0].printJobId;
-    PORTAL_STATE.activePrintJobId = activePrintJobId;
+    if (!setActivePrintJob(activePrintJobId, { visibleJobs: visibleJobs, hydrate: false })) {
+      setActivePrintJob(visibleJobs[0].printJobId, { visibleJobs: visibleJobs, hydrate: false });
+    }
   }
 
   function applyActivePrintJobVisibility(){
@@ -3864,36 +6163,81 @@
     });
   }
 
+  function updatePrintJobTabSummaries(){
+    if (!printJobTabsList) return;
+    printJobTabsList.querySelectorAll('.printJobTabSummary[data-job-tab-summary]').forEach(node => {
+      const jobId = String(node.dataset.jobTabSummary || '').trim();
+      const summary = JOB_SUMMARIES.get(jobId);
+      if (!summary) {
+        node.textContent = 'Units: 0   Total: ' + money(0);
+        return;
+      }
+      node.textContent = 'Units: ' + String(summary.units || 0) + '   Total: ' + money(summary.total || 0);
+    });
+  }
+
   function renderPrintJobTabs(visibleJobs){
     if (!printJobTabsList) return;
     printJobTabsList.innerHTML = '';
 
     ensureActivePrintJob(visibleJobs);
 
-    visibleJobs.forEach((job, idx) => {
-      const tab = createEl('button', 'printJobTab');
-      tab.type = 'button';
+    PRINT_JOBS.forEach((job, idx) => {
+      const isHidden = getJobState(job.printJobId).hidden;
+      const tab = createEl('div', 'printJobTab');
       tab.setAttribute('role', 'tab');
       tab.id = 'print-job-tab-' + domSafeIdPart(job.printJobId);
       tab.setAttribute('aria-controls', jobSectionId(job.printJobId));
+      tab.setAttribute('aria-disabled', isHidden ? 'true' : 'false');
       tab.dataset.jobId = job.printJobId;
+      tab.dataset.hidden = isHidden ? 'true' : 'false';
 
+      const tabBody = createEl('span', 'printJobTabBody');
+      const tabMain = createEl('span', 'printJobTabMain');
       const tabPill = createEl('span', 'printJobTabPill', 'Print Job ' + (idx + 1));
       const tabName = createEl('span', 'printJobTabName', job.printJobName || '--');
-      tab.appendChild(tabPill);
-      tab.appendChild(tabName);
+      tabMain.appendChild(tabPill);
+      tabMain.appendChild(tabName);
+      tabBody.appendChild(tabMain);
+      const tabSummary = createEl('span', 'printJobTabSummary', 'Units: 0   Total: ' + money(0));
+      tabSummary.dataset.jobTabSummary = job.printJobId;
+      tabBody.appendChild(tabSummary);
+      tab.appendChild(tabBody);
+
+      const tabActions = createEl('span', 'printJobTabActions');
+      if (isHidden) {
+        tabActions.appendChild(createEl('span', 'printJobHiddenBadge', 'Removed'));
+        if (CAN_EDIT()) {
+          const restoreBtn = createEl('button', 'printJobTabActionBtn printJobTabRestore', 'Restore');
+          restoreBtn.type = 'button';
+          restoreBtn.addEventListener('click', evt => {
+            evt.stopPropagation();
+            restorePrintJob(job.printJobId);
+          });
+          tabActions.appendChild(restoreBtn);
+        }
+      } else if (CAN_EDIT()) {
+        const hideBtn = createEl('button', 'printJobTabActionBtn printJobTabHide', 'X');
+        hideBtn.type = 'button';
+        hideBtn.title = 'Hide print job';
+        hideBtn.addEventListener('click', evt => {
+          evt.stopPropagation();
+          hidePrintJob(job.printJobId);
+        });
+        tabActions.appendChild(hideBtn);
+      }
+      tab.appendChild(tabActions);
 
       tab.addEventListener('click', () => {
-        activePrintJobId = job.printJobId;
-        PORTAL_STATE.activePrintJobId = activePrintJobId;
-        applyActivePrintJobVisibility();
-        requestHeaderStateUpdate();
+        if (isHidden) return;
+        setActivePrintJob(job.printJobId, { visibleJobs: visibleJobs });
       });
 
       printJobTabsList.appendChild(tab);
     });
 
     applyActivePrintJobVisibility();
+    updatePrintJobTabSummaries();
   }
 
   function renderPortal(){
@@ -3907,9 +6251,10 @@
 
     if (!visibleJobs.length) {
       renderPrintJobTabs(visibleJobs);
-      jobsRoot.appendChild(createEl('div', 'card', 'All print jobs are hidden. Use Show hidden controls to restore.'));
+      jobsRoot.appendChild(createEl('div', 'card', 'No print jobs in view. Restore a print job tab to continue.'));
       renderHeaderProjects([]);
       updateHeaderTotals(0, 0, false);
+      renderHeaderDeliverySummary();
       requestHeaderStateUpdate();
       return;
     }
@@ -3918,14 +6263,31 @@
 
     visibleJobs.forEach((job, idx) => {
       job.slides = buildMockupSlides(job);
-      const section = buildJobSection(job, idx + 1);
+      const section = buildJobSection(job, idx === 0);
       jobsRoot.appendChild(section);
       buildCompareTable(job);
       loadPreviewForJob(job);
     });
 
     renderPrintJobTabs(visibleJobs);
-    recalcAll();
+    renderHeaderDeliverySummary();
+    debugLog('renderPortal:hydrate', { source: HYDRATE_BOOT_SOURCE, reason: 'renderPortal' });
+    hydrateQtyInputsFromState(PORTAL_STATE, { source: HYDRATE_BOOT_SOURCE, reason: 'renderPortal' });
+    const pendingFocus = PENDING_DRAFT_COLOR_FOCUS;
+    PENDING_DRAFT_COLOR_FOCUS = null;
+    if (pendingFocus) {
+      const focusInput = Array.from(jobsRoot.querySelectorAll('.colorNameInput[data-draft-color-id]')).find(inputEl => (
+        String(inputEl.dataset.draftColorId || '') === String(pendingFocus.draftId || '')
+        && String(inputEl.dataset.printJobId || '') === String(pendingFocus.jobId || '')
+        && String(inputEl.dataset.skuId || '') === String(pendingFocus.skuId || '')
+      ));
+      if (focusInput) {
+        requestAnimationFrame(() => {
+          focusInput.focus();
+          focusInput.select();
+        });
+      }
+    }
     requestHeaderStateUpdate();
   }
 
@@ -4010,19 +6372,7 @@
 
       const row = createEl('div', 'addOnRow addOnItem');
 
-      const mainWrap = createEl('div', 'addOnMainWrap');
-      const mainLine = createEl('div', 'addOnMainLine');
-      mainLine.appendChild(createEl('div', 'addOnLabel', labelText));
-      mainLine.appendChild(createEl('span', 'addOnMainQty', 'x1'));
-      mainLine.appendChild(createEl('span', 'addOnMainAmt', money(amount)));
-      mainWrap.appendChild(mainLine);
-
-      if (rush) {
-        mainWrap.appendChild(createEl('div', 'addOnSub', rushRuleText(addOn)));
-      }
-
-      row.appendChild(mainWrap);
-
+      const removeSlot = createEl('div', 'addOnRemoveSlot', '');
       if (CAN_EDIT()) {
         const remove = createEl('button', 'addOnRemove', 'x');
         remove.type = 'button';
@@ -4032,7 +6382,16 @@
           removed.add(addOn.__idx);
           recalcAll();
         });
-        row.appendChild(remove);
+        removeSlot.appendChild(remove);
+      }
+      row.appendChild(removeSlot);
+
+      row.appendChild(createEl('div', 'addOnLabel', labelText));
+      row.appendChild(createEl('span', 'addOnMainQty', 'x1'));
+      row.appendChild(createEl('span', 'addOnMainAmt', money(amount)));
+
+      if (rush) {
+        row.appendChild(createEl('div', 'addOnSub', rushRuleText(addOn)));
       }
 
       list.appendChild(row);
@@ -4057,13 +6416,13 @@
         });
       });
       if (Number.isFinite(minDays)) {
-        turnaround = 'Turnaround Time: ' + (minDays === 1 ? '1 business day (rush)' : (minDays + ' business days (rush)'));
+        turnaround = (minDays === 1 ? '1 business day (rush)' : (minDays + ' business days (rush)'));
       }
     }
 
     if (!turnaround) {
-      const value = formatTurnaroundText(job.turnaroundTime || job.deliveryEstimate || '');
-      if (value) turnaround = 'Turnaround Time: ' + value;
+      const value = pickBaseTurnaround(job);
+      if (value) turnaround = value;
     }
 
     return { addOnTotal: addOnTotal, turnaround: turnaround };
@@ -4093,11 +6452,15 @@
       let subtotal = 0;
 
       visibleSkus.forEach(sku => {
+        let skuUnits = 0;
+        let skuTotal = 0;
         getVisibleColors(job.printJobId, sku).forEach(color => {
           const key = makeRowKey(job.printJobId, sku.skuId, color);
           const rq = rowQty(job.printJobId, sku, color);
           const lt = lineTotal(job.printJobId, sku, color, activeTier);
           subtotal += lt;
+          skuUnits += rq;
+          skuTotal += lt;
 
           const qtyEl = dom.section.querySelector('[data-row-qty="' + key + '"]');
           if (qtyEl) qtyEl.textContent = String(rq);
@@ -4112,6 +6475,21 @@
             unitEl.textContent = (unit == null) ? '' : (unit.toFixed(2) + ' ea.');
           });
         });
+
+        getDraftColorRows(job.printJobId, sku.skuId).forEach(draft => {
+          const draftKey = makeRowKey(job.printJobId, sku.skuId, '__draft__' + draft.id);
+          sku.sizesAllowed.forEach(size => {
+            const unitEl = dom.section.querySelector('[data-unit-key="' + makeUnitKey(draftKey, size) + '"]');
+            if (!unitEl) return;
+            const unit = unitPriceFor(sku, activeTier, size);
+            unitEl.textContent = (unit == null) ? '' : (unit.toFixed(2) + ' ea.');
+          });
+        });
+
+        const skuSummaryEl = dom.section.querySelector('[data-sku-summary="' + makeSkuSummaryKey(job.printJobId, sku.skuId) + '"]');
+        if (skuSummaryEl) {
+          skuSummaryEl.textContent = formatSkuSummary(skuUnits, skuTotal);
+        }
       });
 
       const addOnData = renderAddOnsForJob(job, subtotal);
@@ -4119,24 +6497,19 @@
 
       if (dom.turnaround) {
         if (addOnData.turnaround) {
-          dom.turnaround.textContent = addOnData.turnaround;
+          dom.turnaround.textContent = 'Turnaround: ' + addOnData.turnaround;
+          dom.turnaround.classList.toggle('rush', /\(rush\)/i.test(addOnData.turnaround));
           dom.turnaround.style.display = 'block';
         } else {
+          dom.turnaround.classList.remove('rush');
           dom.turnaround.style.display = 'none';
         }
       }
 
-      if (dom.jobTotal) dom.jobTotal.textContent = money(jobTotal);
-
       applyCompareHighlight(job.printJobId, activeTier);
 
-      const minTier = job.priceTiers.length ? job.priceTiers[0] : 0;
       if (dom.compareHint) {
-        if (jobQty > 0 && minTier > 0 && jobQty < minTier) {
-          dom.compareHint.textContent = 'Minimum order is ' + minTier + ' pieces. Prices shown at that tier until you reach the next break.';
-        } else {
-          dom.compareHint.textContent = '';
-        }
+        renderCompareGuidance(dom.compareHint);
       }
 
       totalUnits += jobQty;
@@ -4145,12 +6518,15 @@
       JOB_SUMMARIES.set(job.printJobId, {
         name: job.printJobName,
         units: jobQty,
-        total: jobTotal
+        total: jobTotal,
+        turnaround: addOnData.turnaround || pickBaseTurnaround(job) || ''
       });
     });
 
     renderHeaderProjects(Array.from(JOB_SUMMARIES.values()));
     updateHeaderTotals(totalUnits, grandTotal, totalUnits > 0);
+    renderHeaderDeliverySummary();
+    updatePrintJobTabSummaries();
   }
 
   function setHeaderDetails(){
@@ -4263,7 +6639,9 @@
     teamDiagPre.textContent = String(diag.snapshotSnippet || '').slice(0, 500);
   }
 
-  async function savePortalState(){
+  async function savePortalState(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const openSendModalOnSuccess = Boolean(opts.openSendModal);
     if (!CAN_EDIT()) return;
 
     [saveBtn, saveBtnMini].forEach(btn => {
@@ -4273,35 +6651,34 @@
     });
 
     try {
-      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES, forceReadOnly: true });
+      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const resp = await persistPortalState(nextState);
-      IS_READ_ONLY = true;
-      nextState.isReadOnly = true;
       nextState.savedAt = String(resp.submittedAt || nextState.savedAt || new Date().toISOString());
       PORTAL_STATE = normalizePortalState(nextState);
-      PORTAL_STATE.isReadOnly = true;
+      PORTAL_STATE.isReadOnly = IS_READ_ONLY;
       setSaveControls();
       renderPortal();
-      showNotice('Saved successfully. This portal is now read-only.', 'ok');
+      showNotice('Saved successfully.', 'ok');
+      if (openSendModalOnSuccess) openSendModal();
     } catch (err) {
       console.error('Save failed:', err);
       showNotice('Save failed: ' + String((err && err.message) || err), 'err');
       [saveBtn, saveBtnMini].forEach(btn => {
         if (!btn) return;
         btn.disabled = false;
-        btn.textContent = 'Save';
+        btn.textContent = (btn.id === 'saveBtnMini') ? 'Save / Send' : 'Save';
       });
     }
   }
 
   function setSaveControls(){
-    const showSave = CAN_EDIT();
+    const canEdit = CAN_EDIT();
 
     [saveBtn, saveBtnMini].forEach(btn => {
       if (!btn) return;
-      btn.style.display = showSave ? '' : 'none';
-      btn.disabled = false;
-      btn.textContent = 'Save';
+      btn.style.display = '';
+      btn.disabled = !canEdit;
+      btn.textContent = (btn.id === 'saveBtnMini') ? 'Save / Send' : 'Save';
     });
 
     [placeOrderBtn, placeOrderBtnMini].forEach(btn => {
@@ -4440,53 +6817,15 @@
     loadLightboxForCurrent();
   }
 
-  let headerCondensed = false;
-  let headerUpdateQueued = false;
-
-  function setHeaderCondensed(next, header){
-    if (!header) return;
-    if (headerCondensed === next) return;
-    headerCondensed = next;
-    header.classList.toggle('condensed', next);
-  }
-
-  function updateHeaderState(){
-    const header = document.getElementById('stickyHeader');
-    const topRow = document.getElementById('topRowNew');
-    if (!header) return;
-
-    const isMobile = window.matchMedia('(max-width: 980px)').matches;
-    if (isMobile) {
-      setHeaderCondensed(true, header);
-      return;
-    }
-
-    if (!topRow) {
-      setHeaderCondensed(window.scrollY > 120, header);
-      return;
-    }
-
-    const rect = topRow.getBoundingClientRect();
-    const scrollY = window.scrollY || 0;
-
-    const enterCondensed = (scrollY > 120) || (rect.top <= -95);
-    const leaveCondensed = (scrollY < 45) && (rect.top > -35);
-    const next = headerCondensed ? !leaveCondensed : enterCondensed;
-    setHeaderCondensed(next, header);
-  }
-
   function requestHeaderStateUpdate(){
-    if (headerUpdateQueued) return;
-    headerUpdateQueued = true;
-    window.requestAnimationFrame(() => {
-      headerUpdateQueued = false;
-      updateHeaderState();
-    });
+    const header = document.getElementById('stickyHeader');
+    if (!header) return;
+    header.classList.remove('condensed');
   }
 
   function wireEvents(){
-    if (saveBtn) saveBtn.addEventListener('click', savePortalState);
-    if (saveBtnMini) saveBtnMini.addEventListener('click', savePortalState);
+    if (saveBtn) saveBtn.addEventListener('click', () => savePortalState());
+    if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState({ openSendModal: true }));
 
     [placeOrderBtn, placeOrderBtnMini].forEach(btn => {
       if (!btn) return;
@@ -4495,7 +6834,7 @@
       });
     });
 
-    [chatBtn, chatBtnMini, chatFab].forEach(btn => {
+    [chatBtn, chatBtnMini].forEach(btn => {
       if (!btn) return;
       btn.addEventListener('click', openChat);
     });
@@ -4563,6 +6902,7 @@
         closeChat();
         closeLightbox();
         closeIntroModal();
+        closeSendModal();
       }
     });
 
@@ -4572,9 +6912,30 @@
     });
 
     if (headerAvatarBtn) headerAvatarBtn.addEventListener('click', openIntroModal);
-    if (headerBubbleBtn) headerBubbleBtn.addEventListener('click', openIntroModal);
-    if (headerBubbleBtnMini) headerBubbleBtnMini.addEventListener('click', openIntroModal);
-    if (headerSmallLogoBtn) headerSmallLogoBtn.addEventListener('click', openIntroModal);
+    if (headerWelcomeBtn) headerWelcomeBtn.addEventListener('click', openIntroModal);
+    if (headerDeliveryToggle) {
+      headerDeliveryToggle.addEventListener('click', e => {
+        e.preventDefault();
+        HEADER_DELIVERY_EXPANDED = !HEADER_DELIVERY_EXPANDED;
+        renderHeaderDeliverySummary();
+      });
+    }
+
+    if (sendModalCancel) sendModalCancel.addEventListener('click', closeSendModal);
+    if (sendModalSend) sendModalSend.addEventListener('click', launchSendMailto);
+    if (sendModalBackdrop) {
+      sendModalBackdrop.addEventListener('click', e => {
+        if (e.target === sendModalBackdrop) closeSendModal();
+      });
+    }
+    if (sendEmailsInput) {
+      sendEmailsInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          launchSendMailto();
+        }
+      });
+    }
 
     if (teamDiagToggle) {
       teamDiagToggle.addEventListener('click', () => {
@@ -4584,8 +6945,6 @@
       });
     }
 
-    window.addEventListener('scroll', requestHeaderStateUpdate, { passive: true });
-    window.addEventListener('resize', requestHeaderStateUpdate);
   }
 
   function initIntro(){
@@ -4606,6 +6965,7 @@
   function initChat(){
     if (chatDate) chatDate.textContent = todayLabel();
     renderChat(CHAT_MESSAGES);
+    renderChatPrefill();
     setChatSendEnabled();
   }
 
