@@ -3,6 +3,16 @@
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Red Threads Estimate Portal</title>
+  <script>
+    (function(){
+      try{
+        var params = new URLSearchParams(window.location.search || '');
+        if (params.get('t') || params.get('token')) {
+          document.documentElement.dataset.hasToken = '1';
+        }
+      }catch(_){}
+    })();
+  </script>
   <style>
     :root{
       --bg:#ffffff;
@@ -25,9 +35,192 @@
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);font-family:Arial, sans-serif;color:var(--ink)}
     body.modalLocked{overflow:hidden;touch-action:none;}
+    .rt-view[hidden]{display:none !important;}
+    [data-has-token="1"] #loginView,
+    [data-has-token="1"] #resetRequestView,
+    [data-has-token="1"] #resetConfirmView,
+    [data-has-token="1"] #dashboardView{
+      display:none !important;
+    }
     a{color:var(--link);text-decoration:underline}
     a:hover{color:var(--red)}
     .wrap{max-width:1260px;margin:18px auto;padding:0 14px}
+
+    .authShell{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      background:linear-gradient(180deg,#eef5ff 0%, #f8fbff 100%);
+    }
+    .authCard{
+      width:100%;
+      max-width:860px;
+      background:#fff;
+      border:1px solid #dbe4f0;
+      border-radius:14px;
+      box-shadow:0 10px 28px rgba(15,23,42,.08);
+      padding:20px;
+    }
+    .authBrand{
+      font-size:16px;
+      font-weight:800;
+      color:#1f2937;
+      margin-bottom:12px;
+    }
+    .authView{display:block}
+    .authTitle{
+      margin:0 0 4px;
+      font-size:24px;
+      font-weight:800;
+      color:#0f172a;
+    }
+    .authSub{
+      margin:0 0 12px;
+      font-size:14px;
+      color:#475569;
+    }
+    .authLabel{
+      display:block;
+      font-size:12px;
+      font-weight:700;
+      color:#475569;
+      margin:8px 0 4px;
+    }
+    .authInput{
+      width:100%;
+      min-height:40px;
+      border:1px solid #cbd5e1;
+      border-radius:8px;
+      padding:8px 10px;
+      font-size:14px;
+    }
+    .authInput:focus{
+      border-color:#0ea5e9;
+      box-shadow:0 0 0 3px rgba(14,165,233,.15);
+      outline:none;
+    }
+    .authPasswordField{
+      position:relative;
+    }
+    .authPasswordField .authInput{
+      padding-right:68px;
+    }
+    .authPasswordToggle{
+      position:absolute;
+      right:8px;
+      top:50%;
+      transform:translateY(-50%);
+      border:none;
+      background:transparent;
+      color:#475569;
+      font-size:12px;
+      font-weight:700;
+      line-height:1;
+      padding:4px 6px;
+      border-radius:6px;
+      cursor:pointer;
+    }
+    .authPasswordToggle:hover{
+      background:#f1f5f9;
+      color:#1e293b;
+    }
+    .authPasswordToggle:focus-visible{
+      outline:2px solid #93c5fd;
+      outline-offset:1px;
+    }
+    .authActions{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-top:12px;
+      flex-wrap:wrap;
+    }
+    .authBtn{
+      border:1px solid #cbd5e1;
+      border-radius:8px;
+      min-height:34px;
+      padding:6px 12px;
+      font-size:13px;
+      font-weight:700;
+      cursor:pointer;
+      background:#fff;
+      color:#1f2937;
+    }
+    .authBtnPrimary{
+      background:#2563eb;
+      border-color:#2563eb;
+      color:#fff;
+    }
+    .authBtnPrimary:hover{background:#1d4ed8}
+    .authBtnGhost:hover{background:#f8fafc}
+    .authMessage{
+      margin-bottom:10px;
+      border-radius:8px;
+      border:1px solid #dbe4f0;
+      background:#f8fbff;
+      color:#1e293b;
+      padding:8px 10px;
+      font-size:13px;
+      white-space:pre-wrap;
+    }
+    .authMessage.err{
+      border-color:#fecaca;
+      background:#fff1f2;
+      color:#9f1239;
+    }
+    .authHomeHead{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+    }
+    .authProjectsWrap{
+      border:1px solid #dbe4f0;
+      border-radius:10px;
+      overflow:auto;
+      background:#fff;
+    }
+    .authProjectsTable{
+      width:100%;
+      border-collapse:collapse;
+      min-width:780px;
+    }
+    .authProjectsTable th,
+    .authProjectsTable td{
+      padding:8px 10px;
+      border-bottom:1px solid #e2e8f0;
+      font-size:12px;
+      color:#1f2937;
+      text-align:left;
+      vertical-align:middle;
+    }
+    .authProjectsTable th{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      color:#475569;
+      background:#f8fafc;
+    }
+    .authProjectsTable tbody tr:last-child td{border-bottom:none}
+    .authProjectsOpenBtn{
+      border:1px solid #93c5fd;
+      background:#eff6ff;
+      color:#1d4ed8;
+      border-radius:8px;
+      padding:4px 10px;
+      font-size:12px;
+      font-weight:700;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .authProjectsOpenBtn:hover{background:#dbeafe}
+    .authEmpty{
+      padding:12px;
+      font-size:13px;
+      color:#64748b;
+    }
 
     /* Sticky header */
     .stickyHeader{
@@ -2547,8 +2740,49 @@
       flex-direction:column;
       margin-top:3px;
     }
+    .pjSkusList .skuSection.skuSectionAlt{
+      background:#e3e9f3;
+    }
     .pjSkusList .skuSection:first-of-type{
       margin-top:0;
+    }
+    .skuHeader{
+      display:grid;
+      grid-template-columns:minmax(220px, 360px) minmax(0, 1fr) auto;
+      align-items:center;
+      gap:10px;
+    }
+    .skuHeaderLeft{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+    }
+    .skuHeaderLeft > .hideEntityBtn{
+      margin-top:0;
+      align-self:center;
+      flex-shrink:0;
+    }
+    .skuHeaderLeft .skuHeaderMain{
+      min-width:0;
+      flex:1;
+    }
+    .skuHeaderHint{
+      font-size:12px;
+      font-weight:400;
+      color:#64748b;
+      line-height:1.2;
+      text-align:center;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      justify-self:center;
+      max-width:100%;
+    }
+    .skuHeaderHint.is-attention{
+      font-size:18px;
+      font-weight:600;
+      color:#15803d;
     }
     .pjPricing .bottomRow{
       margin-top:0;
@@ -3282,8 +3516,20 @@
       display:none;
     }
     .skuColorFooter{
+      display:grid;
+      grid-template-columns:24px clamp(140px, 18vw, 220px);
+      align-items:center;
       gap:0;
-      margin-top:-1px;
+      margin-top:0;
+    }
+    .addColorWrap{
+      grid-column:2;
+      width:clamp(140px, 18vw, 220px);
+      justify-self:center;
+      text-align:center;
+      margin:0;
+      padding:0;
+      line-height:1;
     }
     .addColor{
       height:auto;
@@ -3292,8 +3538,21 @@
       max-width:none;
       padding:0;
       justify-self:center;
+      grid-column:auto;
+      display:inline-block;
+      text-align:center;
+      font-size:14px;
+      font-weight:400;
+      color:#60a5fa;
+      text-decoration:underline;
+      text-underline-offset:2px;
+      border:none;
+      background:transparent;
       margin:0;
       line-height:1;
+    }
+    .addColor:hover{
+      color:#3b82f6;
     }
 
     @media (max-width:980px){
@@ -3386,7 +3645,86 @@
   </style>
 </head>
 <body>
-  <div class="portalPageShell" id="portalPageShell">
+  <section class="rt-view authShell" id="loginView">
+    <div class="authCard">
+      <div class="authBrand">Red Threads Estimate Portal</div>
+      <h1 class="authTitle">Log in</h1>
+      <p class="authSub">Access your projects with the email used for your Red Threads job.</p>
+      <div class="authMessage" id="loginMessage" hidden></div>
+      <label class="authLabel" for="authLoginEmail">Email</label>
+      <input class="authInput" id="authLoginEmail" type="email" autocomplete="email" />
+      <label class="authLabel" for="authLoginPassword">Password</label>
+      <div class="authPasswordField">
+        <input class="authInput" id="authLoginPassword" type="password" autocomplete="current-password" />
+        <button class="authPasswordToggle" id="authLoginPasswordToggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+      </div>
+      <div class="authActions">
+        <button class="authBtn authBtnPrimary" id="authLoginBtn" type="button">Log in</button>
+        <button class="authBtn authBtnGhost" id="authForgotBtn" type="button">Forgot password?</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="rt-view authShell" id="resetRequestView" hidden>
+    <div class="authCard">
+      <h1 class="authTitle">Reset password</h1>
+      <p class="authSub">We will email a 6-digit code valid for 15 minutes.</p>
+      <div class="authMessage" id="resetRequestMessage" hidden></div>
+      <label class="authLabel" for="authForgotEmail">Email</label>
+      <input class="authInput" id="authForgotEmail" type="email" autocomplete="email" />
+      <div class="authActions">
+        <button class="authBtn authBtnPrimary" id="authSendCodeBtn" type="button">Send code</button>
+        <button class="authBtn authBtnGhost" id="authForgotBackBtn" type="button">Back to login</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="rt-view authShell" id="resetConfirmView" hidden>
+    <div class="authCard">
+      <h1 class="authTitle">Enter reset code</h1>
+      <div class="authMessage" id="resetConfirmMessage" hidden></div>
+      <label class="authLabel" for="authResetEmail">Email</label>
+      <input class="authInput" id="authResetEmail" type="email" autocomplete="email" />
+      <label class="authLabel" for="authResetCode">6-digit code</label>
+      <input class="authInput" id="authResetCode" type="text" inputmode="numeric" maxlength="6" />
+      <label class="authLabel" for="authResetPassword">New password</label>
+      <input class="authInput" id="authResetPassword" type="password" autocomplete="new-password" />
+      <div class="authActions">
+        <button class="authBtn authBtnPrimary" id="authResetBtn" type="button">Set password</button>
+        <button class="authBtn authBtnGhost" id="authResetBackBtn" type="button">Back</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="rt-view authShell" id="dashboardView" hidden>
+    <div class="authCard">
+      <div class="authHomeHead">
+        <h1 class="authTitle">Your Projects</h1>
+        <button class="authBtn authBtnGhost" id="authLogoutBtn" type="button">Log out</button>
+      </div>
+      <div class="authMessage" id="dashboardMessage" hidden></div>
+      <p class="authSub" id="authHomeEmail">Signed in</p>
+      <div class="authProjectsWrap">
+        <table class="authProjectsTable">
+          <thead>
+            <tr>
+              <th>Deal #</th>
+              <th>Deal Title</th>
+              <th>Org</th>
+              <th>Person</th>
+              <th>Created/Exported</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="authProjectsBody"></tbody>
+        </table>
+        <div class="authEmpty" id="authProjectsEmpty" hidden>No projects found for this email.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rt-view portalPageShell" id="projectView" hidden>
   <div class="stickyHeader portalHeader" id="stickyHeader">
     <div class="headerCondensed" id="headerCondensed">
       <div class="headerCondensedLeft">
@@ -3425,6 +3763,7 @@
             <div class="headerDeliveryLines" id="headerDeliveryLines"></div>
             <button class="headerDeliveryToggle" id="headerDeliveryToggle" type="button" hidden></button>
           </div>
+          <button class="headerBtn headerBtnChat" id="homeBtnMini" type="button" hidden>Home</button>
           <button class="headerBtn headerBtnGrey" id="saveBtnMini" type="button">Save / Send</button>
           <button class="headerBtn headerBtnBlue" id="placeOrderBtnMini" type="button">Place Order</button>
         </div>
@@ -3565,10 +3904,43 @@
       </div>
     </div>
   </div>
-  </div>
+  </section>
 
 <script>
   const VM = JSON.parse(<?!= JSON.stringify(JSON.stringify(VM)) ?>);
+  const AUTH_SESSION_STORAGE_KEY = 'rtAuthSessionId';
+  const AUTH_PORTAL_PAYLOAD_STORAGE_KEY = 'rtAuthPortalPayloadV1';
+  const AUTH_PORTAL_BOOT_ONCE_KEY = 'rtAuthPortalBootOnce';
+  const AUTH_PORTAL_BOOT_INTENT_KEY = 'rtAuthPortalBootIntentV1';
+  const AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY = 'rtAuthDirectOpenTokenV1';
+
+  (function hydrateVmFromAuthCache(){
+    const hasToken = String(VM.token || '').trim();
+    if (hasToken) return;
+    try {
+      const allowPortalBoot = localStorage.getItem(AUTH_PORTAL_BOOT_ONCE_KEY) === '1';
+      if (!allowPortalBoot) return;
+      const hasBootIntent = sessionStorage.getItem(AUTH_PORTAL_BOOT_INTENT_KEY) === '1';
+      if (!hasBootIntent) return;
+      const sessionId = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+      if (!sessionId) return;
+      const raw = localStorage.getItem(AUTH_PORTAL_PAYLOAD_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const portalPayload = parsed && typeof parsed === 'object' ? parsed.portalPayload : null;
+      if (!portalPayload || typeof portalPayload !== 'object') return;
+      const payloadToken = String(portalPayload.token || '').trim();
+      if (!payloadToken) return;
+      Object.keys(portalPayload).forEach(key => {
+        VM[key] = portalPayload[key];
+      });
+      VM.__fromAuthShell = true;
+      localStorage.removeItem(AUTH_PORTAL_BOOT_ONCE_KEY);
+      sessionStorage.removeItem(AUTH_PORTAL_BOOT_INTENT_KEY);
+    } catch (_) {
+      // Ignore corrupt local cache and continue in auth shell mode.
+    }
+  })();
 
   const SENDER_IMAGES = {
     josiah: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png',
@@ -3824,6 +4196,13 @@
   const SOURCE_PORTAL_STATE = safeJsonParse(VM.portalState, {});
   const HYDRATE_BOOT_SOURCE = hasNonBlankSignalValue(VM.portalState) ? 'portalState' : 'snapshot-bootstrap';
   const INITIAL_TOKEN = String(VM.token || '').trim();
+  const DIRECT_OPEN_TOKEN = (function(){
+    try {
+      return String(sessionStorage.getItem(AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY) || '').trim();
+    } catch (_) {
+      return '';
+    }
+  })();
 
   const FINAL_LOCK_STATUSES = new Set(['submitted', 'placed', 'ordered']);
 
@@ -4315,6 +4694,33 @@
     return metaField('internalNotes') || rowField('internalnotes') || '';
   }
 
+  const loginView = document.getElementById('loginView');
+  const resetRequestView = document.getElementById('resetRequestView');
+  const resetConfirmView = document.getElementById('resetConfirmView');
+  const dashboardView = document.getElementById('dashboardView');
+  const loginMessage = document.getElementById('loginMessage');
+  const resetRequestMessage = document.getElementById('resetRequestMessage');
+  const resetConfirmMessage = document.getElementById('resetConfirmMessage');
+  const dashboardMessage = document.getElementById('dashboardMessage');
+  const authLoginEmail = document.getElementById('authLoginEmail');
+  const authLoginPassword = document.getElementById('authLoginPassword');
+  const authLoginPasswordToggle = document.getElementById('authLoginPasswordToggle');
+  const authLoginBtn = document.getElementById('authLoginBtn');
+  const authForgotBtn = document.getElementById('authForgotBtn');
+  const authForgotEmail = document.getElementById('authForgotEmail');
+  const authSendCodeBtn = document.getElementById('authSendCodeBtn');
+  const authForgotBackBtn = document.getElementById('authForgotBackBtn');
+  const authResetEmail = document.getElementById('authResetEmail');
+  const authResetCode = document.getElementById('authResetCode');
+  const authResetPassword = document.getElementById('authResetPassword');
+  const authResetBtn = document.getElementById('authResetBtn');
+  const authResetBackBtn = document.getElementById('authResetBackBtn');
+  const authLogoutBtn = document.getElementById('authLogoutBtn');
+  const authHomeEmail = document.getElementById('authHomeEmail');
+  const authProjectsBody = document.getElementById('authProjectsBody');
+  const authProjectsEmpty = document.getElementById('authProjectsEmpty');
+
+  const projectView = document.getElementById('projectView');
   const jobsRoot = document.getElementById('jobsRoot');
   const hiddenPrintJobsBar = document.getElementById('hiddenPrintJobsBar');
   const printJobTabsList = document.getElementById('printJobTabsList');
@@ -4347,6 +4753,7 @@
 
   const saveBtn = document.getElementById('saveBtn');
   const saveBtnMini = document.getElementById('saveBtnMini');
+  const homeBtnMini = document.getElementById('homeBtnMini');
   const placeOrderBtn = document.getElementById('placeOrderBtn');
   const placeOrderBtnMini = document.getElementById('placeOrderBtnMini');
   const chatBtn = document.getElementById('chatBtn');
@@ -4386,14 +4793,57 @@
   const COMPARE_GUIDANCE_TEXT = COMPARE_GUIDANCE_PREFIX + COMPARE_GUIDANCE_EMPHASIS;
 
   const CURRENT_TOKEN = INITIAL_TOKEN;
+  const URL_QUERY_PARAMS = new URLSearchParams(window.location.search || '');
+  const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
+  const HAS_PORTAL_TOKEN = String(CURRENT_TOKEN || '').trim().length > 0;
+  const OPENED_FROM_AUTH_SHELL =
+    (VM.__fromAuthShell === true) ||
+    OPENED_FROM_AUTH_QUERY ||
+    (DIRECT_OPEN_TOKEN && DIRECT_OPEN_TOKEN === CURRENT_TOKEN);
+  const STATE_LOGIN = 'login';
+  const STATE_RESET_REQUEST = 'resetRequest';
+  const STATE_RESET_CONFIRM = 'resetConfirm';
+  const STATE_DASHBOARD = 'dashboard';
+  const STATE_SNAPSHOT = 'project';
+  // Backward-compatible aliases for existing UI helpers.
+  const VIEW_LOGIN = STATE_LOGIN;
+  const VIEW_RESET_REQUEST = STATE_RESET_REQUEST;
+  const VIEW_RESET_CONFIRM = STATE_RESET_CONFIRM;
+  const VIEW_DASHBOARD = STATE_DASHBOARD;
+  const VIEW_SNAPSHOT = STATE_SNAPSHOT;
+  const VIEWS = ['login', 'resetRequest', 'resetConfirm', 'dashboard', 'project'];
+  const BASE_BOOT_CLEAR_KEYS = [
+    AUTH_SESSION_STORAGE_KEY,
+    AUTH_PORTAL_PAYLOAD_STORAGE_KEY,
+    AUTH_PORTAL_BOOT_ONCE_KEY,
+    'rt_sessionId',
+    'sessionId',
+    'rt_email',
+    'userEmail',
+    'selectedToken',
+    'currentToken',
+    'lastToken',
+    'rt_view'
+  ];
+  let AUTH_SESSION_ID = '';
   let CHAT_MESSAGES = [];
   let CHAT_PREFILL_PREFIX = '';
   let activePrintJobId = '';
   let HEADER_DELIVERY_EXPANDED = false;
+  let CURRENT_VIEW = '';
+  let AUTH_SHELL_BOUND = false;
+  let AUTH_WARMED = false;
 
   function debugLog(){
     if (!DEBUG_UI) return;
-    const args = Array.prototype.slice.call(arguments);
+    const args = Array.prototype.slice.call(arguments).map(arg => {
+      if (!arg || typeof arg !== 'object') return arg;
+      try {
+        return JSON.stringify(arg);
+      } catch (_) {
+        return String(arg);
+      }
+    });
     args.unshift('[RT-DEBUG]');
     console.log.apply(console, args);
   }
@@ -4429,6 +4879,490 @@
 
   function debugSkuState(label, jobId, skuId, extra){
     debugLog(label, summarizeSkuState(jobId, skuId), extra || {});
+  }
+
+  function callServer(methodName, payload){
+    return new Promise((resolve, reject) => {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        reject(new Error('Apps Script runtime unavailable.'));
+        return;
+      }
+      const fn = google.script.run
+        .withSuccessHandler(resp => resolve(resp))
+        .withFailureHandler(err => reject(new Error(String((err && err.message) || err || 'Request failed.'))));
+      if (typeof fn[methodName] !== 'function') {
+        reject(new Error('Server method unavailable: ' + methodName));
+        return;
+      }
+      fn[methodName](payload || {});
+    });
+  }
+
+  function readStoredSessionId(){
+    try {
+      return String(localStorage.getItem(AUTH_SESSION_STORAGE_KEY) || '').trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function writeStoredSessionId(sessionId){
+    try {
+      if (!sessionId) {
+        localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+      } else {
+        localStorage.setItem(AUTH_SESSION_STORAGE_KEY, String(sessionId));
+      }
+    } catch (_) {}
+  }
+
+  function setPortalBootOnceFlag(enabled){
+    try {
+      if (enabled) {
+        localStorage.setItem(AUTH_PORTAL_BOOT_ONCE_KEY, '1');
+      } else {
+        localStorage.removeItem(AUTH_PORTAL_BOOT_ONCE_KEY);
+      }
+    } catch (_) {}
+  }
+
+  function setPortalBootIntent(enabled){
+    try {
+      if (enabled) {
+        sessionStorage.setItem(AUTH_PORTAL_BOOT_INTENT_KEY, '1');
+      } else {
+        sessionStorage.removeItem(AUTH_PORTAL_BOOT_INTENT_KEY);
+      }
+    } catch (_) {}
+  }
+
+  function clearStoredPortalPayload(){
+    try {
+      localStorage.removeItem(AUTH_PORTAL_PAYLOAD_STORAGE_KEY);
+      localStorage.removeItem(AUTH_PORTAL_BOOT_ONCE_KEY);
+      sessionStorage.removeItem(AUTH_PORTAL_BOOT_INTENT_KEY);
+    } catch (_) {}
+  }
+
+  function clearKnownClientAuthState(){
+    BASE_BOOT_CLEAR_KEYS.forEach(key => {
+      try {
+        localStorage.removeItem(key);
+      } catch (_) {}
+    });
+    try {
+      sessionStorage.removeItem(AUTH_PORTAL_BOOT_INTENT_KEY);
+    } catch (_) {}
+  }
+
+  function storePortalPayload(payload){
+    try {
+      localStorage.setItem(AUTH_PORTAL_PAYLOAD_STORAGE_KEY, JSON.stringify({
+        storedAt: new Date().toISOString(),
+        portalPayload: payload || {}
+      }));
+    } catch (_) {}
+  }
+
+  function getMessageElementForView(viewName){
+    const key = String(viewName || '');
+    if (key === VIEW_LOGIN) return loginMessage;
+    if (key === VIEW_RESET_REQUEST) return resetRequestMessage;
+    if (key === VIEW_RESET_CONFIRM) return resetConfirmMessage;
+    if (key === VIEW_DASHBOARD) return dashboardMessage;
+    return loginMessage;
+  }
+
+  function clearAllViewMessages(){
+    [loginMessage, resetRequestMessage, resetConfirmMessage, dashboardMessage].forEach(el => {
+      if (!el) return;
+      el.hidden = true;
+      el.classList.remove('err');
+      el.textContent = '';
+    });
+  }
+
+  function setAuthMessage(message, isError, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const text = String(message || '').trim();
+    const targetView = String(opts.view || CURRENT_VIEW || VIEW_LOGIN);
+    const targetEl = getMessageElementForView(targetView);
+    if (!targetEl) return;
+
+    clearAllViewMessages();
+    if (!text) return;
+
+    targetEl.hidden = false;
+    targetEl.classList.toggle('err', !!isError);
+    targetEl.innerHTML = '';
+    targetEl.appendChild(document.createTextNode(text));
+
+    const dismissBtn = createEl('button', 'saveNoticeDismiss', 'X');
+    dismissBtn.type = 'button';
+    dismissBtn.setAttribute('aria-label', 'Dismiss');
+    dismissBtn.addEventListener('click', () => {
+      targetEl.hidden = true;
+      targetEl.classList.remove('err');
+      targetEl.textContent = '';
+    });
+    targetEl.appendChild(dismissBtn);
+  }
+
+  function setView(viewName, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const target = String(viewName || VIEW_LOGIN).trim();
+    CURRENT_VIEW = target;
+
+    // Strict single-view router: exactly one primary view is visible at any time.
+    const views = {
+      login: loginView,
+      resetRequest: resetRequestView,
+      resetConfirm: resetConfirmView,
+      dashboard: dashboardView,
+      project: projectView
+    };
+
+    VIEWS.forEach(key => {
+      const el = views[key];
+      if (!el) return;
+      el.hidden = key !== target;
+    });
+
+    if (!opts.preserveMessage) {
+      clearAllViewMessages();
+    }
+
+    if (opts.focus === false) return;
+    if (target === VIEW_LOGIN && authLoginEmail) {
+      requestAnimationFrame(() => authLoginEmail.focus());
+    } else if (target === VIEW_RESET_REQUEST && authForgotEmail) {
+      requestAnimationFrame(() => authForgotEmail.focus());
+    } else if (target === VIEW_RESET_CONFIRM && authResetCode) {
+      requestAnimationFrame(() => authResetCode.focus());
+    }
+  }
+
+  function warmAuthRuntime(){
+    if (AUTH_WARMED || HAS_PORTAL_TOKEN) return;
+    AUTH_WARMED = true;
+    // Warm server runtime so the first explicit login call has less cold-start latency.
+    callServer('validateSession', { sessionId: '__warmup__' }).catch(() => {});
+  }
+
+  function setButtonBusy(btn, busy, busyText, idleText){
+    if (!btn) return;
+    if (!btn.dataset.idleText) btn.dataset.idleText = String(idleText || btn.textContent || '');
+    btn.disabled = !!busy;
+    btn.textContent = busy ? String(busyText || 'Working...') : String(btn.dataset.idleText);
+  }
+
+  function setLoginPasswordVisibility(visible){
+    if (!authLoginPassword) return;
+    const show = !!visible;
+    authLoginPassword.type = show ? 'text' : 'password';
+    if (!authLoginPasswordToggle) return;
+    authLoginPasswordToggle.textContent = show ? 'Hide' : 'Show';
+    authLoginPasswordToggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+    authLoginPasswordToggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  }
+
+  function bindLoginEnterSubmit(inputEl){
+    if (!inputEl) return;
+    inputEl.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      if (CURRENT_VIEW !== VIEW_LOGIN) return;
+      event.preventDefault();
+      if (authLoginBtn && !authLoginBtn.disabled) {
+        authLoginBtn.click();
+      }
+    });
+  }
+
+  function buildProjectOpenUrl(token){
+    const cleanToken = String(token || '').trim();
+    const base = String(VM.postUrl || '').trim();
+    const root = base ? base.split('?')[0] : (window.location.origin + window.location.pathname);
+    return root + '?t=' + encodeURIComponent(cleanToken) + '&fromAuth=1';
+  }
+
+  function formatProjectDate(value){
+    const d = new Date(String(value || '').trim());
+    if (Number.isNaN(d.getTime())) return String(value || '--').trim() || '--';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function renderProjectRows(projects){
+    if (!authProjectsBody || !authProjectsEmpty) return;
+    authProjectsBody.innerHTML = '';
+    const list = Array.isArray(projects) ? projects : [];
+
+    if (!list.length) {
+      authProjectsEmpty.hidden = false;
+      return;
+    }
+    authProjectsEmpty.hidden = true;
+
+    list.forEach(project => {
+      const tr = createEl('tr', '');
+      tr.appendChild(createEl('td', '', project.dealNumber || '--'));
+      tr.appendChild(createEl('td', '', project.dealTitle || '--'));
+      tr.appendChild(createEl('td', '', project.orgName || '--'));
+      tr.appendChild(createEl('td', '', project.personName || '--'));
+      tr.appendChild(createEl('td', '', formatProjectDate(project.exportedAt || project.createdAt)));
+      tr.appendChild(createEl('td', '', project.status || '--'));
+
+      const openCell = createEl('td', '');
+      const openBtn = createEl('button', 'authProjectsOpenBtn', 'Open');
+      openBtn.type = 'button';
+      openBtn.addEventListener('click', async () => {
+        setButtonBusy(openBtn, true, 'Opening...', 'Open');
+        setAuthMessage('', false);
+        try {
+          // Navigate using canonical Apps Script exec URL, not current pathname.
+          // Current pathname can be a transient googleusercontent echo URL that breaks deep-link routing.
+          // Avoid preloading the full snapshot here; opening via token route is faster and more reliable.
+          const openUrl = buildProjectOpenUrl(project.token);
+          debugLog('AUTH_OPEN:navigate', { openUrl: openUrl });
+          window.location.href = openUrl;
+        } catch (err) {
+          setAuthMessage(String((err && err.message) || err), true);
+          setButtonBusy(openBtn, false, 'Opening...', 'Open');
+        }
+      });
+      openCell.appendChild(openBtn);
+      tr.appendChild(openCell);
+
+      authProjectsBody.appendChild(tr);
+    });
+  }
+
+  async function loadProjectsForHome(){
+    if (!AUTH_SESSION_ID) return;
+    setAuthMessage('Loading projects...', false);
+    try {
+      // Dashboard load is metadata-only (no snapshot parsing on this phase).
+      const resp = await callServer('getUserProjects', { sessionId: AUTH_SESSION_ID });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to load projects.'));
+      }
+      renderProjectRows(resp.projects || []);
+      setAuthMessage('', false);
+    } catch (err) {
+      const msg = String((err && err.message) || err);
+      setAuthMessage(msg, true);
+      if (/session/i.test(msg)) {
+        writeStoredSessionId('');
+        AUTH_SESSION_ID = '';
+        clearStoredPortalPayload();
+        setView(VIEW_LOGIN);
+        setAuthMessage(msg, true, { view: VIEW_LOGIN, preserve: true });
+      }
+    }
+  }
+
+  async function verifySessionForAuthShell(){
+    AUTH_SESSION_ID = readStoredSessionId();
+    if (!AUTH_SESSION_ID) {
+      setView(VIEW_LOGIN);
+      setAuthMessage('', false, { view: VIEW_LOGIN });
+      return;
+    }
+
+    setView(VIEW_LOGIN, { focus: false, preserveMessage: true });
+    setAuthMessage('Checking session...', false, { view: VIEW_LOGIN, preserve: true });
+    try {
+      const resp = await callServer('validateSession', { sessionId: AUTH_SESSION_ID });
+      if (!resp || resp.ok !== true) throw new Error(String((resp && resp.error) || 'Session expired.'));
+      if (authHomeEmail) authHomeEmail.textContent = 'Signed in as ' + (resp.email || '');
+      setView(VIEW_DASHBOARD);
+      loadProjectsForHome();
+    } catch (err) {
+      writeStoredSessionId('');
+      AUTH_SESSION_ID = '';
+      clearStoredPortalPayload();
+      setView(VIEW_LOGIN);
+      setAuthMessage('Session expired. Please log in again.', true, { view: VIEW_LOGIN });
+    }
+  }
+
+  function initAuthShell(){
+    setView(VIEW_LOGIN, { focus: false });
+    setAuthMessage('', false, { view: VIEW_LOGIN });
+    warmAuthRuntime();
+
+    if (!AUTH_SHELL_BOUND) {
+      AUTH_SHELL_BOUND = true;
+
+      setLoginPasswordVisibility(false);
+      bindLoginEnterSubmit(authLoginEmail);
+      bindLoginEnterSubmit(authLoginPassword);
+
+      if (authLoginPasswordToggle) {
+        authLoginPasswordToggle.addEventListener('click', () => {
+          const showing = authLoginPassword && authLoginPassword.type === 'text';
+          setLoginPasswordVisibility(!showing);
+        });
+      }
+
+      if (authLoginBtn) {
+        authLoginBtn.addEventListener('click', async () => {
+          const email = String((authLoginEmail && authLoginEmail.value) || '').trim();
+          const password = String((authLoginPassword && authLoginPassword.value) || '');
+          if (!email || !password) {
+            setAuthMessage('Email and password are required.', true);
+            return;
+          }
+          setButtonBusy(authLoginBtn, true, 'Logging in...', 'Log in');
+          setAuthMessage('', false);
+          try {
+            // Phase 1: login only (USERS + USER_SESSIONS), no EXPORT_LOG reads.
+            const resp = await callServer('loginUser', { email: email, password: password });
+            if (resp && resp.needsReset === true) {
+              if (authForgotEmail) authForgotEmail.value = email;
+              if (authResetEmail) authResetEmail.value = email;
+              setView(VIEW_RESET_REQUEST, { preserveMessage: true });
+              setAuthMessage(
+                String(resp.error || 'Password reset required. Click "Forgot password?" to set a new password.'),
+                true,
+                { view: VIEW_RESET_REQUEST }
+              );
+              return;
+            }
+            if (!resp || resp.ok !== true || !resp.sessionId) {
+              throw new Error(String((resp && resp.error) || 'Login failed.'));
+            }
+            AUTH_SESSION_ID = String(resp.sessionId || '');
+            writeStoredSessionId(AUTH_SESSION_ID);
+            if (authHomeEmail) authHomeEmail.textContent = 'Signed in as ' + (resp.email || email);
+            if (authLoginPassword) authLoginPassword.value = '';
+            setLoginPasswordVisibility(false);
+            setView(VIEW_DASHBOARD);
+            loadProjectsForHome();
+          } catch (err) {
+            setAuthMessage(String((err && err.message) || err), true, { view: VIEW_LOGIN });
+          } finally {
+            setButtonBusy(authLoginBtn, false, 'Logging in...', 'Log in');
+          }
+        });
+      }
+
+      if (authForgotBtn) {
+        authForgotBtn.addEventListener('click', () => {
+          if (authForgotEmail && authLoginEmail) authForgotEmail.value = String(authLoginEmail.value || '').trim();
+          setView(VIEW_RESET_REQUEST);
+          setAuthMessage('', false, { view: VIEW_RESET_REQUEST });
+        });
+      }
+
+      if (authForgotBackBtn) {
+        authForgotBackBtn.addEventListener('click', () => {
+          setView(VIEW_LOGIN);
+          setAuthMessage('', false, { view: VIEW_LOGIN });
+        });
+      }
+
+      if (authSendCodeBtn) {
+        authSendCodeBtn.addEventListener('click', async () => {
+          const email = String((authForgotEmail && authForgotEmail.value) || '').trim();
+          if (!email) {
+            setAuthMessage('Enter your email to send a reset code.', true, { view: VIEW_RESET_REQUEST });
+            return;
+          }
+          setButtonBusy(authSendCodeBtn, true, 'Sending...', 'Send code');
+          setAuthMessage('', false, { view: VIEW_RESET_REQUEST });
+          try {
+            const resp = await callServer('authSendResetCode', { email: email });
+            if (!resp || resp.ok !== true) {
+              throw new Error(String((resp && resp.error) || 'Unable to send code.'));
+            }
+            if (authResetEmail) authResetEmail.value = email;
+            if (authResetCode) authResetCode.value = '';
+            if (authResetPassword) authResetPassword.value = '';
+            setView(VIEW_RESET_CONFIRM, { preserveMessage: true });
+            setAuthMessage('Reset code sent. Check your email.', false, { view: VIEW_RESET_CONFIRM });
+          } catch (err) {
+            setAuthMessage(String((err && err.message) || err), true, { view: VIEW_RESET_REQUEST });
+          } finally {
+            setButtonBusy(authSendCodeBtn, false, 'Sending...', 'Send code');
+          }
+        });
+      }
+
+      if (authResetBackBtn) {
+        authResetBackBtn.addEventListener('click', () => {
+          setView(VIEW_RESET_REQUEST);
+          setAuthMessage('', false, { view: VIEW_RESET_REQUEST });
+        });
+      }
+
+      if (authResetBtn) {
+        authResetBtn.addEventListener('click', async () => {
+          const email = String((authResetEmail && authResetEmail.value) || '').trim();
+          const code = String((authResetCode && authResetCode.value) || '').trim();
+          const newPassword = String((authResetPassword && authResetPassword.value) || '');
+          if (!email || !code || !newPassword) {
+            setAuthMessage('Email, code, and new password are required.', true, { view: VIEW_RESET_CONFIRM });
+            return;
+          }
+          setButtonBusy(authResetBtn, true, 'Saving...', 'Set password');
+          setAuthMessage('', false, { view: VIEW_RESET_CONFIRM });
+          try {
+            const resp = await callServer('authResetPassword', {
+              email: email,
+              code: code,
+              newPassword: newPassword
+            });
+            if (!resp || resp.ok !== true) {
+              throw new Error(String((resp && resp.error) || 'Unable to reset password.'));
+            }
+            setView(VIEW_LOGIN, { preserveMessage: true });
+            if (authLoginEmail) authLoginEmail.value = email;
+            if (authLoginPassword) authLoginPassword.value = '';
+            setAuthMessage('Password updated. Log in with your new password.', false, { view: VIEW_LOGIN });
+          } catch (err) {
+            setAuthMessage(String((err && err.message) || err), true, { view: VIEW_RESET_CONFIRM });
+          } finally {
+            setButtonBusy(authResetBtn, false, 'Saving...', 'Set password');
+          }
+        });
+      }
+
+      if (authLogoutBtn) {
+        authLogoutBtn.addEventListener('click', async () => {
+          const sid = AUTH_SESSION_ID;
+          writeStoredSessionId('');
+          AUTH_SESSION_ID = '';
+          clearStoredPortalPayload();
+          renderProjectRows([]);
+          setView(VIEW_LOGIN);
+          setAuthMessage('', false, { view: VIEW_LOGIN });
+          if (!sid) return;
+          try {
+            await callServer('authLogout', { sessionId: sid });
+          } catch (_) {}
+        });
+      }
+
+      document.addEventListener('keydown', e => {
+        if (e.key !== 'Escape') return;
+        if (CURRENT_VIEW === VIEW_SNAPSHOT) return;
+        if (resetRequestView && !resetRequestView.hidden) {
+          setView(VIEW_LOGIN);
+          setAuthMessage('', false, { view: VIEW_LOGIN });
+        } else if (resetConfirmView && !resetConfirmView.hidden) {
+          setView(VIEW_RESET_REQUEST);
+          setAuthMessage('', false, { view: VIEW_RESET_REQUEST });
+        }
+      });
+    }
+
+    // Boot policy for base /exec: always start on login view.
+  }
+
+  function goHomeFromPortal(){
+    clearStoredPortalPayload();
+    setView(VIEW_DASHBOARD);
+    loadProjectsForHome();
   }
 
   function showNotice(message, type){
@@ -5250,6 +6184,41 @@
     return [jobId, skuId].map(v => encodeURIComponent(String(v || ''))).join('::');
   }
 
+  function makeSkuHintKey(jobId, skuId){
+    return [jobId, skuId].map(v => encodeURIComponent(String(v || ''))).join('::');
+  }
+
+  function skuHasAnyQty(jobId, sku){
+    const skuState = getSkuState(jobId, sku.skuId);
+    const colorways = Object.keys((skuState && skuState.colorways) || {});
+    for (let i = 0; i < colorways.length; i += 1) {
+      const color = colorways[i];
+      const colorState = skuState.colorways[color];
+      for (let j = 0; j < sku.sizesAllowed.length; j += 1) {
+        const size = sku.sizesAllowed[j];
+        if (clampInt(colorState && colorState.qtyBySize ? colorState.qtyBySize[size] : 0) > 0) return true;
+      }
+    }
+
+    const drafts = getDraftColorRows(jobId, sku.skuId);
+    for (let i = 0; i < drafts.length; i += 1) {
+      const row = drafts[i];
+      for (let j = 0; j < sku.sizesAllowed.length; j += 1) {
+        const size = sku.sizesAllowed[j];
+        if (clampInt(row && row.qtyBySize ? row.qtyBySize[size] : 0) > 0) return true;
+      }
+    }
+
+    return false;
+  }
+
+  function updateSkuHintAttention(jobId, sku){
+    const key = makeSkuHintKey(jobId, sku.skuId);
+    const hintEl = document.querySelector('[data-sku-hint="' + key + '"]');
+    if (!hintEl) return;
+    hintEl.classList.toggle('is-attention', !skuHasAnyQty(jobId, sku));
+  }
+
   function buildInitialJobState(job){
     const jobState = {
       hidden: false,
@@ -5712,6 +6681,7 @@
       skuList.appendChild(hiddenSkuRow);
     }
 
+    let visibleSkuIndex = 0;
     job.skus.forEach(sku => {
       const skuState = getSkuState(job.printJobId, sku.skuId);
       if (skuState.hidden) {
@@ -5719,8 +6689,11 @@
       }
 
       const skuSection = createEl('div', 'skuSection');
+      if ((visibleSkuIndex % 2) === 0) skuSection.classList.add('skuSectionAlt');
+      visibleSkuIndex += 1;
 
       const skuHeader = createEl('div', 'skuHeader');
+      const skuHeaderLeft = createEl('div', 'skuHeaderLeft');
       let hideSkuBtn = null;
       if (CAN_EDIT()) {
         hideSkuBtn = createEl('button', 'hideEntityBtn', 'X');
@@ -5730,7 +6703,7 @@
           getSkuState(job.printJobId, sku.skuId).hidden = true;
           renderPortal();
         });
-        skuHeader.appendChild(hideSkuBtn);
+        skuHeaderLeft.appendChild(hideSkuBtn);
       }
       const skuHeaderMain = createEl('div', 'skuHeaderMain');
       const skuHeaderInfo = createEl('div', 'skuHeaderInfo');
@@ -5759,12 +6732,23 @@
         skuThumb.appendChild(thumbImg);
         skuHeaderMain.appendChild(skuThumb);
       }
-      skuHeader.appendChild(skuHeaderMain);
+      skuHeaderLeft.appendChild(skuHeaderMain);
+      skuHeader.appendChild(skuHeaderLeft);
+      const skuHeaderHint = createEl('div', 'skuHeaderHint', 'Enter quantities below to see live pricing.');
+      skuHeaderHint.dataset.skuHint = makeSkuHintKey(job.printJobId, sku.skuId);
+      if (!skuHasAnyQty(job.printJobId, sku)) skuHeaderHint.classList.add('is-attention');
+      skuHeader.appendChild(skuHeaderHint);
       const skuSummary = createEl('div', 'skuHeaderSummary', formatSkuSummary(0, 0));
       skuSummary.dataset.skuSummary = makeSkuSummaryKey(job.printJobId, sku.skuId);
       skuHeader.appendChild(skuSummary);
 
       skuSection.appendChild(skuHeader);
+      skuSection.addEventListener('input', evt => {
+        const target = evt.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (!target.classList.contains('qty-input')) return;
+        updateSkuHintAttention(job.printJobId, sku);
+      });
 
       const entryPanel = createEl('div', 'sku-entry-panel');
       entryPanel.style.setProperty('--sku-grid-cols',
@@ -5985,6 +6969,7 @@
 
       const skuFooter = createEl('div', 'skuColorFooter');
       if (CAN_EDIT()) {
+        const addColorWrap = createEl('div', 'addColorWrap');
         const addColorBtn = createEl('button', 'addColor', '+ Add another color');
         addColorBtn.type = 'button';
         addColorBtn.addEventListener('click', () => {
@@ -6004,7 +6989,8 @@
           renderPortal();
           debugSkuState('ADD_COLOR:after-render', job.printJobId, sku.skuId);
         });
-        skuFooter.appendChild(addColorBtn);
+        addColorWrap.appendChild(addColorBtn);
+        skuFooter.appendChild(addColorWrap);
       }
       if (skuFooter.children.length) skuSection.appendChild(skuFooter);
 
@@ -6490,6 +7476,11 @@
         if (skuSummaryEl) {
           skuSummaryEl.textContent = formatSkuSummary(skuUnits, skuTotal);
         }
+
+        const skuHintEl = dom.section.querySelector('[data-sku-hint="' + makeSkuHintKey(job.printJobId, sku.skuId) + '"]');
+        if (skuHintEl) {
+          skuHintEl.classList.toggle('is-attention', !skuHasAnyQty(job.printJobId, sku));
+        }
       });
 
       const addOnData = renderAddOnsForJob(job, subtotal);
@@ -6559,6 +7550,9 @@
     if (headerPlaceBy) {
       const placeBy = metaField('exportedAt') || rowField('submittedat') || '';
       headerPlaceBy.textContent = 'Place your order by: ' + formatDateTime(placeBy);
+    }
+    if (homeBtnMini) {
+      homeBtnMini.hidden = !OPENED_FROM_AUTH_SHELL;
     }
 
     const avatarUrl = getSenderAvatarUrl();
@@ -6826,6 +7820,7 @@
   function wireEvents(){
     if (saveBtn) saveBtn.addEventListener('click', () => savePortalState());
     if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState({ openSendModal: true }));
+    if (homeBtnMini) homeBtnMini.addEventListener('click', goHomeFromPortal);
 
     [placeOrderBtn, placeOrderBtnMini].forEach(btn => {
       if (!btn) return;
@@ -6969,7 +7964,8 @@
     setChatSendEnabled();
   }
 
-  function init(){
+  function startPortalApp(){
+    setView(VIEW_SNAPSHOT);
     hydrateUIFromPortalState(VM.portalState);
     setHeaderDetails();
     renderModeBadge();
@@ -6980,6 +7976,54 @@
     renderPortal();
     initIntro();
     wireEvents();
+  }
+
+  async function init(){
+    debugLog('BOOT:init', {
+      hasPortalToken: HAS_PORTAL_TOKEN,
+      openedFromAuthShell: OPENED_FROM_AUTH_SHELL,
+      path: window.location.pathname,
+      search: window.location.search
+    });
+    if (!HAS_PORTAL_TOKEN) {
+      // Base /exec: auth shell path (login/session -> dashboard -> explicit snapshot open).
+      initAuthShell();
+      return;
+    }
+
+    // Token mode must always render directly (legacy deep-link behavior).
+    // Session is optional here and only used to enable Home back-to-dashboard flow.
+    AUTH_SESSION_ID = readStoredSessionId();
+
+    // Token/deep-link path: render snapshot directly, bypassing auth views.
+    startPortalApp();
+
+    if (OPENED_FROM_AUTH_SHELL && AUTH_SESSION_ID) {
+      callServer('validateSession', { sessionId: AUTH_SESSION_ID }).then(resp => {
+        if (!resp || resp.ok !== true) {
+          writeStoredSessionId('');
+          AUTH_SESSION_ID = '';
+          if (homeBtnMini) homeBtnMini.hidden = true;
+          debugLog('TOKEN_BOOT:session-invalid-home-disabled');
+        }
+      }).catch(() => {
+        writeStoredSessionId('');
+        AUTH_SESSION_ID = '';
+        if (homeBtnMini) homeBtnMini.hidden = true;
+        debugLog('TOKEN_BOOT:session-validate-failed-home-disabled');
+      });
+    } else if (OPENED_FROM_AUTH_SHELL && !AUTH_SESSION_ID) {
+      if (homeBtnMini) homeBtnMini.hidden = true;
+      debugLog('TOKEN_BOOT:no-session-home-disabled');
+    }
+
+    if (DIRECT_OPEN_TOKEN && DIRECT_OPEN_TOKEN === CURRENT_TOKEN) {
+      try { sessionStorage.removeItem(AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY); } catch (_) {}
+      try {
+        if (!window.location.search || window.location.search.indexOf('t=') === -1) return;
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (_) {}
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
