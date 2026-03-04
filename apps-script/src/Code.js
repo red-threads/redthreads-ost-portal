@@ -476,7 +476,8 @@ function getUserProjects(payload) {
       }
     }
 
-    const header = exportSheet.getRange(1, 1, 1, exportSheet.getLastColumn()).getValues()[0];
+    const lastCol = exportSheet.getLastColumn();
+    const header = exportSheet.getRange(1, 1, 1, lastCol).getValues()[0];
     const colMap = buildColumnMap_(header);
     const personEmailCol = colMap[EXPORT_LOG_PERSON_EMAIL_HEADER];
     const tokenCol = colMap.token;
@@ -488,40 +489,36 @@ function getUserProjects(payload) {
     if (lastRow < 2) return { ok: true, projects: [] };
 
     const rowCount = lastRow - 1;
-    const personEmailVals = exportSheet.getRange(2, personEmailCol, rowCount, 1).getValues();
-    const tokenVals = exportSheet.getRange(2, tokenCol, rowCount, 1).getValues();
+    const rows = exportSheet.getRange(2, 1, rowCount, lastCol).getValues();
 
-    const dealNumberCol = colMap.dealnumber || 0;
-    const dealTitleCol = colMap.dealtitle || 0;
-    const orgNameCol = colMap.orgname || 0;
-    const personNameCol = colMap.personname || 0;
-    const exportedAtCol = colMap.exportedat || 0;
-    const createdAtCol = colMap.createdat || 0;
-    const statusCol = colMap.status || 0;
-
-    const dealNumberVals = dealNumberCol ? exportSheet.getRange(2, dealNumberCol, rowCount, 1).getValues() : [];
-    const dealTitleVals = dealTitleCol ? exportSheet.getRange(2, dealTitleCol, rowCount, 1).getValues() : [];
-    const orgNameVals = orgNameCol ? exportSheet.getRange(2, orgNameCol, rowCount, 1).getValues() : [];
-    const personNameVals = personNameCol ? exportSheet.getRange(2, personNameCol, rowCount, 1).getValues() : [];
-    const exportedAtVals = exportedAtCol ? exportSheet.getRange(2, exportedAtCol, rowCount, 1).getValues() : [];
-    const createdAtVals = createdAtCol ? exportSheet.getRange(2, createdAtCol, rowCount, 1).getValues() : [];
-    const statusVals = statusCol ? exportSheet.getRange(2, statusCol, rowCount, 1).getValues() : [];
+    const personEmailIdx = personEmailCol - 1;
+    const tokenIdx = tokenCol - 1;
+    const dealNumberIdx = colMap.dealnumber ? (colMap.dealnumber - 1) : -1;
+    const dealTitleIdx = colMap.dealtitle ? (colMap.dealtitle - 1) : -1;
+    const orgNameIdx = colMap.orgname ? (colMap.orgname - 1) : -1;
+    const personNameIdx = colMap.personname ? (colMap.personname - 1) : -1;
+    const exportedAtIdx = colMap.exportedat ? (colMap.exportedat - 1) : -1;
+    const createdAtIdx = colMap.createdat ? (colMap.createdat - 1) : -1;
+    const statusIdx = colMap.status ? (colMap.status - 1) : -1;
 
     const projects = [];
 
     for (let i = 0; i < rowCount; i++) {
-      const personEmail = normalizeEmail_(personEmailVals[i] && personEmailVals[i][0]);
+      const rowVals = rows[i] || [];
+      const personEmail = normalizeEmail_(rowVals[personEmailIdx]);
       if (!personEmail || personEmail !== email) continue;
 
-      const token = String(tokenVals[i] && tokenVals[i][0] || '').trim();
+      const token = String(rowVals[tokenIdx] || '').trim();
       if (!token) continue;
 
-      const dealNumber = dealNumberVals[i] && dealNumberVals[i][0] || '';
-      const dealTitle = dealTitleVals[i] && dealTitleVals[i][0] || '';
-      const orgName = orgNameVals[i] && orgNameVals[i][0] || '';
-      const personName = personNameVals[i] && personNameVals[i][0] || '';
-      const exportedAt = (exportedAtVals[i] && exportedAtVals[i][0]) || (createdAtVals[i] && createdAtVals[i][0]) || '';
-      const status = statusVals[i] && statusVals[i][0] || '';
+      const dealNumber = dealNumberIdx >= 0 ? rowVals[dealNumberIdx] : '';
+      const dealTitle = dealTitleIdx >= 0 ? rowVals[dealTitleIdx] : '';
+      const orgName = orgNameIdx >= 0 ? rowVals[orgNameIdx] : '';
+      const personName = personNameIdx >= 0 ? rowVals[personNameIdx] : '';
+      const exportedAtRaw = exportedAtIdx >= 0 ? rowVals[exportedAtIdx] : '';
+      const createdAtRaw = createdAtIdx >= 0 ? rowVals[createdAtIdx] : '';
+      const status = statusIdx >= 0 ? rowVals[statusIdx] : '';
+      const exportedAt = exportedAtRaw || createdAtRaw || '';
 
       projects.push({
         token: token,
@@ -875,12 +872,6 @@ function generateResetCode_() {
   return String(Math.floor(Math.random() * 900000) + 100000);
 }
 
-function hashPasswordV1_(password) {
-  const salt = Utilities.getUuid();
-  const hash = hashPasswordWithSalt_(salt, password, AUTH_POLICY.HASH_ITERATIONS_LEGACY_V1);
-  return 'v1:' + salt + ':' + hash;
-}
-
 function hashPasswordV2_(password) {
   const salt = Utilities.getUuid();
   const iterations = AUTH_POLICY.HASH_ITERATIONS_V2;
@@ -955,10 +946,6 @@ function verifyPasswordDetailed_(password, storedValue) {
     needsReset: true,
     reason: 'unknown_hash_format'
   };
-}
-
-function verifyPassword_(password, storedValue) {
-  return verifyPasswordDetailed_(password, storedValue).ok;
 }
 
 function timingSafeEquals_(a, b) {
@@ -1170,17 +1157,6 @@ function emailExistsInExportLog_(exportSheet, email) {
   return false;
 }
 
-function valueByColMap_(rowVals, colMap, possibleKeys) {
-  const keys = Array.isArray(possibleKeys) ? possibleKeys : [];
-  for (let i = 0; i < keys.length; i++) {
-    const col = colMap[String(keys[i] || '').toLowerCase()];
-    if (!col) continue;
-    const value = rowVals[col - 1];
-    if (value != null && String(value).trim() !== '') return value;
-  }
-  return '';
-}
-
 function findRowByToken_(sheet, token) {
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colMap = buildColumnMap_(header);
@@ -1282,14 +1258,6 @@ function escapeHtml_(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-function sanitizeHtml_(html) {
-  let out = String(html || '');
-  out = out.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
-  out = out.replace(/\son\w+="[^"]*"/gi, '');
-  out = out.replace(/\son\w+='[^']*'/gi, '');
-  return out;
 }
 
 function renderTeamContractMessage_(diag) {
