@@ -208,6 +208,90 @@ function appendChatMessage(payload) {
   }
 }
 
+function getPrintJobArtStatusHeader_(printJobIndex) {
+  const idx = Number(printJobIndex);
+  if (!Number.isInteger(idx)) return '';
+  switch (idx) {
+    case 1: return 'printJob1ArtStatus';
+    case 2: return 'printJob2ArtStatus';
+    case 3: return 'printJob3ArtStatus';
+    case 4: return 'printJob4ArtStatus';
+    default: return '';
+  }
+}
+
+function setArtworkApproval(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = String(p.token || '').trim();
+    const nextStatus = String(p.status || 'approved').trim().toLowerCase();
+    const printJobIndex = Number(p.printJobIndex);
+    if (!token) return { ok: false, error: 'Missing token.' };
+    if (nextStatus !== 'approved') return { ok: false, error: 'Invalid art status.' };
+    if (!Number.isInteger(printJobIndex) || printJobIndex < 1 || printJobIndex > 4) {
+      return { ok: false, error: 'Invalid print job index.' };
+    }
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) return { ok: false, error: 'EXPORT_LOG sheet not found.' };
+
+    const rowInfo = findRowByToken_(sheet, token);
+    if (!rowInfo) return { ok: false, error: 'Token not found.' };
+
+    const artStatusHeader = getPrintJobArtStatusHeader_(printJobIndex);
+    if (!artStatusHeader) {
+      return { ok: false, error: 'Invalid print job index.' };
+    }
+    const colMap = rowInfo.colMap || {};
+    const artStatusCol = colMap[normalizeHeaderKey_(artStatusHeader)];
+    if (!artStatusCol) {
+      return { ok: false, error: artStatusHeader + ' column not found.' };
+    }
+
+    sheet.getRange(rowInfo.row, artStatusCol).setValue('approved');
+    return { ok: true, artStatus: 'approved', printJobIndex: printJobIndex, column: artStatusHeader };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function clearArtworkApproval(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = String(p.token || '').trim();
+    const printJobIndex = Number(p.printJobIndex);
+    if (!token) return { ok: false, error: 'Missing token.' };
+    if (!Number.isInteger(printJobIndex) || printJobIndex < 1 || printJobIndex > 4) {
+      return { ok: false, error: 'Invalid print job index.' };
+    }
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) return { ok: false, error: 'EXPORT_LOG sheet not found.' };
+
+    const rowInfo = findRowByToken_(sheet, token);
+    if (!rowInfo) return { ok: false, error: 'Token not found.' };
+
+    const artStatusHeader = getPrintJobArtStatusHeader_(printJobIndex);
+    if (!artStatusHeader) {
+      return { ok: false, error: 'Invalid print job index.' };
+    }
+    const colMap = rowInfo.colMap || {};
+    const artStatusCol = colMap[normalizeHeaderKey_(artStatusHeader)];
+    if (!artStatusCol) {
+      return { ok: false, error: artStatusHeader + ' column not found.' };
+    }
+
+    sheet.getRange(rowInfo.row, artStatusCol).setValue('');
+    return { ok: true, artStatus: '', printJobIndex: printJobIndex, column: artStatusHeader };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function savePortalState(token, portalStateInput) {
   try {
     const tokenValue = String(token || '').trim();
