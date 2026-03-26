@@ -421,17 +421,23 @@
 
     /* ===== Dark Glass Auth + Dashboard (Scoped) ===== */
     #loginView.authShell,
+    #resetRequestView.authShell,
+    #resetConfirmView.authShell,
     #dashboardView.authShell{
       background:var(--rt-bg);
     }
-    #loginView.authShell{
+    #loginView.authShell,
+    #resetRequestView.authShell,
+    #resetConfirmView.authShell{
       display:grid;
       grid-template-rows:minmax(16px,1fr) auto minmax(16px,1fr) auto minmax(16px,1fr);
       justify-items:center;
       align-items:center;
       padding:24px;
     }
-    #loginView .authLogo{
+    #loginView .authLogo,
+    #resetRequestView .authLogo,
+    #resetConfirmView .authLogo{
       grid-row:2;
       width:min(360px, 78vw);
       display:block;
@@ -441,20 +447,28 @@
       user-select:none;
       -webkit-user-select:none;
     }
-    #loginView .authCard{
+    #loginView .authCard,
+    #resetRequestView .authCard,
+    #resetConfirmView .authCard{
       grid-row:4;
       margin:0;
     }
     #loginView .authCard,
+    #resetRequestView .authCard,
+    #resetConfirmView .authCard,
     #dashboardView .authCard{
       color:var(--rt-text);
     }
     #loginView .authTitle,
+    #resetRequestView .authTitle,
+    #resetConfirmView .authTitle,
     #dashboardView .authTitle{
       color:var(--rt-text);
       letter-spacing:.01em;
     }
-    #loginView .authTitle{
+    #loginView .authTitle,
+    #resetRequestView .authTitle,
+    #resetConfirmView .authTitle{
       margin:0 auto 8px;
       padding-bottom:4px;
       border-bottom:3px solid var(--rt-red);
@@ -467,23 +481,33 @@
       width:fit-content;
       max-width:100%;
     }
-    #loginView .authSub{
+    #loginView .authSub,
+    #resetRequestView .authSub,
+    #resetConfirmView .authSub{
       margin:0 0 14px;
       color:var(--rt-muted);
     }
-    #loginView .authLabel{
+    #loginView .authLabel,
+    #resetRequestView .authLabel,
+    #resetConfirmView .authLabel{
       color:var(--rt-muted);
       margin:10px 0 6px;
     }
-    #loginView .authInput{
+    #loginView .authInput,
+    #resetRequestView .authInput,
+    #resetConfirmView .authInput{
       background:var(--rt-input);
       border-color:var(--rt-inputBorder);
       color:var(--rt-text);
     }
-    #loginView .authInput::placeholder{
+    #loginView .authInput::placeholder,
+    #resetRequestView .authInput::placeholder,
+    #resetConfirmView .authInput::placeholder{
       color:rgba(255,255,255,.48);
     }
-    #loginView .authInput:focus{
+    #loginView .authInput:focus,
+    #resetRequestView .authInput:focus,
+    #resetConfirmView .authInput:focus{
       border-color:var(--rt-red);
       box-shadow:0 0 0 3px var(--rt-redRing);
     }
@@ -503,37 +527,52 @@
       border-color:var(--rt-red);
       box-shadow:0 0 0 3px var(--rt-redRing);
     }
-    #loginView .authActions{
+    #loginView .authActions,
+    #resetRequestView .authActions,
+    #resetConfirmView .authActions{
       margin-top:14px;
       gap:10px;
     }
-    #loginView .authBtn{
+    #loginView .authBtn,
+    #resetRequestView .authBtn,
+    #resetConfirmView .authBtn{
       background:rgba(255,255,255,.04);
       color:var(--rt-text);
       border-color:rgba(255,255,255,.2);
     }
-    #loginView .authBtnPrimary{
+    #loginView .authBtnPrimary,
+    #resetRequestView .authBtnPrimary,
+    #resetConfirmView .authBtnPrimary{
       background:linear-gradient(135deg,#f43f5e 0%, var(--rt-red) 55%, #be123c 100%);
       border-color:rgba(255,255,255,.14);
       color:#ffffff;
       box-shadow:0 10px 24px rgba(225,29,72,.34);
     }
-    #loginView .authBtnPrimary:hover:not(:disabled){
+    #loginView .authBtnPrimary:hover:not(:disabled),
+    #resetRequestView .authBtnPrimary:hover:not(:disabled),
+    #resetConfirmView .authBtnPrimary:hover:not(:disabled){
       border-color:rgba(255,255,255,.2);
       box-shadow:0 12px 26px rgba(225,29,72,.42);
       filter:saturate(1.08);
     }
-    #loginView .authBtnGhost{
+    #loginView .authBtnGhost,
+    #resetRequestView .authBtnGhost,
+    #resetConfirmView .authBtnGhost{
       border-color:rgba(225,29,72,.52);
       background:rgba(255,255,255,.04);
       color:rgba(255,237,242,.96);
     }
-    #loginView .authBtnGhost:hover:not(:disabled){
+    #loginView .authBtnGhost:hover:not(:disabled),
+    #resetRequestView .authBtnGhost:hover:not(:disabled),
+    #resetConfirmView .authBtnGhost:hover:not(:disabled){
       background:rgba(225,29,72,.16);
       border-color:rgba(225,29,72,.78);
       color:#ffffff;
     }
-    #loginView .loginHomeBtn{
+    #loginView .loginHomeBtn,
+    #resetRequestView .loginHomeBtn,
+    #resetConfirmView .loginHomeBtn,
+    #dashboardView .dashboardHomeBtn{
       position:fixed;
       top:16px;
       left:16px;
@@ -556,33 +595,57 @@
       -webkit-backdrop-filter:blur(10px) saturate(140%);
       transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease;
     }
-    #loginView .loginHomeBtn:hover{
+    #loginView .loginHomeBtn:hover,
+    #resetRequestView .loginHomeBtn:hover,
+    #resetConfirmView .loginHomeBtn:hover,
+    #dashboardView .dashboardHomeBtn:hover{
       background:rgba(225,29,72,.16);
       border-color:rgba(225,29,72,.82);
       color:#fff;
       box-shadow:0 10px 22px rgba(0,0,0,.3), 0 0 0 1px rgba(225,29,72,.28), inset 0 1px 0 rgba(255,255,255,.1);
     }
-    #loginView .loginHomeBtn:focus-visible{
+    #loginView .loginHomeBtn:focus-visible,
+    #resetRequestView .loginHomeBtn:focus-visible,
+    #resetConfirmView .loginHomeBtn:focus-visible,
+    #dashboardView .dashboardHomeBtn:focus-visible{
       outline:none;
       box-shadow:0 0 0 3px var(--rt-redRing), 0 8px 18px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.08);
     }
-    #loginView .authBtn:disabled{
+    #loginView .authBtn:disabled,
+    #resetRequestView .authBtn:disabled,
+    #resetConfirmView .authBtn:disabled{
       cursor:not-allowed;
       opacity:.64;
       box-shadow:none;
       filter:none;
     }
     #loginView .authMessage,
+    #resetRequestView .authMessage,
+    #resetConfirmView .authMessage,
     #dashboardView .authMessage{
       border-color:rgba(255,255,255,.2);
       background:rgba(255,255,255,.09);
       color:var(--rt-text);
     }
     #loginView .authMessage.err,
+    #resetRequestView .authMessage.err,
+    #resetConfirmView .authMessage.err,
     #dashboardView .authMessage.err{
       border-color:rgba(225,29,72,.6);
       background:rgba(225,29,72,.15);
       color:#ffe4eb;
+    }
+    #resetRequestView .authCard{
+      max-width:430px;
+    }
+    #resetConfirmView .authCard{
+      max-width:460px;
+    }
+    #resetRequestView .authTitle,
+    #resetRequestView .authSub,
+    #resetConfirmView .authTitle,
+    #resetConfirmView .authSub{
+      text-align:center;
     }
     #dashboardView .authHomeHead{
       margin-bottom:12px;
@@ -1279,6 +1342,10 @@
     .chatMessage.team{
       align-self:flex-start;
     }
+    .chatMessage.system{
+      align-self:stretch;
+      max-width:100%;
+    }
     .chatMessage.client{
       align-self:flex-end;
     }
@@ -1313,6 +1380,12 @@
       background:rgba(225,29,72,.14);
       border-color:rgba(225,29,72,.42);
     }
+    .chatMessage.system .chatBubble{
+      background:rgba(255,255,255,.04);
+      border-color:rgba(255,255,255,.14);
+      color:var(--rt-muted);
+      text-align:center;
+    }
     .chatDrawerFoot{
       border-top:1px solid rgba(255,255,255,.16);
       padding:10px;
@@ -1321,6 +1394,42 @@
       gap:8px;
       background:rgba(255,255,255,.05);
       align-items:stretch;
+    }
+    .teamReplyMeta{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      border:1px solid rgba(255,255,255,.18);
+      border-radius:10px;
+      background:rgba(255,255,255,.06);
+      color:var(--rt-text);
+      padding:8px 10px;
+      font-size:12px;
+      font-weight:700;
+      line-height:1.4;
+    }
+    .teamReplyMeta[hidden]{
+      display:none !important;
+    }
+    .teamReplyMeta strong{
+      color:#fff;
+      font-weight:900;
+    }
+    .teamReplyUnlockBtn{
+      border:1px solid rgba(225,29,72,.52);
+      border-radius:999px;
+      background:rgba(225,29,72,.12);
+      color:#fff;
+      font-size:11px;
+      font-weight:800;
+      padding:5px 10px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .teamReplyUnlockBtn:hover{
+      background:rgba(225,29,72,.22);
+      border-color:rgba(244,63,94,.86);
     }
     .chatDrawer .chatPrefillRow{
       display:none !important;
@@ -3079,6 +3188,144 @@
 
     .teamDiagWrap{
       margin-bottom:8px;
+    }
+    .teamModeBanner{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin-bottom:10px;
+      border:1px solid rgba(225,29,72,.24);
+      border-radius:14px;
+      background:linear-gradient(135deg, rgba(4,7,16,.96) 0%, rgba(28,8,16,.96) 100%);
+      box-shadow:0 18px 32px rgba(0,0,0,.18);
+      color:#fdf2f8;
+      padding:14px 16px;
+    }
+    .teamModeBanner[hidden]{
+      display:none !important;
+    }
+    .teamModeBannerTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .teamModeBadge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      width:max-content;
+      border:1px solid rgba(244,63,94,.45);
+      border-radius:999px;
+      background:rgba(225,29,72,.12);
+      color:#ffe4eb;
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      padding:5px 10px;
+    }
+    .teamModeBannerText{
+      font-size:15px;
+      font-weight:800;
+      line-height:1.35;
+      color:#fff1f2;
+    }
+    .teamModeBannerSub{
+      font-size:13px;
+      color:rgba(255,236,241,.9);
+      line-height:1.4;
+    }
+    .teamModeUnlockBtn{
+      border:1px solid rgba(244,63,94,.45);
+      border-radius:999px;
+      background:rgba(255,255,255,.06);
+      color:#fff;
+      font-size:12px;
+      font-weight:800;
+      padding:7px 12px;
+      cursor:pointer;
+    }
+    .teamModeUnlockBtn:hover{
+      background:rgba(225,29,72,.18);
+      border-color:rgba(244,63,94,.82);
+    }
+    .teamModeUnlockBtn[hidden]{
+      display:none !important;
+    }
+    .teamGateBackdrop{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      background:rgba(3,5,10,.76);
+      backdrop-filter:blur(8px);
+      -webkit-backdrop-filter:blur(8px);
+      z-index:10060;
+    }
+    .teamGateBackdrop[hidden]{
+      display:none !important;
+    }
+    .teamGateModal{
+      width:min(440px, calc(100vw - 40px));
+      border:1px solid rgba(244,63,94,.28);
+      border-radius:20px;
+      background:linear-gradient(180deg, rgba(15,17,27,.96) 0%, rgba(8,9,14,.98) 100%);
+      box-shadow:0 28px 60px rgba(0,0,0,.42);
+      color:#fff;
+      padding:24px;
+    }
+    .teamGateTitle{
+      margin:0 0 8px;
+      font-size:24px;
+      font-weight:900;
+      line-height:1.15;
+    }
+    .teamGateSub{
+      margin:0 0 12px;
+      color:rgba(255,236,241,.84);
+      font-size:14px;
+      line-height:1.45;
+    }
+    .teamGateInput{
+      width:100%;
+      min-height:44px;
+      border:1px solid rgba(255,255,255,.18);
+      border-radius:12px;
+      background:rgba(255,255,255,.05);
+      color:#fff;
+      padding:10px 12px;
+      font-size:15px;
+    }
+    .teamGateInput:focus{
+      outline:none;
+      border-color:rgba(244,63,94,.86);
+      box-shadow:0 0 0 3px rgba(225,29,72,.2);
+    }
+    .teamGateMessage{
+      margin-top:10px;
+      border-radius:12px;
+      padding:9px 10px;
+      font-size:13px;
+      font-weight:700;
+      line-height:1.35;
+    }
+    .teamGateMessage[hidden]{
+      display:none !important;
+    }
+    .teamGateMessage.err{
+      background:rgba(225,29,72,.14);
+      color:#ffe4eb;
+      border:1px solid rgba(244,63,94,.45);
+    }
+    .teamGateActions{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      margin-top:14px;
     }
     .teamDiagBtn{
       border:1px solid var(--c-comp-hex-cbd5e1);
@@ -6834,7 +7081,12 @@
 </head>
 <body>
   <section class="rt-view authShell" id="loginView">
-    <a class="loginHomeBtn" href="https://www.redthreads.com">Home</a>
+    <a
+      class="loginHomeBtn"
+      href="https://www.redthreads.com"
+      target="_top"
+      rel="noopener"
+    >Home</a>
     <img class="authLogo" src="https://logos.redthreads.work/CALC_PORTAL/DARK_LOGO_SQUARE.png" alt="Red Threads logo" referrerpolicy="no-referrer">
     <div class="authCard rtGlassCard">
       <h1 class="authTitle">PORTAL LOGIN</h1>
@@ -6855,7 +7107,14 @@
   </section>
 
   <section class="rt-view authShell" id="resetRequestView" hidden>
-    <div class="authCard">
+    <a
+      class="loginHomeBtn"
+      href="https://www.redthreads.com"
+      target="_top"
+      rel="noopener"
+    >Home</a>
+    <img class="authLogo" src="https://logos.redthreads.work/CALC_PORTAL/DARK_LOGO_SQUARE.png" alt="Red Threads logo" referrerpolicy="no-referrer">
+    <div class="authCard rtGlassCard">
       <h1 class="authTitle">Reset password</h1>
       <p class="authSub">We will email a 6-digit code valid for 15 minutes.</p>
       <div class="authMessage" id="resetRequestMessage" hidden></div>
@@ -6869,8 +7128,16 @@
   </section>
 
   <section class="rt-view authShell" id="resetConfirmView" hidden>
-    <div class="authCard">
+    <a
+      class="loginHomeBtn"
+      href="https://www.redthreads.com"
+      target="_top"
+      rel="noopener"
+    >Home</a>
+    <img class="authLogo" src="https://logos.redthreads.work/CALC_PORTAL/DARK_LOGO_SQUARE.png" alt="Red Threads logo" referrerpolicy="no-referrer">
+    <div class="authCard rtGlassCard">
       <h1 class="authTitle">Enter reset code</h1>
+      <p class="authSub">Use the code from your email to set a new password and get back into the portal.</p>
       <div class="authMessage" id="resetConfirmMessage" hidden></div>
       <label class="authLabel" for="authResetEmail">Email</label>
       <input class="authInput" id="authResetEmail" type="email" autocomplete="email" />
@@ -6886,6 +7153,12 @@
   </section>
 
   <section class="rt-view authShell" id="dashboardView" hidden>
+    <a
+      class="dashboardHomeBtn"
+      href="https://www.redthreads.com"
+      target="_top"
+      rel="noopener"
+    >Home</a>
     <div class="authCard rtGlassCard">
       <div class="authHomeHead">
         <h1 class="authTitle" id="authProjectsTitle">Your Projects</h1>
@@ -6947,7 +7220,7 @@
       </div>
       <div class="headerRightZone">
         <div class="headerRightTop">
-          <button class="headerBtn headerBtnGrey" id="saveBtnMini" type="button">Save / Send</button>
+          <button class="headerBtn headerBtnGrey" id="saveBtnMini" type="button">Save</button>
           <button class="headerBtn headerBtnBlue" id="placeOrderBtnMini" type="button">Place Order</button>
         </div>
       </div>
@@ -7011,6 +7284,15 @@
 
     <div class="saveNotice" id="saveNotice" hidden></div>
 
+    <section class="teamModeBanner" id="teamModeBanner" hidden>
+      <div class="teamModeBannerTop">
+        <span class="teamModeBadge" id="teamModeBadge">Team Mode</span>
+        <button class="teamModeUnlockBtn" id="teamModeUnlockBtn" type="button" hidden>Unlock Replies</button>
+      </div>
+      <div class="teamModeBannerText" id="teamModeBannerText">Team messaging is locked for this job.</div>
+      <div class="teamModeBannerSub" id="teamModeAuthor">Replying as: Red Threads Team</div>
+    </section>
+
     <section class="printJobTabsSection" id="printJobTabsSection">
       <div class="printJobTabsList" id="printJobTabsList" role="tablist" aria-label="Print Jobs"></div>
       <div class="hiddenControlBar printJobHiddenControlBar" id="hiddenPrintJobsBar"></div>
@@ -7066,6 +7348,10 @@
       <div id="chatMessages"></div>
     </div>
     <div class="chatDrawerFoot">
+      <div class="teamReplyMeta" id="teamReplyMeta" hidden>
+        <span id="teamReplyIdentity">Replying as: Red Threads Team</span>
+        <button class="teamReplyUnlockBtn" id="teamReplyUnlockBtn" type="button" hidden>Unlock</button>
+      </div>
       <div class="chatClassifierGate" id="chatClassifierGate" hidden>
         <label class="chatClassifierLabel" for="chatClassifierSelect">Before you can send a message, you must select which job this is in reference to.</label>
         <div class="chatClassifierButtons" id="chatClassifierButtons" role="group" aria-label="Select print job"></div>
@@ -7080,6 +7366,18 @@
       </div>
     </div>
   </aside>
+  <div class="teamGateBackdrop" id="teamGateBackdrop" hidden>
+    <div class="teamGateModal" id="teamGateModal" role="dialog" aria-modal="true" aria-labelledby="teamGateTitle">
+      <div class="teamModeBadge">Team Mode</div>
+      <h2 class="teamGateTitle" id="teamGateTitle">Enter the team password</h2>
+      <div class="teamGateSub" id="teamGateSub">Unlock replies for this job.</div>
+      <input class="teamGateInput" id="teamGatePassword" type="password" autocomplete="current-password" placeholder="Team password">
+      <div class="teamGateMessage err" id="teamGateMessage" hidden></div>
+      <div class="teamGateActions">
+        <button class="teamModeUnlockBtn" id="teamGateSubmit" type="button">Unlock Team Replies</button>
+      </div>
+    </div>
+  </div>
   <div class="sendModalBackdrop" id="sendModalBackdrop" hidden>
     <div class="sendModal" id="sendModal" role="dialog" aria-modal="true" aria-labelledby="sendModalTitle">
       <div class="sendModalTitle" id="sendModalTitle">Send Estimate Copy</div>
@@ -7132,7 +7430,7 @@
       <div class="artworkApproveSuccess" id="artworkApproveSuccess" hidden>
         <div class="artworkApproveSuccessIcon" aria-hidden="true">✓</div>
         <p class="artworkApproveSuccessTitle">Success, your artwork is approved.</p>
-        <p class="artworkApproveSuccessBody">Finish entering in your sizes and quantities and click the <span class="artworkApprovePlaceOrderText">Place Order</span> button to place your order. That will begin turnaround time.</p>
+        <p class="artworkApproveSuccessBody">Finish entering your sizes and quantities, then continue through payment when you are ready to place the order. The order only locks after payment is confirmed.</p>
         <div class="artworkApproveActions">
           <button class="artworkApproveBtn artworkApproveBtnBack" id="artworkApproveDoneBtn" type="button">Return to Job</button>
           <button class="artworkApproveBtn artworkApproveBtnDisapprove" id="artworkApproveDisapproveBtn" type="button">Disapprove Art</button>
@@ -7161,10 +7459,10 @@
         <button class="orderFlowClose" id="orderFlowClose" type="button" aria-label="Close order modal">X</button>
       </div>
       <div id="orderFlowConfirmSection">
-        <p class="orderFlowBody">You are about to place your order. This will now begin our turnaround time and you can expect to receive your order at the times detailed in the printout details.</p>
+        <p class="orderFlowBody">You are about to continue toward payment for this order. The order is not placed or locked until payment is confirmed.</p>
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowBackBtn" type="button">Go Back</button>
-          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowProceedBtn" type="button">Proceed to Order</button>
+          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowProceedBtn" type="button">Continue</button>
         </div>
       </div>
       <div id="orderFlowBlockingSection" hidden>
@@ -7176,7 +7474,8 @@
       </div>
       <div id="orderFlowSuccessSection" hidden>
         <div class="orderFlowSuccessIcon" aria-hidden="true">✓</div>
-        <p class="orderFlowSuccessTitle">Success, your order has been placed.</p>
+        <p class="orderFlowSuccessTitle">Your order is ready for payment.</p>
+        <p class="orderFlowBody">Payment confirmation is what places the order, writes the final submitted state, and locks editable order fields.</p>
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowDoneBtn" type="button">Return to Snapshot</button>
         </div>
@@ -7197,42 +7496,42 @@
   </div>
 
 <script>
-  const VM = JSON.parse(<?!= JSON.stringify(JSON.stringify(VM)) ?>);
+  function decodeVmPayload_(encodedPayload){
+    try {
+      const raw = String(encodedPayload || '').trim();
+      if (!raw) return {};
+      const normalized = raw.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized + '==='.slice((normalized.length + 3) % 4);
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      let json = '';
+      if (typeof TextDecoder === 'function') {
+        json = new TextDecoder().decode(bytes);
+      } else {
+        const percentEncoded = Array.prototype.map.call(bytes, function(byte){
+          return '%' + ('00' + byte.toString(16)).slice(-2);
+        }).join('');
+        json = decodeURIComponent(percentEncoded);
+      }
+      const parsed = JSON.parse(json);
+      return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  let VM = decodeVmPayload_(<?!= JSON.stringify(VM_B64 || '') ?>);
   const AUTH_SESSION_STORAGE_KEY = 'rtAuthSessionId';
+  // Legacy embedded boot keys are kept only so newer builds can clear stale
+  // local/session storage written by the old navigation-based open flow.
   const AUTH_PORTAL_PAYLOAD_STORAGE_KEY = 'rtAuthPortalPayloadV1';
   const AUTH_PORTAL_BOOT_ONCE_KEY = 'rtAuthPortalBootOnce';
   const AUTH_PORTAL_BOOT_INTENT_KEY = 'rtAuthPortalBootIntentV1';
   const AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY = 'rtAuthDirectOpenTokenV1';
   const RT_LOADER_PENDING_KEY = 'rtLoaderPendingV1';
-
-  (function hydrateVmFromAuthCache(){
-    const hasToken = String(VM.token || '').trim();
-    if (hasToken) return;
-    try {
-      const allowPortalBoot = localStorage.getItem(AUTH_PORTAL_BOOT_ONCE_KEY) === '1';
-      if (!allowPortalBoot) return;
-      const hasBootIntent = sessionStorage.getItem(AUTH_PORTAL_BOOT_INTENT_KEY) === '1';
-      if (!hasBootIntent) return;
-      const sessionId = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
-      if (!sessionId) return;
-      const raw = localStorage.getItem(AUTH_PORTAL_PAYLOAD_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const portalPayload = parsed && typeof parsed === 'object' ? parsed.portalPayload : null;
-      if (!portalPayload || typeof portalPayload !== 'object') return;
-      const payloadToken = String(portalPayload.token || '').trim();
-      if (!payloadToken) return;
-      Object.keys(portalPayload).forEach(key => {
-        VM[key] = portalPayload[key];
-      });
-      VM.__fromAuthShell = true;
-      try { document.documentElement.dataset.hasToken = '1'; } catch (_) {}
-      localStorage.removeItem(AUTH_PORTAL_BOOT_ONCE_KEY);
-      sessionStorage.removeItem(AUTH_PORTAL_BOOT_INTENT_KEY);
-    } catch (_) {
-      // Ignore corrupt local cache and continue in auth shell mode.
-    }
-  })();
 
   const SENDER_IMAGES = {
     josiah: 'https://logos.redthreads.work/CALC_PORTAL/JOSIAH_HEADSHOT.png',
@@ -7485,34 +7784,30 @@
     return out;
   }
 
-  const ROW = (VM.row && typeof VM.row === 'object') ? VM.row : {};
-  const SNAPSHOT = safeJsonParse(VM.snapshot, {});
-  const META = (SNAPSHOT && typeof SNAPSHOT.meta === 'object' && SNAPSHOT.meta) ? SNAPSHOT.meta : {};
-  const PRINT_JOBS = normalizePrintJobs(SNAPSHOT.printJobs);
-  const INITIAL_ARTWORK_APPROVED_BY_JOB_ID = (function(){
+  function buildArtworkApprovedByJobId_(rowObj, printJobs){
     const out = {};
-    PRINT_JOBS.forEach((job, idx) => {
+    const safeRow = (rowObj && typeof rowObj === 'object') ? rowObj : {};
+    const jobs = Array.isArray(printJobs) ? printJobs : [];
+    jobs.forEach((job, idx) => {
       if (!job || !job.printJobId) return;
       const headerKey = 'printjob' + (idx + 1) + 'artstatus';
-      const value = String(ROW[headerKey] == null ? '' : ROW[headerKey]).trim().toLowerCase();
+      const value = String(safeRow[headerKey] == null ? '' : safeRow[headerKey]).trim().toLowerCase();
       out[job.printJobId] = value === 'approved';
     });
     return out;
-  })();
-  const PORTAL_MODE = normalizePortalMode(VM.mode);
-  const IS_TEAM = PORTAL_MODE === 'team';
-  const SOURCE_PORTAL_STATE = safeJsonParse(VM.portalState, {});
-  const HYDRATE_BOOT_SOURCE = hasNonBlankSignalValue(VM.portalState) ? 'portalState' : 'snapshot-bootstrap';
-  const INITIAL_TOKEN = String(VM.token || '').trim();
-  const DIRECT_OPEN_TOKEN = (function(){
-    try {
-      return String(sessionStorage.getItem(AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY) || '').trim();
-    } catch (_) {
-      return '';
-    }
-  })();
+  }
 
-  const FINAL_LOCK_STATUSES = new Set(['submitted', 'placed', 'ordered']);
+  let ROW = {};
+  let SNAPSHOT = {};
+  let META = {};
+  let PRINT_JOBS = [];
+  let INITIAL_ARTWORK_APPROVED_BY_JOB_ID = {};
+  let PORTAL_MODE = 'client';
+  let IS_TEAM = false;
+  let SOURCE_PORTAL_STATE = {};
+  let HYDRATE_BOOT_SOURCE = 'snapshot-bootstrap';
+  let INITIAL_TOKEN = '';
+  const FINAL_LOCK_STATUSES = new Set(['submitted', 'placed', 'ordered', 'locked']);
 
   function hasNonBlankSignalValue(value){
     if (value == null) return false;
@@ -7563,16 +7858,15 @@
 
   function isFinalizedPortal(){
     const status = readPortalStatusSignal();
-    if (status === 'saved') return false;
+    if (status === 'saved' || status === 'editable') return false;
     if (hasSubmittedStateSignal()) return true;
     if (FINAL_LOCK_STATUSES.has(status)) return true;
-    // Do not treat generic save timestamps as a lock trigger.
-    // `submittedAt` is currently written by non-final saves/chat.
-    // Only explicit final states should lock the portal.
+    // Some legacy rows may have non-final submittedAt values from older save flows.
+    // Only explicit final states or submittedStateJson should lock the portal.
     return false;
   }
 
-  let IS_READ_ONLY = isFinalizedPortal();
+  let IS_READ_ONLY = false;
 
   function detectMessageLogKey(stateObj){
     if (!stateObj || typeof stateObj !== 'object') return 'messageLog';
@@ -7582,7 +7876,7 @@
     return 'messageLog';
   }
 
-  let MESSAGE_LOG_KEY = detectMessageLogKey(SOURCE_PORTAL_STATE);
+  let MESSAGE_LOG_KEY = 'messageLog';
 
   function parseActivePrintJobId(stateObj){
     if (!stateObj || typeof stateObj !== 'object') return '';
@@ -7703,7 +7997,9 @@
     const text = String(raw.text || '').trim();
     if (!text) return null;
     const authorRaw = String(raw.authorType || raw.sender || '').trim().toLowerCase();
-    const authorType = authorRaw === 'team' ? 'team' : 'client';
+    const authorType = authorRaw === 'team'
+      ? 'team'
+      : (authorRaw === 'system' ? 'system' : 'client');
     const createdAtRaw = String(raw.createdAt || raw.tsIso || raw.ts || '').trim();
     const createdAt = !Number.isNaN(new Date(createdAtRaw).getTime()) ? createdAtRaw : new Date().toISOString();
     const pjId = String(raw.pjId || '').trim();
@@ -7899,9 +8195,53 @@
     return out;
   }
 
-  let PORTAL_STATE = normalizePortalState(VM.portalState);
-  IS_READ_ONLY = isFinalizedPortal();
-  PORTAL_STATE.isReadOnly = IS_READ_ONLY;
+  let PORTAL_STATE = {};
+
+  function applyVmRuntimeState(vmPayload){
+    const payload = (vmPayload && typeof vmPayload === 'object') ? clonePlainObject(vmPayload) : {};
+    VM = payload;
+    ROW = (VM.row && typeof VM.row === 'object') ? VM.row : {};
+    SNAPSHOT = safeJsonParse(VM.snapshot, {});
+    META = (SNAPSHOT && typeof SNAPSHOT.meta === 'object' && SNAPSHOT.meta) ? SNAPSHOT.meta : {};
+    PRINT_JOBS = normalizePrintJobs(SNAPSHOT.printJobs);
+    INITIAL_ARTWORK_APPROVED_BY_JOB_ID = buildArtworkApprovedByJobId_(ROW, PRINT_JOBS);
+    PORTAL_MODE = normalizePortalMode(VM.mode);
+    IS_TEAM = PORTAL_MODE === 'team';
+    SOURCE_PORTAL_STATE = safeJsonParse(VM.portalState, {});
+    HYDRATE_BOOT_SOURCE = hasNonBlankSignalValue(VM.portalState) ? 'portalState' : 'snapshot-bootstrap';
+    INITIAL_TOKEN = String(VM.token || '').trim();
+    CURRENT_TOKEN = INITIAL_TOKEN;
+    MESSAGE_LOG_KEY = detectMessageLogKey(SOURCE_PORTAL_STATE);
+    IS_READ_ONLY = isFinalizedPortal();
+    PORTAL_STATE = normalizePortalState(VM.portalState);
+    PORTAL_STATE.isReadOnly = IS_READ_ONLY;
+    TEAM_MODE_UNLOCKED = IS_TEAM ? readStoredTeamModeUnlock(INITIAL_TOKEN) : false;
+    ARTWORK_APPROVED_BY_JOB_ID = Object.assign({}, INITIAL_ARTWORK_APPROVED_BY_JOB_ID);
+    refreshRuntimeBootFlags();
+  }
+
+  function buildClientAuthShellVm(){
+    return {
+      token: '',
+      mode: 'client',
+      status: '',
+      readOnly: false,
+      row: {},
+      snapshot: {
+        meta: {
+          contractVersion: '2.0.0'
+        },
+        printJobs: []
+      },
+      portalState: {},
+      chatLog: [],
+      postUrl: String((VM && VM.postUrl) || '').trim() || (window.location.origin + window.location.pathname),
+      diagnostics: {
+        shell: 'auth'
+      },
+      authShell: true
+    };
+  }
 
   const CAN_EDIT = () => PORTAL_MODE === 'client' && !IS_READ_ONLY;
 
@@ -8035,6 +8375,40 @@
     return metaField('sentBy') || rowField('sentby') || 'Josiah';
   }
 
+  function getVisibleTeamAuthorName(){
+    return String(getSenderName() || '').trim() || 'Red Threads Team';
+  }
+
+  function teamModeUnlockStorageKey(token){
+    return TEAM_MODE_UNLOCK_STORAGE_PREFIX + '::' + String(token || '').trim();
+  }
+
+  function readStoredTeamModeUnlock(token){
+    const key = teamModeUnlockStorageKey(token);
+    if (!key || key === TEAM_MODE_UNLOCK_STORAGE_PREFIX + '::') return false;
+    try {
+      return sessionStorage.getItem(key) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function writeStoredTeamModeUnlock(token, unlocked){
+    const key = teamModeUnlockStorageKey(token);
+    if (!key || key === TEAM_MODE_UNLOCK_STORAGE_PREFIX + '::') return;
+    try {
+      if (unlocked) {
+        sessionStorage.setItem(key, '1');
+      } else {
+        sessionStorage.removeItem(key);
+      }
+    } catch (_) {}
+  }
+
+  function isTeamModeLocked(){
+    return IS_TEAM && !TEAM_MODE_UNLOCKED;
+  }
+
   function getSenderAvatarUrl(){
     const name = getSenderName().toLowerCase();
     if (!name) return SENDER_IMAGES.josiah;
@@ -8072,7 +8446,6 @@
   const authProjectsTitle = document.getElementById('authProjectsTitle');
   const authProjectsBody = document.getElementById('authProjectsBody');
   const authProjectsEmpty = document.getElementById('authProjectsEmpty');
-
   const projectView = document.getElementById('projectView');
   const jobsRoot = document.getElementById('jobsRoot');
   const printJobTabsSection = document.getElementById('printJobTabsSection');
@@ -8131,6 +8504,19 @@
   const chatInput = document.getElementById('chatInput');
   const chatSend = document.getElementById('chatSend');
   const chatBody = document.getElementById('chatBody');
+  const teamModeBanner = document.getElementById('teamModeBanner');
+  const teamModeBadge = document.getElementById('teamModeBadge');
+  const teamModeBannerText = document.getElementById('teamModeBannerText');
+  const teamModeAuthor = document.getElementById('teamModeAuthor');
+  const teamModeUnlockBtn = document.getElementById('teamModeUnlockBtn');
+  const teamReplyMeta = document.getElementById('teamReplyMeta');
+  const teamReplyIdentity = document.getElementById('teamReplyIdentity');
+  const teamReplyUnlockBtn = document.getElementById('teamReplyUnlockBtn');
+  const teamGateBackdrop = document.getElementById('teamGateBackdrop');
+  const teamGatePassword = document.getElementById('teamGatePassword');
+  const teamGateSubmit = document.getElementById('teamGateSubmit');
+  const teamGateMessage = document.getElementById('teamGateMessage');
+  const teamGateSub = document.getElementById('teamGateSub');
   const sendModalBackdrop = document.getElementById('sendModalBackdrop');
   const sendModal = document.getElementById('sendModal');
   const sendEmailsInput = document.getElementById('sendEmailsInput');
@@ -8185,14 +8571,11 @@
   const COMPARE_GUIDANCE_EMPHASIS = 'Buy in bulk and save.';
   const COMPARE_GUIDANCE_TEXT = COMPARE_GUIDANCE_PREFIX + COMPARE_GUIDANCE_EMPHASIS;
 
-  const CURRENT_TOKEN = INITIAL_TOKEN;
+  let CURRENT_TOKEN = '';
   const URL_QUERY_PARAMS = new URLSearchParams(window.location.search || '');
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
-  const HAS_PORTAL_TOKEN = String(CURRENT_TOKEN || '').trim().length > 0;
-  const OPENED_FROM_AUTH_SHELL =
-    (VM.__fromAuthShell === true) ||
-    OPENED_FROM_AUTH_QUERY ||
-    (DIRECT_OPEN_TOKEN && DIRECT_OPEN_TOKEN === CURRENT_TOKEN);
+  let HAS_PORTAL_TOKEN = false;
+  let OPENED_FROM_AUTH_SHELL = false;
   const STATE_LOGIN = 'login';
   const STATE_RESET_REQUEST = 'resetRequest';
   const STATE_RESET_CONFIRM = 'resetConfirm';
@@ -8225,6 +8608,8 @@
   let CHAT_HEADER_CLASSIFY_REQUIRED = false;
   let CHAT_CLASSIFIER_JOBS = [];
   let CHAT_SEND_IN_FLIGHT = false;
+  let TEAM_MODE_UNLOCKED = false;
+  let TEAM_MODE_GATE_IN_FLIGHT = false;
   let activePrintJobId = '';
   let HEADER_DELIVERY_EXPANDED = false;
   let CURRENT_VIEW = '';
@@ -8250,6 +8635,29 @@
   let ORDER_FLOW_BLOCKING_JOBS = [];
   let UNSAVED_LEAVE_ACTION_PENDING = false;
   let SNAPSHOT_DIRTY_BASELINE_KEY = '';
+  let DASHBOARD_VIEW_VISIBLE_AT = 0;
+  let DASHBOARD_OPEN_ARMED_BTN = null;
+  let DASHBOARD_OPEN_ARMED_AT = 0;
+  let DASHBOARD_OPEN_ARMED_SOURCE = '';
+  const DASHBOARD_OPEN_ARM_WINDOW_MS = 1500;
+  const RT_PORTAL_EVENT_READY = 'RT_PORTAL_READY';
+  const RT_PORTAL_EVENT_PING = 'RT_PORTAL_PING';
+  const RT_PORTAL_EVENT_LOAD_TOKEN = 'RT_PORTAL_LOAD_TOKEN';
+  const TEAM_MODE_UNLOCK_STORAGE_PREFIX = 'rtTeamModeUnlocked';
+  const RT_PORTAL_PARENT_ORIGINS = new Set([
+    'https://www.redthreads.com',
+    'https://redthreads.com'
+  ]);
+  let PORTAL_PARENT_BRIDGE_BOUND = false;
+
+  function refreshRuntimeBootFlags(){
+    HAS_PORTAL_TOKEN = String(CURRENT_TOKEN || '').trim().length > 0;
+    OPENED_FROM_AUTH_SHELL =
+      (VM && VM.__fromAuthShell === true) ||
+      OPENED_FROM_AUTH_QUERY;
+  }
+
+  applyVmRuntimeState(VM);
 
   function debugLog(){
     if (!DEBUG_UI) return;
@@ -8285,7 +8693,6 @@
     try { candidates.push(String(sessionStorage.getItem('selectedToken') || '').trim()); } catch (_) {}
     try { candidates.push(String(sessionStorage.getItem('currentToken') || '').trim()); } catch (_) {}
     try { candidates.push(String(sessionStorage.getItem('lastToken') || '').trim()); } catch (_) {}
-    candidates.push(String(DIRECT_OPEN_TOKEN || '').trim());
     candidates.push(String(CURRENT_TOKEN || '').trim());
     candidates.push(String(VM.token || '').trim());
     for (let i = 0; i < candidates.length; i += 1) {
@@ -8419,6 +8826,7 @@
       localStorage.removeItem(AUTH_PORTAL_PAYLOAD_STORAGE_KEY);
       localStorage.removeItem(AUTH_PORTAL_BOOT_ONCE_KEY);
       sessionStorage.removeItem(AUTH_PORTAL_BOOT_INTENT_KEY);
+      sessionStorage.removeItem(AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY);
     } catch (_) {}
   }
 
@@ -8506,19 +8914,7 @@
     } catch (_) {}
 
     const base = String(VM.postUrl || '').trim().split('?')[0] || (window.location.origin + window.location.pathname);
-    let navigated = false;
-    try {
-      if (window.top && window.top !== window) {
-        window.top.location = base;
-        navigated = true;
-      }
-    } catch (_) {}
-    if (!navigated) {
-      try {
-        window.location.assign(base);
-        navigated = true;
-      } catch (_) {}
-    }
+    const navigated = navigateCurrentContext_(base);
 
     if (!navigated) {
       setView(VIEW_LOGIN, { focus: false });
@@ -8532,21 +8928,158 @@
     }
   }
 
-  function navigateInTab(targetUrl){
+  function navigateCurrentContext_(targetUrl){
     const target = String(targetUrl || '').trim();
     if (!target) return false;
+    const tryNavigate = winRef => {
+      if (!winRef) return false;
+      try {
+        if (winRef === window) {
+          window.location.assign(target);
+        } else {
+          winRef.location = target;
+        }
+        return true;
+      } catch (_) {
+        return false;
+      }
+    };
     try {
       if (window.top && window.top !== window) {
-        window.top.location = target;
+        if (tryNavigate(window.top)) return true;
+      }
+    } catch (_) {}
+    if (isGoogleAppsScriptShellContext_()) {
+      try {
+        // Our app runs inside two nested Google-controlled iframe layers.
+        // Replacing only `window.parent` nests a fresh Apps Script wrapper
+        // inside the existing shell. Jump to the containing `/exec` frame first.
+        if (window.parent && window.parent.parent && window.parent !== window && window.parent.parent !== window.parent) {
+          if (tryNavigate(window.parent.parent)) return true;
+        }
+      } catch (_) {}
+      try {
+        if (window.parent && window.parent !== window) {
+          if (tryNavigate(window.parent)) return true;
+        }
+      } catch (_) {}
+    }
+    return tryNavigate(window);
+  }
+
+  function navigateInTab(targetUrl){
+    return navigateCurrentContext_(targetUrl);
+  }
+
+  function isGoogleAppsScriptShellContext_(){
+    const host = String(window.location.hostname || '').trim().toLowerCase();
+    const path = String(window.location.pathname || '').trim();
+    const referrer = String(document.referrer || '').trim().toLowerCase();
+    if (host.indexOf('script.googleusercontent.com') !== -1 && path.indexOf('/userCodeAppPanel') === 0) {
+      return true;
+    }
+    if (referrer.indexOf('://script.google.com/') !== -1) {
+      return true;
+    }
+    return false;
+  }
+
+  function isEmbeddedPortalContext_(){
+    let framed = false;
+    try {
+      framed = !!(window.top && window.top !== window);
+    } catch (_) {
+      framed = true;
+    }
+    if (!framed) return false;
+    if (!isGoogleAppsScriptShellContext_()) return true;
+    try {
+      return !!(window.parent && window.top && window.parent !== window && window.top !== window.parent);
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function normalizePortalParentOrigin_(origin){
+    try {
+      return String(new URL(String(origin || '')).origin || '').trim().toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function isAllowedPortalParentOrigin_(origin){
+    const normalized = normalizePortalParentOrigin_(origin);
+    return normalized ? RT_PORTAL_PARENT_ORIGINS.has(normalized) : false;
+  }
+
+  function buildPortalReadyMessage_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    return {
+      type: RT_PORTAL_EVENT_READY,
+      payload: {
+        ready: true,
+        reason: String(opts.reason || '').trim(),
+        view: String(CURRENT_VIEW || '').trim(),
+        hasSession: hasActiveAuthSession(),
+        hasToken: String(CURRENT_TOKEN || '').trim().length > 0
+      }
+    };
+  }
+
+  function postPortalMessageToTop_(message){
+    if (!isEmbeddedPortalContext_()) return false;
+    try {
+      if (window.top && window.top !== window) {
+        window.top.postMessage(message, '*');
         return true;
       }
     } catch (_) {}
+    return false;
+  }
+
+  function replyPortalReadyToSource_(sourceWindow, origin, options){
+    if (!sourceWindow || !isAllowedPortalParentOrigin_(origin)) return false;
     try {
-      window.location.assign(target);
+      sourceWindow.postMessage(buildPortalReadyMessage_(options), origin);
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  function notifyPortalReady(options){
+    postPortalMessageToTop_(buildPortalReadyMessage_(options));
+  }
+
+  function getTokenFromPortalMessage_(message){
+    if (!message || typeof message !== 'object') return '';
+    const payload = (message.payload && typeof message.payload === 'object') ? message.payload : {};
+    return String(payload.token || message.token || '').trim();
+  }
+
+  function initPortalParentBridge(){
+    if (PORTAL_PARENT_BRIDGE_BOUND) return;
+    PORTAL_PARENT_BRIDGE_BOUND = true;
+    window.addEventListener('message', event => {
+      const data = event && event.data;
+      if (!data || typeof data !== 'object') return;
+      if (!isAllowedPortalParentOrigin_(event.origin)) return;
+
+      const type = String(data.type || '').trim();
+      if (type === RT_PORTAL_EVENT_PING) {
+        replyPortalReadyToSource_(event.source, event.origin, { reason: 'ping' });
+        return;
+      }
+      if (type !== RT_PORTAL_EVENT_LOAD_TOKEN) return;
+
+      const token = getTokenFromPortalMessage_(data);
+      if (!token) return;
+      loadProjectTokenInPlace(token, {
+        source: 'parent-message',
+        requireAuthSession: false
+      }).catch(() => {});
+    });
   }
 
   function getMessageElementForView(viewName){
@@ -8597,10 +9130,21 @@
     const opts = (options && typeof options === 'object') ? options : {};
     const target = String(viewName || VIEW_LOGIN).trim();
     CURRENT_VIEW = target;
+    if (target === VIEW_DASHBOARD) {
+      DASHBOARD_VIEW_VISIBLE_AT = Date.now();
+      DASHBOARD_OPEN_ARMED_BTN = null;
+      DASHBOARD_OPEN_ARMED_AT = 0;
+      DASHBOARD_OPEN_ARMED_SOURCE = '';
+    } else if (target !== VIEW_DASHBOARD) {
+      DASHBOARD_OPEN_ARMED_BTN = null;
+      DASHBOARD_OPEN_ARMED_AT = 0;
+      DASHBOARD_OPEN_ARMED_SOURCE = '';
+    }
     if (target !== VIEW_SNAPSHOT) {
       closeUnsavedLeaveModal({ immediate: true });
       closeArtworkApproveModal({ immediate: true });
       closeOrderFlowModal({ immediate: true });
+      closeTeamModeGate({ immediate: true });
       resetSnapshotDirtyBaseline({ clear: true });
     }
     if (target === VIEW_DASHBOARD) {
@@ -8657,6 +9201,49 @@
     if (!btn.dataset.idleText) btn.dataset.idleText = String(idleText || btn.textContent || '');
     btn.disabled = !!busy;
     btn.textContent = busy ? String(busyText || 'Working...') : String(btn.dataset.idleText);
+  }
+
+  function armDashboardProjectOpen(btn, source){
+    if (!btn) return;
+    DASHBOARD_OPEN_ARMED_BTN = btn;
+    DASHBOARD_OPEN_ARMED_AT = Date.now();
+    DASHBOARD_OPEN_ARMED_SOURCE = String(source || '');
+  }
+
+  function hasFreshDashboardProjectOpenArm(btn){
+    if (!btn || DASHBOARD_OPEN_ARMED_BTN !== btn) return false;
+    const ageMs = Date.now() - DASHBOARD_OPEN_ARMED_AT;
+    return ageMs >= 0 && ageMs <= DASHBOARD_OPEN_ARM_WINDOW_MS;
+  }
+
+  function consumeDashboardProjectOpenArm(btn){
+    const ok = hasFreshDashboardProjectOpenArm(btn);
+    DASHBOARD_OPEN_ARMED_BTN = null;
+    DASHBOARD_OPEN_ARMED_AT = 0;
+    DASHBOARD_OPEN_ARMED_SOURCE = '';
+    return ok;
+  }
+
+  function shouldAllowDashboardProjectOpen(btn, event){
+    const armed = consumeDashboardProjectOpenArm(btn);
+    if (armed) return true;
+
+    const sinceDashboardVisibleMs = DASHBOARD_VIEW_VISIBLE_AT ? (Date.now() - DASHBOARD_VIEW_VISIBLE_AT) : -1;
+    const focusedBtn = (document.activeElement === btn);
+    const isTrusted = !!(event && event.isTrusted);
+
+    // Keep keyboard accessibility intact for users who focus a project button
+    // and activate it via assistive tech or browser-generated click.
+    if (isTrusted && focusedBtn && sinceDashboardVisibleMs > 750) {
+      return true;
+    }
+
+    rtDebugStep('OPEN:blocked-unarmed', {
+      sinceDashboardVisibleMs: sinceDashboardVisibleMs,
+      focused: focusedBtn,
+      trusted: isTrusted
+    });
+    return false;
   }
 
   function rtShowLoader(title, sub) {
@@ -8844,6 +9431,141 @@
     homeBtnMini.hidden = !showHome;
   }
 
+  function setTeamGateMessage(message, isError){
+    if (!teamGateMessage) return;
+    const text = String(message || '').trim();
+    if (!text) {
+      teamGateMessage.hidden = true;
+      teamGateMessage.textContent = '';
+      return;
+    }
+    teamGateMessage.hidden = false;
+    teamGateMessage.textContent = text;
+    teamGateMessage.classList.toggle('err', isError !== false);
+  }
+
+  function setTeamModeGateBusy(busy){
+    TEAM_MODE_GATE_IN_FLIGHT = !!busy;
+    if (teamGateSubmit) {
+      teamGateSubmit.disabled = TEAM_MODE_GATE_IN_FLIGHT;
+      teamGateSubmit.textContent = TEAM_MODE_GATE_IN_FLIGHT ? 'Unlocking...' : 'Unlock Team Replies';
+    }
+    if (teamGatePassword) teamGatePassword.disabled = TEAM_MODE_GATE_IN_FLIGHT;
+  }
+
+  function openTeamModeGate(options){
+    if (!IS_TEAM || !teamGateBackdrop) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (teamGateSub) {
+      teamGateSub.textContent = 'Replying as ' + getVisibleTeamAuthorName() + '. Enter the team password to unlock replies.';
+    }
+    if (!opts.preserveMessage) setTeamGateMessage('', true);
+    if (teamGatePassword && opts.resetValue !== false) teamGatePassword.value = '';
+    teamGateBackdrop.hidden = false;
+    requestAnimationFrame(() => {
+      syncOverlayScrollLock();
+      if (teamGatePassword) teamGatePassword.focus();
+    });
+  }
+
+  function closeTeamModeGate(options){
+    if (!teamGateBackdrop) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (opts.immediate === true) {
+      teamGateBackdrop.hidden = true;
+      syncOverlayScrollLock();
+      return;
+    }
+    teamGateBackdrop.hidden = true;
+    syncOverlayScrollLock();
+  }
+
+  function syncTeamModeUi(){
+    const isTeam = IS_TEAM;
+    const isLocked = isTeamModeLocked();
+    const authorName = getVisibleTeamAuthorName();
+
+    if (teamModeBanner) teamModeBanner.hidden = !isTeam;
+    if (teamModeBadge) teamModeBadge.textContent = isLocked ? 'Team Mode Locked' : 'Team Mode';
+    if (teamModeBannerText) {
+      teamModeBannerText.textContent = isLocked
+        ? 'Unlock Team Mode to reply to the client from the shared thread.'
+        : 'Team messaging is unlocked for this job.';
+    }
+    if (teamModeAuthor) teamModeAuthor.textContent = 'Replying as: ' + authorName;
+    if (teamModeUnlockBtn) teamModeUnlockBtn.hidden = !isTeam || !isLocked;
+
+    if (teamReplyMeta) teamReplyMeta.hidden = !isTeam;
+    if (teamReplyIdentity) {
+      teamReplyIdentity.textContent = 'Replying as: ' + authorName + (isLocked ? ' (locked)' : '');
+    }
+    if (teamReplyUnlockBtn) teamReplyUnlockBtn.hidden = !isTeam || !isLocked;
+
+    if (chatInput) {
+      chatInput.placeholder = isTeam
+        ? (isLocked ? 'Unlock Team Mode to reply.' : 'Reply to the client...')
+        : 'Type a message...';
+    }
+
+    if (saveBtnMini) {
+      saveBtnMini.hidden = isTeam;
+    }
+    if (placeOrderBtnMini) {
+      placeOrderBtnMini.hidden = isTeam;
+    }
+
+    if (isTeam && CURRENT_VIEW === VIEW_SNAPSHOT && isLocked) {
+      openTeamModeGate({ preserveMessage: true, resetValue: false });
+    } else {
+      closeTeamModeGate({ immediate: true });
+    }
+
+    setChatDrawerHeaderMeta();
+    setChatComposerLocked(CHAT_HEADER_CLASSIFY_REQUIRED);
+    setChatSendEnabled();
+  }
+
+  function setTeamModeUnlocked(unlocked){
+    TEAM_MODE_UNLOCKED = IS_TEAM ? !!unlocked : false;
+    writeStoredTeamModeUnlock(CURRENT_TOKEN || INITIAL_TOKEN, TEAM_MODE_UNLOCKED);
+    syncTeamModeUi();
+  }
+
+  async function submitTeamModePassword(){
+    if (!IS_TEAM || TEAM_MODE_GATE_IN_FLIGHT) return;
+    const password = String((teamGatePassword && teamGatePassword.value) || '').trim();
+    if (!password) {
+      setTeamGateMessage('Enter the team password to continue.', true);
+      if (teamGatePassword) teamGatePassword.focus();
+      return;
+    }
+    setTeamModeGateBusy(true);
+    setTeamGateMessage('', true);
+    try {
+      const resp = await callServer('verifyTeamModePassword', {
+        token: CURRENT_TOKEN,
+        password: password
+      });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Incorrect password.'));
+      }
+      setTeamModeUnlocked(true);
+      if (teamGatePassword) teamGatePassword.value = '';
+      closeTeamModeGate({ immediate: true });
+      showNotice('Team mode unlocked. Replying as ' + String(resp.senderName || getVisibleTeamAuthorName()) + '.', 'ok');
+      if (chatInput && !chatInput.disabled) chatInput.focus();
+    } catch (err) {
+      setTeamModeUnlocked(false);
+      setTeamGateMessage(String((err && err.message) || err || 'Incorrect password.'), true);
+      if (teamGatePassword) {
+        teamGatePassword.focus();
+        teamGatePassword.select();
+      }
+    } finally {
+      setTeamModeGateBusy(false);
+    }
+  }
+
   function setLoginPasswordVisibility(visible){
     if (!authLoginPassword) return;
     const show = !!visible;
@@ -8864,16 +9586,6 @@
         authLoginBtn.click();
       }
     });
-  }
-
-  function buildProjectOpenUrl(token){
-    const cleanToken = String(token || '').trim();
-    const base = String(VM.postUrl || '').trim();
-    const root = base ? base.split('?')[0] : (window.location.origin + window.location.pathname);
-    const params = new URLSearchParams();
-    params.set('t', cleanToken);
-    params.set('fromAuth', '1');
-    return root + '?' + params.toString();
   }
 
   function clearProjectRuntimeCaches(){
@@ -8917,82 +9629,152 @@
     resetProjectViewState();
   }
 
-  function openProjectFromDashboard(token, openBtn){
+  function applyAuthShellRuntimeState(){
+    applyVmRuntimeState(buildClientAuthShellVm());
+    CHAT_MESSAGES = [];
+    activePrintJobId = '';
+    TEAM_MODE_UNLOCKED = false;
+  }
+
+  function applyPortalPayloadInPlace(portalPayload, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const payload = clonePlainObject(portalPayload);
+    const payloadToken = String(payload.token || '').trim();
+    if (!payloadToken) throw new Error('Project payload token missing.');
+    payload.__fromAuthShell = opts.fromAuthShell === true;
+    applyVmRuntimeState(payload);
+    startPortalApp();
+    notifyPortalReady({ reason: String(opts.reason || opts.source || 'project-loaded') });
+  }
+
+  function showProjectLoadErrorMessage(message, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const text = String(message || 'Unable to load project.').trim() || 'Unable to load project.';
+    if (opts.forceLogin === true) {
+      applyAuthShellRuntimeState();
+      setView(VIEW_LOGIN, { focus: false, preserveMessage: true });
+      setAuthMessage(text, true, { view: VIEW_LOGIN, preserve: true });
+      return;
+    }
+    if (
+      CURRENT_VIEW === VIEW_LOGIN ||
+      CURRENT_VIEW === VIEW_RESET_REQUEST ||
+      CURRENT_VIEW === VIEW_RESET_CONFIRM ||
+      CURRENT_VIEW === VIEW_DASHBOARD
+    ) {
+      setAuthMessage(text, true, { view: CURRENT_VIEW || VIEW_LOGIN });
+      return;
+    }
+    showNotice(text, 'err');
+  }
+
+  async function loadProjectTokenInPlace(token, options){
+    const opts = (options && typeof options === 'object') ? options : {};
     const cleanToken = String(token || '').trim();
     if (!cleanToken) {
-      setAuthMessage('Missing project token.', true, { view: VIEW_DASHBOARD });
-      return;
+      showProjectLoadErrorMessage('Missing project token.');
+      return false;
     }
 
-    const loadingTitle = 'Loading project';
-    const loadingSub = '';
-    let navigationAttempted = false;
-    const openStartedAt = Date.now();
+    const requireAuthSession = opts.requireAuthSession === true;
+    const requestSessionId = requireAuthSession
+      ? String(AUTH_SESSION_ID || readStoredSessionId() || '').trim()
+      : '';
+    if (requireAuthSession && !requestSessionId) {
+      showProjectLoadErrorMessage('Please log in to open that project.', { forceLogin: true });
+      return false;
+    }
+
+    const openBtn = opts.openBtn || null;
+    const source = String(opts.source || 'unknown').trim() || 'unknown';
+    const loadingTitle = String(opts.loadingTitle || 'Loading project');
+    const loadingSub = Object.prototype.hasOwnProperty.call(opts, 'loadingSub')
+      ? String(opts.loadingSub == null ? '' : opts.loadingSub)
+      : '';
+    const methodName = requireAuthSession ? 'authLoadProject' : 'getSnapshotByToken';
 
     setButtonBusy(openBtn, true, 'Opening...', 'Open');
-    setAuthMessage('', false, { view: VIEW_DASHBOARD });
+    if (CURRENT_VIEW !== VIEW_SNAPSHOT) {
+      setAuthMessage('', false, { view: CURRENT_VIEW || VIEW_LOGIN });
+    }
     rtShowLoader(loadingTitle, loadingSub);
-    rtDebugStep('OPEN:start', { token: shortToken(cleanToken) });
+    rtDebugStep('OPEN:start', {
+      source: source,
+      token: shortToken(cleanToken),
+      mode: requireAuthSession ? 'auth-in-place' : 'token-in-place'
+    });
+
+    resetProjectViewState();
+    const requestSeq = PROJECT_OPEN_REQUEST_SEQ;
+    clearStoredPortalPayload();
+    try {
+      sessionStorage.setItem('selectedToken', cleanToken);
+      sessionStorage.setItem('currentToken', cleanToken);
+    } catch (_) {}
 
     try {
-      resetProjectViewState();
-      rtSetPendingLoaderState(loadingTitle, loadingSub);
-      try { sessionStorage.setItem(AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY, cleanToken); } catch (_) {}
-      try {
-        sessionStorage.setItem('selectedToken', cleanToken);
-        sessionStorage.setItem('currentToken', cleanToken);
-      } catch (_) {}
-
-      rtDebugStep('OPEN:fetchSnapshot:begin', { mode: 'token-navigation' });
-      rtDebugStep('OPEN:fetchSnapshot:ok', { mode: 'token-navigation', token: shortToken(cleanToken) });
-
-      const targetUrl = buildProjectOpenUrl(cleanToken);
-      rtDebugStep('OPEN:navigate', {
+      rtDebugStep('OPEN:fetchSnapshot:begin', {
+        source: source,
         token: shortToken(cleanToken),
-        currentUrl: window.location.href,
-        targetUrl: targetUrl
+        mode: requireAuthSession ? 'auth-in-place' : 'token-in-place'
       });
-      // Yield one frame so overlay paints before in-tab navigation starts.
-      requestAnimationFrame(() => {
-        const navOk = navigateInTab(targetUrl);
-        if (navOk) return;
-        rtDebugStep('OPEN:navigate:failed', { targetUrl: targetUrl });
-        setButtonBusy(openBtn, false, 'Opening...', 'Open');
-        rtHideLoader();
-        setAuthMessage('Unable to open project. Please try again.', true, { view: VIEW_DASHBOARD });
-      });
-      navigationAttempted = true;
-      setTimeout(() => {
-        if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
-        if (document.hidden) return;
-        rtDebugStep('OPEN:navigate:slow', {
-          token: shortToken(cleanToken),
-          elapsedMs: Date.now() - openStartedAt
-        });
-        rtShowLoader('Loading project', '');
-      }, 3500);
-      setTimeout(() => {
-        if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
-        if (document.hidden) return;
-        rtDebugStep('OPEN:navigate:timeout', {
-          token: shortToken(cleanToken),
-          elapsedMs: Date.now() - openStartedAt
-        });
-        setButtonBusy(openBtn, false, 'Opening...', 'Open');
-        rtHideLoader();
-        setAuthMessage('Project is taking longer than expected. Try Open again.', true, { view: VIEW_DASHBOARD });
-      }, 10000);
-      return;
-    } catch (err) {
-      const message = String((err && err.message) || err || 'Unable to open project.');
-      rtDebugStep('OPEN:fail', { message: message });
-      setAuthMessage(message, true, { view: VIEW_DASHBOARD });
-    } finally {
-      if (!navigationAttempted) {
-        setButtonBusy(openBtn, false, 'Opening...', 'Open');
-        rtHideLoader();
+      const resp = await callServer(
+        methodName,
+        requireAuthSession
+          ? { sessionId: requestSessionId, token: cleanToken }
+          : { token: cleanToken }
+      );
+      if (requestSeq !== PROJECT_OPEN_REQUEST_SEQ) return false;
+      if (!resp || resp.ok !== true || !resp.portalPayload) {
+        throw new Error(String((resp && resp.error) || 'Unable to load project.'));
       }
+
+      rtDebugStep('OPEN:fetchSnapshot:ok', {
+        source: source,
+        token: shortToken(cleanToken),
+        mode: requireAuthSession ? 'auth-in-place' : 'token-in-place'
+      });
+      applyPortalPayloadInPlace(resp.portalPayload, {
+        source: source,
+        fromAuthShell: requireAuthSession,
+        reason: source
+      });
+      rtDebugStep('OPEN:done', {
+        source: source,
+        token: shortToken(cleanToken),
+        mode: requireAuthSession ? 'auth-in-place' : 'token-in-place'
+      });
+      return true;
+    } catch (err) {
+      if (requestSeq !== PROJECT_OPEN_REQUEST_SEQ) return false;
+      const message = String((err && err.message) || err || 'Unable to load project.');
+      rtDebugStep('OPEN:fail', {
+        source: source,
+        token: shortToken(cleanToken),
+        message: message
+      });
+      if (requireAuthSession && /session|unauthorized/i.test(message)) {
+        writeStoredSessionId('');
+        AUTH_SESSION_ID = '';
+        showProjectLoadErrorMessage(message, { forceLogin: true });
+        return false;
+      }
+      showProjectLoadErrorMessage(message);
+      return false;
+    } finally {
+      setButtonBusy(openBtn, false, 'Opening...', 'Open');
+      rtHideLoader();
     }
+  }
+
+  function openProjectFromDashboard(token, openBtn){
+    return loadProjectTokenInPlace(token, {
+      source: 'dashboard',
+      requireAuthSession: true,
+      openBtn: openBtn,
+      loadingTitle: 'Loading project',
+      loadingSub: ''
+    });
   }
 
   function formatProjectDate(value){
@@ -9041,9 +9823,18 @@
       const openCell = createEl('td', '');
       const openBtn = createEl('button', 'authProjectsOpenBtn', 'Open');
       openBtn.type = 'button';
+      openBtn.addEventListener('pointerdown', () => {
+        armDashboardProjectOpen(openBtn, 'pointer');
+      });
+      openBtn.addEventListener('keydown', event => {
+        if (!event) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        armDashboardProjectOpen(openBtn, 'keyboard');
+      });
       openBtn.addEventListener('click', event => {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        if (!shouldAllowDashboardProjectOpen(openBtn, event)) return;
         openProjectFromDashboard(project.token, openBtn);
       });
       openCell.appendChild(openBtn);
@@ -9255,9 +10046,11 @@
 
   function initAuthShell(){
     ensureAuthShellBindings();
+    applyAuthShellRuntimeState();
     setView(VIEW_LOGIN, { focus: false });
     setAuthMessage('', false, { view: VIEW_LOGIN });
     warmAuthRuntime();
+    notifyPortalReady({ reason: 'auth-shell-ready' });
 
     // Boot policy for base /exec: always start on login view.
   }
@@ -9268,18 +10061,24 @@
     try {
       if (!AUTH_SESSION_ID) AUTH_SESSION_ID = readStoredSessionId();
       if (!AUTH_SESSION_ID) {
+        teardownProjectView();
+        applyAuthShellRuntimeState();
         setView(VIEW_LOGIN);
-        setAuthMessage('Session expired. Please log in again.', true, { view: VIEW_LOGIN });
+        setAuthMessage('Log in to access your dashboard.', false, { view: VIEW_LOGIN });
+        notifyPortalReady({ reason: 'auth-shell-ready' });
         return;
       }
 
       // Keep auth session, but clear one-time portal boot cache before returning.
       clearStoredPortalPayload();
       teardownProjectView();
+      applyAuthShellRuntimeState();
       resetSnapshotDirtyBaseline({ clear: true });
-      try {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } catch (_) {}
+      if (!isEmbeddedPortalContext_()) {
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (_) {}
+      }
 
       setView(VIEW_DASHBOARD, { focus: false });
       if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
@@ -9287,6 +10086,7 @@
       // Yield one frame so loader paints before network work begins.
       await new Promise(resolve => requestAnimationFrame(resolve));
       await loadProjectsForHome();
+      notifyPortalReady({ reason: 'dashboard-ready' });
     } finally {
       rtHideLoader();
     }
@@ -9338,6 +10138,7 @@
       (introModal && introModal.classList.contains('open')) ||
       (lightbox && lightbox.classList.contains('open')) ||
       (chatPanel && chatPanel.classList.contains('open')) ||
+      (teamGateBackdrop && !teamGateBackdrop.hidden) ||
       (sendModalBackdrop && !sendModalBackdrop.hidden && sendModalBackdrop.classList.contains('open')) ||
       (unsavedLeaveBackdrop && !unsavedLeaveBackdrop.hidden && unsavedLeaveBackdrop.classList.contains('open')) ||
       (artworkApproveBackdrop && !artworkApproveBackdrop.hidden && artworkApproveBackdrop.classList.contains('open')) ||
@@ -9652,7 +10453,7 @@
 
   function chatDisplayPersonNameForMessage(msg){
     const isTeam = !!(msg && String(msg.authorType || '').toLowerCase() === 'team');
-    const sourceName = isTeam ? getSenderName() : getClientName();
+    const sourceName = isTeam ? getVisibleTeamAuthorName() : getClientName();
     const first = String(sourceName || '').trim().split(/\s+/)[0] || '';
     return first || (isTeam ? 'Red Threads' : 'Client');
   }
@@ -9715,10 +10516,12 @@
   function setChatDrawerHeaderMeta(){
     const avatarUrl = getSenderAvatarUrl();
     if (chatDrawerTitle) {
-      chatDrawerTitle.textContent = 'Send me a message!';
+      chatDrawerTitle.textContent = IS_TEAM ? 'Team Reply Mode' : 'Send me a message!';
     }
     if (chatDrawerSub) {
-      chatDrawerSub.textContent = 'I will respond within 1 business day, or as soon as I\'m able.';
+      chatDrawerSub.textContent = IS_TEAM
+        ? ('Replying as ' + getVisibleTeamAuthorName() + '. Your message will email the client through the shared thread.')
+        : 'I will respond within 1 business day, or as soon as I\'m able.';
     }
     setImageSrcWithFallback(chatDrawerAvatar, avatarUrl, SENDER_IMAGES.josiah);
   }
@@ -9736,18 +10539,27 @@
     chatEmpty.style.display = 'none';
 
     list.forEach(msg => {
-      const isTeam = msg.authorType === 'team';
-      const row = createEl('div', 'chatMessage ' + (isTeam ? 'team' : 'client'));
-      const personName = chatDisplayPersonNameForMessage(msg);
-      const jobRef = chatBuildJobRefLine(msg);
+      const authorType = String(msg.authorType || '').toLowerCase();
+      const isSystem = authorType === 'system';
+      const isTeam = authorType === 'team';
+      const row = createEl('div', 'chatMessage ' + (isSystem ? 'system' : (isTeam ? 'team' : 'client')));
       const dateText = formatChatDate(msg.createdAt);
       const timeText = formatChatTime(msg.createdAt);
-      const commentLead = personName + '\'s comment' + (jobRef ? (' on ' + jobRef) : '');
-      const commentHeader = commentLead + ' - ' + dateText + ' ' + timeText;
-      const messageBody = chatStripEmbeddedPjLabel(msg, msg.text);
-      const bubbleText = messageBody
-        ? [commentHeader, messageBody].join('\n')
-        : commentHeader;
+      let bubbleText = '';
+      if (isSystem) {
+        bubbleText = ['System update - ' + dateText + ' ' + timeText, String(msg.text || '').trim()]
+          .filter(Boolean)
+          .join('\n');
+      } else {
+        const personName = chatDisplayPersonNameForMessage(msg);
+        const jobRef = chatBuildJobRefLine(msg);
+        const commentLead = personName + '\'s comment' + (jobRef ? (' on ' + jobRef) : '');
+        const commentHeader = commentLead + ' - ' + dateText + ' ' + timeText;
+        const messageBody = chatStripEmbeddedPjLabel(msg, msg.text);
+        bubbleText = messageBody
+          ? [commentHeader, messageBody].join('\n')
+          : commentHeader;
+      }
       const bubble = createEl('div', 'chatBubble', bubbleText);
       row.appendChild(bubble);
       chatMessages.appendChild(row);
@@ -9794,7 +10606,7 @@
   }
 
   function setChatComposerLocked(locked){
-    const shouldLock = !!locked;
+    const shouldLock = !!locked || isTeamModeLocked();
     if (chatInput) chatInput.disabled = shouldLock;
     if (chatSend) chatSend.disabled = shouldLock;
     if (chatComposerRow) chatComposerRow.hidden = shouldLock;
@@ -9969,6 +10781,10 @@
 
   function setChatSendEnabled(){
     if (!chatSend || !chatInput) return;
+    if (isTeamModeLocked()) {
+      chatSend.disabled = true;
+      return;
+    }
     const selectedJob = getSelectedChatClassificationJob();
     const requiresSelection = CHAT_HEADER_CLASSIFY_REQUIRED && !selectedJob;
     const hasJobSelection = !requiresSelection && !chatInput.disabled && !!selectedJob;
@@ -9998,6 +10814,7 @@
     renderChat(CHAT_MESSAGES);
     setChatDrawerHeaderMeta();
     renderChatPrefill();
+    syncTeamModeUi();
     setChatSendEnabled();
     if (CHAT_HEADER_CLASSIFY_REQUIRED) {
       if (chatClassifierButtons && chatClassifierButtons.firstElementChild) {
@@ -10083,6 +10900,7 @@
     const approved = isArtworkApprovedForJob(jobId);
     btn.textContent = approved ? 'Artwork Approved' : 'Approve Artwork';
     btn.classList.toggle('isApproved', approved);
+    btn.disabled = !CAN_EDIT();
   }
 
   function refreshArtworkApprovedButtons(){
@@ -10100,10 +10918,12 @@
     if (!printJobIndex) {
       return { ok: false, error: 'Missing print job context.' };
     }
+    const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
     const resp = await callServer('setArtworkApproval', {
       token: token,
       status: 'approved',
-      printJobIndex: printJobIndex
+      printJobIndex: printJobIndex,
+      portalState: JSON.stringify(nextState)
     });
     if (!resp || resp.ok !== true) {
       throw new Error(String((resp && resp.error) || 'Could not save artwork approval.'));
@@ -10120,9 +10940,11 @@
     if (!printJobIndex) {
       return { ok: false, error: 'Missing print job context.' };
     }
+    const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
     const resp = await callServer('clearArtworkApproval', {
       token: token,
-      printJobIndex: printJobIndex
+      printJobIndex: printJobIndex,
+      portalState: JSON.stringify(nextState)
     });
     if (!resp || resp.ok !== true) {
       throw new Error(String((resp && resp.error) || 'Could not clear artwork approval.'));
@@ -10130,11 +10952,24 @@
     return resp;
   }
 
+  function syncChatAuditTrailFromResponse(resp){
+    const serverLog = normalizeMessageLog(resp && resp.chatLog);
+    if (!serverLog.length) return;
+    CHAT_MESSAGES = mergeMessageLogsAppendOnly(CHAT_MESSAGES, serverLog);
+    renderChat(CHAT_MESSAGES);
+    const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    nextState.savedAt = String((resp && resp.savedAt) || nextState.savedAt || new Date().toISOString());
+    PORTAL_STATE = normalizePortalState(nextState);
+    PORTAL_STATE.isReadOnly = IS_READ_ONLY;
+    resetSnapshotDirtyBaseline();
+  }
+
   function getUnapprovedActiveJobs(){
     return getVisibleJobs().filter(job => !isArtworkApprovedForJob(job.printJobId));
   }
 
   async function handleArtworkApprovalConfirm(){
+    if (!CAN_EDIT()) return;
     if (ARTWORK_APPROVE_SAVE_IN_FLIGHT) return;
     const targetJobId = String(ARTWORK_APPROVE_JOB_ID || activePrintJobId || '').trim();
     if (!targetJobId) return;
@@ -10155,7 +10990,8 @@
     ARTWORK_APPROVE_JUST_APPROVED = true;
     setArtworkApproveMode('success');
     try {
-      await persistArtworkApproval(targetJobId);
+      const resp = await persistArtworkApproval(targetJobId);
+      syncChatAuditTrailFromResponse(resp);
     } catch (err) {
       setArtworkApprovedForJob(targetJobId, false);
       refreshArtworkApprovedButtons();
@@ -10173,6 +11009,7 @@
   }
 
   async function handleArtworkApprovalDisapprove(){
+    if (!CAN_EDIT()) return;
     if (ARTWORK_APPROVE_SAVE_IN_FLIGHT) return;
     const targetJobId = String(ARTWORK_APPROVE_JOB_ID || activePrintJobId || '').trim();
     if (!targetJobId) return;
@@ -10189,7 +11026,8 @@
     refreshArtworkApprovedButtons();
     updatePrintJobTabSummaries();
     try {
-      await persistArtworkDisapproval(targetJobId);
+      const resp = await persistArtworkDisapproval(targetJobId);
+      syncChatAuditTrailFromResponse(resp);
       closeArtworkApproveModal();
     } catch (err) {
       setArtworkApprovedForJob(targetJobId, true);
@@ -10391,6 +11229,10 @@
 
   function openArtworkApproveModal(jobId){
     if (!artworkApproveBackdrop) return;
+    if (!CAN_EDIT()) {
+      showNotice('Artwork approval is locked after the order is finalized.', 'err');
+      return;
+    }
     const requestedId = String(jobId || activePrintJobId || '').trim();
     const fallbackJob = getVisibleJobs()[0] || null;
     const job = getJobById(requestedId) || fallbackJob;
@@ -10465,12 +11307,16 @@
     setOrderFlowMode('confirm');
     if (orderFlowProceedBtn) {
       orderFlowProceedBtn.disabled = false;
-      orderFlowProceedBtn.textContent = 'Proceed to Order';
+      orderFlowProceedBtn.textContent = 'Continue';
     }
   }
 
   function openOrderFlowModal(){
     if (!orderFlowBackdrop) return;
+    if (IS_READ_ONLY) {
+      showNotice('This order has already been placed. Messaging is still available if you need follow-up support.', 'ok');
+      return;
+    }
     resetOrderFlowModalState();
     orderFlowBackdrop.hidden = false;
     requestAnimationFrame(() => {
@@ -10532,7 +11378,7 @@
     }
     if (orderFlowProceedBtn) {
       orderFlowProceedBtn.disabled = false;
-      orderFlowProceedBtn.textContent = 'Proceed to Order';
+      orderFlowProceedBtn.textContent = 'Continue';
     }
   }
 
@@ -10799,7 +11645,8 @@
     });
   }
 
-  function appendChatMessageToExportLog(text){
+  function appendChatMessageToExportLog(text, portalState, options){
+    const opts = (options && typeof options === 'object') ? options : {};
     return new Promise((resolve, reject) => {
       if (!CURRENT_TOKEN) {
         reject(new Error('Missing token.'));
@@ -10824,13 +11671,21 @@
         .appendChatMessage({
           token: CURRENT_TOKEN,
           text: String(text || ''),
-          sender: 'client'
+          sender: IS_TEAM ? 'team' : 'client',
+          portalState: JSON.stringify(portalState || {}),
+          messageText: String(opts.messageText || '').trim(),
+          projectName: String(opts.projectName || '').trim(),
+          printJobId: String(opts.printJobId || '').trim()
         });
     });
   }
 
   async function sendChat(){
     if (!chatInput) return;
+    if (isTeamModeLocked()) {
+      openTeamModeGate();
+      return;
+    }
     if (CHAT_SEND_IN_FLIGHT) {
       setChatSendEnabled();
       return;
@@ -10874,20 +11729,22 @@
     setChatSendEnabled();
     if (chatInput && !chatInput.disabled) chatInput.focus();
 
-    let appendSucceeded = false;
     try {
-      const appendResp = await appendChatMessageToExportLog(text);
-      appendSucceeded = true;
+      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+      const appendResp = await appendChatMessageToExportLog(text, nextState, {
+        messageText: typedText,
+        projectName: pjName,
+        printJobId: pjId
+      });
       const serverLog = normalizeMessageLog(appendResp.chatLog);
       const hasServerEcho = serverLog.some(msg => isSameMessageApprox(message, msg));
       const baseLog = hasServerEcho ? prevLog : CHAT_MESSAGES;
       CHAT_MESSAGES = mergeMessageLogsAppendOnly(baseLog, serverLog);
       renderChat(CHAT_MESSAGES);
 
-      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
-      const resp = await persistPortalState(nextState);
-      nextState.savedAt = String(resp.submittedAt || nextState.savedAt || new Date().toISOString());
-      PORTAL_STATE = normalizePortalState(nextState);
+      const syncedState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+      syncedState.savedAt = String(appendResp.savedAt || syncedState.savedAt || new Date().toISOString());
+      PORTAL_STATE = normalizePortalState(syncedState);
       PORTAL_STATE.isReadOnly = IS_READ_ONLY;
       setSaveControls();
       renderPortal();
@@ -10896,13 +11753,9 @@
       clearNotice();
     } catch (err) {
       console.error('Message send failed:', err);
-      if (!appendSucceeded) {
-        CHAT_MESSAGES = prevLog;
-        renderChat(CHAT_MESSAGES);
-        showNotice('Message send failed: ' + String((err && err.message) || err), 'err');
-      } else {
-        showNotice('Message sent, but state sync failed: ' + String((err && err.message) || err), 'err');
-      }
+      CHAT_MESSAGES = prevLog;
+      renderChat(CHAT_MESSAGES);
+      showNotice('Message send failed: ' + String((err && err.message) || err), 'err');
     } finally {
       CHAT_SEND_IN_FLIGHT = false;
       setChatComposerLocked(CHAT_HEADER_CLASSIFY_REQUIRED);
@@ -11297,34 +12150,35 @@
     const detailsCard = createEl('div', 'pjOverviewCard card detailsCard');
     const detailsTopBar = createEl('div', 'detailsTopBar detailsTopBarV2');
     const detailsActions = createEl('div', 'detailsActions');
-
-    const approveArtworkBtn = createEl('button', 'approvalBtn', 'Approve Artwork');
-    approveArtworkBtn.type = 'button';
-    approveArtworkBtn.dataset.artworkApproveBtn = '1';
-    approveArtworkBtn.dataset.artworkApproveJobId = job.printJobId;
-    applyArtworkApprovedButtonState(approveArtworkBtn);
-    approveArtworkBtn.addEventListener('click', evt => {
-      evt.preventDefault();
-      evt.stopPropagation();
-      openArtworkApproveModal(job.printJobId);
-    });
-    detailsActions.appendChild(approveArtworkBtn);
-
-    const revisionBtn = createEl('button', 'revisionBtn', 'Request Revision');
-    revisionBtn.type = 'button';
-    revisionBtn.addEventListener('click', evt => {
-      evt.preventDefault();
-      evt.stopPropagation();
-      openChat({ forceOpen: true });
-      requestAnimationFrame(() => {
-        const targetJobId = String(activePrintJobId || job.printJobId || '').trim();
-        if (selectChatPrintJobById(targetJobId)) return;
-        const line = 'Comment on Print Job ' + printJobNumber + ' ' + (job.printJobName || ('Project ' + printJobNumber));
-        applyRevisionChatPrefill(line);
+    if (!IS_TEAM) {
+      const approveArtworkBtn = createEl('button', 'approvalBtn', 'Approve Artwork');
+      approveArtworkBtn.type = 'button';
+      approveArtworkBtn.dataset.artworkApproveBtn = '1';
+      approveArtworkBtn.dataset.artworkApproveJobId = job.printJobId;
+      applyArtworkApprovedButtonState(approveArtworkBtn);
+      approveArtworkBtn.addEventListener('click', evt => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        openArtworkApproveModal(job.printJobId);
       });
-    });
-    detailsActions.appendChild(revisionBtn);
-    detailsTopBar.appendChild(detailsActions);
+      detailsActions.appendChild(approveArtworkBtn);
+
+      const revisionBtn = createEl('button', 'revisionBtn', 'Request Revision');
+      revisionBtn.type = 'button';
+      revisionBtn.addEventListener('click', evt => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        openChat({ forceOpen: true });
+        requestAnimationFrame(() => {
+          const targetJobId = String(activePrintJobId || job.printJobId || '').trim();
+          if (selectChatPrintJobById(targetJobId)) return;
+          const line = 'Comment on Print Job ' + printJobNumber + ' ' + (job.printJobName || ('Project ' + printJobNumber));
+          applyRevisionChatPrefill(line);
+        });
+      });
+      detailsActions.appendChild(revisionBtn);
+      detailsTopBar.appendChild(detailsActions);
+    }
     detailsTopBar.appendChild(createEl('span', 'printJobShellName', job.printJobName || ('Project ' + printJobNumber)));
 
     const detailsWorkflowRow = createEl('div', 'detailsWorkflowRow');
@@ -12289,8 +13143,9 @@
     if (headerDealNumMini) headerDealNumMini.textContent = projectLabel;
     if (headerProjectNumMini) headerProjectNumMini.textContent = projectLabel;
     if (chatBtnMini) {
-      chatBtnMini.textContent = 'Message Caleb';
-      chatBtnMini.setAttribute('aria-label', 'Message Caleb');
+      const chatLabel = IS_TEAM ? 'Reply to Client' : 'Message Caleb';
+      chatBtnMini.textContent = chatLabel;
+      chatBtnMini.setAttribute('aria-label', chatLabel);
     }
     if (homeBtnMini) homeBtnMini.textContent = 'Dashboard';
     updateHeaderNavVisibility();
@@ -12388,13 +13243,13 @@
     try {
       const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const resp = await persistPortalState(nextState);
-      nextState.savedAt = String(resp.submittedAt || nextState.savedAt || new Date().toISOString());
+      nextState.savedAt = String(resp.savedAt || resp.submittedAt || nextState.savedAt || new Date().toISOString());
       PORTAL_STATE = normalizePortalState(nextState);
       PORTAL_STATE.isReadOnly = IS_READ_ONLY;
       setSaveControls();
       renderPortal();
       resetSnapshotDirtyBaseline();
-      if (!suppressSuccessNotice) showNotice('Saved successfully.', 'ok');
+      if (!suppressSuccessNotice) showNotice('Saved successfully. You can keep editing.', 'ok');
       if (openSendModalOnSuccess) openSendModal();
       saveSucceeded = true;
       return true;
@@ -12403,7 +13258,7 @@
       showNotice('Save failed: ' + String((err && err.message) || err), 'err');
       if (saveBtnMini) {
         saveBtnMini.disabled = false;
-        saveBtnMini.textContent = 'Save / Send';
+        saveBtnMini.textContent = 'Save';
       }
       return false;
     } finally {
@@ -12415,14 +13270,18 @@
 
   function setSaveControls(){
     const canEdit = CAN_EDIT();
+    const hideTeamActions = IS_TEAM;
 
     if (saveBtnMini) {
-      saveBtnMini.style.display = '';
+      saveBtnMini.style.display = hideTeamActions ? 'none' : '';
       saveBtnMini.disabled = !canEdit;
-      saveBtnMini.textContent = 'Save / Send';
+      saveBtnMini.textContent = 'Save';
     }
 
-    if (placeOrderBtnMini) placeOrderBtnMini.disabled = false;
+    if (placeOrderBtnMini) {
+      placeOrderBtnMini.style.display = hideTeamActions ? 'none' : '';
+      placeOrderBtnMini.disabled = hideTeamActions ? true : false;
+    }
   }
 
   let LIGHTBOX = {
@@ -12576,7 +13435,7 @@
   function wireEvents(){
     if (PROJECT_EVENTS_BOUND) return;
     PROJECT_EVENTS_BOUND = true;
-    if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState({ openSendModal: true }));
+    if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState({ openSendModal: false }));
     if (homeBtnMini) homeBtnMini.addEventListener('click', goHomeFromSnapshotGuarded);
 
     if (placeOrderBtnMini) {
@@ -12629,6 +13488,16 @@
     if (chatPanelClose) chatPanelClose.addEventListener('click', closeChat);
     if (chatBackdrop) chatBackdrop.addEventListener('click', closeChat);
     if (chatSend) chatSend.addEventListener('click', sendChat);
+    if (teamModeUnlockBtn) teamModeUnlockBtn.addEventListener('click', () => openTeamModeGate());
+    if (teamReplyUnlockBtn) teamReplyUnlockBtn.addEventListener('click', () => openTeamModeGate());
+    if (teamGateSubmit) teamGateSubmit.addEventListener('click', submitTeamModePassword);
+    if (teamGatePassword) {
+      teamGatePassword.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        submitTeamModePassword();
+      });
+    }
     if (chatInput) {
       chatInput.addEventListener('input', setChatSendEnabled);
       chatInput.addEventListener('keydown', e => {
@@ -12926,6 +13795,7 @@
     setChatDrawerHeaderMeta();
     renderChat(CHAT_MESSAGES);
     renderChatPrefill();
+    syncTeamModeUi();
     setChatSendEnabled();
   }
 
@@ -12938,8 +13808,10 @@
     initChat();
     setSaveControls();
     renderPortal();
-    initIntro();
+    if (!IS_TEAM) initIntro();
     wireEvents();
+    syncTeamModeUi();
+    notifyPortalReady({ reason: 'snapshot-ready' });
     resetSnapshotDirtyBaseline();
     syncHeaderUtilityOffset();
     requestAnimationFrame(() => {
@@ -12955,6 +13827,7 @@
       path: window.location.pathname,
       search: window.location.search
     });
+    initPortalParentBridge();
     ensureAuthShellBindings();
     if (!HAS_PORTAL_TOKEN) {
       // Base /exec: auth shell path (login/session -> dashboard -> explicit snapshot open).
@@ -13007,8 +13880,7 @@
       debugLog('TOKEN_BOOT:no-session-home-disabled');
     }
 
-    if (DIRECT_OPEN_TOKEN && DIRECT_OPEN_TOKEN === CURRENT_TOKEN) {
-      try { sessionStorage.removeItem(AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY); } catch (_) {}
+    if (!isEmbeddedPortalContext_()) {
       try {
         if (!window.location.search || window.location.search.indexOf('t=') === -1) return;
         window.history.replaceState({}, document.title, window.location.pathname);

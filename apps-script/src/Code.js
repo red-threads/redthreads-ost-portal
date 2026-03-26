@@ -5,11 +5,22 @@ const CONFIG_KEYS = {
   EXPORT_LOG_SHEET: 'EXPORT_LOG_SHEET',
   MAKE_WEBHOOK_URL: 'MAKE_WEBHOOK_URL',
   MAKE_WEBHOOK_SECRET: 'MAKE_WEBHOOK_SECRET',
+  TEAM_MODE_PASSWORD: 'TEAM_MODE_PASSWORD',
   SUCCESS_REDIRECT_URL: 'SUCCESS_REDIRECT_URL'
 };
 
+const DEFAULT_MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/rpulw78oq9tup5smtsb7kv4c7bc607lm';
+const DEFAULT_TEAM_MODE_PASSWORD = 'R3dthreads!';
+
 const EXPORT_LOG_COLUMNS = {
   chatLogJson: 28
+};
+
+const FINAL_LOCK_STATUSES = {
+  submitted: true,
+  placed: true,
+  ordered: true,
+  locked: true
 };
 
 const AUTH_SHEETS = {
@@ -57,8 +68,7 @@ function doGet(e) {
         ? String(e.parameter.t || e.parameter.token).trim()
         : '';
     if (!token) {
-      const tpl = HtmlService.createTemplateFromFile('Index');
-      tpl.VM = buildAuthShellVm_();
+      const tpl = createIndexTemplate_(buildAuthShellVm_());
       return tpl.evaluate()
         .setTitle('Red Threads Estimate Portal')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -127,13 +137,9 @@ function doGet(e) {
 
     const portalState = safeJsonParse_(row.portalstatejson, null);
     const chatLog = normalizeChatLog_(safeJsonParse_(row.chatlogjson, []));
-    const readOnly =
-      status === 'saved' ||
-      status === 'submitted' ||
-      Boolean(portalState && portalState.isReadOnly === true);
+    const readOnly = isLockedPortalRow_(row, portalState);
 
-    const tpl = HtmlService.createTemplateFromFile('Index');
-    tpl.VM = {
+    const tpl = createIndexTemplate_({
       token: token,
       mode: mode,
       status: status,
@@ -153,7 +159,7 @@ function doGet(e) {
         printJobIds: printJobIds,
         snapshotSnippet: snapshotRaw.slice(0, 500)
       }
-    };
+    });
 
     return tpl.evaluate()
       .setTitle('Red Threads Estimate Portal')
@@ -161,6 +167,21 @@ function doGet(e) {
   } catch (err) {
     return renderMessage_('Runtime error', String((err && err.message) || err));
   }
+}
+
+function createIndexTemplate_(vm) {
+  const tpl = HtmlService.createTemplateFromFile('Index');
+  const payload = (vm && typeof vm === 'object') ? vm : {};
+  tpl.VM = payload;
+  tpl.VM_B64 = encodeVmPayload_(payload);
+  return tpl;
+}
+
+function encodeVmPayload_(vm) {
+  const json = JSON.stringify(vm || {});
+  return Utilities.base64EncodeWebSafe(
+    Utilities.newBlob(json, 'application/json').getBytes()
+  );
 }
 
 function appendChatMessage(payload) {
@@ -188,21 +209,41 @@ function appendChatMessage(payload) {
     const chatCol = colMap.chatlogjson || EXPORT_LOG_COLUMNS.chatLogJson;
     if (!chatCol) return { ok: false, error: 'Invalid input' };
 
-    const existingRaw = sheet.getRange(row, chatCol).getValue();
-    const existingParsed = safeJsonParse_(existingRaw, []);
-    const chatLog = Array.isArray(existingParsed) ? existingParsed : [];
+    const chatLog = readChatLogForRow_(sheet, rowInfo);
+    const nextMsg = createChatMessage_(sender, text);
+    const nextChatLog = normalizeChatLog_(chatLog.concat([nextMsg]));
 
-    const nextMsg = {
-      id: 'msg_' + Utilities.getUuid(),
-      ts: new Date().toISOString(),
-      sender: sender,
-      text: text
-    };
+    sheet.getRange(row, chatCol).setValue(JSON.stringify(nextChatLog));
 
-    chatLog.push(nextMsg);
-    sheet.getRange(row, chatCol).setValue(JSON.stringify(chatLog));
+    let savedAt = '';
+    let statusOut = String(rowInfo.rowObjNormalized.status || '').trim() || 'Editable';
 
-    return { ok: true, chatLog: normalizeChatLog_(chatLog) };
+    if (Object.prototype.hasOwnProperty.call(p, 'portalState')) {
+      const portalState = parsePortalStateInput_(p.portalState);
+      const rowPortalState = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, null);
+      const isLocked = isLockedPortalRow_(rowInfo.rowObjNormalized, rowPortalState);
+      const persisted = persistPortalStateForRow_(sheet, rowInfo, portalState, {
+        locked: isLocked,
+        status: isLocked ? getFinalStatusForRow_(rowInfo.rowObjNormalized) : 'Editable',
+        chatLog: nextChatLog,
+        clearSubmittedAt: !isLocked
+      });
+      if (!persisted.ok) return persisted;
+      savedAt = String(persisted.savedAt || '');
+      statusOut = String(persisted.status || statusOut || '');
+    }
+
+    sendChatNotificationToMake_(
+      buildChatNotificationPayload_(rowInfo, nextMsg, {
+        token: token,
+        senderType: sender,
+        messageText: String(p.messageText || '').trim(),
+        projectName: String(p.projectName || '').trim(),
+        printJobId: String(p.printJobId || '').trim()
+      })
+    );
+
+    return { ok: true, chatLog: nextChatLog, status: statusOut, savedAt: savedAt };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -220,6 +261,73 @@ function getPrintJobArtStatusHeader_(printJobIndex) {
   }
 }
 
+function buildPrintJobAuditLabel_(rowInfo, printJobIndex) {
+  const idx = Number(printJobIndex);
+  const fallbackNumber = Number.isInteger(idx) && idx > 0 ? idx : 1;
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const snapshot = safeJsonParse_(row.snapshotjson, null);
+  const rawPrintJobs = Array.isArray(snapshot && snapshot.printJobs)
+    ? snapshot.printJobs
+    : ((snapshot && snapshot.printJobs && typeof snapshot.printJobs === 'object')
+      ? Object.keys(snapshot.printJobs).map(key => snapshot.printJobs[key])
+      : []);
+  const rawJob = rawPrintJobs[fallbackNumber - 1];
+  const printJobName = String(
+    rawJob && typeof rawJob === 'object'
+      ? (rawJob.printJobName || rawJob.projectName || rawJob.name || '')
+      : ''
+  ).trim();
+  return printJobName
+    ? ('Print Job ' + fallbackNumber + ': ' + printJobName)
+    : ('Print Job ' + fallbackNumber);
+}
+
+function buildArtworkAuditText_(rowInfo, printJobIndex, action) {
+  const label = buildPrintJobAuditLabel_(rowInfo, printJobIndex);
+  const normalizedAction = String(action || '').trim().toLowerCase();
+  if (normalizedAction === 'disapproved') {
+    return 'Artwork disapproved for ' + label + '.';
+  }
+  return 'Artwork approved for ' + label + '.';
+}
+
+function persistActionChatLogForRow_(sheet, rowInfo, chatLog, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const nextChatLog = normalizeChatLog_(chatLog);
+  const colMap = rowInfo.colMap || {};
+  const chatCol = colMap.chatlogjson || EXPORT_LOG_COLUMNS.chatLogJson;
+  if (chatCol) {
+    sheet.getRange(rowInfo.row, chatCol).setValue(JSON.stringify(nextChatLog));
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(opts, 'portalState')) {
+    return {
+      ok: true,
+      chatLog: nextChatLog,
+      savedAt: '',
+      status: String((rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.status) || '').trim()
+    };
+  }
+
+  const portalState = parsePortalStateInput_(opts.portalState);
+  const rowPortalState = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, null);
+  const isLocked = isLockedPortalRow_(rowInfo.rowObjNormalized, rowPortalState);
+  const persisted = persistPortalStateForRow_(sheet, rowInfo, portalState, {
+    token: String(opts.token || ''),
+    locked: isLocked,
+    status: isLocked ? getFinalStatusForRow_(rowInfo.rowObjNormalized) : 'Editable',
+    chatLog: nextChatLog,
+    clearSubmittedAt: !isLocked
+  });
+  if (!persisted.ok) return persisted;
+  return {
+    ok: true,
+    chatLog: nextChatLog,
+    savedAt: String(persisted.savedAt || ''),
+    status: String(persisted.status || '')
+  };
+}
+
 function setArtworkApproval(payload) {
   try {
     const p = (payload && typeof payload === 'object') ? payload : {};
@@ -230,6 +338,9 @@ function setArtworkApproval(payload) {
     if (nextStatus !== 'approved') return { ok: false, error: 'Invalid art status.' };
     if (!Number.isInteger(printJobIndex) || printJobIndex < 1 || printJobIndex > 4) {
       return { ok: false, error: 'Invalid print job index.' };
+    }
+    if (Object.prototype.hasOwnProperty.call(p, 'portalState')) {
+      parsePortalStateInput_(p.portalState);
     }
 
     const cfg = getConfig_();
@@ -251,7 +362,30 @@ function setArtworkApproval(payload) {
     }
 
     sheet.getRange(rowInfo.row, artStatusCol).setValue('approved');
-    return { ok: true, artStatus: 'approved', printJobIndex: printJobIndex, column: artStatusHeader };
+    const changedAt = String(p.changedAt || '').trim();
+    const existingChatLog = readChatLogForRow_(sheet, rowInfo);
+    const nextChatLog = appendUniqueChatMessage_(
+      existingChatLog,
+      createChatMessage_(
+        'system',
+        String(p.systemMessage || buildArtworkAuditText_(rowInfo, printJobIndex, 'approved')).trim(),
+        changedAt
+      )
+    );
+    const persisted = persistActionChatLogForRow_(sheet, rowInfo, nextChatLog, {
+      token: token,
+      portalState: p.portalState
+    });
+    if (!persisted.ok) return persisted;
+    return {
+      ok: true,
+      artStatus: 'approved',
+      printJobIndex: printJobIndex,
+      column: artStatusHeader,
+      chatLog: nextChatLog,
+      savedAt: String(persisted.savedAt || ''),
+      status: String(persisted.status || '')
+    };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -265,6 +399,9 @@ function clearArtworkApproval(payload) {
     if (!token) return { ok: false, error: 'Missing token.' };
     if (!Number.isInteger(printJobIndex) || printJobIndex < 1 || printJobIndex > 4) {
       return { ok: false, error: 'Invalid print job index.' };
+    }
+    if (Object.prototype.hasOwnProperty.call(p, 'portalState')) {
+      parsePortalStateInput_(p.portalState);
     }
 
     const cfg = getConfig_();
@@ -286,7 +423,30 @@ function clearArtworkApproval(payload) {
     }
 
     sheet.getRange(rowInfo.row, artStatusCol).setValue('');
-    return { ok: true, artStatus: '', printJobIndex: printJobIndex, column: artStatusHeader };
+    const changedAt = String(p.changedAt || '').trim();
+    const existingChatLog = readChatLogForRow_(sheet, rowInfo);
+    const nextChatLog = appendUniqueChatMessage_(
+      existingChatLog,
+      createChatMessage_(
+        'system',
+        String(p.systemMessage || buildArtworkAuditText_(rowInfo, printJobIndex, 'disapproved')).trim(),
+        changedAt
+      )
+    );
+    const persisted = persistActionChatLogForRow_(sheet, rowInfo, nextChatLog, {
+      token: token,
+      portalState: p.portalState
+    });
+    if (!persisted.ok) return persisted;
+    return {
+      ok: true,
+      artStatus: '',
+      printJobIndex: printJobIndex,
+      column: artStatusHeader,
+      chatLog: nextChatLog,
+      savedAt: String(persisted.savedAt || ''),
+      status: String(persisted.status || '')
+    };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -299,13 +459,7 @@ function savePortalState(token, portalStateInput) {
       return { ok: false, error: 'Missing token.' };
     }
 
-    const portalState = safeJsonParse_(portalStateInput, null);
-    if (!portalState || typeof portalState !== 'object' || Array.isArray(portalState)) {
-      return { ok: false, error: 'portalState must be an object.' };
-    }
-    if (!portalState.printJobs || typeof portalState.printJobs !== 'object' || Array.isArray(portalState.printJobs)) {
-      return { ok: false, error: 'portalState.printJobs must be an object.' };
-    }
+    const portalState = parsePortalStateInput_(portalStateInput);
 
     const cfg = getConfig_();
     const ss = SpreadsheetApp.openById(cfg.sheetId);
@@ -319,7 +473,80 @@ function savePortalState(token, portalStateInput) {
       return { ok: false, error: 'Token not found.' };
     }
 
-    return persistPortalStateForRow_(sheet, rowInfo, portalState, tokenValue);
+    const existingPortalState = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, null);
+    if (isLockedPortalRow_(rowInfo.rowObjNormalized, existingPortalState)) {
+      return { ok: false, error: 'Portal is finalized.' };
+    }
+
+    return persistPortalStateForRow_(sheet, rowInfo, portalState, {
+      token: tokenValue,
+      locked: false,
+      status: 'Editable',
+      clearSubmittedAt: true
+    });
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function finalizePortalAfterPayment(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = String(p.token || '').trim();
+    if (!token) {
+      return { ok: false, error: 'Missing token.' };
+    }
+
+    const portalState = parsePortalStateInput_(p.portalState);
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const sheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!sheet) {
+      return { ok: false, error: 'EXPORT_LOG sheet not found.' };
+    }
+
+    const rowInfo = findRowByToken_(sheet, token);
+    if (!rowInfo) {
+      return { ok: false, error: 'Token not found.' };
+    }
+
+    const existingPortalState = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, null);
+    const requestedSubmittedAt = String(p.submittedAt || p.finalizedAt || '').trim();
+    const requestedOrNow = requestedSubmittedAt && !isNaN(new Date(requestedSubmittedAt).getTime())
+      ? requestedSubmittedAt
+      : new Date().toISOString();
+    const existingSubmittedAt = String(rowInfo.rowObjNormalized.submittedat || '').trim();
+    const submittedAt = (isLockedPortalRow_(rowInfo.rowObjNormalized, existingPortalState) && existingSubmittedAt)
+      ? existingSubmittedAt
+      : requestedOrNow;
+    const existingChatLog = readChatLogForRow_(sheet, rowInfo);
+    const systemText = String(
+      p.systemMessage || ('Order placed successfully on ' + submittedAt + '.')
+    ).trim();
+    const nextChatLog = appendUniqueChatMessage_(
+      existingChatLog,
+      createChatMessage_('system', systemText, submittedAt)
+    );
+
+    const persisted = persistPortalStateForRow_(sheet, rowInfo, portalState, {
+      token: token,
+      locked: true,
+      status: 'submitted',
+      chatLog: nextChatLog,
+      submittedAt: submittedAt,
+      writeSubmittedState: true
+    });
+    if (!persisted.ok) return persisted;
+
+    return {
+      ok: true,
+      token: token,
+      status: String(persisted.status || 'submitted'),
+      savedAt: String(persisted.savedAt || submittedAt),
+      submittedAt: String(persisted.submittedAt || submittedAt),
+      chatLog: nextChatLog
+    };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -333,17 +560,18 @@ function doPost(e) {
     }
 
     const action = String(payload.action || '').toLowerCase();
-    if (action !== 'save') {
-      return jsonOutput_({ ok: false, error: 'Unsupported action.' });
+    if (action === 'save') {
+      const token = String(payload.token || '').trim();
+      if (!token) {
+        return jsonOutput_({ ok: false, error: 'Missing token.' });
+      }
+      const result = savePortalState(token, payload.portalState);
+      return jsonOutput_(result);
     }
-
-    const token = String(payload.token || '').trim();
-    if (!token) {
-      return jsonOutput_({ ok: false, error: 'Missing token.' });
+    if (action === 'finalize_after_payment' || action === 'finalizeafterpayment') {
+      return jsonOutput_(finalizePortalAfterPayment(payload));
     }
-
-    const result = savePortalState(token, payload.portalState);
-    return jsonOutput_(result);
+    return jsonOutput_({ ok: false, error: 'Unsupported action.' });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String((err && err.message) || err) });
   }
@@ -681,7 +909,7 @@ function getSnapshotByToken(payload) {
       return { ok: false, error: built.error || 'Unable to load project.' };
     }
 
-    return { ok: true, portalPayload: built.vm };
+    return { ok: true, portalPayload: makeClientSafe_(built.vm) };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -690,6 +918,40 @@ function getSnapshotByToken(payload) {
 // Backward-compatible alias for existing frontend callers.
 function authLoadProject(payload) {
   return getSnapshotByToken(payload);
+}
+
+function verifyTeamModePassword(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = String(p.token || '').trim();
+    const password = String(p.password || '');
+    if (!token || !password) {
+      return { ok: false, error: 'Password is required.' };
+    }
+
+    const cfg = getConfig_();
+    if (password !== String(cfg.teamModePassword || '')) {
+      return { ok: false, error: 'Incorrect password.' };
+    }
+
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const exportSheet = ss.getSheetByName(cfg.exportLogSheetName);
+    if (!exportSheet) {
+      return { ok: false, error: 'Auth configuration is incomplete.' };
+    }
+
+    const rowInfo = findRowByToken_(exportSheet, token);
+    if (!rowInfo) {
+      return { ok: false, error: 'Link not found.' };
+    }
+
+    return {
+      ok: true,
+      senderName: getVisibleTeamAuthorName_(rowInfo.rowObjNormalized)
+    };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 }
 
 function authSendResetCode(payload) {
@@ -848,10 +1110,7 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
 
   const portalState = safeJsonParse_(row.portalstatejson, null);
   const chatLog = normalizeChatLog_(safeJsonParse_(row.chatlogjson, []));
-  const readOnly =
-    status === 'saved' ||
-    status === 'submitted' ||
-    Boolean(portalState && portalState.isReadOnly === true);
+  const readOnly = isLockedPortalRow_(row, portalState);
 
   return {
     ok: true,
@@ -879,29 +1138,63 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
   };
 }
 
-function persistPortalStateForRow_(sheet, rowInfo, portalState, token) {
+function persistPortalStateForRow_(sheet, rowInfo, portalState, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
   const colMap = rowInfo.colMap || {};
   const row = rowInfo.row;
 
   const portalStateCol = colMap.portalstatejson;
   const statusCol = colMap.status;
   const submittedAtCol = colMap.submittedat;
+  const submittedStateCol = colMap.submittedstatejson;
+  const chatCol = colMap.chatlogjson || EXPORT_LOG_COLUMNS.chatLogJson;
 
-  if (!portalStateCol || !statusCol || !submittedAtCol) {
-    return { ok: false, error: 'Required columns missing (portalStateJson/status/submittedAt).' };
+  if (!portalStateCol || !statusCol) {
+    return { ok: false, error: 'Required columns missing (portalStateJson/status).' };
+  }
+  if (opts.writeSubmittedState === true && !submittedStateCol) {
+    return { ok: false, error: 'Required column missing (submittedStateJson).' };
+  }
+  if (opts.submittedAt && !submittedAtCol) {
+    return { ok: false, error: 'Required column missing (submittedAt).' };
   }
 
-  const nowIso = new Date().toISOString();
+  const nowIso = String(opts.submittedAt || new Date().toISOString());
   const stateToStore = JSON.parse(JSON.stringify(portalState));
   stateToStore.version = String(stateToStore.version || '1');
   stateToStore.savedAt = nowIso;
-  stateToStore.isReadOnly = true;
+  stateToStore.isReadOnly = opts.locked === true;
+  if (Array.isArray(opts.chatLog)) {
+    writeChatLogIntoPortalState_(stateToStore, normalizeChatLog_(opts.chatLog));
+  }
 
   sheet.getRange(row, portalStateCol).setValue(JSON.stringify(stateToStore));
-  sheet.getRange(row, statusCol).setValue('saved');
-  sheet.getRange(row, submittedAtCol).setValue(nowIso);
+  sheet.getRange(row, statusCol).setValue(String(opts.status || 'Editable'));
+  if (Array.isArray(opts.chatLog) && chatCol) {
+    sheet.getRange(row, chatCol).setValue(JSON.stringify(normalizeChatLog_(opts.chatLog)));
+  }
+  if (opts.submittedAt && submittedAtCol) {
+    sheet.getRange(row, submittedAtCol).setValue(nowIso);
+  } else if (opts.clearSubmittedAt === true && submittedAtCol) {
+    sheet.getRange(row, submittedAtCol).setValue('');
+  }
+  if (opts.writeSubmittedState === true && submittedStateCol) {
+    const existingSubmittedState = rowInfo.rowObjNormalized
+      ? rowInfo.rowObjNormalized.submittedstatejson
+      : '';
+    if (!hasNonBlankJsonSignal_(existingSubmittedState)) {
+      const submittedState = JSON.parse(JSON.stringify(stateToStore));
+      sheet.getRange(row, submittedStateCol).setValue(JSON.stringify(submittedState));
+    }
+  }
 
-  return { ok: true, token: token, status: 'saved', submittedAt: nowIso };
+  return {
+    ok: true,
+    token: String(opts.token || ''),
+    status: String(opts.status || 'Editable'),
+    savedAt: nowIso,
+    submittedAt: opts.submittedAt ? nowIso : ''
+  };
 }
 
 function normalizeMode_(value) {
@@ -925,17 +1218,172 @@ function getConfig_() {
   const exportLogSheetName = props.getProperty(CONFIG_KEYS.EXPORT_LOG_SHEET) || 'EXPORT_LOG';
   const makeWebhookUrl = props.getProperty(CONFIG_KEYS.MAKE_WEBHOOK_URL);
   const makeWebhookSecret = props.getProperty(CONFIG_KEYS.MAKE_WEBHOOK_SECRET) || '';
+  const teamModePassword = props.getProperty(CONFIG_KEYS.TEAM_MODE_PASSWORD) || DEFAULT_TEAM_MODE_PASSWORD;
 
   return {
     sheetId: sheetId,
     exportLogSheetName: exportLogSheetName,
-    makeWebhookUrl: makeWebhookUrl || '',
-    makeWebhookSecret: makeWebhookSecret
+    makeWebhookUrl: makeWebhookUrl || DEFAULT_MAKE_WEBHOOK_URL,
+    makeWebhookSecret: makeWebhookSecret,
+    teamModePassword: String(teamModePassword || DEFAULT_TEAM_MODE_PASSWORD)
   };
 }
 
 function getWebAppUrl_() {
   return ScriptApp.getService().getUrl();
+}
+
+function buildPortalDirectUrl_(token) {
+  const baseUrl = String(getWebAppUrl_() || '').trim();
+  const tokenValue = String(token || '').trim();
+  if (!baseUrl || !tokenValue) return '';
+  return baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + 't=' + encodeURIComponent(tokenValue);
+}
+
+function deriveProjectNameForNotification_(row, snapshot, overrides) {
+  const opts = (overrides && typeof overrides === 'object') ? overrides : {};
+  const overrideName = String(opts.projectName || '').trim();
+  if (overrideName) return overrideName;
+
+  const normalizedRow = (row && typeof row === 'object') ? row : {};
+  const snapshotObj = (snapshot && typeof snapshot === 'object') ? snapshot : {};
+  const meta = snapshotObj.meta && typeof snapshotObj.meta === 'object' ? snapshotObj.meta : {};
+
+  const dealTitle = String(
+    normalizedRow.dealtitle ||
+    normalizedRow.projectname ||
+    meta.dealTitle ||
+    meta.projectName ||
+    ''
+  ).trim();
+  const dealNumber = String(
+    normalizedRow.dealnumber ||
+    meta.dealNumber ||
+    ''
+  ).trim();
+
+  if (dealNumber && dealTitle) return dealNumber + ' - ' + dealTitle;
+  if (dealTitle) return dealTitle;
+  if (dealNumber) return dealNumber;
+
+  const printJobId = String(opts.printJobId || '').trim();
+  return printJobId ? ('Print Job ' + printJobId) : '';
+}
+
+function getVisibleTeamAuthorName_(row) {
+  const normalizedRow = (row && typeof row === 'object') ? row : {};
+  return String(
+    normalizedRow.sentby ||
+    normalizedRow.assigneddesigner ||
+    normalizedRow.assignedto ||
+    normalizedRow.projectowner ||
+    'Red Threads Team'
+  ).trim() || 'Red Threads Team';
+}
+
+function deriveSenderNameForNotification_(row, senderType) {
+  const normalizedRow = (row && typeof row === 'object') ? row : {};
+  if (String(senderType || '').trim().toLowerCase() === 'team') {
+    return getVisibleTeamAuthorName_(normalizedRow);
+  }
+  return String(
+    normalizedRow.personname ||
+    normalizedRow.clientname ||
+    normalizedRow.orgname ||
+    normalizedRow[EXPORT_LOG_PERSON_EMAIL_HEADER] ||
+    'Client'
+  ).trim();
+}
+
+function buildChatNotificationPayload_(rowInfo, message, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const senderType = String(opts.senderType || message.sender || 'client').trim().toLowerCase() || 'client';
+  const normalizedMessage = normalizeChatLog_([message])[0] || createChatMessage_(senderType, String(opts.messageText || '').trim());
+  const snapshot = safeJsonParse_(row.snapshotjson, null);
+  const token = String(opts.token || row.token || '').trim();
+  const personEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+  const teamMemberName = getVisibleTeamAuthorName_(row);
+  const projectName = deriveProjectNameForNotification_(row, snapshot, opts);
+  const messageText = String(opts.messageText || normalizedMessage.text || '').trim() || String(normalizedMessage.text || '').trim();
+
+  return {
+    eventType: 'chat_message_created',
+    token: token,
+    senderType: senderType === 'team' ? 'team' : 'client',
+    messageText: messageText,
+    messageCreatedAt: String(normalizedMessage.ts || new Date().toISOString()),
+    senderName: deriveSenderNameForNotification_(row, senderType),
+    teamMemberName: teamMemberName,
+    projectName: projectName,
+    personEmail: personEmail,
+    portalDirectUrl: buildPortalDirectUrl_(token)
+  };
+}
+
+function logChatNotificationIssue_(message, meta) {
+  const payload = (meta && typeof meta === 'object') ? meta : {};
+  try {
+    console.warn('[CHAT_NOTIFY]', message, JSON.stringify(payload));
+  } catch (_) {
+    Logger.log('[CHAT_NOTIFY] ' + message + ' ' + JSON.stringify(payload));
+  }
+}
+
+function sendChatNotificationToMake_(eventPayload) {
+  const payload = (eventPayload && typeof eventPayload === 'object') ? eventPayload : {};
+  const token = String(payload.token || '').trim();
+  const messageText = String(payload.messageText || '').trim();
+  const senderType = String(payload.senderType || '').trim().toLowerCase();
+  if (!token || !messageText || (senderType !== 'client' && senderType !== 'team')) {
+    return { ok: false, skipped: true, reason: 'invalid-payload' };
+  }
+
+  try {
+    const cfg = getConfig_();
+    const url = String(cfg.makeWebhookUrl || '').trim();
+    if (!url) {
+      logChatNotificationIssue_('Missing Make webhook URL.', {
+        token: token,
+        senderType: senderType
+      });
+      return { ok: false, skipped: true, reason: 'missing-webhook-url' };
+    }
+
+    const headers = {};
+    if (cfg.makeWebhookSecret) {
+      headers['X-RT-Webhook-Secret'] = String(cfg.makeWebhookSecret);
+    }
+
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      muteHttpExceptions: true,
+      payload: JSON.stringify(payload),
+      headers: headers
+    });
+
+    const statusCode = Number(response.getResponseCode() || 0);
+    const responseText = String(response.getContentText() || '');
+    if (statusCode < 200 || statusCode >= 300) {
+      logChatNotificationIssue_('Make webhook responded with non-2xx status.', {
+        token: token,
+        senderType: senderType,
+        statusCode: statusCode,
+        responseText: responseText.slice(0, 500)
+      });
+      return { ok: false, statusCode: statusCode };
+    }
+
+    return { ok: true, statusCode: statusCode };
+  } catch (err) {
+    logChatNotificationIssue_('Make webhook request failed.', {
+      token: token,
+      senderType: senderType,
+      error: String((err && err.message) || err)
+    });
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 }
 
 function normalizeEmail_(value) {
@@ -1310,6 +1758,37 @@ function safeJsonParse_(input, fallback) {
   }
 }
 
+function makeClientSafe_(value, depth) {
+  const level = Number(depth || 0);
+  if (level > 30) return null;
+  if (value == null) return value;
+
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    const ms = value.getTime();
+    return isNaN(ms) ? '' : value.toISOString();
+  }
+
+  const valueType = typeof value;
+  if (valueType === 'string' || valueType === 'number' || valueType === 'boolean') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => makeClientSafe_(item, level + 1));
+  }
+
+  if (valueType === 'object') {
+    const out = {};
+    Object.keys(value).forEach((key) => {
+      const nextValue = makeClientSafe_(value[key], level + 1);
+      if (typeof nextValue !== 'undefined') out[key] = nextValue;
+    });
+    return out;
+  }
+
+  return String(value);
+}
+
 function normalizeChatLog_(input) {
   if (!Array.isArray(input)) return [];
   return input
@@ -1317,7 +1796,9 @@ function normalizeChatLog_(input) {
       if (!m || typeof m !== 'object') return null;
       const text = String(m.text || '').trim();
       const senderRaw = String(m.sender || '').trim().toLowerCase();
-      const sender = senderRaw === 'team' ? 'team' : 'client';
+      const sender = senderRaw === 'team'
+        ? 'team'
+        : (senderRaw === 'system' ? 'system' : 'client');
       if (!text) return null;
       const tsRaw = String(m.ts || m.tsIso || '').trim();
       const ts = tsRaw && !isNaN(new Date(tsRaw).getTime()) ? tsRaw : new Date().toISOString();
@@ -1329,6 +1810,98 @@ function normalizeChatLog_(input) {
       };
     })
     .filter(Boolean);
+}
+
+function hasNonBlankJsonSignal_(value) {
+  if (value == null) return false;
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) return value.length > 0;
+    return Object.keys(value).length > 0;
+  }
+  const raw = String(value || '').trim();
+  if (!raw || raw === 'null' || raw === 'undefined') return false;
+  if (raw === '{}' || raw === '[]') return false;
+  const parsed = safeJsonParse_(raw, null);
+  if (parsed == null) return raw !== '';
+  if (Array.isArray(parsed)) return parsed.length > 0;
+  if (typeof parsed === 'object') return Object.keys(parsed).length > 0;
+  return String(parsed || '').trim() !== '';
+}
+
+function isFinalPortalStatus_(status) {
+  return FINAL_LOCK_STATUSES[String(status || '').trim().toLowerCase()] === true;
+}
+
+function getFinalStatusForRow_(row) {
+  const current = String((row && row.status) || '').trim();
+  return isFinalPortalStatus_(current) ? current : 'submitted';
+}
+
+function isLockedPortalRow_(row, portalState) {
+  const status = String((row && row.status) || '').trim().toLowerCase();
+  if (status === 'saved' || status === 'editable') return false;
+  if (hasNonBlankJsonSignal_(row && row.submittedstatejson)) return true;
+  if (isFinalPortalStatus_(status)) return true;
+  return Boolean(portalState && portalState.isReadOnly === true && isFinalPortalStatus_(status));
+}
+
+function parsePortalStateInput_(portalStateInput) {
+  const portalState = safeJsonParse_(portalStateInput, null);
+  if (!portalState || typeof portalState !== 'object' || Array.isArray(portalState)) {
+    throw new Error('portalState must be an object.');
+  }
+  if (!portalState.printJobs || typeof portalState.printJobs !== 'object' || Array.isArray(portalState.printJobs)) {
+    throw new Error('portalState.printJobs must be an object.');
+  }
+  return portalState;
+}
+
+function detectMessageLogKey_(stateObj) {
+  if (!stateObj || typeof stateObj !== 'object') return 'messageLog';
+  if (Array.isArray(stateObj.messageLog)) return 'messageLog';
+  if (Array.isArray(stateObj.chatLog)) return 'chatLog';
+  if (Array.isArray(stateObj.messages)) return 'messages';
+  return 'messageLog';
+}
+
+function writeChatLogIntoPortalState_(stateObj, chatLog) {
+  if (!stateObj || typeof stateObj !== 'object') return;
+  const key = detectMessageLogKey_(stateObj);
+  delete stateObj.messageLog;
+  delete stateObj.chatLog;
+  delete stateObj.messages;
+  stateObj[key] = normalizeChatLog_(chatLog);
+}
+
+function readChatLogForRow_(sheet, rowInfo) {
+  const colMap = rowInfo.colMap || {};
+  const chatCol = colMap.chatlogjson || EXPORT_LOG_COLUMNS.chatLogJson;
+  if (!chatCol) return [];
+  const existingRaw = sheet.getRange(rowInfo.row, chatCol).getValue();
+  return normalizeChatLog_(safeJsonParse_(existingRaw, []));
+}
+
+function createChatMessage_(sender, text, tsOverride) {
+  return {
+    id: 'msg_' + Utilities.getUuid(),
+    ts: String(tsOverride || new Date().toISOString()),
+    sender: String(sender || '').trim().toLowerCase() || 'client',
+    text: String(text || '').trim()
+  };
+}
+
+function appendUniqueChatMessage_(chatLog, message) {
+  const nextLog = normalizeChatLog_(chatLog);
+  const normalized = normalizeChatLog_([message])[0];
+  if (!normalized) return nextLog;
+  const alreadyPresent = nextLog.some((item) => (
+    String(item.sender || '') === String(normalized.sender || '') &&
+    String(item.text || '') === String(normalized.text || '') &&
+    String(item.ts || '') === String(normalized.ts || '')
+  ));
+  if (alreadyPresent) return nextLog;
+  nextLog.push(normalized);
+  return normalizeChatLog_(nextLog);
 }
 
 function jsonOutput_(obj) {
