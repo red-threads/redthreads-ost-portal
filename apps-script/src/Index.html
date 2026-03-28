@@ -665,6 +665,81 @@
       background:rgba(255,255,255,.04);
       border-radius:14px;
     }
+    .dashboardAccountPanel{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      margin-bottom:14px;
+      padding:16px 18px;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:16px;
+      background:rgba(255,255,255,.05);
+      box-shadow:0 18px 30px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .dashboardAccountHead{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .dashboardAccountTitle{
+      font-size:16px;
+      font-weight:900;
+      color:var(--rt-text);
+    }
+    .dashboardAccountSub{
+      margin-top:4px;
+      font-size:13px;
+      font-weight:600;
+      color:var(--rt-muted);
+      line-height:1.4;
+    }
+    .dashboardAccountBadge{
+      display:inline-flex;
+      align-items:center;
+      min-height:28px;
+      padding:0 12px;
+      border-radius:999px;
+      border:1px solid rgba(225,29,72,.48);
+      background:rgba(225,29,72,.12);
+      color:#ffe4eb;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.05em;
+      text-transform:uppercase;
+      white-space:nowrap;
+    }
+    .dashboardAccountMeta{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:10px;
+    }
+    .dashboardAccountMetaItem{
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.04);
+    }
+    .dashboardAccountMetaKey{
+      display:block;
+      font-size:10px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      color:var(--rt-muted);
+      margin-bottom:4px;
+    }
+    .dashboardAccountMetaVal{
+      display:block;
+      font-size:13px;
+      font-weight:700;
+      color:var(--rt-text);
+    }
+    .dashboardAccountActions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
     #dashboardView .authProjectsTable th,
     #dashboardView .authProjectsTable td{
       border-bottom-color:rgba(255,255,255,.1);
@@ -5267,6 +5342,54 @@
       outline:none;
       box-shadow:0 0 0 3px var(--rt-redRing);
     }
+    .orderFlowStatePill{
+      align-self:flex-start;
+      display:inline-flex;
+      align-items:center;
+      min-height:28px;
+      padding:0 12px;
+      border-radius:999px;
+      border:1px solid rgba(225,29,72,.42);
+      background:rgba(225,29,72,.12);
+      color:#ffe4eb;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.05em;
+      text-transform:uppercase;
+    }
+    .orderFlowSummaryCard{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:14px;
+      background:rgba(255,255,255,.05);
+      padding:14px;
+      text-align:left;
+    }
+    .orderFlowSummaryGrid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+      gap:10px;
+    }
+    .orderFlowSummaryItem{
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(4,7,16,.44);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .orderFlowSummaryKey{
+      display:block;
+      font-size:10px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      color:var(--rt-muted);
+      margin-bottom:4px;
+    }
+    .orderFlowSummaryVal{
+      display:block;
+      font-size:14px;
+      font-weight:800;
+      color:var(--rt-text);
+    }
     .orderFlowBody{
       margin:0;
       font-size:17px;
@@ -5274,11 +5397,88 @@
       line-height:1.45;
       color:var(--rt-text);
     }
+    .orderFlowOptions{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:12px;
+      width:100%;
+    }
+    .orderFlowOptions.twoCol{
+      grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    }
+    .orderFlowOptionBtn{
+      width:100%;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:6px;
+      text-align:left;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.06);
+      color:var(--rt-text);
+      padding:16px;
+      cursor:pointer;
+      box-shadow:0 14px 24px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.06);
+      transition:background-color .14s ease, border-color .14s ease, box-shadow .14s ease, transform .08s ease;
+    }
+    .orderFlowOptionBtn:hover{
+      background:rgba(225,29,72,.14);
+      border-color:rgba(225,29,72,.52);
+      box-shadow:0 18px 28px rgba(0,0,0,.28), 0 0 0 1px var(--rt-redRing);
+    }
+    .orderFlowOptionTitle{
+      display:block;
+      font-size:15px;
+      font-weight:900;
+      color:var(--rt-text);
+    }
+    .orderFlowOptionSub{
+      display:block;
+      font-size:12px;
+      font-weight:600;
+      line-height:1.45;
+      color:var(--rt-muted);
+    }
     .orderFlowActions{
       display:flex;
       justify-content:center;
       gap:10px;
       flex-wrap:wrap;
+    }
+    .orderFlowInlineActions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:center;
+    }
+    .orderFlowInlineLink{
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .orderFlowInfoCard{
+      width:100%;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.05);
+      padding:14px;
+      text-align:left;
+      color:var(--rt-text);
+    }
+    .orderFlowInfoCard p{
+      margin:0 0 8px;
+    }
+    .orderFlowInfoCard p:last-child{
+      margin-bottom:0;
+    }
+    .orderFlowCheckoutMeta{
+      font-size:12px;
+      font-weight:700;
+      color:var(--rt-muted);
+      line-height:1.5;
+      white-space:pre-wrap;
     }
     .orderFlowBtn{
       min-height:42px;
@@ -5386,6 +5586,34 @@
       font-weight:900;
       line-height:1.15;
     }
+    .orderFlowSuccessIcon.isError{
+      border-color:rgba(248,113,113,.85);
+      background:rgba(220,38,38,.14);
+      color:#f87171;
+      box-shadow:0 14px 28px rgba(220,38,38,.18), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .orderFlowSuccessTitle.isError{
+      color:#f87171;
+    }
+    .orderFlowSuccessIcon.isInfo{
+      border-color:rgba(96,165,250,.85);
+      background:rgba(37,99,235,.12);
+      color:#60a5fa;
+      box-shadow:0 14px 28px rgba(37,99,235,.18), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .orderFlowSuccessTitle.isInfo{
+      color:#60a5fa;
+    }
+    .orderFlowResultMeta{
+      width:100%;
+      max-width:540px;
+      margin:0 auto;
+      font-size:12px;
+      font-weight:700;
+      line-height:1.55;
+      color:var(--rt-muted);
+      white-space:pre-wrap;
+    }
     .orderFlowModal.isSuccess .orderFlowHead{
       justify-content:flex-end;
       min-height:34px;
@@ -5393,7 +5621,14 @@
     .orderFlowModal.isSuccess .orderFlowTitle{
       display:none;
     }
-    #orderFlowSuccessSection:not([hidden]){
+    .orderFlowModal.isError .orderFlowHead{
+      justify-content:flex-end;
+      min-height:34px;
+    }
+    .orderFlowModal.isError .orderFlowTitle{
+      display:none;
+    }
+    #orderFlowResultSection:not([hidden]){
       display:flex;
       flex-direction:column;
       align-items:center;
@@ -5401,16 +5636,58 @@
       min-height:320px;
       width:100%;
     }
-    #orderFlowSuccessSection:not([hidden]) .orderFlowSuccessIcon{
+    #orderFlowResultSection:not([hidden]) .orderFlowSuccessIcon{
       margin-top:auto;
     }
-    #orderFlowSuccessSection:not([hidden]) .orderFlowSuccessTitle{
+    #orderFlowResultSection:not([hidden]) .orderFlowSuccessTitle{
       margin-top:10px;
     }
-    #orderFlowSuccessSection:not([hidden]) .orderFlowActions{
+    #orderFlowResultSection:not([hidden]) .orderFlowActions{
       margin-top:auto;
     }
+    .portalStatusBanner{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin:0 0 12px;
+      padding:14px 16px;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:16px;
+      background:rgba(255,255,255,.05);
+      color:var(--rt-text);
+      box-shadow:0 16px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .portalStatusBadge{
+      align-self:flex-start;
+      display:inline-flex;
+      align-items:center;
+      min-height:28px;
+      padding:0 12px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.2);
+      background:rgba(255,255,255,.08);
+      color:var(--rt-text);
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.05em;
+      text-transform:uppercase;
+    }
+    .portalStatusText{
+      font-size:14px;
+      font-weight:800;
+      line-height:1.45;
+      color:var(--rt-text);
+    }
+    .portalStatusMeta{
+      font-size:12px;
+      font-weight:700;
+      line-height:1.5;
+      color:var(--rt-muted);
+    }
     @media (max-width: 980px){
+      .dashboardAccountHead{
+        flex-direction:column;
+      }
       .artworkApproveGrid{
         grid-template-columns:1fr;
       }
@@ -5421,6 +5698,10 @@
       }
       .artworkApproveActions{
         justify-content:center;
+      }
+      .orderFlowOptions,
+      .orderFlowOptions.twoCol{
+        grid-template-columns:1fr;
       }
     }
 
@@ -7165,6 +7446,20 @@
         <button class="authBtn authBtnGhost" id="authLogoutBtn" type="button">Log out</button>
       </div>
       <div class="authMessage" id="dashboardMessage" hidden></div>
+      <div class="dashboardAccountPanel" id="dashboardAccountPanel">
+        <div class="dashboardAccountHead">
+          <div>
+            <div class="dashboardAccountTitle">Account Actions</div>
+            <div class="dashboardAccountSub" id="dashboardAccountSummaryText">Checking your account status...</div>
+          </div>
+          <span class="dashboardAccountBadge" id="dashboardAccountBadge">Account</span>
+        </div>
+        <div class="dashboardAccountMeta" id="dashboardAccountMeta"></div>
+        <div class="dashboardAccountActions">
+          <button class="authBtn authBtnGhost" id="dashboardApplyTermsBtn" type="button">Apply for Terms</button>
+          <button class="authBtn authBtnGhost" id="dashboardTaxExemptBtn" type="button">Submit Sales Tax Exemption</button>
+        </div>
+      </div>
       <div class="authProjectsWrap">
         <table class="authProjectsTable">
           <thead>
@@ -7283,6 +7578,11 @@
     </div>
 
     <div class="saveNotice" id="saveNotice" hidden></div>
+    <section class="portalStatusBanner" id="portalStatusBanner" hidden>
+      <div class="portalStatusBadge" id="portalStatusBadge">Editable</div>
+      <div class="portalStatusText" id="portalStatusText">This estimate is editable.</div>
+      <div class="portalStatusMeta" id="portalStatusMeta"></div>
+    </section>
 
     <section class="teamModeBanner" id="teamModeBanner" hidden>
       <div class="teamModeBannerTop">
@@ -7458,11 +7758,57 @@
         <h2 class="orderFlowTitle" id="orderFlowTitle">Place Order</h2>
         <button class="orderFlowClose" id="orderFlowClose" type="button" aria-label="Close order modal">X</button>
       </div>
-      <div id="orderFlowConfirmSection">
-        <p class="orderFlowBody">You are about to continue toward payment for this order. The order is not placed or locked until payment is confirmed.</p>
+      <div class="orderFlowStatePill" id="orderFlowStatePill">Checkout</div>
+      <div class="orderFlowSummaryCard" id="orderFlowSummaryCard">
+        <div class="orderFlowSummaryGrid" id="orderFlowSummaryGrid"></div>
+      </div>
+      <div id="orderFlowMethodSection">
+        <p class="orderFlowBody">How would you like to place your order?</p>
+        <div class="orderFlowOptions">
+          <button class="orderFlowOptionBtn" id="orderFlowCardBtn" type="button">
+            <span class="orderFlowOptionTitle">Credit / Debit Card</span>
+            <span class="orderFlowOptionSub">Pay now with secure Stripe Checkout in a separate tab.</span>
+          </button>
+          <button class="orderFlowOptionBtn" id="orderFlowAchBtn" type="button">
+            <span class="orderFlowOptionTitle">ACH Bank Transfer</span>
+            <span class="orderFlowOptionSub">Start secure ACH checkout. Confirmation can arrive after Stripe finishes processing.</span>
+          </button>
+          <button class="orderFlowOptionBtn" id="orderFlowCheckBtn" type="button">
+            <span class="orderFlowOptionTitle">Pay by Check</span>
+            <span class="orderFlowOptionSub">Generate an invoice and lock the portal pending manual payment.</span>
+          </button>
+          <button class="orderFlowOptionBtn" id="orderFlowCashBtn" type="button">
+            <span class="orderFlowOptionTitle">Pay by Cash</span>
+            <span class="orderFlowOptionSub">Generate an invoice and lock the portal pending manual confirmation.</span>
+          </button>
+          <button class="orderFlowOptionBtn" id="orderFlowPoBtn" type="button">
+            <span class="orderFlowOptionTitle">Submit order via P.O.</span>
+            <span class="orderFlowOptionSub">Requires approved terms before the PO order path can continue.</span>
+          </button>
+        </div>
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowBackBtn" type="button">Go Back</button>
-          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowProceedBtn" type="button">Continue</button>
+        </div>
+      </div>
+      <div id="orderFlowManualSection" hidden>
+        <p class="orderFlowBody" id="orderFlowManualBody">We will generate an invoice and lock this portal while payment is pending.</p>
+        <div class="orderFlowInfoCard" id="orderFlowManualInfo"></div>
+        <div class="orderFlowActions">
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowManualBackBtn" type="button">Back</button>
+          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowManualConfirmBtn" type="button">Confirm Manual Payment</button>
+        </div>
+      </div>
+      <div id="orderFlowPoSection" hidden>
+        <p class="orderFlowBody" id="orderFlowPoBody">Purchase orders require approved terms.</p>
+        <div class="orderFlowInfoCard" id="orderFlowPoInfo"></div>
+        <div class="orderFlowInlineActions" id="orderFlowPoTermsActions">
+          <a class="orderFlowBtn orderFlowBtnBack orderFlowInlineLink" id="orderFlowViewTermsBtn" href="#" target="_blank" rel="noopener">View Terms</a>
+          <a class="orderFlowBtn orderFlowBtnBack orderFlowInlineLink" id="orderFlowDownloadTermsBtn" href="#" target="_blank" rel="noopener">Download Terms</a>
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowSubmitTermsBtn" type="button">Submit Terms</button>
+        </div>
+        <div class="orderFlowActions">
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowPoBackBtn" type="button">Back</button>
+          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowPoConfirmBtn" type="button">Continue with P.O.</button>
         </div>
       </div>
       <div id="orderFlowBlockingSection" hidden>
@@ -7472,10 +7818,26 @@
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowBlockingBackBtn" type="button">Go Back</button>
         </div>
       </div>
-      <div id="orderFlowSuccessSection" hidden>
+      <div id="orderFlowCheckoutSection" hidden>
+        <p class="orderFlowBody" id="orderFlowCheckoutBody">Creating your checkout session...</p>
+        <div class="orderFlowInfoCard">
+          <div class="orderFlowCheckoutMeta" id="orderFlowCheckoutMeta"></div>
+        </div>
+        <p class="orderFlowBody" id="orderFlowCheckoutHint" hidden>Continue to open Stripe Checkout in a secure tab. Return here after payment.</p>
+        <div class="orderFlowInlineActions" id="orderFlowCheckoutActions" hidden>
+          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowCheckoutLaunchBtn" type="button">Open secure payment</button>
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutCopyBtn" type="button">Copy payment link</button>
+          <a class="orderFlowBtn orderFlowBtnBack orderFlowInlineLink" id="orderFlowCheckoutOpenLink" href="#" target="_blank" rel="noopener noreferrer">Open in new tab again</a>
+        </div>
+        <div class="orderFlowActions">
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutBackBtn" type="button">Back</button>
+        </div>
+      </div>
+      <div id="orderFlowResultSection" hidden>
         <div class="orderFlowSuccessIcon" aria-hidden="true">✓</div>
-        <p class="orderFlowSuccessTitle">Your order is ready for payment.</p>
-        <p class="orderFlowBody">Payment confirmation is what places the order, writes the final submitted state, and locks editable order fields.</p>
+        <p class="orderFlowSuccessTitle" id="orderFlowResultTitle">Order status updated.</p>
+        <p class="orderFlowBody" id="orderFlowResultBody">We saved the latest order state.</p>
+        <div class="orderFlowResultMeta" id="orderFlowResultMeta"></div>
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowDoneBtn" type="button">Return to Snapshot</button>
         </div>
@@ -8130,6 +8492,18 @@
 
   function normalizePortalState(rawState){
     const parsed = safeJsonParse(rawState, {});
+    function normalizeRemovedAddOnIndexes(value){
+      if (!Array.isArray(value)) return [];
+      const seen = new Set();
+      return value
+        .map(item => Number(String(item).trim()))
+        .filter(idx => {
+          if (!Number.isInteger(idx) || idx < 0 || seen.has(idx)) return false;
+          seen.add(idx);
+          return true;
+        })
+        .sort((a, b) => a - b);
+    }
     const out = {
       version: String(parsed && parsed.version ? parsed.version : '1'),
       savedAt: String(parsed && parsed.savedAt ? parsed.savedAt : ''),
@@ -8144,6 +8518,7 @@
       const srcJob = parsed && parsed.printJobs && parsed.printJobs[job.printJobId] ? parsed.printJobs[job.printJobId] : {};
       const jobState = {
         hidden: Boolean(srcJob && srcJob.hidden === true),
+        removedAddOnIndexes: normalizeRemovedAddOnIndexes(srcJob && srcJob.removedAddOnIndexes),
         skus: {}
       };
 
@@ -8196,6 +8571,72 @@
   }
 
   let PORTAL_STATE = {};
+  let ACCOUNT_SUMMARY = {};
+  let LATEST_ORDER_SUMMARY = {};
+  let CURRENT_STATE_SUMMARY = {};
+  let DASHBOARD_ACCOUNT_SUMMARY = {};
+
+  function normalizeAccountSummary(rawSummary){
+    const raw = (rawSummary && typeof rawSummary === 'object') ? rawSummary : {};
+    return {
+      accountId: String(raw.accountId || '').trim(),
+      orgId: String(raw.orgId || '').trim(),
+      orgName: String(raw.orgName || '').trim(),
+      primaryEmail: String(raw.primaryEmail || '').trim(),
+      primaryContactName: String(raw.primaryContactName || '').trim(),
+      termsStatus: String(raw.termsStatus || '').trim(),
+      termsApproved: raw.termsApproved === true,
+      taxExemptStatus: String(raw.taxExemptStatus || '').trim(),
+      taxExemptApproved: raw.taxExemptApproved === true,
+      taxExemptExpiresAt: String(raw.taxExemptExpiresAt || '').trim(),
+      taxExemptActive: raw.taxExemptActive === true,
+      poAvailable: raw.poAvailable === true,
+      termsDocumentUrl: String(raw.termsDocumentUrl || '').trim(),
+      billingContactEmail: String(raw.billingContactEmail || '').trim(),
+      billingContactName: String(raw.billingContactName || '').trim()
+    };
+  }
+
+  function normalizeOrderSummary(rawSummary){
+    const raw = (rawSummary && typeof rawSummary === 'object') ? rawSummary : {};
+    return {
+      orderId: String(raw.orderId || '').trim(),
+      checkoutAttemptId: String(raw.checkoutAttemptId || '').trim(),
+      portalLockState: String(raw.portalLockState || '').trim(),
+      orderState: String(raw.orderState || '').trim(),
+      paymentMethodSelected: String(raw.paymentMethodSelected || '').trim(),
+      paymentState: String(raw.paymentState || '').trim(),
+      productionAuthorizationState: String(raw.productionAuthorizationState || '').trim(),
+      invoiceNumber: String(raw.invoiceNumber || '').trim(),
+      invoicePdfUrl: String(raw.invoicePdfUrl || '').trim(),
+      amountGrandTotal: toNumber(raw.amountGrandTotal, 0),
+      amountTax: toNumber(raw.amountTax, 0),
+      currency: String(raw.currency || 'USD').trim() || 'USD',
+      paidAt: String(raw.paidAt || '').trim(),
+      authorizedToProduceAt: String(raw.authorizedToProduceAt || '').trim(),
+      lockedAt: String(raw.lockedAt || '').trim(),
+      stripeSessionId: String(raw.stripeSessionId || '').trim(),
+      lastUpdatedAt: String(raw.lastUpdatedAt || '').trim()
+    };
+  }
+
+  function normalizeCurrentStateSummary(rawSummary){
+    const raw = (rawSummary && typeof rawSummary === 'object') ? rawSummary : {};
+    return {
+      activeOrderId: String(raw.activeOrderId || '').trim(),
+      latestCheckoutAttemptId: String(raw.latestCheckoutAttemptId || '').trim(),
+      currentAccountId: String(raw.currentAccountId || '').trim(),
+      portalLockState: String(raw.portalLockState || '').trim() || (IS_READ_ONLY ? 'locked' : 'editable'),
+      currentOrderState: String(raw.currentOrderState || '').trim(),
+      currentPaymentState: String(raw.currentPaymentState || '').trim(),
+      currentProductionAuthorizationState: String(raw.currentProductionAuthorizationState || '').trim(),
+      currentPaymentMethod: String(raw.currentPaymentMethod || '').trim(),
+      termsApproved: raw.termsApproved === true,
+      taxExemptApproved: raw.taxExemptApproved === true,
+      latestInvoiceNumber: String(raw.latestInvoiceNumber || '').trim(),
+      lastOrderUpdatedAt: String(raw.lastOrderUpdatedAt || '').trim()
+    };
+  }
 
   function applyVmRuntimeState(vmPayload){
     const payload = (vmPayload && typeof vmPayload === 'object') ? clonePlainObject(vmPayload) : {};
@@ -8215,6 +8656,9 @@
     IS_READ_ONLY = isFinalizedPortal();
     PORTAL_STATE = normalizePortalState(VM.portalState);
     PORTAL_STATE.isReadOnly = IS_READ_ONLY;
+    ACCOUNT_SUMMARY = normalizeAccountSummary(VM.accountSummary);
+    LATEST_ORDER_SUMMARY = normalizeOrderSummary(VM.latestOrderSummary);
+    CURRENT_STATE_SUMMARY = normalizeCurrentStateSummary(VM.currentStateSummary);
     TEAM_MODE_UNLOCKED = IS_TEAM ? readStoredTeamModeUnlock(INITIAL_TOKEN) : false;
     ARTWORK_APPROVED_BY_JOB_ID = Object.assign({}, INITIAL_ARTWORK_APPROVED_BY_JOB_ID);
     refreshRuntimeBootFlags();
@@ -8254,9 +8698,36 @@
 
   function getJobState(jobId){
     if (!PORTAL_STATE.printJobs[jobId]) {
-      PORTAL_STATE.printJobs[jobId] = { hidden: false, skus: {} };
+      PORTAL_STATE.printJobs[jobId] = { hidden: false, removedAddOnIndexes: [], skus: {} };
+    }
+    if (!Array.isArray(PORTAL_STATE.printJobs[jobId].removedAddOnIndexes)) {
+      PORTAL_STATE.printJobs[jobId].removedAddOnIndexes = [];
     }
     return PORTAL_STATE.printJobs[jobId];
+  }
+
+  function syncRemovedAddOnsForJob(jobId, nextSet){
+    const jobState = getJobState(jobId);
+    const normalized = Array.from(nextSet || [])
+      .map(idx => Number(String(idx).trim()))
+      .filter(idx => Number.isInteger(idx) && idx >= 0)
+      .sort((a, b) => a - b);
+    jobState.removedAddOnIndexes = normalized;
+    REMOVED_ADDONS_BY_JOB[jobId] = new Set(normalized);
+    return REMOVED_ADDONS_BY_JOB[jobId];
+  }
+
+  function getRemovedAddOnsForJob(jobId){
+    const persisted = Array.isArray(getJobState(jobId).removedAddOnIndexes)
+      ? getJobState(jobId).removedAddOnIndexes
+      : [];
+    const existing = REMOVED_ADDONS_BY_JOB[jobId] || new Set();
+    const merged = new Set(existing);
+    persisted.forEach(idx => {
+      const normalized = Number(String(idx).trim());
+      if (Number.isInteger(normalized) && normalized >= 0) merged.add(normalized);
+    });
+    return syncRemovedAddOnsForJob(jobId, merged);
   }
 
   function getSkuState(jobId, skuId){
@@ -8421,6 +8892,174 @@
     return metaField('internalNotes') || rowField('internalnotes') || '';
   }
 
+  function describePortalStateForUi(){
+    const portalLockState = String(CURRENT_STATE_SUMMARY.portalLockState || '').trim().toLowerCase();
+    const orderState = String(CURRENT_STATE_SUMMARY.currentOrderState || '').trim();
+    const paymentState = String(CURRENT_STATE_SUMMARY.currentPaymentState || '').trim();
+    const paymentMethod = String(CURRENT_STATE_SUMMARY.currentPaymentMethod || '').trim();
+    const productionState = String(CURRENT_STATE_SUMMARY.currentProductionAuthorizationState || '').trim();
+    const invoiceNumber = String(CURRENT_STATE_SUMMARY.latestInvoiceNumber || '').trim();
+    const updatedAt = String(CURRENT_STATE_SUMMARY.lastOrderUpdatedAt || '').trim();
+
+    if (portalLockState === 'locked' || IS_READ_ONLY) {
+      if (paymentState === 'failed') {
+        return {
+          badge: 'Payment Failed',
+          text: 'The latest payment attempt failed. Production has not started.',
+          meta: updatedAt ? ('Updated ' + updatedAt) : ''
+        };
+      }
+      if (orderState === 'awaiting_manual_payment') {
+        return {
+          badge: 'Awaiting Payment',
+          text: 'This portal is locked while we wait for your ' + (paymentMethod || 'manual') + ' payment.',
+          meta: invoiceNumber ? ('Invoice ' + invoiceNumber + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
+        };
+      }
+      if (orderState === 'awaiting_payment_confirmation') {
+        return {
+          badge: 'Payment Pending',
+          text: 'Your payment was submitted and is waiting for final confirmation before production can begin.',
+          meta: paymentState ? ('Payment state: ' + paymentState) : ''
+        };
+      }
+      if (orderState === 'awaiting_po_submission') {
+        return {
+          badge: 'Awaiting P.O.',
+          text: 'This portal is locked while we wait for your purchase order paperwork.',
+          meta: invoiceNumber ? ('Invoice ' + invoiceNumber) : ''
+        };
+      }
+      if (orderState === 'ready_for_production' || productionState === 'authorized') {
+        return {
+          badge: 'Ready',
+          text: 'Your order is authorized for production.',
+          meta: updatedAt ? ('Authorized ' + updatedAt) : ''
+        };
+      }
+      return {
+        badge: 'Locked',
+        text: 'This portal is currently locked for client edits.',
+        meta: updatedAt ? ('Updated ' + updatedAt) : ''
+      };
+    }
+
+    if (orderState === 'payment_in_progress' || paymentState === 'checkout_created') {
+      if (hasUnsavedSnapshotChanges()) {
+        return {
+          badge: 'Draft Updated',
+          text: 'This draft changed after the last secure checkout was created. Use Place Order to generate a fresh payment tab for the current totals.',
+          meta: updatedAt ? ('Last checkout updated ' + updatedAt) : ''
+        };
+      }
+      return {
+        badge: 'Checkout Started',
+        text: 'A secure checkout has been created for this draft. Continue in the secure tab, or use Place Order to reopen payment.',
+        meta: updatedAt ? ('Updated ' + updatedAt) : ''
+      };
+    }
+
+    return {
+      badge: 'Editable',
+      text: 'This estimate is still editable. Your order is not locked until a checkout or manual payment path is confirmed.',
+      meta: ACCOUNT_SUMMARY.taxExemptActive ? 'Tax exemption is active for this account.' : ''
+    };
+  }
+
+  function renderPortalStatusBanner(){
+    if (!portalStatusBanner || !portalStatusBadge || !portalStatusText || !portalStatusMeta) return;
+    const summary = describePortalStateForUi();
+    portalStatusBadge.textContent = summary.badge;
+    portalStatusText.textContent = summary.text;
+    portalStatusMeta.textContent = summary.meta || '';
+    portalStatusBanner.hidden = false;
+  }
+
+  function renderDashboardAccountStatus(summary){
+    if (!dashboardAccountPanel || !dashboardAccountSummaryText || !dashboardAccountBadge || !dashboardAccountMeta) return;
+    const account = normalizeAccountSummary(summary);
+    DASHBOARD_ACCOUNT_SUMMARY = account;
+    dashboardAccountBadge.textContent = account.poAvailable ? 'Terms Approved' : 'Account';
+    dashboardAccountSummaryText.textContent = account.poAvailable
+      ? 'Purchase orders are available for this account.'
+      : 'Terms and tax exemption placeholders are ready on this account.';
+    dashboardAccountMeta.innerHTML = '';
+    [
+      ['Organization', account.orgName || account.primaryContactName || '--'],
+      ['Primary Email', account.primaryEmail || '--'],
+      ['Terms', account.termsApproved ? 'Approved' : (account.termsStatus || 'Not started')],
+      ['Tax Exemption', account.taxExemptActive ? 'Active' : (account.taxExemptStatus || 'Not started')]
+    ].forEach(([label, value]) => {
+      const cell = createEl('div', 'dashboardAccountMetaItem');
+      cell.appendChild(createEl('span', 'dashboardAccountMetaKey', label));
+      cell.appendChild(createEl('span', 'dashboardAccountMetaVal', value));
+      dashboardAccountMeta.appendChild(cell);
+    });
+  }
+
+  function describeCheckoutReturnNotice(){
+    const result = String(CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+    if (!result) return null;
+    if (result === 'cancel') {
+      return {
+        message: 'Checkout canceled. Your order draft was saved, and you can restart payment whenever you are ready.',
+        type: 'ok'
+      };
+    }
+    if (result !== 'success') return null;
+
+    const orderState = String(CURRENT_STATE_SUMMARY.currentOrderState || '').trim().toLowerCase();
+    const paymentState = String(CURRENT_STATE_SUMMARY.currentPaymentState || '').trim().toLowerCase();
+    const paymentMethod = String(CURRENT_STATE_SUMMARY.currentPaymentMethod || '').trim().toLowerCase();
+    const productionState = String(CURRENT_STATE_SUMMARY.currentProductionAuthorizationState || '').trim().toLowerCase();
+
+    if (paymentState === 'failed') {
+      return {
+        message: 'Payment failed. No order has been authorized yet. Please retry checkout or contact Red Threads.',
+        type: 'err'
+      };
+    }
+    if (productionState === 'authorized' || orderState === 'ready_for_production' || paymentState === 'paid') {
+      return {
+        message: 'Payment received. Your order is authorized for production.',
+        type: 'ok'
+      };
+    }
+    if (paymentMethod === 'ach' || paymentState === 'pending' || orderState === 'awaiting_payment_confirmation') {
+      return {
+        message: 'Bank payment submitted. We are waiting for final confirmation before production begins.',
+        type: 'ok'
+      };
+    }
+    return {
+      message: 'Checkout completed. We are processing payment confirmation now. Your order status will update as soon as it is received.',
+      type: 'ok'
+    };
+  }
+
+  function clearConsumedCheckoutReturnParams(){
+    if (typeof window === 'undefined' || !window.location || !window.history) return;
+    try {
+      const url = new URL(window.location.href);
+      let changed = false;
+      ['checkoutResult', 'stripeSessionId'].forEach(key => {
+        if (!url.searchParams.has(key)) return;
+        url.searchParams.delete(key);
+        changed = true;
+      });
+      if (!changed) return;
+      const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
+      window.history.replaceState({}, document.title, nextUrl);
+    } catch (_) {}
+  }
+
+  function handleCheckoutReturnNotice(){
+    const notice = describeCheckoutReturnNotice();
+    if (!notice) return;
+    showNotice(notice.message, notice.type || 'ok');
+    clearConsumedCheckoutReturnParams();
+  }
+
   const loginView = document.getElementById('loginView');
   const resetRequestView = document.getElementById('resetRequestView');
   const resetConfirmView = document.getElementById('resetConfirmView');
@@ -8446,12 +9085,22 @@
   const authProjectsTitle = document.getElementById('authProjectsTitle');
   const authProjectsBody = document.getElementById('authProjectsBody');
   const authProjectsEmpty = document.getElementById('authProjectsEmpty');
+  const dashboardAccountPanel = document.getElementById('dashboardAccountPanel');
+  const dashboardAccountSummaryText = document.getElementById('dashboardAccountSummaryText');
+  const dashboardAccountBadge = document.getElementById('dashboardAccountBadge');
+  const dashboardAccountMeta = document.getElementById('dashboardAccountMeta');
+  const dashboardApplyTermsBtn = document.getElementById('dashboardApplyTermsBtn');
+  const dashboardTaxExemptBtn = document.getElementById('dashboardTaxExemptBtn');
   const projectView = document.getElementById('projectView');
   const jobsRoot = document.getElementById('jobsRoot');
   const printJobTabsSection = document.getElementById('printJobTabsSection');
   const hiddenPrintJobsBar = document.getElementById('hiddenPrintJobsBar');
   const printJobTabsList = document.getElementById('printJobTabsList');
   const saveNotice = document.getElementById('saveNotice');
+  const portalStatusBanner = document.getElementById('portalStatusBanner');
+  const portalStatusBadge = document.getElementById('portalStatusBadge');
+  const portalStatusText = document.getElementById('portalStatusText');
+  const portalStatusMeta = document.getElementById('portalStatusMeta');
   const snapshotTokenEl = document.getElementById('snapshotToken');
   const snapshotIdVal = document.getElementById('snapshotIdVal');
   const snapshotExportedVal = document.getElementById('snapshotExportedVal');
@@ -8546,12 +9195,45 @@
   const orderFlowBackdrop = document.getElementById('orderFlowBackdrop');
   const orderFlowModal = document.getElementById('orderFlowModal');
   const orderFlowClose = document.getElementById('orderFlowClose');
-  const orderFlowConfirmSection = document.getElementById('orderFlowConfirmSection');
+  const orderFlowStatePill = document.getElementById('orderFlowStatePill');
+  const orderFlowSummaryGrid = document.getElementById('orderFlowSummaryGrid');
+  const orderFlowMethodSection = document.getElementById('orderFlowMethodSection');
+  const orderFlowManualSection = document.getElementById('orderFlowManualSection');
+  const orderFlowPoSection = document.getElementById('orderFlowPoSection');
   const orderFlowBlockingSection = document.getElementById('orderFlowBlockingSection');
-  const orderFlowSuccessSection = document.getElementById('orderFlowSuccessSection');
+  const orderFlowCheckoutSection = document.getElementById('orderFlowCheckoutSection');
+  const orderFlowResultSection = document.getElementById('orderFlowResultSection');
   const orderFlowBackBtn = document.getElementById('orderFlowBackBtn');
-  const orderFlowProceedBtn = document.getElementById('orderFlowProceedBtn');
+  const orderFlowCheckBtn = document.getElementById('orderFlowCheckBtn');
+  const orderFlowCashBtn = document.getElementById('orderFlowCashBtn');
+  const orderFlowPoBtn = document.getElementById('orderFlowPoBtn');
+  const orderFlowCardBtn = document.getElementById('orderFlowCardBtn');
+  const orderFlowAchBtn = document.getElementById('orderFlowAchBtn');
+  const orderFlowManualBody = document.getElementById('orderFlowManualBody');
+  const orderFlowManualInfo = document.getElementById('orderFlowManualInfo');
+  const orderFlowManualBackBtn = document.getElementById('orderFlowManualBackBtn');
+  const orderFlowManualConfirmBtn = document.getElementById('orderFlowManualConfirmBtn');
+  const orderFlowPoBody = document.getElementById('orderFlowPoBody');
+  const orderFlowPoInfo = document.getElementById('orderFlowPoInfo');
+  const orderFlowPoTermsActions = document.getElementById('orderFlowPoTermsActions');
+  const orderFlowViewTermsBtn = document.getElementById('orderFlowViewTermsBtn');
+  const orderFlowDownloadTermsBtn = document.getElementById('orderFlowDownloadTermsBtn');
+  const orderFlowSubmitTermsBtn = document.getElementById('orderFlowSubmitTermsBtn');
+  const orderFlowPoBackBtn = document.getElementById('orderFlowPoBackBtn');
+  const orderFlowPoConfirmBtn = document.getElementById('orderFlowPoConfirmBtn');
   const orderFlowBlockingBackBtn = document.getElementById('orderFlowBlockingBackBtn');
+  const orderFlowCheckoutBody = document.getElementById('orderFlowCheckoutBody');
+  const orderFlowCheckoutMeta = document.getElementById('orderFlowCheckoutMeta');
+  const orderFlowCheckoutHint = document.getElementById('orderFlowCheckoutHint');
+  const orderFlowCheckoutActions = document.getElementById('orderFlowCheckoutActions');
+  const orderFlowCheckoutLaunchBtn = document.getElementById('orderFlowCheckoutLaunchBtn');
+  const orderFlowCheckoutCopyBtn = document.getElementById('orderFlowCheckoutCopyBtn');
+  const orderFlowCheckoutOpenLink = document.getElementById('orderFlowCheckoutOpenLink');
+  const orderFlowCheckoutBackBtn = document.getElementById('orderFlowCheckoutBackBtn');
+  const orderFlowResultIcon = orderFlowResultSection ? orderFlowResultSection.querySelector('.orderFlowSuccessIcon') : null;
+  const orderFlowResultTitle = document.getElementById('orderFlowResultTitle');
+  const orderFlowResultBody = document.getElementById('orderFlowResultBody');
+  const orderFlowResultMeta = document.getElementById('orderFlowResultMeta');
   const orderFlowDoneBtn = document.getElementById('orderFlowDoneBtn');
   const orderFlowBlockingJobs = document.getElementById('orderFlowBlockingJobs');
   const headerDeliverySummary = document.getElementById('headerDeliverySummary');
@@ -8574,6 +9256,7 @@
   let CURRENT_TOKEN = '';
   const URL_QUERY_PARAMS = new URLSearchParams(window.location.search || '');
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
+  const CHECKOUT_RETURN_RESULT = String(URL_QUERY_PARAMS.get('checkoutResult') || '').trim().toLowerCase();
   let HAS_PORTAL_TOKEN = false;
   let OPENED_FROM_AUTH_SHELL = false;
   const STATE_LOGIN = 'login';
@@ -8631,8 +9314,14 @@
   let ARTWORK_PREVIEW_SLIDES = [];
   let ARTWORK_PREVIEW_INDEX = 0;
   let ARTWORK_PREVIEW_HIDE_TIMER = 0;
-  let ORDER_FLOW_MODE = 'confirm';
+  let ORDER_FLOW_MODE = 'method';
   let ORDER_FLOW_BLOCKING_JOBS = [];
+  let ORDER_FLOW_SELECTED_METHOD = '';
+  let ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
+  let ORDER_FLOW_CHECKOUT_URL = '';
+  let ORDER_FLOW_CHECKOUT_WINDOW = null;
+  let ORDER_FLOW_RESULT_KIND = 'info';
+  let ORDER_FLOW_REQUEST_IN_FLIGHT = false;
   let UNSAVED_LEAVE_ACTION_PENDING = false;
   let SNAPSHOT_DIRTY_BASELINE_KEY = '';
   let DASHBOARD_VIEW_VISIBLE_AT = 0;
@@ -9848,15 +10537,16 @@
     const opts = (options && typeof options === 'object') ? options : {};
     if (!AUTH_SESSION_ID) {
       clearDashboardProjectRows();
+      renderDashboardAccountStatus({});
       return;
     }
     const requestSessionId = AUTH_SESSION_ID;
     if (!opts.suppressLoadingMessage) {
-      setAuthMessage('Loading projects...', false, { view: VIEW_DASHBOARD });
+      setAuthMessage('Loading dashboard...', false, { view: VIEW_DASHBOARD });
     }
     try {
-      // Dashboard load is metadata-only (no snapshot parsing on this phase).
-      const resp = await callServer('getUserProjects', { sessionId: requestSessionId });
+      // Dashboard load is metadata-only and bundled into one server call.
+      const resp = await callServer('getDashboardHomeData', { sessionId: requestSessionId });
       if (!AUTH_SESSION_ID || AUTH_SESSION_ID !== requestSessionId) {
         clearDashboardProjectRows();
         return;
@@ -9864,7 +10554,7 @@
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to load projects.'));
       }
-      renderProjectRows(resp.projects || []);
+      applyDashboardHomeData(resp);
       if (opts.awaitPaint) {
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
@@ -9872,6 +10562,7 @@
     } catch (err) {
       const msg = String((err && err.message) || err);
       setAuthMessage(msg, true, { view: VIEW_DASHBOARD });
+      renderDashboardAccountStatus({});
       if (/session/i.test(msg)) {
         writeStoredSessionId('');
         AUTH_SESSION_ID = '';
@@ -9879,6 +10570,69 @@
         setView(VIEW_LOGIN);
         setAuthMessage(msg, true, { view: VIEW_LOGIN, preserve: true });
       }
+    }
+  }
+
+  async function loadDashboardAccountStatus(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (!AUTH_SESSION_ID) {
+      renderDashboardAccountStatus({});
+      return null;
+    }
+    try {
+      const resp = await callServer('getAccountStatus', { sessionId: AUTH_SESSION_ID });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to load account status.'));
+      }
+      renderDashboardAccountStatus(resp.accountSummary || {});
+      return resp.accountSummary || {};
+    } catch (err) {
+      if (!opts.suppressLoadingMessage) {
+        setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD });
+      }
+      renderDashboardAccountStatus({});
+      return null;
+    }
+  }
+
+  function applyDashboardHomeData(data){
+    const payload = (data && typeof data === 'object') ? data : {};
+    renderProjectRows(payload.projects || []);
+    renderDashboardAccountStatus(payload.accountSummary || {});
+    return payload;
+  }
+
+  async function requestDashboardTermsEnrollment(){
+    if (!AUTH_SESSION_ID) return;
+    setButtonBusy(dashboardApplyTermsBtn, true, 'Submitting...', 'Apply for Terms');
+    try {
+      const resp = await callServer('requestTermsEnrollment', { sessionId: AUTH_SESSION_ID });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to start terms enrollment.'));
+      }
+      renderDashboardAccountStatus(resp.accountSummary || {});
+      setAuthMessage(String(resp.message || 'Terms enrollment placeholder started.'), false, { view: VIEW_DASHBOARD });
+    } catch (err) {
+      setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD });
+    } finally {
+      setButtonBusy(dashboardApplyTermsBtn, false, 'Submitting...', 'Apply for Terms');
+    }
+  }
+
+  async function requestDashboardTaxExemptSubmission(){
+    if (!AUTH_SESSION_ID) return;
+    setButtonBusy(dashboardTaxExemptBtn, true, 'Submitting...', 'Submit Sales Tax Exemption');
+    try {
+      const resp = await callServer('requestTaxExemptSubmission', { sessionId: AUTH_SESSION_ID });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to start tax exemption submission.'));
+      }
+      renderDashboardAccountStatus(resp.accountSummary || {});
+      setAuthMessage(String(resp.message || 'Tax exemption placeholder started.'), false, { view: VIEW_DASHBOARD });
+    } catch (err) {
+      setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD });
+    } finally {
+      setButtonBusy(dashboardTaxExemptBtn, false, 'Submitting...', 'Submit Sales Tax Exemption');
     }
   }
 
@@ -9909,7 +10663,7 @@
         setButtonBusy(authLoginBtn, true, 'Logging in...', 'Log in');
         setAuthMessage('', false);
         try {
-          // Phase 1: login only (USERS + USER_SESSIONS), no EXPORT_LOG reads.
+          // Login returns session info and a lightweight dashboard bootstrap when available.
           const resp = await callServer('loginUser', { email: email, password: password });
           if (resp && resp.needsReset === true) {
             if (authForgotEmail) authForgotEmail.value = email;
@@ -9929,11 +10683,23 @@
           writeStoredSessionId(AUTH_SESSION_ID);
           if (authLoginPassword) authLoginPassword.value = '';
           setLoginPasswordVisibility(false);
-          rtShowLoader('Loading your projects', 'One moment…');
-          await loadProjectsForHome({ suppressLoadingMessage: true, awaitPaint: true });
-          if (AUTH_SESSION_ID) {
-            setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
-            await new Promise(resolve => requestAnimationFrame(resolve));
+          rtShowLoader('Loading your dashboard', 'One moment…');
+          const dashboardHomeData = resp && resp.dashboardHomeData && resp.dashboardHomeData.ok === true
+            ? resp.dashboardHomeData
+            : null;
+          if (dashboardHomeData) {
+            applyDashboardHomeData(dashboardHomeData);
+            if (AUTH_SESSION_ID) {
+              setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+              await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+            setAuthMessage('', false, { view: VIEW_DASHBOARD });
+          } else {
+            await loadProjectsForHome({ suppressLoadingMessage: true, awaitPaint: true });
+            if (AUTH_SESSION_ID) {
+              setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+              await new Promise(resolve => requestAnimationFrame(resolve));
+            }
           }
         } catch (err) {
           setAuthMessage(String((err && err.message) || err), true, { view: VIEW_LOGIN });
@@ -10217,6 +10983,36 @@
   function isPortalDisplay(addOn){
     const v = addOn ? addOn.portal_display : false;
     return v === true || String(v).toLowerCase() === 'true';
+  }
+
+  function shouldExcludeAddOnFromPortal(addOn, removedIndexSet){
+    const item = (addOn && typeof addOn === 'object') ? addOn : {};
+    const idx = parseInt(String(item.__idx), 10);
+    if (removedIndexSet && Number.isFinite(idx) && removedIndexSet.has(idx)) return true;
+
+    const truthyFalse = ['false', '0', 'no', 'off'];
+    const hiddenFlags = [
+      item.hidden,
+      item.cancelled,
+      item.canceled
+    ];
+    for (let i = 0; i < hiddenFlags.length; i += 1) {
+      const raw = hiddenFlags[i];
+      if (raw === true) return true;
+      if (truthyFalse.indexOf(String(raw).trim().toLowerCase()) >= 0) continue;
+      if (String(raw).trim().toLowerCase() === 'true') return true;
+    }
+
+    const inactiveFields = ['active', 'isActive', 'enabled', 'selected', 'included'];
+    for (let j = 0; j < inactiveFields.length; j += 1) {
+      const key = inactiveFields[j];
+      if (!Object.prototype.hasOwnProperty.call(item, key)) continue;
+      const value = item[key];
+      if (value === false) return true;
+      const normalized = String(value).trim().toLowerCase();
+      if (truthyFalse.indexOf(normalized) >= 0) return true;
+    }
+    return false;
   }
 
   function isRush(addOn){
@@ -11291,24 +12087,541 @@
     });
   }
 
+  function buildOrderFlowSummaryItems(){
+    const units = String((document.getElementById('headerTotalUnitsMini') && document.getElementById('headerTotalUnitsMini').textContent) || '0').trim() || '0';
+    const total = String((document.getElementById('headerTotalPricingMini') && document.getElementById('headerTotalPricingMini').textContent) || '--').trim() || '--';
+    const taxState = ACCOUNT_SUMMARY.taxExemptActive
+      ? 'Tax Exempt Active'
+      : (ACCOUNT_SUMMARY.taxExemptApproved ? 'Tax Exempt Approved' : 'Standard Tax');
+    const selectedMethod = String(ORDER_FLOW_SELECTED_METHOD || '').trim().toLowerCase();
+    const poState = ACCOUNT_SUMMARY.poAvailable
+      ? 'Approved'
+      : (selectedMethod === 'purchase_order' ? 'Required' : 'Not required for card/ACH');
+    const termsLabel = selectedMethod === 'purchase_order' ? 'P.O. Terms' : 'Terms';
+    return [
+      ['Project', 'Job #' + getDealNumber()],
+      ['Units', units],
+      ['Total', total],
+      [termsLabel, poState],
+      ['Tax', taxState],
+      ['Portal', IS_READ_ONLY ? 'Locked' : 'Editable']
+    ];
+  }
+
+  function renderOrderFlowSummaryCard(){
+    if (!orderFlowSummaryGrid) return;
+    orderFlowSummaryGrid.innerHTML = '';
+    buildOrderFlowSummaryItems().forEach(([label, value]) => {
+      const cell = createEl('div', 'orderFlowSummaryItem');
+      cell.appendChild(createEl('span', 'orderFlowSummaryKey', label));
+      cell.appendChild(createEl('span', 'orderFlowSummaryVal', value));
+      orderFlowSummaryGrid.appendChild(cell);
+    });
+  }
+
+  function setOrderFlowStatePill(text){
+    if (!orderFlowStatePill) return;
+    orderFlowStatePill.textContent = String(text || 'Checkout');
+  }
+
   function setOrderFlowMode(mode){
-    ORDER_FLOW_MODE = (mode === 'blocking' || mode === 'success') ? mode : 'confirm';
-    if (orderFlowConfirmSection) orderFlowConfirmSection.hidden = ORDER_FLOW_MODE !== 'confirm';
+    const validModes = new Set(['method', 'manual', 'po', 'blocking', 'checkout', 'result']);
+    ORDER_FLOW_MODE = validModes.has(mode) ? mode : 'method';
+    if (orderFlowMethodSection) orderFlowMethodSection.hidden = ORDER_FLOW_MODE !== 'method';
+    if (orderFlowManualSection) orderFlowManualSection.hidden = ORDER_FLOW_MODE !== 'manual';
+    if (orderFlowPoSection) orderFlowPoSection.hidden = ORDER_FLOW_MODE !== 'po';
     if (orderFlowBlockingSection) orderFlowBlockingSection.hidden = ORDER_FLOW_MODE !== 'blocking';
-    if (orderFlowSuccessSection) orderFlowSuccessSection.hidden = ORDER_FLOW_MODE !== 'success';
-    if (orderFlowModal) orderFlowModal.classList.toggle('isSuccess', ORDER_FLOW_MODE === 'success');
+    if (orderFlowCheckoutSection) orderFlowCheckoutSection.hidden = ORDER_FLOW_MODE !== 'checkout';
+    if (orderFlowResultSection) orderFlowResultSection.hidden = ORDER_FLOW_MODE !== 'result';
+    if (orderFlowModal) {
+      orderFlowModal.classList.toggle('isSuccess', ORDER_FLOW_MODE === 'result' && ORDER_FLOW_RESULT_KIND === 'success');
+      orderFlowModal.classList.toggle('isError', ORDER_FLOW_MODE === 'result' && ORDER_FLOW_RESULT_KIND === 'error');
+    }
     if (ORDER_FLOW_MODE === 'blocking') {
       renderOrderFlowBlockingJobs();
     }
   }
 
+  function setOrderFlowButtonsBusy(busy){
+    ORDER_FLOW_REQUEST_IN_FLIGHT = !!busy;
+    [
+      orderFlowCheckBtn,
+      orderFlowCashBtn,
+      orderFlowPoBtn,
+      orderFlowCardBtn,
+      orderFlowAchBtn,
+      orderFlowManualConfirmBtn,
+      orderFlowPoConfirmBtn,
+      orderFlowSubmitTermsBtn,
+      orderFlowCheckoutLaunchBtn,
+      orderFlowCheckoutCopyBtn
+    ].forEach(btn => {
+      if (!btn) return;
+      btn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT;
+    });
+  }
+
+  function resetOrderFlowCheckoutLaunchState(){
+    ORDER_FLOW_CHECKOUT_URL = '';
+    if (ORDER_FLOW_CHECKOUT_WINDOW && ORDER_FLOW_CHECKOUT_WINDOW.closed) {
+      ORDER_FLOW_CHECKOUT_WINDOW = null;
+    }
+    if (orderFlowCheckoutHint) {
+      orderFlowCheckoutHint.hidden = true;
+      orderFlowCheckoutHint.textContent = 'If a secure tab does not open automatically, use the button below to continue payment.';
+    }
+    if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = true;
+    if (orderFlowCheckoutLaunchBtn) orderFlowCheckoutLaunchBtn.textContent = 'Open secure payment';
+    if (orderFlowCheckoutOpenLink) {
+      orderFlowCheckoutOpenLink.href = '#';
+      orderFlowCheckoutOpenLink.hidden = true;
+    }
+  }
+
+  function setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    ORDER_FLOW_CHECKOUT_URL = String(checkoutUrl || '').trim();
+    if (orderFlowCheckoutBody) {
+      orderFlowCheckoutBody.textContent = opts.launched ? 'Secure payment opened' : 'Secure payment ready';
+    }
+    if (orderFlowCheckoutMeta) {
+      orderFlowCheckoutMeta.textContent = [
+        opts.launched
+          ? 'Stripe Checkout opened in a secure tab. Return here after payment.'
+          : 'Your secure Stripe Checkout is ready. Click below to continue payment in a secure tab.',
+        resp.stripe && resp.stripe.sessionId ? ('Session ID: ' + resp.stripe.sessionId) : '',
+        resp.orderSummary && resp.orderSummary.checkoutAttemptId ? ('Checkout Attempt: ' + resp.orderSummary.checkoutAttemptId) : '',
+        method === 'ach'
+          ? 'ACH confirmation can remain pending until Stripe posts a later success event.'
+          : 'Card payments typically confirm quickly once checkout.session.completed is processed.'
+      ].filter(Boolean).join('\n');
+    }
+    if (orderFlowCheckoutHint) {
+      orderFlowCheckoutHint.hidden = false;
+      orderFlowCheckoutHint.textContent = opts.launched
+        ? 'Return here after payment. If the secure tab did not open, use the payment button below.'
+        : 'If a secure tab does not open automatically, use the payment button below.';
+    }
+    if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = !!opts.launched && !opts.showActions;
+    if (orderFlowCheckoutOpenLink) {
+      orderFlowCheckoutOpenLink.href = ORDER_FLOW_CHECKOUT_URL || '#';
+      orderFlowCheckoutOpenLink.hidden = !ORDER_FLOW_CHECKOUT_URL || !!opts.launched;
+    }
+  }
+
+  function buildPendingOrderFlowCheckoutWindowHtml(){
+    return [
+      '<!doctype html>',
+      '<html lang="en">',
+      '<head>',
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      '<title>Red Threads Secure Payment</title>',
+      '<style>',
+      '  :root{',
+      '    --rt-bg:#05060a;',
+      '    --rt-glass:rgba(255,255,255,0.08);',
+      '    --rt-glassBorder:rgba(255,255,255,0.16);',
+      '    --rt-text:rgba(255,255,255,0.92);',
+      '    --rt-muted:rgba(255,255,255,0.72);',
+      '    --rt-red:#e11d48;',
+      '  }',
+      '  *{box-sizing:border-box;}',
+      '  html,body{height:100%;}',
+      '  html{background:var(--rt-bg);}',
+      '  body{',
+      '    margin:0;',
+      '    min-height:100vh;',
+      '    display:flex;',
+      '    align-items:center;',
+      '    justify-content:center;',
+      '    padding:24px;',
+      '    background:',
+      '      radial-gradient(circle at top, rgba(20,51,92,.95) 0%, rgba(9,18,31,.96) 48%, rgba(3,6,11,1) 100%),',
+      '      linear-gradient(180deg, #0a1421 0%, #05060a 100%);',
+      '    color:var(--rt-text);',
+      '    font:600 16px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+      '    overflow:hidden;',
+      '  }',
+      '  body::before{',
+      '    content:"";',
+      '    position:fixed;',
+      '    inset:-18%;',
+      '    background:',
+      '      radial-gradient(circle at 50% 34%, rgba(225,29,72,.10) 0%, rgba(225,29,72,0) 44%),',
+      '      radial-gradient(circle at 50% 78%, rgba(96,165,250,.08) 0%, rgba(96,165,250,0) 34%);',
+      '    pointer-events:none;',
+      '  }',
+      '  .rt-payment-shell{',
+      '    position:relative;',
+      '    width:min(560px, calc(100vw - 48px));',
+      '    padding:34px 28px;',
+      '    border:1px solid var(--rt-glassBorder);',
+      '    border-radius:20px;',
+      '    background:linear-gradient(170deg, rgba(15,17,27,.92) 0%, rgba(5,6,10,.9) 100%);',
+      '    box-shadow:0 24px 50px rgba(0,0,0,.54), inset 0 1px 0 rgba(255,255,255,.08);',
+      '    backdrop-filter:blur(18px) saturate(130%);',
+      '    -webkit-backdrop-filter:blur(18px) saturate(130%);',
+      '    text-align:center;',
+      '    animation:rtPopIn 160ms ease-out forwards;',
+      '    transform:translateY(8px) scale(.98);',
+      '    opacity:0;',
+      '  }',
+      '  .rt-payment-badge{',
+      '    display:inline-flex;',
+      '    align-items:center;',
+      '    justify-content:center;',
+      '    margin-bottom:14px;',
+      '    color:rgba(255,255,255,.7);',
+      '    font-size:12px;',
+      '    font-weight:800;',
+      '    letter-spacing:.16em;',
+      '    text-transform:uppercase;',
+      '  }',
+      '  .rt-spinner{',
+      '    width:48px;',
+      '    height:48px;',
+      '    margin:0 auto 18px;',
+      '    border-radius:999px;',
+      '    border:4px solid rgba(225,29,72,.24);',
+      '    border-top-color:var(--rt-red);',
+      '    border-right-color:rgba(244,63,94,.74);',
+      '    animation:rtSpin 860ms linear infinite;',
+      '    filter:drop-shadow(0 0 12px rgba(225,29,72,.45));',
+      '    position:relative;',
+      '  }',
+      '  .rt-spinner::after{',
+      '    content:"";',
+      '    position:absolute;',
+      '    inset:7px;',
+      '    border-radius:999px;',
+      '    border:2px solid rgba(244,63,94,.36);',
+      '    animation:rtPulse 1200ms ease-in-out infinite;',
+      '  }',
+      '  .rt-payment-title{',
+      '    margin:0 0 10px;',
+      '    font-size:42px;',
+      '    line-height:1.02;',
+      '    font-weight:900;',
+      '    letter-spacing:-.03em;',
+      '    color:var(--rt-text);',
+      '  }',
+      '  .rt-payment-sub{',
+      '    margin:0 auto;',
+      '    max-width:34ch;',
+      '    color:var(--rt-muted);',
+      '    font-size:19.5px;',
+      '    line-height:1.35;',
+      '  }',
+      '  @keyframes rtPopIn{',
+      '    to{transform:translateY(0) scale(1);opacity:1;}',
+      '  }',
+      '  @keyframes rtSpin{',
+      '    to{transform:rotate(360deg);}',
+      '  }',
+      '  @keyframes rtPulse{',
+      '    0%,100%{opacity:.36;transform:scale(.92);}',
+      '    50%{opacity:1;transform:scale(1);}',
+      '  }',
+      '</style>',
+      '</head>',
+      '<body>',
+      '  <div class="rt-payment-shell" role="status" aria-live="polite">',
+      '    <div class="rt-payment-badge">Red Threads</div>',
+      '    <div class="rt-spinner" aria-hidden="true"></div>',
+      '    <h1 class="rt-payment-title">Secure Payment</h1>',
+      '    <p class="rt-payment-sub">Preparing your hosted Stripe Checkout. This tab will continue automatically as soon as the secure session is ready.</p>',
+      '  </div>',
+      '</body>',
+      '</html>'
+    ].join('');
+  }
+
+  function openPendingOrderFlowCheckoutWindow(){
+    try {
+      const popup = window.open('', '_blank');
+      if (!popup) return null;
+      try { popup.opener = null; } catch (_) {}
+      try {
+        popup.document.title = 'Red Threads Secure Payment';
+        popup.document.open();
+        popup.document.write(buildPendingOrderFlowCheckoutWindowHtml());
+        popup.document.close();
+      } catch (_) {}
+      return popup;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function copyOrderFlowCheckoutLink(){
+    const checkoutUrl = String(ORDER_FLOW_CHECKOUT_URL || '').trim();
+    if (!checkoutUrl) {
+      showNotice('Secure payment link is not available yet.', 'err');
+      return;
+    }
+    try {
+      if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(checkoutUrl);
+        showNotice('Secure payment link copied.', 'ok');
+        return;
+      }
+    } catch (_) {}
+    try {
+      window.prompt('Copy this secure payment link:', checkoutUrl);
+    } catch (_) {}
+  }
+
+  function launchOrderFlowCheckout(){
+    const checkoutUrl = String(ORDER_FLOW_CHECKOUT_URL || '').trim();
+    if (!checkoutUrl) {
+      console.warn('Hosted checkout launch requested without a checkout URL.');
+      showNotice('Secure payment link is not available yet.', 'err');
+      return false;
+    }
+    const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+    if (popup) {
+      try { popup.opener = null; } catch (_) {}
+      if (orderFlowCheckoutHint) {
+        orderFlowCheckoutHint.hidden = false;
+        orderFlowCheckoutHint.textContent = 'Secure payment opened in a new tab. Return here after payment.';
+      }
+      if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = false;
+      if (orderFlowCheckoutOpenLink) orderFlowCheckoutOpenLink.hidden = true;
+      console.info('Stripe checkout launch path: fallback-button');
+      showNotice('Secure payment opened in a new tab.', 'ok');
+      return true;
+    }
+    console.warn('Stripe checkout popup/new tab was blocked.');
+    if (orderFlowCheckoutHint) {
+      orderFlowCheckoutHint.hidden = false;
+      orderFlowCheckoutHint.textContent = 'A new tab was blocked. Use the payment button below to continue in a secure tab.';
+    }
+    if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = false;
+    if (orderFlowCheckoutOpenLink) {
+      orderFlowCheckoutOpenLink.href = checkoutUrl;
+      orderFlowCheckoutOpenLink.hidden = false;
+    }
+    showNotice('Your browser blocked the new tab. Use the payment button in the modal to continue.', 'err');
+    return false;
+  }
+
+  function renderOrderFlowManualSection(){
+    const label = ORDER_FLOW_SELECTED_METHOD === 'cash' ? 'cash' : 'check';
+    if (orderFlowManualBody) {
+      orderFlowManualBody.textContent = 'We will generate an invoice, email it to you, and lock this portal while ' + label + ' payment is pending.';
+    }
+    if (orderFlowManualInfo) {
+      orderFlowManualInfo.innerHTML = '';
+      [
+        'An invoice PDF will be generated in the portal invoices folder.',
+        'The portal will switch to a locked client state while payment is pending.',
+        'Production does not begin until the Red Threads team marks the payment as received.'
+      ].forEach(line => {
+        orderFlowManualInfo.appendChild(createEl('p', '', line));
+      });
+    }
+    if (orderFlowManualConfirmBtn) {
+      orderFlowManualConfirmBtn.textContent = 'Confirm Pay by ' + (label === 'cash' ? 'Cash' : 'Check');
+    }
+  }
+
+  function renderOrderFlowPoSection(){
+    const approved = ACCOUNT_SUMMARY.poAvailable === true;
+    const termsUrl = String(ACCOUNT_SUMMARY.termsDocumentUrl || '').trim();
+    if (orderFlowPoBody) {
+      orderFlowPoBody.textContent = approved
+        ? 'Terms are approved for this account. Continue to create the purchase-order invoice path.'
+        : 'Terms are not yet approved. You can view the current terms document and start the placeholder submission flow.';
+    }
+    if (orderFlowPoInfo) {
+      orderFlowPoInfo.innerHTML = '';
+      const lines = approved
+        ? [
+            'A PORTAL_ORDERS row will be created for the PO path.',
+            'An invoice will be generated and emailed.',
+            'Production stays in a P.O. pending state until documentation is received.'
+          ]
+        : [
+            'Approved terms are required before the P.O. order path can continue.',
+            'Use the placeholder buttons below to review and submit terms.',
+            'This pass does not yet implement the final signing/upload UX.'
+          ];
+      lines.forEach(line => orderFlowPoInfo.appendChild(createEl('p', '', line)));
+    }
+    if (orderFlowPoTermsActions) orderFlowPoTermsActions.hidden = approved;
+    if (orderFlowPoConfirmBtn) {
+      orderFlowPoConfirmBtn.hidden = !approved;
+      orderFlowPoConfirmBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT;
+    }
+    if (orderFlowViewTermsBtn) orderFlowViewTermsBtn.href = termsUrl || '#';
+    if (orderFlowDownloadTermsBtn) orderFlowDownloadTermsBtn.href = termsUrl || '#';
+  }
+
+  function showOrderFlowResult(title, body, meta, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    ORDER_FLOW_RESULT_KIND = String(opts.kind || 'info');
+    setOrderFlowMode('result');
+    setOrderFlowStatePill(ORDER_FLOW_RESULT_KIND === 'success' ? 'Updated' : 'Status');
+    if (orderFlowResultIcon) {
+      orderFlowResultIcon.textContent = ORDER_FLOW_RESULT_KIND === 'error' ? '!' : (ORDER_FLOW_RESULT_KIND === 'info' ? 'i' : '✓');
+      orderFlowResultIcon.classList.toggle('isError', ORDER_FLOW_RESULT_KIND === 'error');
+      orderFlowResultIcon.classList.toggle('isInfo', ORDER_FLOW_RESULT_KIND === 'info');
+    }
+    if (orderFlowResultTitle) {
+      orderFlowResultTitle.classList.toggle('isError', ORDER_FLOW_RESULT_KIND === 'error');
+      orderFlowResultTitle.classList.toggle('isInfo', ORDER_FLOW_RESULT_KIND === 'info');
+    }
+    if (orderFlowResultTitle) orderFlowResultTitle.textContent = String(title || 'Order status updated.');
+    if (orderFlowResultBody) orderFlowResultBody.textContent = String(body || '');
+    if (orderFlowResultMeta) orderFlowResultMeta.textContent = String(meta || '');
+    if (orderFlowDoneBtn) orderFlowDoneBtn.focus();
+  }
+
+  function setOrderFlowBlockingJobsState(blockingJobs){
+    ORDER_FLOW_BLOCKING_JOBS = (Array.isArray(blockingJobs) ? blockingJobs : [])
+      .map(job => {
+        const printJobId = String(job && job.printJobId || '').trim();
+        const fallbackNumber = printJobId ? getPrintJobDisplayNumber(printJobId) : '';
+        const title = String(job && job.title || '').trim()
+          || (fallbackNumber ? ('Print Job ' + fallbackNumber) : 'Print Job');
+        return {
+          printJobId: printJobId,
+          title: title
+        };
+      })
+      .filter(job => job.title);
+    if (!ORDER_FLOW_BLOCKING_JOBS.length) return false;
+    setOrderFlowStatePill('Checkout');
+    setOrderFlowMode('blocking');
+    if (orderFlowBlockingJobs) {
+      const firstBtn = orderFlowBlockingJobs.querySelector('.orderFlowJobBtn');
+      if (firstBtn) firstBtn.focus();
+    }
+    return true;
+  }
+
+  function maybeBlockOrderFlow(){
+    const blockingJobs = getUnapprovedActiveJobs();
+    if (!blockingJobs.length) return false;
+    return setOrderFlowBlockingJobsState(blockingJobs.map(job => {
+      const number = getPrintJobDisplayNumber(job.printJobId);
+      const name = String(job.printJobName || ('Project ' + number)).trim();
+      return {
+        printJobId: job.printJobId,
+        title: 'Print Job ' + number + ': ' + name
+      };
+    }));
+  }
+
+  function handleOrderFlowActionError(resp, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const code = String((resp && resp.code) || '').trim().toLowerCase();
+    const message = String((resp && (resp.error || resp.message)) || opts.fallbackMessage || 'Unable to continue order placement.').trim()
+      || 'Unable to continue order placement.';
+    if (code === 'artwork_approval_required') {
+      if (setOrderFlowBlockingJobsState(resp && resp.blockingJobs)) return true;
+      return maybeBlockOrderFlow();
+    }
+    if (opts.surface === 'checkout') {
+      const metaParts = [];
+      const amount = Number(resp && resp.amountGrandTotal);
+      if (Number.isFinite(amount)) {
+        metaParts.push('Computed total: ' + money(amount) + ' ' + String((resp && resp.currency) || 'USD').trim());
+      }
+      showOrderFlowResult(
+        code === 'non_positive_checkout_total' ? 'Checkout Unavailable' : 'Checkout Error',
+        message,
+        metaParts.join('\n'),
+        { kind: 'error' }
+      );
+      return true;
+    }
+    showNotice(message, 'err');
+    return true;
+  }
+
+  function buildOrderFlowPortalPayloadForApply(portalPayload, expectedPortalState){
+    const payload = clonePlainObject(portalPayload);
+    const expectedState = (expectedPortalState && typeof expectedPortalState === 'object')
+      ? clonePlainObject(expectedPortalState)
+      : null;
+    if (!expectedState) return payload;
+    try {
+      const payloadKey = getComparablePortalStateKey(payload && payload.portalState ? payload.portalState : {});
+      const expectedKey = getComparablePortalStateKey(expectedState);
+      if (expectedKey && payloadKey && payloadKey !== expectedKey) {
+        console.warn('Order-flow portal payload mismatch; preserving clicked portal state.', {
+          payloadKey: payloadKey,
+          expectedKey: expectedKey
+        });
+      }
+    } catch (_) {
+      // Fall through and use the clicked portal state.
+    }
+    payload.portalState = expectedState;
+    return payload;
+  }
+
+  function applyOrderFlowPortalPayload(resp, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (!resp || !resp.portalPayload) return;
+    const payload = buildOrderFlowPortalPayloadForApply(resp.portalPayload, opts.expectedPortalState);
+    applyPortalPayloadInPlace(payload, {
+      source: 'order-flow',
+      reason: 'order-flow'
+    });
+  }
+
+  function updateOrderStateFromResponse(resp){
+    if (resp && resp.accountSummary) {
+      ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary);
+    }
+    if (resp && resp.orderSummary) {
+      LATEST_ORDER_SUMMARY = normalizeOrderSummary(resp.orderSummary);
+      CURRENT_STATE_SUMMARY = normalizeCurrentStateSummary({
+        activeOrderId: LATEST_ORDER_SUMMARY.orderId,
+        latestCheckoutAttemptId: LATEST_ORDER_SUMMARY.checkoutAttemptId,
+        currentAccountId: ACCOUNT_SUMMARY.accountId,
+        portalLockState: LATEST_ORDER_SUMMARY.portalLockState,
+        currentOrderState: LATEST_ORDER_SUMMARY.orderState,
+        currentPaymentState: LATEST_ORDER_SUMMARY.paymentState,
+        currentProductionAuthorizationState: LATEST_ORDER_SUMMARY.productionAuthorizationState,
+        currentPaymentMethod: LATEST_ORDER_SUMMARY.paymentMethodSelected,
+        termsApproved: ACCOUNT_SUMMARY.termsApproved,
+        taxExemptApproved: ACCOUNT_SUMMARY.taxExemptApproved,
+        latestInvoiceNumber: LATEST_ORDER_SUMMARY.invoiceNumber,
+        lastOrderUpdatedAt: LATEST_ORDER_SUMMARY.lastUpdatedAt
+      });
+    }
+    renderPortalStatusBanner();
+    renderOrderFlowSummaryCard();
+  }
+
   function resetOrderFlowModalState(){
     ORDER_FLOW_BLOCKING_JOBS = [];
-    setOrderFlowMode('confirm');
-    if (orderFlowProceedBtn) {
-      orderFlowProceedBtn.disabled = false;
-      orderFlowProceedBtn.textContent = 'Continue';
+    ORDER_FLOW_SELECTED_METHOD = '';
+    ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
+    ORDER_FLOW_RESULT_KIND = 'info';
+    setOrderFlowButtonsBusy(false);
+    setOrderFlowMode('method');
+    setOrderFlowStatePill('Checkout');
+    renderOrderFlowSummaryCard();
+    if (orderFlowCheckoutBody) orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
+    if (orderFlowCheckoutMeta) orderFlowCheckoutMeta.textContent = '';
+    if (ORDER_FLOW_CHECKOUT_WINDOW && !ORDER_FLOW_CHECKOUT_WINDOW.closed && !ORDER_FLOW_CHECKOUT_URL) {
+      try { ORDER_FLOW_CHECKOUT_WINDOW.close(); } catch (_) {}
     }
+    ORDER_FLOW_CHECKOUT_WINDOW = null;
+    resetOrderFlowCheckoutLaunchState();
+    if (orderFlowResultIcon) {
+      orderFlowResultIcon.textContent = '✓';
+      orderFlowResultIcon.classList.remove('isError', 'isInfo');
+    }
+    if (orderFlowResultTitle) orderFlowResultTitle.classList.remove('isError', 'isInfo');
+    if (orderFlowResultTitle) orderFlowResultTitle.textContent = 'Order status updated.';
+    if (orderFlowResultBody) orderFlowResultBody.textContent = 'We saved the latest order state.';
+    if (orderFlowResultMeta) orderFlowResultMeta.textContent = '';
   }
 
   function openOrderFlowModal(){
@@ -11322,7 +12635,7 @@
     requestAnimationFrame(() => {
       orderFlowBackdrop.classList.add('open');
       syncOverlayScrollLock();
-      if (orderFlowProceedBtn) orderFlowProceedBtn.focus();
+      if (orderFlowCardBtn) orderFlowCardBtn.focus();
     });
   }
 
@@ -11350,35 +12663,223 @@
     }, 170);
   }
 
-  function handleOrderFlowProceed(){
-    if (ORDER_FLOW_MODE !== 'confirm') return;
-    if (orderFlowProceedBtn) {
-      orderFlowProceedBtn.disabled = true;
-      orderFlowProceedBtn.textContent = 'Checking...';
+  function enterOrderFlowManual(method){
+    if (maybeBlockOrderFlow()) return;
+    ORDER_FLOW_SELECTED_METHOD = String(method || 'check');
+    renderOrderFlowManualSection();
+    setOrderFlowStatePill(ORDER_FLOW_SELECTED_METHOD === 'cash' ? 'Cash' : 'Check');
+    setOrderFlowMode('manual');
+    if (orderFlowManualConfirmBtn) orderFlowManualConfirmBtn.focus();
+  }
+
+  function enterOrderFlowPo(){
+    if (maybeBlockOrderFlow()) return;
+    ORDER_FLOW_SELECTED_METHOD = 'purchase_order';
+    renderOrderFlowPoSection();
+    setOrderFlowStatePill('P.O.');
+    setOrderFlowMode('po');
+    if (ACCOUNT_SUMMARY.poAvailable && orderFlowPoConfirmBtn) {
+      orderFlowPoConfirmBtn.focus();
+    } else if (orderFlowSubmitTermsBtn) {
+      orderFlowSubmitTermsBtn.focus();
     }
-    const blockingJobs = getUnapprovedActiveJobs();
-    if (blockingJobs.length) {
-      ORDER_FLOW_BLOCKING_JOBS = blockingJobs.map(job => {
-        const number = getPrintJobDisplayNumber(job.printJobId);
-        const name = String(job.printJobName || ('Project ' + number)).trim();
-        return {
-          printJobId: job.printJobId,
-          title: 'Print Job ' + number + ': ' + name
-        };
+  }
+
+  async function submitOrderFlowManual(){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    const method = ORDER_FLOW_SELECTED_METHOD === 'cash' ? 'cash' : 'check';
+    const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    setOrderFlowButtonsBusy(true);
+    try {
+      const resp = await callServer('initiateManualPayment', {
+        token: CURRENT_TOKEN,
+        paymentMethodSelected: method,
+        portalState: JSON.stringify(clickedPortalState)
       });
-      setOrderFlowMode('blocking');
-      if (orderFlowBlockingJobs) {
-        const firstBtn = orderFlowBlockingJobs.querySelector('.orderFlowJobBtn');
-        if (firstBtn) firstBtn.focus();
+      if (!resp || resp.ok !== true) {
+        if (handleOrderFlowActionError(resp, {
+          surface: 'manual',
+          fallbackMessage: 'Unable to start manual payment order.'
+        })) return;
+        throw new Error(String((resp && resp.error) || 'Unable to start manual payment order.'));
       }
-    } else {
-      ORDER_FLOW_BLOCKING_JOBS = [];
-      setOrderFlowMode('success');
-      if (orderFlowDoneBtn) orderFlowDoneBtn.focus();
+      applyOrderFlowPortalPayload(resp, { expectedPortalState: clickedPortalState });
+      updateOrderStateFromResponse(resp);
+      const invoiceLine = resp && resp.invoice && resp.invoice.invoiceNumber
+        ? ('Invoice ' + resp.invoice.invoiceNumber + (resp.invoice.invoicePdfUrl ? '\n' + resp.invoice.invoicePdfUrl : ''))
+        : '';
+      showOrderFlowResult(
+        'Awaiting Manual Payment',
+        'The portal is now locked while we wait for your ' + method + ' payment. An invoice has been generated for the team/client payment handoff.',
+        invoiceLine,
+        { kind: 'success' }
+      );
+    } catch (err) {
+      showNotice(String((err && err.message) || err), 'err');
+    } finally {
+      setOrderFlowButtonsBusy(false);
     }
-    if (orderFlowProceedBtn) {
-      orderFlowProceedBtn.disabled = false;
-      orderFlowProceedBtn.textContent = 'Continue';
+  }
+
+  async function submitOrderFlowPo(){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    setOrderFlowButtonsBusy(true);
+    try {
+      const resp = await callServer('initiatePurchaseOrder', {
+        token: CURRENT_TOKEN,
+        paymentMethodSelected: 'purchase_order',
+        portalState: JSON.stringify(clickedPortalState)
+      });
+      if (!resp || resp.ok !== true) {
+        if (handleOrderFlowActionError(resp, {
+          surface: 'po',
+          fallbackMessage: 'Unable to start purchase-order flow.'
+        })) return;
+        throw new Error(String((resp && resp.error) || 'Unable to start purchase-order flow.'));
+      }
+      if (resp.gated) {
+        ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
+        renderOrderFlowPoSection();
+        showOrderFlowResult(
+          'Terms Required',
+          String(resp.message || 'Approved terms are required before the purchase-order flow can continue.'),
+          String(resp.termsDocumentUrl || ''),
+          { kind: 'info' }
+        );
+        return;
+      }
+      applyOrderFlowPortalPayload(resp, { expectedPortalState: clickedPortalState });
+      updateOrderStateFromResponse(resp);
+      const invoiceLine = resp && resp.invoice && resp.invoice.invoiceNumber
+        ? ('Invoice ' + resp.invoice.invoiceNumber + (resp.invoice.invoicePdfUrl ? '\n' + resp.invoice.invoicePdfUrl : ''))
+        : '';
+      showOrderFlowResult(
+        'Awaiting Purchase Order',
+        'The portal is locked and the order is waiting for purchase-order submission before production authorization.',
+        invoiceLine,
+        { kind: 'success' }
+      );
+    } catch (err) {
+      showNotice(String((err && err.message) || err), 'err');
+    } finally {
+      setOrderFlowButtonsBusy(false);
+    }
+  }
+
+  async function submitOrderFlowTermsPlaceholder(){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    setOrderFlowButtonsBusy(true);
+    try {
+      const resp = await callServer('requestTermsEnrollment', { token: CURRENT_TOKEN });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to start terms enrollment.'));
+      }
+      ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
+      renderOrderFlowPoSection();
+      showOrderFlowResult(
+        'Terms Placeholder Started',
+        String(resp.message || 'Terms enrollment placeholder recorded.'),
+        String(resp.termsDocumentUrl || ''),
+        { kind: 'info' }
+      );
+    } catch (err) {
+      showNotice(String((err && err.message) || err), 'err');
+    } finally {
+      setOrderFlowButtonsBusy(false);
+    }
+  }
+
+  async function startOrderFlowCheckout(method){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    if (maybeBlockOrderFlow()) return;
+    const paymentLabel = method === 'ach' ? 'ACH bank payment' : 'card payment';
+    const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    const pendingWindow = openPendingOrderFlowCheckoutWindow();
+    ORDER_FLOW_CHECKOUT_WINDOW = pendingWindow;
+    setOrderFlowButtonsBusy(true);
+    setOrderFlowStatePill(method === 'ach' ? 'ACH' : 'Card');
+    setOrderFlowMode('checkout');
+    if (orderFlowCheckoutBody) {
+      orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
+    }
+    if (orderFlowCheckoutMeta) orderFlowCheckoutMeta.textContent = 'Creating your secure Stripe Checkout for ' + paymentLabel + '.';
+    resetOrderFlowCheckoutLaunchState();
+    try {
+      const resp = await callServer('createCheckoutAttempt', {
+        token: CURRENT_TOKEN,
+        paymentMethodSelected: method,
+        portalState: JSON.stringify(clickedPortalState)
+      });
+      if (!resp || resp.ok !== true) {
+        if (pendingWindow && !pendingWindow.closed) {
+          try { pendingWindow.close(); } catch (_) {}
+        }
+        if (handleOrderFlowActionError(resp, {
+          surface: 'checkout',
+          fallbackMessage: 'Unable to create checkout attempt.'
+        })) return;
+        throw new Error(String((resp && resp.error) || 'Unable to create checkout attempt.'));
+      }
+      applyOrderFlowPortalPayload(resp, { expectedPortalState: clickedPortalState });
+      updateOrderStateFromResponse(resp);
+      const checkoutUrl = String((resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '').trim();
+      if (!resp.checkoutReady || !checkoutUrl) {
+        console.warn('Stripe checkout URL missing from createCheckoutAttempt response.', resp);
+        if (pendingWindow && !pendingWindow.closed) {
+          try { pendingWindow.close(); } catch (_) {}
+        }
+        showOrderFlowResult(
+          'Checkout Unavailable',
+          'Your order draft and checkout attempt were saved, but secure payment could not start. Please try again or contact Red Threads.',
+          (resp.warnings || []).join('\n'),
+          { kind: 'error' }
+        );
+        return;
+      }
+      let launched = false;
+      if (pendingWindow && !pendingWindow.closed) {
+        try {
+          pendingWindow.location.replace(checkoutUrl);
+          launched = true;
+          console.info('Stripe checkout launch path: pending-window');
+        } catch (err) {
+          console.warn('Stripe checkout pending window navigation failed.', err);
+        }
+      }
+      if (!launched) {
+        console.warn('Stripe checkout popup/new tab was blocked before session launch.');
+        if (pendingWindow && !pendingWindow.closed) {
+          try { pendingWindow.close(); } catch (_) {}
+        }
+        ORDER_FLOW_CHECKOUT_WINDOW = null;
+        setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, { launched: false });
+        if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = false;
+        if (orderFlowCheckoutOpenLink) {
+          orderFlowCheckoutOpenLink.href = checkoutUrl;
+          orderFlowCheckoutOpenLink.hidden = false;
+        }
+        if (orderFlowCheckoutHint) {
+          orderFlowCheckoutHint.hidden = false;
+          orderFlowCheckoutHint.textContent = 'Your secure Stripe Checkout is ready. Click below to continue payment in a secure tab.';
+        }
+        showNotice('Secure payment is ready. Use the button in the modal to continue.', 'ok');
+        return;
+      }
+      setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, {
+        launched: true,
+        showActions: false
+      });
+      showNotice('Secure payment opened in a new tab.', 'ok');
+    } catch (err) {
+      if (pendingWindow && !pendingWindow.closed) {
+        try { pendingWindow.close(); } catch (_) {}
+      }
+      showNotice(String((err && err.message) || err), 'err');
+      setOrderFlowStatePill('Checkout');
+      setOrderFlowMode('method');
+    } finally {
+      setOrderFlowButtonsBusy(false);
     }
   }
 
@@ -11582,6 +13083,16 @@
     }
     nextState.isReadOnly = Boolean(IS_READ_ONLY);
     nextState.printJobs = clonePlainObject(currentState.printJobs);
+    PRINT_JOBS.forEach(job => {
+      const jobId = String(job && job.printJobId || '').trim();
+      if (!jobId) return;
+      if (!nextState.printJobs || !nextState.printJobs[jobId]) {
+        if (!nextState.printJobs) nextState.printJobs = {};
+        nextState.printJobs[jobId] = buildInitialJobState(job);
+      }
+      const removed = getRemovedAddOnsForJob(jobId);
+      nextState.printJobs[jobId].removedAddOnIndexes = Array.from(removed).sort((a, b) => a - b);
+    });
 
     const existingLog = readMessageLogFromState(existingState);
     const nextLog = normalizeMessageLog(opts.messageLog || CHAT_MESSAGES);
@@ -11791,6 +13302,7 @@
   function buildInitialJobState(job){
     const jobState = {
       hidden: false,
+      removedAddOnIndexes: [],
       skus: {}
     };
     (job && Array.isArray(job.skus) ? job.skus : []).forEach(sku => {
@@ -12215,7 +13727,7 @@
     resetBtn.type = 'button';
     resetBtn.dataset.addOnReset = job.printJobId;
     resetBtn.addEventListener('click', () => {
-      REMOVED_ADDONS_BY_JOB[job.printJobId] = new Set();
+      syncRemovedAddOnsForJob(job.printJobId, new Set());
       recalcAll();
     });
     totalsCard.appendChild(resetBtn);
@@ -12947,12 +14459,11 @@
     const list = dom.addOnsList;
     list.innerHTML = '';
 
-    if (!REMOVED_ADDONS_BY_JOB[job.printJobId]) REMOVED_ADDONS_BY_JOB[job.printJobId] = new Set();
-    const removed = REMOVED_ADDONS_BY_JOB[job.printJobId];
+    const removed = getRemovedAddOnsForJob(job.printJobId);
 
     const visible = job.addOns
       .filter(addOn => isPortalDisplay(addOn))
-      .filter(addOn => !removed.has(addOn.__idx));
+      .filter(addOn => !shouldExcludeAddOnFromPortal(addOn, removed));
 
     let staticPositive = 0;
     visible.forEach(addOn => {
@@ -12986,6 +14497,7 @@
         remove.addEventListener('click', e => {
           e.stopPropagation();
           removed.add(addOn.__idx);
+          syncRemovedAddOnsForJob(job.printJobId, removed);
           recalcAll();
         });
         removeSlot.appendChild(remove);
@@ -13129,6 +14641,7 @@
     updateHeaderTotals(totalUnits, grandTotal, totalUnits > 0);
     renderHeaderDeliverySummary();
     updatePrintJobTabSummaries();
+    renderPortalStatusBanner();
   }
 
   function setHeaderDetails(){
@@ -13280,7 +14793,7 @@
 
     if (placeOrderBtnMini) {
       placeOrderBtnMini.style.display = hideTeamActions ? 'none' : '';
-      placeOrderBtnMini.disabled = hideTeamActions ? true : false;
+      placeOrderBtnMini.disabled = hideTeamActions ? true : !canEdit;
     }
   }
 
@@ -13437,6 +14950,8 @@
     PROJECT_EVENTS_BOUND = true;
     if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState({ openSendModal: false }));
     if (homeBtnMini) homeBtnMini.addEventListener('click', goHomeFromSnapshotGuarded);
+    if (dashboardApplyTermsBtn) dashboardApplyTermsBtn.addEventListener('click', requestDashboardTermsEnrollment);
+    if (dashboardTaxExemptBtn) dashboardTaxExemptBtn.addEventListener('click', requestDashboardTaxExemptSubmission);
 
     if (placeOrderBtnMini) {
       placeOrderBtnMini.addEventListener('click', () => {
@@ -13730,9 +15245,42 @@
         closeOrderFlowModal();
       });
     }
-    if (orderFlowProceedBtn) {
-      orderFlowProceedBtn.addEventListener('click', () => {
-        handleOrderFlowProceed();
+    if (orderFlowCheckBtn) orderFlowCheckBtn.addEventListener('click', () => enterOrderFlowManual('check'));
+    if (orderFlowCashBtn) orderFlowCashBtn.addEventListener('click', () => enterOrderFlowManual('cash'));
+    if (orderFlowPoBtn) orderFlowPoBtn.addEventListener('click', enterOrderFlowPo);
+    if (orderFlowCardBtn) orderFlowCardBtn.addEventListener('click', () => startOrderFlowCheckout('card'));
+    if (orderFlowAchBtn) orderFlowAchBtn.addEventListener('click', () => startOrderFlowCheckout('ach'));
+    if (orderFlowManualBackBtn) {
+      orderFlowManualBackBtn.addEventListener('click', () => {
+        ORDER_FLOW_SELECTED_METHOD = '';
+        setOrderFlowStatePill('Checkout');
+        setOrderFlowMode('method');
+      });
+    }
+    if (orderFlowManualConfirmBtn) orderFlowManualConfirmBtn.addEventListener('click', submitOrderFlowManual);
+    if (orderFlowPoBackBtn) {
+      orderFlowPoBackBtn.addEventListener('click', () => {
+        ORDER_FLOW_SELECTED_METHOD = '';
+        setOrderFlowStatePill('Checkout');
+        setOrderFlowMode('method');
+      });
+    }
+    if (orderFlowPoConfirmBtn) orderFlowPoConfirmBtn.addEventListener('click', submitOrderFlowPo);
+    if (orderFlowSubmitTermsBtn) orderFlowSubmitTermsBtn.addEventListener('click', submitOrderFlowTermsPlaceholder);
+    if (orderFlowCheckoutBackBtn) {
+      orderFlowCheckoutBackBtn.addEventListener('click', () => {
+        setOrderFlowButtonsBusy(false);
+        resetOrderFlowCheckoutLaunchState();
+        setOrderFlowStatePill('Checkout');
+        setOrderFlowMode('method');
+      });
+    }
+    if (orderFlowCheckoutLaunchBtn) orderFlowCheckoutLaunchBtn.addEventListener('click', launchOrderFlowCheckout);
+    if (orderFlowCheckoutCopyBtn) {
+      orderFlowCheckoutCopyBtn.addEventListener('click', () => {
+        copyOrderFlowCheckoutLink().catch(() => {
+          showNotice('Unable to copy the secure payment link.', 'err');
+        });
       });
     }
     if (orderFlowBlockingBackBtn) {
@@ -13807,8 +15355,10 @@
     renderTeamDiagnostics();
     initChat();
     setSaveControls();
+    renderPortalStatusBanner();
     renderPortal();
-    if (!IS_TEAM) initIntro();
+    handleCheckoutReturnNotice();
+    if (!IS_TEAM && !CHECKOUT_RETURN_RESULT) initIntro();
     wireEvents();
     syncTeamModeUi();
     notifyPortalReady({ reason: 'snapshot-ready' });
