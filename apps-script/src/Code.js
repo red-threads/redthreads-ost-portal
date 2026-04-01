@@ -174,6 +174,16 @@ const PAYMENT_METHODS = {
   purchase_order: 'purchase_order'
 };
 
+const FULFILLMENT_METHODS = {
+  shipping: 'shipping',
+  pickup: 'pickup'
+};
+
+const STRIPE_FULFILLMENT_FREE_SHIPPING_THRESHOLD_CENTS = 50000;
+const STRIPE_FULFILLMENT_FLAT_RATE_SHIPPING_CENTS = 2500;
+const STRIPE_FULFILLMENT_SHIPPING_SERVICE_LABEL = 'UPS Standard Ground Services';
+const STRIPE_FULFILLMENT_ALLOWED_COUNTRIES = ['US'];
+
 const PAYMENT_STATES = {
   not_started: 'not_started',
   checkout_created: 'checkout_created',
@@ -1405,6 +1415,9 @@ function normalizePortalStateForOrderAction_(rawState, snapshot) {
   const out = Object.assign({}, source, {
     version: trimString_(source.version) || '1',
     isReadOnly: source.isReadOnly === true,
+    fulfillmentMethod: normalizeFulfillmentMethod_(source.fulfillmentMethod),
+    shippingChargeCents: Math.max(0, parseInt(String(source.shippingChargeCents || 0), 10) || 0),
+    shippingModeLabel: trimString_(source.shippingModeLabel),
     printJobs: normalized.printJobs
   });
   const chatLog = readChatLogFromPortalState_(source, []);
@@ -1476,6 +1489,13 @@ function validateOrderPlacementForAction_(ctx, options) {
       'artwork_approval_required',
       'Artwork approval is required before you can place this order.',
       { blockingJobs: blockingJobs }
+    );
+  }
+  const fulfillmentMethod = normalizeFulfillmentMethod_(ctx && ctx.orderDraft && ctx.orderDraft.fulfillmentMethod);
+  if (!fulfillmentMethod) {
+    return buildOrderActionError_(
+      'fulfillment_method_required',
+      'Please choose shipping or pickup before continuing to payment.'
     );
   }
   if (opts.requirePositiveCheckoutTotal === true) {
@@ -2045,11 +2065,14 @@ function handleCheckoutSessionCompleted_(sessionObj) {
   if (!orderInfo) return { ok: false, error: 'Order not found for checkout session.' };
   const now = nowIso_();
   const delayed = paymentMethodSelected === PAYMENT_METHODS.ach || trimString_(sessionObj && sessionObj.payment_status).toLowerCase() !== 'paid';
+  const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
+  const nextDraft = mergeOrderDraftShippingDetails_(currentDraft, sessionObj);
   const updatedOrder = updatePortalOrderState_({
     cfg: cfg,
     ss: ss,
     infra: infra,
     orderRowInfo: orderInfo,
+    orderDraft: nextDraft,
     stripeSessionId: trimString_(sessionObj && sessionObj.id),
     stripePaymentIntentId: trimString_(sessionObj && sessionObj.payment_intent),
     portalLockState: PORTAL_LOCK_STATES.locked,
@@ -2099,11 +2122,14 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj) {
     getPortalOrderByStripeSessionId_(trimString_(sessionObj && sessionObj.id), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
   if (!orderInfo) return { ok: false, error: 'Order not found for async success.' };
   const now = nowIso_();
+  const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
+  const nextDraft = mergeOrderDraftShippingDetails_(currentDraft, sessionObj);
   const updatedOrder = updatePortalOrderState_({
     cfg: cfg,
     ss: ss,
     infra: infra,
     orderRowInfo: orderInfo,
+    orderDraft: nextDraft,
     stripeSessionId: trimString_(sessionObj && sessionObj.id),
     stripePaymentIntentId: trimString_(sessionObj && sessionObj.payment_intent),
     portalLockState: PORTAL_LOCK_STATES.locked,
@@ -3398,6 +3424,85 @@ function isShippingAddOn_(addOn) {
   return /ship|freight|delivery/.test(label);
 }
 
+function normalizeFulfillmentMethod_(value) {
+  const normalized = trimString_(value).toLowerCase();
+  return normalized === FULFILLMENT_METHODS.shipping || normalized === FULFILLMENT_METHODS.pickup
+    ? normalized
+    : '';
+}
+
+function computeFulfillmentContextForOrderDraft_(portalState, orderTotal) {
+  const fulfillmentMethod = normalizeFulfillmentMethod_(portalState && portalState.fulfillmentMethod);
+  const totalCents = Math.max(0, Math.round(roundMoney_(orderTotal) * 100));
+  if (fulfillmentMethod === FULFILLMENT_METHODS.shipping) {
+    const qualifiesForFreeShipping = totalCents > STRIPE_FULFILLMENT_FREE_SHIPPING_THRESHOLD_CENTS;
+    return {
+      fulfillmentMethod: FULFILLMENT_METHODS.shipping,
+      shippingChargeCents: qualifiesForFreeShipping ? 0 : STRIPE_FULFILLMENT_FLAT_RATE_SHIPPING_CENTS,
+      shippingModeLabel: STRIPE_FULFILLMENT_SHIPPING_SERVICE_LABEL,
+      qualifiesForFreeShipping: qualifiesForFreeShipping
+    };
+  }
+  if (fulfillmentMethod === FULFILLMENT_METHODS.pickup) {
+    return {
+      fulfillmentMethod: FULFILLMENT_METHODS.pickup,
+      shippingChargeCents: 0,
+      shippingModeLabel: 'Local Pickup',
+      qualifiesForFreeShipping: false
+    };
+  }
+  return {
+    fulfillmentMethod: '',
+    shippingChargeCents: 0,
+    shippingModeLabel: '',
+    qualifiesForFreeShipping: false
+  };
+}
+
+function extractStripeShippingDetails_(sessionObj) {
+  const shippingDetails = (sessionObj && sessionObj.shipping_details && typeof sessionObj.shipping_details === 'object')
+    ? sessionObj.shipping_details
+    : null;
+  const shippingCost = (sessionObj && sessionObj.shipping_cost && typeof sessionObj.shipping_cost === 'object')
+    ? sessionObj.shipping_cost
+    : null;
+  if (!shippingDetails && !shippingCost) return null;
+  const result = {};
+  if (shippingDetails) {
+    const address = shippingDetails.address && typeof shippingDetails.address === 'object'
+      ? shippingDetails.address
+      : null;
+    result.name = trimString_(shippingDetails.name);
+    result.phone = trimString_(shippingDetails.phone);
+    if (address) {
+      result.address = {
+        line1: trimString_(address.line1),
+        line2: trimString_(address.line2),
+        city: trimString_(address.city),
+        state: trimString_(address.state),
+        postal_code: trimString_(address.postal_code),
+        country: trimString_(address.country)
+      };
+    }
+  }
+  if (shippingCost) {
+    result.shippingRate = trimString_(shippingCost.shipping_rate);
+    result.shippingAmountTotalCents = Math.max(0, parseInt(String(shippingCost.amount_total || 0), 10) || 0);
+  }
+  return result;
+}
+
+function mergeOrderDraftShippingDetails_(orderDraft, sessionObj) {
+  const draft = (orderDraft && typeof orderDraft === 'object')
+    ? JSON.parse(JSON.stringify(orderDraft))
+    : {};
+  const shippingDetails = extractStripeShippingDetails_(sessionObj);
+  if (!shippingDetails) return draft;
+  draft.shippingDetails = shippingDetails;
+  draft.shippingDetailsCaptured = true;
+  return draft;
+}
+
 function computeRushAddOnAmount_(addOn, orderBasis) {
   const pct = Math.max(0, toFiniteNumber_(addOn && addOn.percent_rate, 0));
   const minAmount = Math.max(0, toFiniteNumber_(addOn && addOn.min_amount, 0));
@@ -3429,7 +3534,11 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : ((options.row && typeof options.row === 'object') ? options.row : {});
   const snapshot = options.snapshot || safeJsonParse_(row.snapshotjson, {});
   const printJobs = normalizePrintJobsForOrder_(snapshot && snapshot.printJobs);
-  const portalState = normalizePortalStateForOrder_(options.portalState || row.portalstatejson || {}, printJobs);
+  const portalStateSource = safeJsonParse_(options.portalState || row.portalstatejson || {}, {});
+  const portalState = normalizePortalStateForOrder_(portalStateSource, printJobs);
+  portalState.fulfillmentMethod = normalizeFulfillmentMethod_(portalStateSource && portalStateSource.fulfillmentMethod);
+  portalState.shippingChargeCents = Math.max(0, parseInt(String(portalStateSource && portalStateSource.shippingChargeCents || 0), 10) || 0);
+  portalState.shippingModeLabel = trimString_(portalStateSource && portalStateSource.shippingModeLabel);
   const accountSummary = options.accountSummary || null;
   const dealNumber = trimString_(row.dealnumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber));
   const visibleJobs = getVisibleJobsForOrder_(printJobs, portalState);
@@ -3598,6 +3707,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   amountRush = roundMoney_(amountRush);
   const amountTax = roundMoney_(deriveTaxAmountForOrderDraft_(row, snapshot, amountSubtotal + amountShipping + amountRush, accountSummary));
   const amountGrandTotal = roundMoney_(amountSubtotal + amountShipping + amountRush + amountTax);
+  const fulfillment = computeFulfillmentContextForOrderDraft_(portalState, amountGrandTotal);
   const orgContext = deriveOrgContextFromRow_(row);
   const currency = trimString_(options.currency || (snapshot && snapshot.meta && snapshot.meta.currency) || getConfig_().stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY).toUpperCase();
 
@@ -3618,6 +3728,11 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
     amountRush: amountRush,
     amountTax: amountTax,
     amountGrandTotal: amountGrandTotal,
+    fulfillmentMethod: fulfillment.fulfillmentMethod,
+    shippingChargeCents: fulfillment.shippingChargeCents,
+    shippingCharge: roundMoney_(fulfillment.shippingChargeCents / 100),
+    shippingModeLabel: fulfillment.shippingModeLabel,
+    qualifiesForFreeShipping: fulfillment.qualifiesForFreeShipping,
     currency: currency || DEFAULT_STRIPE_PRICE_CURRENCY,
     taxStatusApplied: taxExemptApplied ? 'tax_exempt_active' : 'standard',
     taxExemptApplied: taxExemptApplied,
@@ -4426,6 +4541,21 @@ function finalizeStripeCheckoutLineItemPricing_(lineItem) {
   return item;
 }
 
+function applyStripeCheckoutConvenienceFeeToLineItems_(lineItems, feeRate) {
+  const rate = Number(feeRate);
+  const items = Array.isArray(lineItems) ? lineItems : [];
+  if (!Number.isFinite(rate) || rate <= 0 || !items.length) {
+    return items.slice();
+  }
+  return items.map((lineItem) => {
+    const item = Object.assign({}, (lineItem && typeof lineItem === 'object') ? lineItem : {});
+    const baseAmountCents = Math.max(0, parseInt(String(item.amountCents || 0), 10) || 0);
+    if (!baseAmountCents) return finalizeStripeCheckoutLineItemPricing_(item);
+    item.amountCents = baseAmountCents + Math.round(baseAmountCents * rate);
+    return finalizeStripeCheckoutLineItemPricing_(item);
+  });
+}
+
 function buildStripeCheckoutSortedPriceBuckets_(skuSummary) {
   return (Array.isArray(skuSummary && skuSummary.priceBuckets) ? skuSummary.priceBuckets.slice() : []).sort((left, right) => {
     const leftColor = trimString_(left && left.colorway).toLowerCase();
@@ -4635,7 +4765,9 @@ function finalizeStripeCheckoutLineItemDescriptions_(lineItems) {
   });
 }
 
-function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft) {
+function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const paymentMethodSelected = trimString_(opts.paymentMethodSelected).toLowerCase();
   const draft = (orderDraft && typeof orderDraft === 'object') ? orderDraft : {};
   const rawLineItems = [];
   const selectedJobs = Array.isArray(draft.selectedJobs) ? draft.selectedJobs : [];
@@ -4665,17 +4797,34 @@ function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft) {
   const diffCents = grandTotalCents - lineItemsTotalCents;
   if (diffCents !== 0) {
     const target = lineItems[lineItems.length - 1];
-    if (!target) return buildStripeCheckoutDefaultLineItems_(draft);
+    if (!target) {
+      const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
+      const pricedFallbackItems = paymentMethodSelected === PAYMENT_METHODS.card
+        ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
+        : fallbackItems;
+      return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
+    }
     target.amountCents += diffCents;
     if (target.amountCents <= 0) {
-      return buildStripeCheckoutDefaultLineItems_(draft);
+      const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
+      const pricedFallbackItems = paymentMethodSelected === PAYMENT_METHODS.card
+        ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
+        : fallbackItems;
+      return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
     }
   }
   const pricedLineItems = lineItems.map(finalizeStripeCheckoutLineItemPricing_);
-  if (pricedLineItems.length > 100) {
-    return finalizeStripeCheckoutLineItemDescriptions_(buildStripeCheckoutDefaultLineItems_(draft));
+  const pricedCheckoutLineItems = paymentMethodSelected === PAYMENT_METHODS.card
+    ? applyStripeCheckoutConvenienceFeeToLineItems_(pricedLineItems, 0.03)
+    : pricedLineItems;
+  if (pricedCheckoutLineItems.length > 100) {
+    const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
+    const pricedFallbackItems = paymentMethodSelected === PAYMENT_METHODS.card
+      ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
+      : fallbackItems;
+    return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
   }
-  return finalizeStripeCheckoutLineItemDescriptions_(pricedLineItems);
+  return finalizeStripeCheckoutLineItemDescriptions_(pricedCheckoutLineItems);
 }
 
 function appendStripeCheckoutLineItemToPayload_(payload, index, lineItem, currency) {
@@ -4745,12 +4894,20 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     }
   });
   const currency = trimString_(orderDraft.currency || getConfig_().stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY).toLowerCase();
-  const lineItems = buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft);
+  const lineItems = buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, {
+    paymentMethodSelected: paymentMethodSelected
+  });
+  const fulfillmentMethod = normalizeFulfillmentMethod_(orderDraft && orderDraft.fulfillmentMethod);
+  const shippingChargeCents = Math.max(0, parseInt(String(orderDraft && orderDraft.shippingChargeCents || 0), 10) || 0);
+  const shippingModeLabel = trimString_(orderDraft && orderDraft.shippingModeLabel);
   const metadata = {
     token: trimString_(orderDraft.token),
     checkoutAttemptId: trimString_(opts.checkoutAttemptId),
     orderId: trimString_(opts.orderId),
-    paymentMethodSelected: paymentMethodSelected
+    paymentMethodSelected: paymentMethodSelected,
+    fulfillmentMethod: fulfillmentMethod,
+    shippingChargeCents: String(shippingChargeCents),
+    shippingModeLabel: shippingModeLabel
   };
   const payload = {
     mode: 'payment',
@@ -4768,6 +4925,15 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     payload['metadata[' + key + ']'] = metadata[key];
     payload['payment_intent_data[metadata][' + key + ']'] = metadata[key];
   });
+  if (fulfillmentMethod === FULFILLMENT_METHODS.shipping) {
+    STRIPE_FULFILLMENT_ALLOWED_COUNTRIES.forEach(function (countryCode, idx) {
+      payload['shipping_address_collection[allowed_countries][' + idx + ']'] = trimString_(countryCode).toUpperCase();
+    });
+    payload['shipping_options[0][shipping_rate_data][type]'] = 'fixed_amount';
+    payload['shipping_options[0][shipping_rate_data][fixed_amount][amount]'] = String(shippingChargeCents);
+    payload['shipping_options[0][shipping_rate_data][fixed_amount][currency]'] = currency;
+    payload['shipping_options[0][shipping_rate_data][display_name]'] = shippingModeLabel || STRIPE_FULFILLMENT_SHIPPING_SERVICE_LABEL;
+  }
   if (paymentMethodType === 'us_bank_account') {
     payload['payment_method_options[us_bank_account][verification_method]'] = 'automatic';
   }

@@ -811,24 +811,41 @@
     }
 
     .rt-spinner{
-      width: 48px;
-      height: 48px;
-      border-radius: 999px;
-      border: 4px solid rgba(225,29,72,.24);
-      border-top-color: var(--rt-red);
-      border-right-color: rgba(244,63,94,.74);
-      animation: rtSpin 860ms linear infinite;
-      filter:drop-shadow(0 0 12px rgba(225,29,72,.45));
+      width: 72px;
+      height: 72px;
       position:relative;
+      display:grid;
+      place-items:center;
       flex: 0 0 auto;
+      filter:drop-shadow(0 0 14px rgba(225,29,72,.34));
     }
-    .rt-spinner::after{
+    .rt-spinner::before{
       content:'';
       position:absolute;
-      inset:7px;
+      inset:0;
       border-radius:999px;
-      border:2px solid rgba(244,63,94,.36);
+      background:
+        conic-gradient(from 210deg,
+          rgba(225,29,72,.18) 0deg,
+          rgba(225,29,72,.26) 78deg,
+          rgba(244,63,94,.95) 78deg,
+          rgba(244,63,94,.95) 186deg,
+          rgba(225,29,72,.18) 186deg,
+          rgba(225,29,72,.18) 360deg);
+      -webkit-mask:radial-gradient(circle, transparent 58%, #000 60%);
+      mask:radial-gradient(circle, transparent 58%, #000 60%);
+      animation:rtSpin 1180ms linear infinite;
+    }
+    .rt-spinner-icon{
+      position:relative;
+      z-index:1;
+      width:37px;
+      height:37px;
+      object-fit:contain;
+      user-select:none;
+      -webkit-user-drag:none;
       animation:rtPulse 1200ms ease-in-out infinite;
+      filter:drop-shadow(0 1px 4px rgba(0,0,0,.18));
     }
 
     .rt-loading-text{
@@ -3444,8 +3461,11 @@
     }
     .printJobTabsList{
       display:flex;
-      flex-wrap:wrap;
+      flex-wrap:nowrap;
       gap:8px;
+      width:max-content;
+      min-width:100%;
+      overflow:visible;
     }
     .printJobTab{
       border:1px solid var(--c-comp-hex-cbd5e1);
@@ -3460,6 +3480,7 @@
       font-size:12px;
       line-height:1.2;
       min-height:36px;
+      flex:0 0 auto;
     }
     .printJobTabBody{
       display:flex;
@@ -3700,7 +3721,11 @@
     }
 
     .sku-entry-panel{
-      --sku-grid-cols:24px clamp(140px,18vw,220px) repeat(5, minmax(64px, 1fr)) 68px 132px;
+      --sku-grid-color-col:clamp(120px,16vw,200px);
+      --sku-grid-qty-col:56px;
+      --sku-grid-total-col:108px;
+      --sku-grid-gap:8px;
+      --sku-grid-cols:24px var(--sku-grid-color-col) repeat(5, minmax(0, 1fr)) var(--sku-grid-qty-col) var(--sku-grid-total-col);
       background:transparent;
       border:none;
       border-radius:0;
@@ -3708,14 +3733,14 @@
       display:flex;
       flex-direction:column;
       gap:3px;
-      overflow-x:auto;
+      overflow-x:hidden;
       width:100%;
     }
     .sku-grid-header,
     .sku-grid-row{
       display:grid;
       grid-template-columns:var(--sku-grid-cols);
-      column-gap:12px;
+      column-gap:var(--sku-grid-gap);
       align-items:center;
       justify-items:center;
       width:100%;
@@ -3789,7 +3814,7 @@
     .sku-entry-panel .colorChoiceCell .colorLabel,
     .sku-entry-panel .colorChoiceCell .colorNameInput{
       width:100%;
-      max-width:clamp(140px,18vw,220px);
+      max-width:100%;
       text-align:center;
       margin:0 auto;
       justify-content:center;
@@ -4838,6 +4863,114 @@
       border-color:rgba(225,29,72,.44);
       box-shadow:0 0 0 1px var(--rt-redRing), 0 12px 22px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.1);
     }
+    .colorRemoveConfirmBackdrop{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,0.66);
+      backdrop-filter:blur(4px);
+      -webkit-backdrop-filter:blur(4px);
+      z-index:10072;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .16s ease;
+    }
+    .colorRemoveConfirmBackdrop[hidden]{
+      display:none !important;
+    }
+    .colorRemoveConfirmBackdrop.open{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .colorRemoveConfirmModal{
+      width:min(460px, calc(100% - 32px));
+      background:rgba(4,7,16,.84);
+      border:1px solid rgba(225,29,72,.28);
+      border-radius:18px;
+      box-shadow:0 26px 46px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+      backdrop-filter:blur(18px) saturate(140%);
+      -webkit-backdrop-filter:blur(18px) saturate(140%);
+      padding:18px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      color:var(--rt-text);
+    }
+    .colorRemoveConfirmTitle{
+      margin:0;
+      font-size:22px;
+      line-height:1.14;
+      font-weight:900;
+      color:var(--rt-text);
+      text-align:left;
+    }
+    .colorRemoveConfirmBody{
+      margin:0;
+      font-size:16px;
+      line-height:1.45;
+      font-weight:700;
+      color:var(--rt-muted);
+    }
+    .colorRemoveConfirmRow{
+      display:flex;
+      align-items:center;
+      justify-content:flex-start;
+      gap:10px;
+    }
+    .colorRemoveConfirmCheck{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      cursor:pointer;
+      color:var(--rt-text);
+      font-size:14px;
+      line-height:1.35;
+      font-weight:700;
+      user-select:none;
+    }
+    .colorRemoveConfirmCheck input{
+      width:16px;
+      height:16px;
+      accent-color:var(--rt-red);
+      margin:0;
+      cursor:pointer;
+    }
+    .colorRemoveConfirmActions{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .colorRemoveConfirmBtn{
+      min-height:42px;
+      border:1px solid var(--rt-glassBorder);
+      border-radius:12px;
+      background:var(--rt-glass);
+      color:var(--rt-text);
+      font-size:14px;
+      font-weight:800;
+      padding:9px 16px;
+      cursor:pointer;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.08);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
+    }
+    .colorRemoveConfirmBtn:hover{
+      background:rgba(255,255,255,.12);
+      box-shadow:0 12px 22px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.1);
+    }
+    .colorRemoveConfirmBtnDanger{
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #e11d48 100%);
+      border-color:#ff8aa2;
+      color:#fff;
+      box-shadow:0 12px 24px rgba(225,29,72,.32), 0 0 0 1px rgba(255,255,255,.06);
+    }
+    .colorRemoveConfirmBtnDanger:hover{
+      background:linear-gradient(135deg,#ff8097 0%, #ff5377 56%, #f43f5e 100%);
+      box-shadow:0 14px 26px rgba(225,29,72,.36), 0 0 0 1px rgba(255,255,255,.08);
+    }
     .unsavedLeaveBtnDanger{
       background:rgba(255,255,255,.06);
       border-color:rgba(225,29,72,.54);
@@ -5293,9 +5426,10 @@
       pointer-events:auto;
     }
     .orderFlowModal{
-      width:min(760px, calc(100% - 44px));
+      width:min(860px, calc(100% - 44px));
       max-height:calc(100vh - 44px);
       overflow:auto;
+      position:relative;
       background:rgba(4,7,16,.8);
       border:1px solid var(--rt-glassBorder);
       border-radius:18px;
@@ -5315,6 +5449,224 @@
       justify-content:space-between;
       gap:10px;
     }
+    .orderFlowModal.isBlocking{
+      width:min(800px, calc(100% - 44px));
+      overflow-x:hidden;
+      gap:0;
+      padding:10px;
+    }
+    .orderFlowModal.isSelection{
+      width:min(940px, calc(100% - 24px));
+      overflow-x:hidden;
+      gap:0;
+      padding:6px 8px 8px;
+    }
+    .orderFlowAccountBanner{
+      width:100%;
+      max-width:900px;
+      align-self:center;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:8px;
+      padding:2px 52px 8px 10px;
+    }
+    .orderFlowAccountBanner[hidden]{
+      display:none !important;
+    }
+    .orderFlowAccountIdentity{
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:28px;
+      color:var(--rt-text);
+      font-size:36px;
+      line-height:1.08;
+      font-weight:900;
+      letter-spacing:-.02em;
+      text-align:center;
+      flex-wrap:wrap;
+    }
+    .orderFlowAccountPerson{
+      color:var(--rt-text);
+    }
+    .orderFlowAccountOrg{
+      display:inline-flex;
+      align-items:baseline;
+      gap:6px;
+      color:var(--rt-text);
+    }
+    .orderFlowAccountActionsRow{
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .orderFlowAccountActionBtn{
+      min-height:30px;
+      width:auto;
+      max-width:min(100%, 520px);
+      padding:3px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.03);
+      color:rgba(156,163,175,.96);
+      font-size:15px;
+      line-height:1.2;
+      font-weight:400;
+      text-align:center;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 6px 12px rgba(0,0,0,.12);
+      cursor:pointer;
+      transition:background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease, filter .14s ease;
+    }
+    .orderFlowAccountActionBtn:hover{
+      background:rgba(255,255,255,.06);
+      border-color:rgba(255,255,255,.18);
+      color:rgba(229,231,235,.98);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 8px 14px rgba(0,0,0,.16), 0 0 0 1px rgba(255,255,255,.04);
+    }
+    .orderFlowAccountActionBtn:focus-visible{
+      outline:none;
+      box-shadow:0 0 0 3px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.08), 0 8px 14px rgba(0,0,0,.16);
+    }
+    .orderFlowAccountActionBtn.is-attention{
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8aa2;
+      color:#fff;
+      box-shadow:0 12px 24px rgba(225,29,72,.32), 0 0 0 1px rgba(255,255,255,.06);
+    }
+    .orderFlowAccountActionBtn.is-busy{
+      cursor:progress;
+      filter:saturate(.86);
+    }
+    .orderFlowAccountStatusLine{
+      color:#65ffbe;
+      font-size:18px;
+      line-height:1.12;
+      font-weight:900;
+      text-align:center;
+      text-shadow:0 0 20px rgba(81,255,183,.14);
+    }
+    .orderFlowModal.isBlocking .orderFlowHead{
+      box-sizing:border-box;
+      width:100%;
+      max-width:752px;
+      align-self:center;
+      position:relative;
+      justify-content:center;
+      align-items:center;
+      min-height:58px;
+      margin-bottom:5px;
+      padding:0 44px;
+    }
+    .orderFlowModal.isMinimumsBlocking .orderFlowHead{
+      max-width:100%;
+      min-height:0;
+      margin-bottom:0;
+      padding:0 0 4px;
+      justify-content:flex-end;
+      align-items:flex-start;
+    }
+    .orderFlowModal.isSelection .orderFlowHead{
+      box-sizing:border-box;
+      width:100%;
+      max-width:none;
+      align-self:center;
+      position:static;
+      justify-content:center;
+      align-items:center;
+      min-height:44px;
+      margin-bottom:8px;
+      padding:0;
+    }
+    .orderFlowModal.isBlocking .orderFlowStatePill{
+      display:none !important;
+    }
+    .orderFlowModal.isSelection .orderFlowStatePill{
+      display:none !important;
+    }
+    .orderFlowModal.isBlocking .orderFlowTitle{
+      display:none !important;
+    }
+    .orderFlowModal.isMinimumsBlocking .orderFlowTitle{
+      display:none !important;
+    }
+    .orderFlowModal.isSelection .orderFlowTitle{
+      display:flex !important;
+      align-items:baseline;
+      justify-content:center;
+      gap:10px;
+      width:100%;
+      text-align:center;
+      font-size:42px;
+      line-height:1;
+      letter-spacing:-.03em;
+    }
+    .orderFlowModal.isBlocking .orderFlowClose{
+      position:absolute;
+      top:50%;
+      right:0;
+      transform:translateY(-50%);
+    }
+    .orderFlowModal.isMinimumsBlocking .orderFlowClose{
+      position:static;
+      top:auto;
+      right:auto;
+      transform:none;
+    }
+    .orderFlowModal.isSelection .orderFlowClose{
+      position:absolute;
+      top:8px;
+      right:8px;
+      transform:none;
+    }
+    .orderFlowModal.isBlocking .orderFlowSummaryTitle{
+      display:none;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryTitle{
+      display:none;
+    }
+    .orderFlowTitleText{
+      color:var(--rt-text);
+    }
+    .orderFlowTitleAccent{
+      color:#ff3358;
+    }
+    .orderFlowModal.isBlocking .orderFlowSummaryCard{
+      display:none !important;
+    }
+    .orderFlowModal.isMinimumsBlocking .orderFlowSummaryCard{
+      display:none !important;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryCard{
+      width:100%;
+      max-width:900px;
+      align-self:center;
+    }
+    .orderFlowModal.isBlocking #orderFlowBlockingSection{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      width:100%;
+    }
+    .orderFlowModal.isMinimumsBlocking #orderFlowBlockingSection{
+      padding-top:10px;
+      justify-content:center;
+      min-height:220px;
+    }
+    .orderFlowModal.isBlocking #orderFlowFulfillmentSection,
+    .orderFlowModal.isBlocking #orderFlowMethodSection,
+    .orderFlowModal.isBlocking #orderFlowManualSection,
+    .orderFlowModal.isBlocking #orderFlowPoSection,
+    .orderFlowModal.isBlocking #orderFlowCheckoutSection{
+      display:none !important;
+    }
+    .orderFlowModal.isMinimumsBlocking .orderFlowBlockingActions{
+      display:none !important;
+    }
     .orderFlowTitle{
       margin:0;
       font-size:24px;
@@ -5323,20 +5675,23 @@
       text-align:left;
     }
     .orderFlowClose{
-      width:34px;
-      height:34px;
+      width:32px;
+      height:32px;
       border-radius:999px;
-      border:1px solid var(--rt-glassBorder);
-      background:rgba(255,255,255,.08);
-      color:var(--rt-text);
+      border:1px solid rgba(225,29,72,.62);
+      background:rgba(225,29,72,.12);
+      color:#ff8da0;
       font-weight:900;
+      font-size:14px;
       cursor:pointer;
       line-height:1;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
     }
     .orderFlowClose:hover{
-      background:rgba(225,29,72,.14);
-      border-color:rgba(225,29,72,.58);
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
       color:#fff;
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
     }
     .orderFlowClose:focus-visible{
       outline:none;
@@ -5358,37 +5713,176 @@
       text-transform:uppercase;
     }
     .orderFlowSummaryCard{
-      border:1px solid rgba(255,255,255,.12);
-      border-radius:14px;
-      background:rgba(255,255,255,.05);
-      padding:14px;
-      text-align:left;
+      width:100%;
+      max-width:100%;
+      margin:0 auto;
+      padding:0;
+      border:none;
+      background:none;
+      text-align:center;
     }
     .orderFlowSummaryGrid{
-      display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-      gap:10px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:0;
     }
-    .orderFlowSummaryItem{
-      padding:10px 12px;
-      border-radius:12px;
-      background:rgba(4,7,16,.44);
-      border:1px solid rgba(255,255,255,.08);
-    }
-    .orderFlowSummaryKey{
-      display:block;
-      font-size:10px;
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:.05em;
-      color:var(--rt-muted);
-      margin-bottom:4px;
-    }
-    .orderFlowSummaryVal{
-      display:block;
-      font-size:14px;
-      font-weight:800;
+    .orderFlowSummaryTitle{
+      margin:0 0 -16px;
+      padding:0 14px;
+      position:relative;
+      z-index:1;
+      background:rgba(4,7,16,.92);
+      text-align:center;
+      font-size:42px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:-.03em;
       color:var(--rt-text);
+    }
+    .orderFlowSummaryInner{
+      width:100%;
+      position:relative;
+      border:1px solid rgba(255,255,255,.72);
+      border-radius:18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.97) 0%, rgba(246,248,252,.92) 56%, rgba(239,243,248,.9) 100%),
+        linear-gradient(135deg, rgba(255,255,255,.82) 0%, rgba(255,255,255,0) 46%);
+      backdrop-filter:blur(18px) saturate(135%);
+      -webkit-backdrop-filter:blur(18px) saturate(135%);
+      box-shadow:
+        0 16px 34px rgba(3,8,20,.18),
+        0 2px 10px rgba(255,255,255,.18) inset,
+        0 -10px 24px rgba(255,255,255,.16) inset;
+      padding:10px 12px 10px;
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      overflow:hidden;
+    }
+    .orderFlowSummaryInner::before{
+      content:'';
+      position:absolute;
+      inset:0;
+      border-radius:inherit;
+      pointer-events:none;
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,.72) 0%, rgba(255,255,255,0) 38%),
+        linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 24%, rgba(255,255,255,.12) 100%);
+      opacity:.95;
+    }
+    .orderFlowSummaryTop{
+      display:grid;
+      grid-auto-flow:column;
+      grid-auto-columns:max-content;
+      justify-content:space-between;
+      align-items:center;
+      position:relative;
+      z-index:1;
+      padding:2px 4px 10px;
+      border-bottom:1px solid rgba(15,23,42,.08);
+    }
+    .orderFlowSummaryTopItem{
+      min-width:0;
+      display:flex;
+      align-items:baseline;
+      justify-content:flex-start;
+      gap:4px;
+      font-size:22.5px;
+      line-height:1.15;
+      font-weight:900;
+      color:#111827;
+      white-space:nowrap;
+    }
+    .orderFlowSummaryTopItem:nth-child(2){
+      justify-content:center;
+      text-align:center;
+    }
+    .orderFlowSummaryTopItem:last-child{
+      justify-content:flex-end;
+      text-align:right;
+    }
+    .orderFlowSummaryTopLabel{
+      color:#111827;
+    }
+    .orderFlowSummaryTopAccent{
+      color:#ff3358;
+    }
+    .orderFlowSummaryJobs{
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      width:100%;
+      position:relative;
+      z-index:1;
+      padding:1px 4px 0;
+    }
+    .orderFlowSummaryJobRow{
+      display:grid;
+      grid-template-columns:minmax(0, 1.04fr) minmax(0, .56fr) minmax(0, .72fr) minmax(0, 1.16fr);
+      column-gap:12px;
+      align-items:center;
+      width:100%;
+    }
+    .orderFlowSummaryJobCell{
+      min-width:0;
+      text-align:left;
+    }
+    .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(4){
+      text-align:right;
+    }
+    .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(3){
+      text-align:right;
+    }
+    .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(2){
+      padding-left:0;
+    }
+    .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(3),
+    .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(4){
+      padding-left:0;
+    }
+    .orderFlowSummaryJobCellVal{
+      display:block;
+      font-size:21px;
+      line-height:1.2;
+      font-weight:800;
+      color:#111827;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .orderFlowSummaryJobName{
+      color:#111827;
+      text-align:left;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .orderFlowSummaryEmpty{
+      font-size:13px;
+      font-weight:700;
+      line-height:1.5;
+      color:#4b5563;
+      text-align:center;
+      padding:10px 0 4px;
+    }
+    .orderFlowSummaryNote{
+      margin-top:4px;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:0;
+      padding-top:8px;
+      border-top:1px solid rgba(15,23,42,.08);
+      font-size:17px;
+      line-height:1.15;
+      letter-spacing:-0.01em;
+      font-weight:400;
+      color:#566171;
+      text-align:center;
+      white-space:normal;
+    }
+    .orderFlowSummaryNoteAccent{
+      color:var(--rt-blueCta, #00c8ff);
     }
     .orderFlowBody{
       margin:0;
@@ -5397,48 +5891,233 @@
       line-height:1.45;
       color:var(--rt-text);
     }
-    .orderFlowOptions{
-      display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-      gap:12px;
+    #orderFlowFulfillmentSection{
       width:100%;
+      max-width:900px;
+      align-self:center;
+      display:flex;
+      flex-direction:column;
+      margin-top:6px;
+      gap:12px;
     }
-    .orderFlowOptions.twoCol{
-      grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-    }
-    .orderFlowOptionBtn{
+    .orderFlowSelectionGroup{
       width:100%;
       display:flex;
       flex-direction:column;
-      align-items:flex-start;
-      gap:6px;
-      text-align:left;
-      border-radius:16px;
-      border:1px solid rgba(255,255,255,.14);
-      background:rgba(255,255,255,.06);
-      color:var(--rt-text);
-      padding:16px;
-      cursor:pointer;
-      box-shadow:0 14px 24px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.06);
-      transition:background-color .14s ease, border-color .14s ease, box-shadow .14s ease, transform .08s ease;
+      gap:10px;
     }
-    .orderFlowOptionBtn:hover{
-      background:rgba(225,29,72,.14);
-      border-color:rgba(225,29,72,.52);
-      box-shadow:0 18px 28px rgba(0,0,0,.28), 0 0 0 1px var(--rt-redRing);
+    .orderFlowSelectionGroup[hidden]{
+      display:none !important;
     }
-    .orderFlowOptionTitle{
-      display:block;
-      font-size:15px;
+    .orderFlowSectionHeading{
+      margin:0;
+      font-size:22px;
+      line-height:1.08;
       font-weight:900;
+      text-align:center;
+      color:var(--rt-text);
+      letter-spacing:-.02em;
+    }
+    .orderFlowSectionHeading.is-error-step{
+      color:#ff4065;
+      text-shadow:0 0 18px rgba(255,64,101,.56), 0 0 32px rgba(255,64,101,.42), 0 0 48px rgba(255,64,101,.24);
+    }
+    .orderFlowChoiceGrid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:12px;
+      width:100%;
+    }
+    .orderFlowChoiceBtn{
+      width:100%;
+      min-height:188px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:flex-start;
+      gap:14px;
+      text-align:center;
+      border-radius:14px;
+      border:1px solid rgba(229,231,235,.34);
+      background:rgba(255,255,255,.05);
+      backdrop-filter:blur(14px) saturate(140%);
+      -webkit-backdrop-filter:blur(14px) saturate(140%);
+      color:var(--rt-text);
+      padding:24px 26px 22px;
+      cursor:pointer;
+      box-shadow:0 8px 18px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.08);
+      transition:background-color .14s ease, border-color .14s ease, box-shadow .14s ease, transform .08s ease, color .14s ease, filter .14s ease;
+    }
+    .orderFlowChoiceBtn:hover{
+      background:rgba(81,255,183,.12);
+      border-color:#74ffc4;
+      box-shadow:0 10px 22px rgba(0,0,0,.28), 0 0 0 1px rgba(81,255,183,.28);
+      filter:none;
+    }
+    .orderFlowChoiceBtn:focus-visible{
+      outline:none;
+      border-color:#74ffc4;
+      box-shadow:0 0 0 3px rgba(81,255,183,.2), 0 10px 22px rgba(0,0,0,.28), 0 0 0 1px rgba(81,255,183,.28);
+    }
+    .orderFlowChoiceBtn.is-selected{
+      border-color:rgba(81,255,183,.82);
+      background:linear-gradient(135deg,#51ffb7 0%, #34d399 100%);
+      color:#032317;
+      box-shadow:0 10px 20px rgba(52,211,153,.34), inset 0 1px 0 rgba(255,255,255,.2);
+      filter:none;
+    }
+    .orderFlowChoiceBtn.is-selected:hover{
+      border-color:rgba(116,255,196,.95);
+      box-shadow:0 12px 24px rgba(52,211,153,.42), inset 0 1px 0 rgba(255,255,255,.24);
+      filter:brightness(1.04);
+    }
+    .orderFlowChoiceBtn.is-payment{
+      min-height:84px;
+      padding:7px 10px 4px;
+      gap:2px;
+    }
+    .orderFlowChoiceBtn:not(.is-payment){
+      min-height:78px;
+      padding:9px 11px 4px;
+      gap:5px;
+    }
+    .orderFlowChoiceTitle{
+      display:block;
+      font-size:31px;
+      font-weight:900;
+      line-height:1.04;
+      letter-spacing:-.02em;
+      color:#51ffb7;
+    }
+    .orderFlowChoiceBtn.is-payment .orderFlowChoiceTitle{
+      color:var(--rt-text);
+      font-size:25.5px;
+      margin-bottom:6px;
+    }
+    .orderFlowChoiceBtn:not(.is-payment) .orderFlowChoiceTitle{
+      font-size:25.5px;
       color:var(--rt-text);
     }
-    .orderFlowOptionSub{
+    .orderFlowChoiceBody{
       display:block;
-      font-size:12px;
+      font-size:17px;
+      line-height:1.13;
       font-weight:600;
-      line-height:1.45;
-      color:var(--rt-muted);
+      color:#d7f6ea;
+    }
+    .orderFlowChoiceBtn:not(.is-payment) .orderFlowChoiceBody{
+      font-size:11px;
+    }
+    .orderFlowChoiceBody.is-muted{
+      color:#d4d8e4;
+    }
+    .orderFlowChoiceBtn.is-payment .orderFlowChoiceBody{
+      font-size:15px;
+      line-height:1.08;
+      font-weight:700;
+    }
+    .orderFlowChoiceAccentBlue{
+      color:var(--rt-blueCta, #00c8ff);
+    }
+    .orderFlowChoiceAccentGreen{
+      color:#51ffb7;
+    }
+    .orderFlowChoiceAccentRed{
+      color:#ff4065;
+    }
+    .orderFlowChoiceFoot{
+      display:block;
+      font-size:18px;
+      line-height:1.1;
+      font-weight:700;
+    }
+    .orderFlowChoiceBtn:not(.is-payment) .orderFlowChoiceFoot{
+      font-size:11px;
+    }
+    .orderFlowChoiceBtn.is-payment .orderFlowChoiceFoot{
+      font-size:15px;
+      line-height:1.08;
+      font-weight:700;
+    }
+    .orderFlowChoiceFoot.is-green{
+      color:#51ffb7;
+    }
+    .orderFlowChoiceFoot.is-red{
+      color:#ff4065;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceTitle,
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceBody,
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceAccentGreen{
+      color:#032317 !important;
+      text-shadow:none;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot{
+      text-shadow:none;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot:not(.is-green):not(.is-red){
+      color:#032317 !important;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceAccentBlue{
+      color:#0d7db1 !important;
+      text-shadow:none;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot.is-green{
+      color:#0d7db1 !important;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot.is-red{
+      color:#ff4065 !important;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceAccentRed{
+      color:#ff4065 !important;
+      text-shadow:none;
+    }
+    .orderFlowSelectionActions{
+      width:100%;
+      display:grid;
+      grid-template-columns:1fr auto 1fr;
+      align-items:center;
+      margin-top:0;
+      min-height:72px;
+    }
+    .orderFlowSelectionErrorStack{
+      grid-column:3;
+      justify-self:center;
+      width:auto;
+      max-width:312px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:6px;
+    }
+    .orderFlowSelectionErrorStack[hidden]{
+      display:none !important;
+    }
+    .orderFlowSelectionErrorCard{
+      width:auto;
+      max-width:100%;
+      box-sizing:border-box;
+      padding:6px 8px;
+      border-radius:10px;
+      border:1px solid rgba(255,64,101,.56);
+      background:rgba(78,10,20,.78);
+      color:#ffd8df;
+      font-size:10.5px;
+      line-height:1.05;
+      font-weight:800;
+      text-align:center;
+      white-space:nowrap;
+      box-shadow:0 0 0 1px rgba(255,64,101,.08), 0 8px 18px rgba(0,0,0,.24), 0 0 18px rgba(255,64,101,.12);
+    }
+    .orderFlowSelectionErrorCard[hidden]{
+      display:none !important;
+    }
+    .orderFlowSelectionClear{
+      grid-column:1;
+      justify-self:start;
+      min-width:140px;
+      font-size:12px;
+      padding:8px 12px;
+      transition:background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease;
     }
     .orderFlowActions{
       display:flex;
@@ -5492,6 +6171,9 @@
     .orderFlowBtn:active{
       transform:scale(0.98);
     }
+    .orderFlowBtn.orderFlowSelectionClear:active{
+      transform:none;
+    }
     .orderFlowBtn:focus-visible{
       outline:none;
       box-shadow:0 0 0 3px var(--rt-redRing);
@@ -5515,6 +6197,25 @@
     .orderFlowBtnPrimary:hover{
       background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
     }
+    .orderFlowBtnBlueLarge{
+      grid-column:2;
+      justify-self:center;
+      min-width:260px;
+      min-height:58px;
+      border-radius:18px;
+      font-size:26px;
+      font-weight:900;
+      padding:12px 32px;
+      border:1px solid rgba(0,200,255,.76);
+      color:#fff;
+      background:linear-gradient(135deg,#3ed7ff 0%, #00c8ff 56%, #10a7d7 100%);
+      box-shadow:0 14px 28px rgba(0,200,255,.24);
+      justify-self:center;
+    }
+    .orderFlowBtnBlueLarge:hover{
+      filter:brightness(1.05);
+      box-shadow:0 18px 32px rgba(0,200,255,.32);
+    }
     .orderFlowBtnSuccess{
       border:1px solid rgba(81,255,183,.78);
       color:#052816;
@@ -5527,32 +6228,81 @@
     }
     .orderFlowBlockingJobs{
       display:grid;
-      grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
-      gap:10px;
+      grid-template-columns:repeat(auto-fit, minmax(240px, 270px));
+      justify-content:center;
+      gap:22px;
       width:100%;
+    }
+    .orderFlowBlockingAlert{
+      margin:18px 0;
+      padding:0 12px;
+      text-align:center;
+      font-size:20px;
+      line-height:1.25;
+      font-weight:900;
+      color:#51ffb7;
+      letter-spacing:-.01em;
+      text-wrap:balance;
+    }
+    .orderFlowBlockingAlert.is-error{
+      color:#ff6b89;
+      text-shadow:0 0 22px rgba(225,29,72,.18);
+    }
+    .orderFlowModal.isMinimumsBlocking .orderFlowBlockingAlert{
+      max-width:620px;
+      margin:0 auto 18px;
+      align-self:center;
+    }
+    .orderFlowModal.isMinimumsBlocking .orderFlowBlockingJobs{
+      align-content:center;
+    }
+    .orderFlowBlockingActions{
+      padding:9px 12px 4px;
     }
     .orderFlowJobBtn{
       width:100%;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
       border-radius:12px;
-      border:1px solid var(--rt-glassBorder);
-      background:rgba(255,255,255,.08);
-      color:var(--rt-text);
+      border:1px solid rgba(81,255,183,.85);
+      background:rgba(255,255,255,.03);
+      color:#51ffb7;
       padding:10px 12px;
-      text-align:left;
+      text-align:center;
       cursor:pointer;
-      box-shadow:0 8px 16px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.07);
+      box-shadow:0 8px 18px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.06);
+      transition:background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease, filter .14s ease;
     }
     .orderFlowJobBtn:hover{
-      border-color:rgba(225,29,72,.58);
-      background:rgba(225,29,72,.14);
-      box-shadow:0 10px 20px rgba(0,0,0,.28), 0 0 0 1px var(--rt-redRing);
+      border-color:rgba(116,255,196,.95);
+      background:linear-gradient(135deg,#51ffb7 0%, #34d399 100%);
+      color:#032317;
+      box-shadow:0 12px 24px rgba(52,211,153,.42), inset 0 1px 0 rgba(255,255,255,.2);
+      filter:brightness(1.02);
+    }
+    .orderFlowJobBtn:focus-visible{
+      outline:none;
+      border-color:rgba(116,255,196,.78);
+      background:rgba(255,255,255,.02);
+      color:#51ffb7;
+      box-shadow:0 0 0 2px rgba(81,255,183,.22), 0 10px 20px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.08);
+      filter:none;
+    }
+    .orderFlowJobBtn:hover:focus-visible{
+      border-color:rgba(116,255,196,.95);
+      background:linear-gradient(135deg,#51ffb7 0%, #34d399 100%);
+      color:#032317;
+      box-shadow:0 12px 24px rgba(52,211,153,.42), inset 0 1px 0 rgba(255,255,255,.2);
+      filter:brightness(1.02);
     }
     .orderFlowJobBtnMain{
       display:block;
       font-size:14px;
       font-weight:800;
       line-height:1.2;
-      color:var(--rt-text);
+      color:#51ffb7;
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
@@ -5562,7 +6312,35 @@
       margin-top:2px;
       font-size:12px;
       font-weight:700;
-      color:var(--rt-muted);
+      color:#51ffb7;
+      opacity:1;
+    }
+    .orderFlowJobBtnExtra{
+      display:block;
+      margin-top:1px;
+      font-size:11px;
+      line-height:1.2;
+      font-weight:700;
+      color:#c7f6e4;
+      opacity:1;
+    }
+    .orderFlowJobBtn:hover .orderFlowJobBtnMain,
+    .orderFlowJobBtn:hover .orderFlowJobBtnSub,
+    .orderFlowJobBtn:hover .orderFlowJobBtnExtra{
+      color:#032317;
+      opacity:.96;
+    }
+    .orderFlowJobBtn:focus-visible .orderFlowJobBtnMain,
+    .orderFlowJobBtn:focus-visible .orderFlowJobBtnSub,
+    .orderFlowJobBtn:focus-visible .orderFlowJobBtnExtra{
+      color:#51ffb7;
+      opacity:1;
+    }
+    .orderFlowJobBtn:hover:focus-visible .orderFlowJobBtnMain,
+    .orderFlowJobBtn:hover:focus-visible .orderFlowJobBtnSub,
+    .orderFlowJobBtn:hover:focus-visible .orderFlowJobBtnExtra{
+      color:#032317;
+      opacity:.96;
     }
     .orderFlowSuccessIcon{
       width:84px;
@@ -5645,44 +6423,215 @@
     #orderFlowResultSection:not([hidden]) .orderFlowActions{
       margin-top:auto;
     }
-    .portalStatusBanner{
-      display:flex;
-      flex-direction:column;
+    .orderFlowModal.isSelection{
+      width:min(910px, calc(100% - 24px));
+      padding:4px 8px 6px;
+    }
+    .orderFlowModal.isSelection .orderFlowAccountBanner{
+      max-width:860px;
       gap:6px;
-      margin:0 0 12px;
-      padding:14px 16px;
-      border:1px solid rgba(255,255,255,.14);
-      border-radius:16px;
-      background:rgba(255,255,255,.05);
-      color:var(--rt-text);
-      box-shadow:0 16px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.05);
+      padding:0 44px 6px 8px;
     }
-    .portalStatusBadge{
-      align-self:flex-start;
-      display:inline-flex;
-      align-items:center;
-      min-height:28px;
-      padding:0 12px;
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,.2);
-      background:rgba(255,255,255,.08);
-      color:var(--rt-text);
-      font-size:11px;
-      font-weight:800;
-      letter-spacing:.05em;
-      text-transform:uppercase;
+    .orderFlowModal.isSelection .orderFlowAccountIdentity{
+      gap:24px;
+      font-size:31px;
+      line-height:1.04;
     }
-    .portalStatusText{
-      font-size:14px;
-      font-weight:800;
-      line-height:1.45;
-      color:var(--rt-text);
+    .orderFlowModal.isSelection .orderFlowAccountActionBtn{
+      min-height:27px;
+      padding:2px 9px;
+      font-size:13px;
     }
-    .portalStatusMeta{
+    .orderFlowModal.isSelection .orderFlowAccountStatusLine{
+      font-size:16px;
+    }
+    .orderFlowModal.isSelection .orderFlowHead{
+      min-height:38px;
+      margin-bottom:4px;
+    }
+    .orderFlowModal.isSelection .orderFlowTitle{
+      font-size:36px;
+    }
+    .orderFlowModal.isSelection .orderFlowClose{
+      top:4px;
+      right:4px;
+      width:28px;
+      height:28px;
       font-size:12px;
-      font-weight:700;
-      line-height:1.5;
-      color:var(--rt-muted);
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryCard{
+      max-width:860px;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryInner{
+      border-radius:16px;
+      padding:8px 10px 8px;
+      box-shadow:
+        0 12px 26px rgba(3,8,20,.16),
+        0 2px 8px rgba(255,255,255,.16) inset,
+        0 -8px 18px rgba(255,255,255,.14) inset;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryTop{
+      padding:2px 4px 8px;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryTopItem{
+      font-size:19px;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryJobs{
+      gap:3px;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryJobRow{
+      column-gap:10px;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryJobCellVal{
+      font-size:18px;
+    }
+    .orderFlowModal.isSelection .orderFlowSummaryNote{
+      margin-top:3px;
+      padding-top:6px;
+      font-size:14.5px;
+    }
+    .orderFlowModal.isSelection #orderFlowFulfillmentSection{
+      max-width:860px;
+      margin-top:4px;
+      gap:10px;
+    }
+    .orderFlowModal.isSelection .orderFlowSelectionGroup{
+      gap:8px;
+    }
+    .orderFlowModal.isSelection .orderFlowSectionHeading{
+      font-size:19px;
+      line-height:1.05;
+    }
+    .orderFlowModal.isSelection .orderFlowChoiceGrid{
+      gap:10px;
+    }
+    .orderFlowModal.isSelection .orderFlowChoiceBtn.is-payment{
+      min-height:72px;
+      padding:6px 9px 3px;
+      gap:1px;
+    }
+    .orderFlowModal.isSelection .orderFlowChoiceBtn:not(.is-payment){
+      min-height:66px;
+      padding:7px 10px 3px;
+      gap:4px;
+    }
+    .orderFlowModal.isSelection .orderFlowChoiceBtn.is-payment .orderFlowChoiceTitle,
+    .orderFlowModal.isSelection .orderFlowChoiceBtn:not(.is-payment) .orderFlowChoiceTitle{
+      font-size:22px;
+    }
+    .orderFlowModal.isSelection .orderFlowChoiceBtn.is-payment .orderFlowChoiceTitle{
+      margin-bottom:4px;
+    }
+    .orderFlowModal.isSelection .orderFlowChoiceBtn.is-payment .orderFlowChoiceBody,
+    .orderFlowModal.isSelection .orderFlowChoiceBtn.is-payment .orderFlowChoiceFoot{
+      font-size:13px;
+      line-height:1.06;
+    }
+    .orderFlowModal.isSelection .orderFlowChoiceBtn:not(.is-payment) .orderFlowChoiceBody,
+    .orderFlowModal.isSelection .orderFlowChoiceBtn:not(.is-payment) .orderFlowChoiceFoot{
+      font-size:10px;
+    }
+    .orderFlowModal.isSelection .orderFlowSelectionActions{
+      min-height:58px;
+    }
+    .orderFlowModal.isSelection .orderFlowSelectionClear{
+      min-width:124px;
+      font-size:11px;
+      padding:7px 10px;
+    }
+    .orderFlowModal.isSelection .orderFlowBtnBlueLarge{
+      min-width:224px;
+      min-height:50px;
+      border-radius:16px;
+      font-size:22px;
+      padding:10px 28px;
+    }
+    .orderFlowModal.isSelection .orderFlowSelectionErrorCard{
+      font-size:10px;
+      padding:5px 7px;
+    }
+    @media (max-width: 760px){
+      .orderFlowSummaryTitle{
+        font-size:34px;
+        margin-bottom:-10px;
+      }
+      .orderFlowModal.isBlocking .orderFlowTitle,
+      .orderFlowModal.isSelection .orderFlowTitle{
+        font-size:34px;
+      }
+      .orderFlowAccountBanner{
+        padding-right:44px;
+      }
+      .orderFlowAccountIdentity{
+        font-size:19px;
+        gap:16px;
+      }
+      .orderFlowAccountActionBtn{
+        font-size:13px;
+      }
+      .orderFlowAccountStatusLine{
+        font-size:16px;
+      }
+      .orderFlowSummaryTop{
+        grid-template-columns:1fr;
+        gap:10px;
+      }
+      .orderFlowSummaryTopItem{
+        justify-content:flex-start;
+        white-space:normal;
+      }
+      .orderFlowSummaryJobRow{
+        grid-template-columns:1fr;
+        gap:8px;
+      }
+      .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(2),
+      .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(3),
+      .orderFlowSummaryJobRow > .orderFlowSummaryJobCell:nth-child(4){
+        padding-left:0;
+      }
+      .orderFlowSummaryJobCellVal{
+        white-space:normal;
+      }
+      .orderFlowBlockingAlert{
+        font-size:18px;
+      }
+      .orderFlowBlockingJobs{
+        grid-template-columns:minmax(220px, 1fr);
+      }
+      .orderFlowSectionHeading{
+        font-size:18px;
+      }
+      .orderFlowChoiceBtn{
+        min-height:unset;
+        padding:18px 18px 16px;
+        border-radius:22px;
+      }
+      .orderFlowChoiceTitle{
+        font-size:24px;
+      }
+      .orderFlowChoiceBody,
+      .orderFlowChoiceFoot{
+        font-size:15px;
+      }
+      .orderFlowBtnBlueLarge{
+        min-width:220px;
+        font-size:22px;
+      }
+      .orderFlowSelectionActions{
+        position:static;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:10px;
+        min-height:0;
+      }
+      .orderFlowSelectionClear,
+      .orderFlowBtnBlueLarge,
+      .orderFlowSelectionErrorStack{
+        position:static;
+        transform:none;
+        justify-self:center;
+      }
     }
     @media (max-width: 980px){
       .dashboardAccountHead{
@@ -5701,6 +6650,9 @@
       }
       .orderFlowOptions,
       .orderFlowOptions.twoCol{
+        grid-template-columns:1fr;
+      }
+      .orderFlowChoiceGrid{
         grid-template-columns:1fr;
       }
     }
@@ -5928,7 +6880,8 @@
     }
     #projectView .portalShell{
       color:var(--rt-text);
-      margin-top:8px;
+      width:min(1180px, calc(100% - 40px));
+      margin:8px auto 0;
     }
     #projectView .portalJobsSection{
       background:transparent;
@@ -5945,6 +6898,10 @@
     }
     #projectView .printJobTabsList{
       gap:10px;
+      flex-wrap:nowrap;
+      width:max-content;
+      min-width:100%;
+      overflow:visible;
     }
     #projectView .printJobTab{
       background:var(--rt-glass);
@@ -6897,12 +7854,18 @@
       font-size:15px;
       line-height:1.35;
       min-width:0;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:2px;
     }
     #projectView .notesInlineLabel{
+      display:block;
       font-weight:900;
       color:var(--rt-text);
     }
     #projectView .notesInlineText{
+      display:block;
       font-weight:400;
       color:var(--rt-text);
     }
@@ -6924,6 +7887,19 @@
       display:flex;
       flex-direction:column;
       align-items:flex-start;
+    }
+    #projectView .detailsAddOnsHeading{
+      display:block;
+      width:100%;
+      margin:0 0 2px;
+      font-size:15px;
+      line-height:1.35;
+      font-weight:900;
+      color:var(--rt-text);
+      text-align:left;
+    }
+    #projectView .detailsAddOnsHeading[hidden]{
+      display:none !important;
     }
     #projectView .detailsAddOnsCol .addOnsList{
       align-items:stretch;
@@ -7578,11 +8554,6 @@
     </div>
 
     <div class="saveNotice" id="saveNotice" hidden></div>
-    <section class="portalStatusBanner" id="portalStatusBanner" hidden>
-      <div class="portalStatusBadge" id="portalStatusBadge">Editable</div>
-      <div class="portalStatusText" id="portalStatusText">This estimate is editable.</div>
-      <div class="portalStatusMeta" id="portalStatusMeta"></div>
-    </section>
 
     <section class="teamModeBanner" id="teamModeBanner" hidden>
       <div class="teamModeBannerTop">
@@ -7700,6 +8671,22 @@
       </div>
     </div>
   </div>
+  <div class="colorRemoveConfirmBackdrop" id="colorRemoveConfirmBackdrop" hidden>
+    <div class="colorRemoveConfirmModal" id="colorRemoveConfirmModal" role="dialog" aria-modal="true" aria-labelledby="colorRemoveConfirmTitle">
+      <h2 class="colorRemoveConfirmTitle" id="colorRemoveConfirmTitle">Remove colorway?</h2>
+      <p class="colorRemoveConfirmBody" id="colorRemoveConfirmBody">This colorway has quantities entered. Remove anyway?</p>
+      <div class="colorRemoveConfirmRow">
+        <label class="colorRemoveConfirmCheck" for="colorRemoveConfirmSkip">
+          <input id="colorRemoveConfirmSkip" type="checkbox">
+          <span>Don&apos;t ask again</span>
+        </label>
+      </div>
+      <div class="colorRemoveConfirmActions">
+        <button class="colorRemoveConfirmBtn" id="colorRemoveConfirmCancelBtn" type="button">Cancel</button>
+        <button class="colorRemoveConfirmBtn colorRemoveConfirmBtnDanger" id="colorRemoveConfirmProceedBtn" type="button">Remove Colorway</button>
+      </div>
+    </div>
+  </div>
   <div class="artworkApproveBackdrop" id="artworkApproveBackdrop" hidden>
     <div class="artworkApproveModal" id="artworkApproveModal" role="dialog" aria-modal="true" aria-labelledby="artworkApproveTitle">
       <div class="artworkApproveHead">
@@ -7723,7 +8710,7 @@
         </div>
         <p class="artworkApproveWarning">Please review mockups carefully. What you see is exactly what will be printed. Click to expand.</p>
         <div class="artworkApproveActions">
-          <button class="artworkApproveBtn artworkApproveBtnBack" id="artworkApproveBackBtn" type="button">Go Back</button>
+          <button class="artworkApproveBtn artworkApproveBtnBack" id="artworkApproveBackBtn" type="button">Go Back to Job</button>
           <button class="artworkApproveBtn artworkApproveBtnConfirm" id="artworkApproveConfirmBtn" type="button">Approve Artwork</button>
         </div>
       </div>
@@ -7732,7 +8719,7 @@
         <p class="artworkApproveSuccessTitle">Success, your artwork is approved.</p>
         <p class="artworkApproveSuccessBody">Finish entering your sizes and quantities, then continue through payment when you are ready to place the order. The order only locks after payment is confirmed.</p>
         <div class="artworkApproveActions">
-          <button class="artworkApproveBtn artworkApproveBtnBack" id="artworkApproveDoneBtn" type="button">Return to Job</button>
+          <button class="artworkApproveBtn artworkApproveBtnBack" id="artworkApproveDoneBtn" type="button">Go Back to Job</button>
           <button class="artworkApproveBtn artworkApproveBtnDisapprove" id="artworkApproveDisapproveBtn" type="button">Disapprove Art</button>
         </div>
       </div>
@@ -7754,6 +8741,7 @@
   </div>
   <div class="orderFlowBackdrop" id="orderFlowBackdrop" hidden>
     <div class="orderFlowModal" id="orderFlowModal" role="dialog" aria-modal="true" aria-labelledby="orderFlowTitle">
+      <div class="orderFlowAccountBanner" id="orderFlowAccountBanner" hidden></div>
       <div class="orderFlowHead">
         <h2 class="orderFlowTitle" id="orderFlowTitle">Place Order</h2>
         <button class="orderFlowClose" id="orderFlowClose" type="button" aria-label="Close order modal">X</button>
@@ -7762,34 +8750,58 @@
       <div class="orderFlowSummaryCard" id="orderFlowSummaryCard">
         <div class="orderFlowSummaryGrid" id="orderFlowSummaryGrid"></div>
       </div>
-      <div id="orderFlowMethodSection">
-        <p class="orderFlowBody">How would you like to place your order?</p>
-        <div class="orderFlowOptions">
-          <button class="orderFlowOptionBtn" id="orderFlowCardBtn" type="button">
-            <span class="orderFlowOptionTitle">Credit / Debit Card</span>
-            <span class="orderFlowOptionSub">Pay now with secure Stripe Checkout in a separate tab.</span>
-          </button>
-          <button class="orderFlowOptionBtn" id="orderFlowAchBtn" type="button">
-            <span class="orderFlowOptionTitle">ACH Bank Transfer</span>
-            <span class="orderFlowOptionSub">Start secure ACH checkout. Confirmation can arrive after Stripe finishes processing.</span>
-          </button>
-          <button class="orderFlowOptionBtn" id="orderFlowCheckBtn" type="button">
-            <span class="orderFlowOptionTitle">Pay by Check</span>
-            <span class="orderFlowOptionSub">Generate an invoice and lock the portal pending manual payment.</span>
-          </button>
-          <button class="orderFlowOptionBtn" id="orderFlowCashBtn" type="button">
-            <span class="orderFlowOptionTitle">Pay by Cash</span>
-            <span class="orderFlowOptionSub">Generate an invoice and lock the portal pending manual confirmation.</span>
-          </button>
-          <button class="orderFlowOptionBtn" id="orderFlowPoBtn" type="button">
-            <span class="orderFlowOptionTitle">Submit order via P.O.</span>
-            <span class="orderFlowOptionSub">Requires approved terms before the PO order path can continue.</span>
-          </button>
+      <div id="orderFlowFulfillmentSection">
+        <div class="orderFlowSelectionGroup">
+          <p class="orderFlowSectionHeading" id="orderFlowFulfillmentHeading">1. Select a delivery method.</p>
+          <div class="orderFlowChoiceGrid">
+            <button class="orderFlowChoiceBtn" id="orderFlowShipBtn" type="button" aria-pressed="false">
+              <span class="orderFlowChoiceTitle">Ship My Order</span>
+              <span class="orderFlowChoiceBody">Orders ship out via UPS Ground after all jobs have completed.</span>
+              <span class="orderFlowChoiceBody"><span class="orderFlowChoiceAccentRed">Ship time is not included in turn time.</span> Estimated ship out date is by <span class="orderFlowChoiceAccentRed" id="orderFlowShipDateLabel">--</span>.</span>
+            </button>
+            <button class="orderFlowChoiceBtn" id="orderFlowPickupBtn" type="button" aria-pressed="false">
+              <span class="orderFlowChoiceTitle">Local Pickup</span>
+              <span class="orderFlowChoiceBody">Red Threads Print House | 505 S. Saginaw Rd | Midland, MI 48640</span>
+              <span class="orderFlowChoiceBody">Pickup is available after all jobs are completed. Estimated pickup by: <span class="orderFlowChoiceAccentRed" id="orderFlowPickupDateLabel">--</span></span>
+            </button>
+          </div>
         </div>
-        <div class="orderFlowActions">
-          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowBackBtn" type="button">Go Back</button>
+        <div class="orderFlowSelectionGroup" id="orderFlowPaymentGroup">
+          <p class="orderFlowSectionHeading" id="orderFlowPaymentHeading">2. Select a payment method.</p>
+          <div class="orderFlowChoiceGrid">
+            <button class="orderFlowChoiceBtn is-payment" id="orderFlowCardBtn" type="button" aria-pressed="false">
+              <span class="orderFlowChoiceTitle">Pay now: Credit / Debit Card</span>
+              <span class="orderFlowChoiceFoot is-green">Turn time begins immediately</span>
+              <span class="orderFlowChoiceBody orderFlowChoiceAccentRed" id="orderFlowCardFeeLabel">Item costs will increase by 3% ($0.00)</span>
+            </button>
+            <button class="orderFlowChoiceBtn is-payment" id="orderFlowAchBtn" type="button" aria-pressed="false">
+              <span class="orderFlowChoiceTitle">Pay now: Check / ACH Transfer</span>
+              <span class="orderFlowChoiceFoot is-green">Turn time begins immediately</span>
+              <span class="orderFlowChoiceBody is-muted">Enter basic info found on any check.</span>
+            </button>
+            <button class="orderFlowChoiceBtn is-payment" id="orderFlowCheckBtn" type="button" aria-pressed="false">
+              <span class="orderFlowChoiceTitle">Submit: Physical check or cash</span>
+              <span class="orderFlowChoiceFoot is-red">Turn time begins on payment receipt</span>
+              <span class="orderFlowChoiceBody is-muted">Invoice &amp; payment instructions will be emailed.</span>
+            </button>
+            <button class="orderFlowChoiceBtn is-payment" id="orderFlowPoBtn" type="button" aria-pressed="false">
+              <span class="orderFlowChoiceTitle">Submit: Purchase Order</span>
+              <span class="orderFlowChoiceFoot is-red">Turn time begins on PO Submission.</span>
+              <span class="orderFlowChoiceBody is-muted">Final cost determined by payment terms.</span>
+            </button>
+          </div>
+        </div>
+        <div class="orderFlowSelectionActions">
+          <button class="orderFlowBtn orderFlowBtnBack orderFlowSelectionClear" id="orderFlowClearSelectionsBtn" type="button">Clear Selections</button>
+          <button class="orderFlowBtn orderFlowBtnBlueLarge" id="orderFlowSelectionConfirmBtn" type="button">Place Order</button>
+          <div class="orderFlowSelectionErrorStack" id="orderFlowSelectionErrorStack" hidden>
+            <div class="orderFlowSelectionErrorCard" id="orderFlowFulfillmentErrorCard" hidden>Select delivery method to proceed.</div>
+            <div class="orderFlowSelectionErrorCard" id="orderFlowMethodErrorCard" hidden>Select payment method to proceed.</div>
+            <div class="orderFlowSelectionErrorCard" id="orderFlowPoUnlockErrorCard" hidden>This feature is not unlocked.</div>
+          </div>
         </div>
       </div>
+      <div id="orderFlowMethodSection" hidden></div>
       <div id="orderFlowManualSection" hidden>
         <p class="orderFlowBody" id="orderFlowManualBody">We will generate an invoice and lock this portal while payment is pending.</p>
         <div class="orderFlowInfoCard" id="orderFlowManualInfo"></div>
@@ -7812,9 +8824,9 @@
         </div>
       </div>
       <div id="orderFlowBlockingSection" hidden>
-        <p class="orderFlowBody">We are unable to place your order because your art status is not approved.</p>
+        <p class="orderFlowBlockingAlert" id="orderFlowBlockingAlert">Order cannot be placed until all artwork is approved</p>
         <div class="orderFlowBlockingJobs" id="orderFlowBlockingJobs"></div>
-        <div class="orderFlowActions">
+        <div class="orderFlowActions orderFlowBlockingActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowBlockingBackBtn" type="button">Go Back</button>
         </div>
       </div>
@@ -7849,7 +8861,9 @@
   <!-- RT Loading Overlay -->
   <div id="rtLoadingOverlay" class="rt-loading-overlay" aria-hidden="true">
     <div class="rt-loading-card" role="status" aria-live="polite">
-      <div class="rt-spinner" aria-hidden="true"></div>
+      <div class="rt-spinner" aria-hidden="true">
+        <img class="rt-spinner-icon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+      </div>
       <div class="rt-loading-text">
         <div class="rt-loading-title" id="rtLoadingTitle">Working…</div>
         <div class="rt-loading-sub" id="rtLoadingSub">Please wait.</div>
@@ -8509,6 +9523,11 @@
       savedAt: String(parsed && parsed.savedAt ? parsed.savedAt : ''),
       isReadOnly: Boolean(parsed && parsed.isReadOnly === true),
       activePrintJobId: parseActivePrintJobId(parsed),
+      fulfillmentMethod: ['shipping', 'pickup'].indexOf(String(parsed && parsed.fulfillmentMethod || '').trim().toLowerCase()) >= 0
+        ? String(parsed && parsed.fulfillmentMethod || '').trim().toLowerCase()
+        : '',
+      shippingChargeCents: Math.max(0, parseInt(String(parsed && parsed.shippingChargeCents || 0), 10) || 0),
+      shippingModeLabel: String(parsed && parsed.shippingModeLabel ? parsed.shippingModeLabel : '').trim(),
       messageLog: readMessageLogFromState(parsed),
       quantities: {},
       printJobs: {}
@@ -8967,12 +9986,9 @@
   }
 
   function renderPortalStatusBanner(){
-    if (!portalStatusBanner || !portalStatusBadge || !portalStatusText || !portalStatusMeta) return;
-    const summary = describePortalStateForUi();
-    portalStatusBadge.textContent = summary.badge;
-    portalStatusText.textContent = summary.text;
-    portalStatusMeta.textContent = summary.meta || '';
-    portalStatusBanner.hidden = false;
+    if (portalStatusBanner) {
+      portalStatusBanner.hidden = true;
+    }
   }
 
   function renderDashboardAccountStatus(summary){
@@ -9175,6 +10191,12 @@
   const unsavedStayBtn = document.getElementById('unsavedStayBtn');
   const unsavedLeaveBtn = document.getElementById('unsavedLeaveBtn');
   const unsavedSaveAndGoBtn = document.getElementById('unsavedSaveAndGoBtn');
+  const colorRemoveConfirmBackdrop = document.getElementById('colorRemoveConfirmBackdrop');
+  const colorRemoveConfirmModal = document.getElementById('colorRemoveConfirmModal');
+  const colorRemoveConfirmBody = document.getElementById('colorRemoveConfirmBody');
+  const colorRemoveConfirmSkip = document.getElementById('colorRemoveConfirmSkip');
+  const colorRemoveConfirmCancelBtn = document.getElementById('colorRemoveConfirmCancelBtn');
+  const colorRemoveConfirmProceedBtn = document.getElementById('colorRemoveConfirmProceedBtn');
   const artworkApproveBackdrop = document.getElementById('artworkApproveBackdrop');
   const artworkApproveModal = document.getElementById('artworkApproveModal');
   const artworkApproveClose = document.getElementById('artworkApproveClose');
@@ -9194,21 +10216,41 @@
   const artworkPreviewImageWrap = document.getElementById('artworkPreviewImageWrap');
   const orderFlowBackdrop = document.getElementById('orderFlowBackdrop');
   const orderFlowModal = document.getElementById('orderFlowModal');
+  const orderFlowAccountBanner = document.getElementById('orderFlowAccountBanner');
+  const orderFlowHead = orderFlowModal ? orderFlowModal.querySelector('.orderFlowHead') : null;
   const orderFlowClose = document.getElementById('orderFlowClose');
+  const orderFlowTitle = document.getElementById('orderFlowTitle');
   const orderFlowStatePill = document.getElementById('orderFlowStatePill');
+  const orderFlowSummaryCard = document.getElementById('orderFlowSummaryCard');
   const orderFlowSummaryGrid = document.getElementById('orderFlowSummaryGrid');
+  const orderFlowFulfillmentSection = document.getElementById('orderFlowFulfillmentSection');
+  const orderFlowFulfillmentHeading = document.getElementById('orderFlowFulfillmentHeading');
+  const orderFlowShipBtn = document.getElementById('orderFlowShipBtn');
+  const orderFlowShipDateLabel = document.getElementById('orderFlowShipDateLabel');
+  const orderFlowPickupBtn = document.getElementById('orderFlowPickupBtn');
+  const orderFlowPickupDateLabel = document.getElementById('orderFlowPickupDateLabel');
+  const orderFlowPaymentGroup = document.getElementById('orderFlowPaymentGroup');
+  const orderFlowPaymentHeading = document.getElementById('orderFlowPaymentHeading');
+  const orderFlowFulfillmentBackBtn = document.getElementById('orderFlowFulfillmentBackBtn');
+  const orderFlowClearSelectionsBtn = document.getElementById('orderFlowClearSelectionsBtn');
+  const orderFlowSelectionConfirmBtn = document.getElementById('orderFlowSelectionConfirmBtn');
+  const orderFlowSelectionErrorStack = document.getElementById('orderFlowSelectionErrorStack');
+  const orderFlowFulfillmentErrorCard = document.getElementById('orderFlowFulfillmentErrorCard');
+  const orderFlowMethodErrorCard = document.getElementById('orderFlowMethodErrorCard');
+  const orderFlowPoUnlockErrorCard = document.getElementById('orderFlowPoUnlockErrorCard');
   const orderFlowMethodSection = document.getElementById('orderFlowMethodSection');
   const orderFlowManualSection = document.getElementById('orderFlowManualSection');
   const orderFlowPoSection = document.getElementById('orderFlowPoSection');
   const orderFlowBlockingSection = document.getElementById('orderFlowBlockingSection');
+  const orderFlowBlockingAlert = document.getElementById('orderFlowBlockingAlert');
   const orderFlowCheckoutSection = document.getElementById('orderFlowCheckoutSection');
   const orderFlowResultSection = document.getElementById('orderFlowResultSection');
   const orderFlowBackBtn = document.getElementById('orderFlowBackBtn');
   const orderFlowCheckBtn = document.getElementById('orderFlowCheckBtn');
-  const orderFlowCashBtn = document.getElementById('orderFlowCashBtn');
   const orderFlowPoBtn = document.getElementById('orderFlowPoBtn');
   const orderFlowCardBtn = document.getElementById('orderFlowCardBtn');
   const orderFlowAchBtn = document.getElementById('orderFlowAchBtn');
+  const orderFlowCardFeeLabel = document.getElementById('orderFlowCardFeeLabel');
   const orderFlowManualBody = document.getElementById('orderFlowManualBody');
   const orderFlowManualInfo = document.getElementById('orderFlowManualInfo');
   const orderFlowManualBackBtn = document.getElementById('orderFlowManualBackBtn');
@@ -9304,6 +10346,7 @@
   let SAVE_NOTICE_HIDE_TIMER = 0;
   let SEND_MODAL_HIDE_TIMER = 0;
   let UNSAVED_LEAVE_HIDE_TIMER = 0;
+  let COLOR_REMOVE_CONFIRM_HIDE_TIMER = 0;
   let ARTWORK_APPROVE_HIDE_TIMER = 0;
   let ORDER_FLOW_HIDE_TIMER = 0;
   let ARTWORK_APPROVED_BY_JOB_ID = Object.assign({}, INITIAL_ARTWORK_APPROVED_BY_JOB_ID);
@@ -9311,17 +10354,31 @@
   let ARTWORK_APPROVE_MODE = 'review';
   let ARTWORK_APPROVE_JOB_ID = '';
   let ARTWORK_APPROVE_JUST_APPROVED = false;
+  let ARTWORK_APPROVE_NEXT_JOB_ID = '';
+  let ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
+  let ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW = false;
   let ARTWORK_PREVIEW_SLIDES = [];
   let ARTWORK_PREVIEW_INDEX = 0;
   let ARTWORK_PREVIEW_HIDE_TIMER = 0;
-  let ORDER_FLOW_MODE = 'method';
+  let ORDER_FLOW_MODE = 'fulfillment';
   let ORDER_FLOW_BLOCKING_JOBS = [];
+  let ORDER_FLOW_BLOCKING_KIND = 'artwork';
+  let ORDER_FLOW_BLOCKING_ALERT_TEXT = 'Order cannot be placed until all artwork is approved';
+  let ORDER_FLOW_SELECTED_FULFILLMENT = '';
+  let ORDER_FLOW_SHIPPING_CHARGE_CENTS = 0;
+  let ORDER_FLOW_SHIPPING_MODE_LABEL = '';
   let ORDER_FLOW_SELECTED_METHOD = '';
   let ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
   let ORDER_FLOW_CHECKOUT_URL = '';
   let ORDER_FLOW_CHECKOUT_WINDOW = null;
   let ORDER_FLOW_RESULT_KIND = 'info';
   let ORDER_FLOW_REQUEST_IN_FLIGHT = false;
+  let ORDER_FLOW_FULFILLMENT_ERROR = false;
+  let ORDER_FLOW_METHOD_ERROR = false;
+  let ORDER_FLOW_PO_UNLOCK_ERROR = false;
+  let ORDER_FLOW_TAX_ACTION_IN_FLIGHT = false;
+  let ORDER_FLOW_TERMS_ACTION_IN_FLIGHT = false;
+  let COLOR_REMOVE_CONFIRM_RESOLVER = null;
   let UNSAVED_LEAVE_ACTION_PENDING = false;
   let SNAPSHOT_DIRTY_BASELINE_KEY = '';
   let DASHBOARD_VIEW_VISIBLE_AT = 0;
@@ -9333,6 +10390,7 @@
   const RT_PORTAL_EVENT_PING = 'RT_PORTAL_PING';
   const RT_PORTAL_EVENT_LOAD_TOKEN = 'RT_PORTAL_LOAD_TOKEN';
   const TEAM_MODE_UNLOCK_STORAGE_PREFIX = 'rtTeamModeUnlocked';
+  const COLOR_REMOVE_CONFIRM_STORAGE_PREFIX = 'rtSkipColorRemoveConfirm';
   const RT_PORTAL_PARENT_ORIGINS = new Set([
     'https://www.redthreads.com',
     'https://redthreads.com'
@@ -10073,6 +11131,92 @@
         unsavedLeaveBackdrop.hidden = true;
       }
     }, 160);
+  }
+
+  function colorRemoveConfirmStorageKey(token){
+    return COLOR_REMOVE_CONFIRM_STORAGE_PREFIX + '::' + String(token || '').trim();
+  }
+
+  function readStoredColorRemoveConfirmSkip(token){
+    const key = colorRemoveConfirmStorageKey(token);
+    if (!key || key === COLOR_REMOVE_CONFIRM_STORAGE_PREFIX + '::') return false;
+    try {
+      return sessionStorage.getItem(key) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function writeStoredColorRemoveConfirmSkip(token, skip){
+    const key = colorRemoveConfirmStorageKey(token);
+    if (!key || key === COLOR_REMOVE_CONFIRM_STORAGE_PREFIX + '::') return;
+    try {
+      if (skip) {
+        sessionStorage.setItem(key, '1');
+      } else {
+        sessionStorage.removeItem(key);
+      }
+    } catch (_) {}
+  }
+
+  function settleColorRemoveConfirm_(accepted){
+    const resolver = COLOR_REMOVE_CONFIRM_RESOLVER;
+    COLOR_REMOVE_CONFIRM_RESOLVER = null;
+    if (resolver) resolver(Boolean(accepted));
+  }
+
+  function closeColorRemoveConfirmModal(options){
+    if (!colorRemoveConfirmBackdrop) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (COLOR_REMOVE_CONFIRM_HIDE_TIMER) {
+      clearTimeout(COLOR_REMOVE_CONFIRM_HIDE_TIMER);
+      COLOR_REMOVE_CONFIRM_HIDE_TIMER = 0;
+    }
+    colorRemoveConfirmBackdrop.classList.remove('open');
+    syncOverlayScrollLock();
+    if (opts.immediate === true) {
+      colorRemoveConfirmBackdrop.hidden = true;
+      return;
+    }
+    COLOR_REMOVE_CONFIRM_HIDE_TIMER = setTimeout(() => {
+      COLOR_REMOVE_CONFIRM_HIDE_TIMER = 0;
+      if (!colorRemoveConfirmBackdrop.classList.contains('open')) {
+        colorRemoveConfirmBackdrop.hidden = true;
+      }
+    }, 160);
+  }
+
+  function cancelColorRemoveConfirm_(){
+    closeColorRemoveConfirmModal();
+    settleColorRemoveConfirm_(false);
+  }
+
+  function proceedColorRemoveConfirm_(){
+    const shouldSkip = Boolean(colorRemoveConfirmSkip && colorRemoveConfirmSkip.checked);
+    if (shouldSkip) writeStoredColorRemoveConfirmSkip(getSelectedTokenHint(), true);
+    closeColorRemoveConfirmModal();
+    settleColorRemoveConfirm_(true);
+  }
+
+  function requestColorRemoveConfirmation_(){
+    if (!colorRemoveConfirmBackdrop) return Promise.resolve(true);
+    if (readStoredColorRemoveConfirmSkip(getSelectedTokenHint())) return Promise.resolve(true);
+    if (COLOR_REMOVE_CONFIRM_RESOLVER) {
+      settleColorRemoveConfirm_(false);
+    }
+    if (colorRemoveConfirmBody) {
+      colorRemoveConfirmBody.textContent = 'This colorway has quantities entered. Remove anyway?';
+    }
+    if (colorRemoveConfirmSkip) colorRemoveConfirmSkip.checked = false;
+    colorRemoveConfirmBackdrop.hidden = false;
+    return new Promise(resolve => {
+      COLOR_REMOVE_CONFIRM_RESOLVER = resolve;
+      requestAnimationFrame(() => {
+        colorRemoveConfirmBackdrop.classList.add('open');
+        syncOverlayScrollLock();
+        if (colorRemoveConfirmCancelBtn) colorRemoveConfirmCancelBtn.focus();
+      });
+    });
   }
 
   async function continueHomeWithoutSaving(){
@@ -10907,6 +12051,7 @@
       (teamGateBackdrop && !teamGateBackdrop.hidden) ||
       (sendModalBackdrop && !sendModalBackdrop.hidden && sendModalBackdrop.classList.contains('open')) ||
       (unsavedLeaveBackdrop && !unsavedLeaveBackdrop.hidden && unsavedLeaveBackdrop.classList.contains('open')) ||
+      (colorRemoveConfirmBackdrop && !colorRemoveConfirmBackdrop.hidden && colorRemoveConfirmBackdrop.classList.contains('open')) ||
       (artworkApproveBackdrop && !artworkApproveBackdrop.hidden && artworkApproveBackdrop.classList.contains('open')) ||
       (artworkPreviewLightbox && !artworkPreviewLightbox.hidden && artworkPreviewLightbox.classList.contains('open')) ||
       (orderFlowBackdrop && !orderFlowBackdrop.hidden && orderFlowBackdrop.classList.contains('open'));
@@ -10925,6 +12070,13 @@
     introModal.classList.remove('open');
     introModal.setAttribute('aria-hidden', 'true');
     syncOverlayScrollLock();
+  }
+
+  function shouldAutoShowIntro(){
+    const orderState = String(CURRENT_STATE_SUMMARY.currentOrderState || '').trim().toLowerCase();
+    const paymentState = String(CURRENT_STATE_SUMMARY.currentPaymentState || '').trim().toLowerCase();
+    if (paymentState === 'checkout_created' || orderState === 'payment_in_progress') return false;
+    return true;
   }
 
   function setImageSrcWithFallback(imgEl, src, fallback){
@@ -11144,6 +12296,61 @@
     if (!target) return '';
     const shortDate = target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     return 'By ' + shortDate + (parsed.rush ? ' (rush)' : '');
+  }
+
+  function extractExplicitDateValue(value){
+    const text = formatTurnaroundText(value);
+    if (!text) return null;
+    if (/\b\d+\s*(business\s*)?day/i.test(text)) return null;
+    if (/^standard$/i.test(text)) return null;
+
+    const monthPattern = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,\s*\d{2,4})?/i;
+    const monthMatch = text.match(monthPattern);
+    if (monthMatch && monthMatch[0]) {
+      const parsedMonth = new Date(monthMatch[0]);
+      if (!Number.isNaN(parsedMonth.getTime())) {
+        parsedMonth.setHours(12, 0, 0, 0);
+        return parsedMonth;
+      }
+    }
+
+    const slashMatch = text.match(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/);
+    if (slashMatch && slashMatch[0]) {
+      const parsedSlash = new Date(slashMatch[0]);
+      if (!Number.isNaN(parsedSlash.getTime())) {
+        parsedSlash.setHours(12, 0, 0, 0);
+        return parsedSlash;
+      }
+    }
+
+    const parsed = new Date(text);
+    if (!Number.isNaN(parsed.getTime())) {
+      parsed.setHours(12, 0, 0, 0);
+      return parsed;
+    }
+
+    return null;
+  }
+
+  function getHeaderEtaDateValue(job, summary){
+    const explicitDate = extractExplicitDateValue(job && job.deliveryEstimate) || extractExplicitDateValue(job && job.turnaroundTime);
+    if (explicitDate) return explicitDate.getTime();
+
+    const renderedTurnaround = String((summary && summary.turnaround) || '').trim();
+    const renderedParsed = parseBusinessDayCount(renderedTurnaround);
+    if (renderedParsed) {
+      const renderedDate = addBusinessDaysFromToday(renderedParsed.dayCount);
+      if (renderedDate) return renderedDate.getTime();
+    }
+
+    const baseTurnaround = pickBaseTurnaround(job);
+    const baseParsed = parseBusinessDayCount(baseTurnaround);
+    if (baseParsed) {
+      const baseDate = addBusinessDaysFromToday(baseParsed.dayCount);
+      if (baseDate) return baseDate.getTime();
+    }
+
+    return null;
   }
 
   function getHeaderEtaText(job, summary){
@@ -11760,8 +12967,20 @@
     resetSnapshotDirtyBaseline();
   }
 
+  function getOrderFlowIncludedJobs_(){
+    return getVisibleJobs().filter(job => getOrderFlowEnteredUnitsForJob_(job) > 0);
+  }
+
   function getUnapprovedActiveJobs(){
-    return getVisibleJobs().filter(job => !isArtworkApprovedForJob(job.printJobId));
+    return getOrderFlowIncludedJobs_().filter(job => !isArtworkApprovedForJob(job.printJobId));
+  }
+
+  function queueArtworkApprovalContinue_(){
+    ARTWORK_APPROVE_CONTINUE_REQUESTED = true;
+    if (artworkApproveDoneBtn) {
+      artworkApproveDoneBtn.disabled = true;
+      artworkApproveDoneBtn.textContent = ARTWORK_APPROVE_NEXT_JOB_ID ? 'Loading Next Job...' : 'Continuing to Order...';
+    }
   }
 
   async function handleArtworkApprovalConfirm(){
@@ -11770,11 +12989,16 @@
     const targetJobId = String(ARTWORK_APPROVE_JOB_ID || activePrintJobId || '').trim();
     if (!targetJobId) return;
     if (isArtworkApprovedForJob(targetJobId)) {
+      if (ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW) {
+        continueArtworkApprovalOrderFlow_();
+        return;
+      }
       ARTWORK_APPROVE_JUST_APPROVED = false;
       setArtworkApproveMode('success');
       return;
     }
     ARTWORK_APPROVE_SAVE_IN_FLIGHT = true;
+    ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
     if (artworkApproveConfirmBtn) {
       artworkApproveConfirmBtn.disabled = true;
       artworkApproveConfirmBtn.textContent = 'Approving...';
@@ -11788,11 +13012,18 @@
     try {
       const resp = await persistArtworkApproval(targetJobId);
       syncChatAuditTrailFromResponse(resp);
+      if (ARTWORK_APPROVE_CONTINUE_REQUESTED && ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW) {
+        ARTWORK_APPROVE_SAVE_IN_FLIGHT = false;
+        ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
+        continueArtworkApprovalOrderFlow_();
+        return;
+      }
     } catch (err) {
       setArtworkApprovedForJob(targetJobId, false);
       refreshArtworkApprovedButtons();
       updatePrintJobTabSummaries();
       ARTWORK_APPROVE_JUST_APPROVED = false;
+      ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
       setArtworkApproveMode('review');
       showNotice('Could not save artwork approval. Please try again.', 'err');
     } finally {
@@ -11800,6 +13031,9 @@
       if (artworkApproveConfirmBtn) {
         artworkApproveConfirmBtn.disabled = false;
         artworkApproveConfirmBtn.textContent = 'Approve Artwork';
+      }
+      if (artworkApproveDoneBtn) {
+        artworkApproveDoneBtn.disabled = false;
       }
     }
   }
@@ -11843,8 +13077,19 @@
     ARTWORK_APPROVE_MODE = (mode === 'success') ? 'success' : 'review';
     if (artworkApproveReview) artworkApproveReview.hidden = ARTWORK_APPROVE_MODE !== 'review';
     if (artworkApproveSuccess) artworkApproveSuccess.hidden = ARTWORK_APPROVE_MODE !== 'success';
-    if (artworkApproveDoneBtn && ARTWORK_APPROVE_MODE === 'success') {
-      artworkApproveDoneBtn.textContent = 'Return to Job';
+    if (artworkApproveDoneBtn) {
+      ARTWORK_APPROVE_NEXT_JOB_ID = '';
+      if (ARTWORK_APPROVE_MODE === 'success'
+        && ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW
+        && ARTWORK_APPROVE_JUST_APPROVED) {
+        const nextJob = getUnapprovedActiveJobs()[0] || null;
+        ARTWORK_APPROVE_NEXT_JOB_ID = nextJob ? nextJob.printJobId : '';
+        artworkApproveDoneBtn.textContent = ARTWORK_APPROVE_NEXT_JOB_ID
+          ? 'Approve Artwork for Next Job'
+          : 'Continue to Order';
+      } else {
+        artworkApproveDoneBtn.textContent = 'Go Back to Job';
+      }
     }
     const targetJobId = String(ARTWORK_APPROVE_JOB_ID || activePrintJobId || '').trim();
     const showDisapprove = ARTWORK_APPROVE_MODE === 'success'
@@ -11861,15 +13106,22 @@
     closeArtworkPreviewLightbox({ immediate: true });
     ARTWORK_APPROVE_JOB_ID = '';
     ARTWORK_APPROVE_JUST_APPROVED = false;
+    ARTWORK_APPROVE_NEXT_JOB_ID = '';
+    ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
+    ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW = false;
     ARTWORK_PREVIEW_SLIDES = [];
     ARTWORK_PREVIEW_INDEX = 0;
     setArtworkApproveMode('review');
+    if (artworkApproveBackBtn) {
+      artworkApproveBackBtn.textContent = 'Go Back to Job';
+    }
     if (artworkApproveConfirmBtn) {
       artworkApproveConfirmBtn.disabled = false;
       artworkApproveConfirmBtn.textContent = 'Approve Artwork';
     }
     if (artworkApproveDoneBtn) {
-      artworkApproveDoneBtn.textContent = 'Return to Job';
+      artworkApproveDoneBtn.disabled = false;
+      artworkApproveDoneBtn.textContent = 'Go Back to Job';
     }
     if (artworkApproveDisapproveBtn) {
       artworkApproveDisapproveBtn.disabled = false;
@@ -12023,18 +13275,36 @@
     }, 170);
   }
 
-  function openArtworkApproveModal(jobId){
+  function continueArtworkApprovalOrderFlow_(){
+    const fallbackNextJob = getUnapprovedActiveJobs()[0] || null;
+    const nextJobId = String(ARTWORK_APPROVE_NEXT_JOB_ID || (fallbackNextJob && fallbackNextJob.printJobId) || '').trim();
+    if (nextJobId) {
+      const visibleJobs = getVisibleJobs();
+      setActivePrintJob(nextJobId, { visibleJobs: visibleJobs });
+      openArtworkApproveModal(nextJobId, { fromOrderFlow: true });
+      return true;
+    }
+    closeArtworkApproveModal({ immediate: true });
+    requestAnimationFrame(() => {
+      openOrderFlowModal();
+    });
+    return true;
+  }
+
+  function openArtworkApproveModal(jobId, options){
     if (!artworkApproveBackdrop) return;
     if (!CAN_EDIT()) {
       showNotice('Artwork approval is locked after the order is finalized.', 'err');
       return;
     }
+    const opts = (options && typeof options === 'object') ? options : {};
     const requestedId = String(jobId || activePrintJobId || '').trim();
     const fallbackJob = getVisibleJobs()[0] || null;
     const job = getJobById(requestedId) || fallbackJob;
     if (!job) return;
     ARTWORK_APPROVE_JOB_ID = job.printJobId;
     ARTWORK_APPROVE_JUST_APPROVED = false;
+    ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW = !!opts.fromOrderFlow;
     setArtworkApproveMode(isArtworkApprovedForJob(job.printJobId) ? 'success' : 'review');
     renderArtworkApproveMockups(job);
     artworkApproveBackdrop.hidden = false;
@@ -12071,52 +13341,319 @@
 
   function renderOrderFlowBlockingJobs(){
     if (!orderFlowBlockingJobs) return;
+    if (orderFlowBlockingAlert) {
+      orderFlowBlockingAlert.textContent = ORDER_FLOW_BLOCKING_ALERT_TEXT || 'Order cannot be placed until all artwork is approved';
+      orderFlowBlockingAlert.classList.add('is-error');
+    }
+    if (orderFlowBlockingBackBtn) {
+      orderFlowBlockingBackBtn.hidden = ORDER_FLOW_BLOCKING_KIND === 'minimums';
+    }
     orderFlowBlockingJobs.innerHTML = '';
     ORDER_FLOW_BLOCKING_JOBS.forEach(job => {
       const btn = createEl('button', 'orderFlowJobBtn', '');
       btn.type = 'button';
       btn.dataset.orderFlowJobId = job.printJobId;
       btn.appendChild(createEl('span', 'orderFlowJobBtnMain', job.title));
-      btn.appendChild(createEl('span', 'orderFlowJobBtnSub', 'Art status is not approved'));
+      if (job.subline) {
+        btn.appendChild(createEl('span', 'orderFlowJobBtnSub', job.subline));
+      }
+      if (job.extraLine) {
+        btn.appendChild(createEl('span', 'orderFlowJobBtnExtra', job.extraLine));
+      }
       btn.addEventListener('click', () => {
+        const blockingKind = ORDER_FLOW_BLOCKING_KIND;
         const visibleJobs = getVisibleJobs();
-        closeOrderFlowModal();
         setActivePrintJob(job.printJobId, { visibleJobs: visibleJobs });
+        closeOrderFlowModal({ immediate: true });
+        if (blockingKind === 'artwork') {
+          requestAnimationFrame(() => {
+            openArtworkApproveModal(job.printJobId, { fromOrderFlow: true });
+          });
+          return;
+        }
+        requestAnimationFrame(() => {
+          const section = JOB_DOM.get(job.printJobId);
+          if (section && section.section && typeof section.section.scrollIntoView === 'function') {
+            section.section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
       });
       orderFlowBlockingJobs.appendChild(btn);
     });
   }
 
-  function buildOrderFlowSummaryItems(){
-    const units = String((document.getElementById('headerTotalUnitsMini') && document.getElementById('headerTotalUnitsMini').textContent) || '0').trim() || '0';
-    const total = String((document.getElementById('headerTotalPricingMini') && document.getElementById('headerTotalPricingMini').textContent) || '--').trim() || '--';
-    const taxState = ACCOUNT_SUMMARY.taxExemptActive
-      ? 'Tax Exempt Active'
-      : (ACCOUNT_SUMMARY.taxExemptApproved ? 'Tax Exempt Approved' : 'Standard Tax');
-    const selectedMethod = String(ORDER_FLOW_SELECTED_METHOD || '').trim().toLowerCase();
-    const poState = ACCOUNT_SUMMARY.poAvailable
-      ? 'Approved'
-      : (selectedMethod === 'purchase_order' ? 'Required' : 'Not required for card/ACH');
-    const termsLabel = selectedMethod === 'purchase_order' ? 'P.O. Terms' : 'Terms';
-    return [
-      ['Project', 'Job #' + getDealNumber()],
-      ['Units', units],
-      ['Total', total],
-      [termsLabel, poState],
-      ['Tax', taxState],
-      ['Portal', IS_READ_ONLY ? 'Locked' : 'Editable']
-    ];
+  function getOrderFlowEnteredUnitsForJob_(job){
+    if (!job || !job.printJobId) return 0;
+    return getVisibleSkus(job).reduce((jobTotal, sku) => {
+      return jobTotal + getVisibleColors(job.printJobId, sku).reduce((skuTotal, color) => {
+        return skuTotal + rowQty(job.printJobId, sku, color);
+      }, 0);
+    }, 0);
+  }
+
+  function getOrderFlowMinimumUnitsForJob_(job){
+    if (!job) return 0;
+    const tiers = normalizeTierList(job.priceTiers, getVisibleSkus(job))
+      .map(t => toNumber(t, NaN))
+      .filter(Number.isFinite)
+      .filter(t => t > 0 && t < 2000)
+      .sort((a, b) => a - b);
+    return tiers.length ? tiers[0] : 0;
+  }
+
+  function getOrderFlowMinimumBlockingJobs_(){
+    return getOrderFlowIncludedJobs_().map(job => {
+      const enteredUnits = getOrderFlowEnteredUnitsForJob_(job);
+      const minimumUnits = getOrderFlowMinimumUnitsForJob_(job);
+      return {
+        job: job,
+        enteredUnits: enteredUnits,
+        minimumUnits: minimumUnits
+      };
+    }).filter(item => item.enteredUnits > 0 && item.minimumUnits > 0 && item.enteredUnits < item.minimumUnits);
+  }
+
+  function formatOrderFlowProductionTime_(value){
+    const cleaned = formatTurnaroundText(value)
+      .replace(/^turnaround\s*:\s*/i, '')
+      .replace(/\bbusiness\s+days?\b/gi, 'biz days')
+      .trim();
+    return cleaned || '--';
+  }
+
+  function getOrderFlowJobSummaryRows_(){
+    return getOrderFlowIncludedJobs_().slice(0, 4).map((job, idx) => {
+      const summary = JOB_SUMMARIES.get(job.printJobId) || {};
+      const printJobNumber = getPrintJobDisplayNumber(job.printJobId) || (idx + 1);
+      return {
+        name: String(summary.name || job.printJobName || ('Project ' + printJobNumber)).trim(),
+        units: String(summary.units || 0),
+        total: money(Number(summary.total) || 0),
+        production: formatOrderFlowProductionTime_(summary.turnaround || pickBaseTurnaround(job) || '')
+      };
+    });
+  }
+
+  function getOrderFlowReadyDateLabel_(){
+    let furthestValue = null;
+    let furthestLabel = '';
+    let fallbackLabel = '';
+
+    getOrderFlowIncludedJobs_().forEach(job => {
+      const summary = JOB_SUMMARIES.get(job.printJobId) || {};
+      const label = String(summary.readyDateLabel || '').trim();
+      const value = Number(summary.readyDateValue);
+      if (!fallbackLabel && label) fallbackLabel = label;
+      if (!Number.isFinite(value)) return;
+      if (furthestValue == null || value > furthestValue) {
+        furthestValue = value;
+        furthestLabel = label || new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+    });
+
+    return furthestLabel || fallbackLabel || '--';
+  }
+
+  function getOrderFlowDiscountLabel_(discountRate){
+    const rate = Number(discountRate);
+    if (!Number.isFinite(rate) || rate <= 0) return money(0);
+    const totalCents = getOrderFlowPortalTotalCents_();
+    return money(Math.round(totalCents * rate) / 100);
+  }
+
+  function getOrderFlowDiscountedTotalLabel_(discountRate){
+    const rate = Number(discountRate);
+    const totalCents = getOrderFlowPortalTotalCents_();
+    if (!Number.isFinite(rate) || rate <= 0) return money(totalCents / 100);
+    const discountCents = Math.round(totalCents * rate);
+    return money(Math.max(0, (totalCents - discountCents) / 100));
+  }
+
+  function getOrderFlowConvenienceFeeLabel_(feeRate){
+    const rate = Number(feeRate);
+    if (!Number.isFinite(rate) || rate <= 0) return money(0);
+    const totalCents = getOrderFlowPortalTotalCents_();
+    return money(Math.round(totalCents * rate) / 100);
+  }
+
+  function getOrderFlowConvenienceFeeTotalLabel_(feeRate){
+    const rate = Number(feeRate);
+    const totalCents = getOrderFlowPortalTotalCents_();
+    if (!Number.isFinite(rate) || rate <= 0) return money(totalCents / 100);
+    const feeCents = Math.round(totalCents * rate);
+    return money((totalCents + feeCents) / 100);
+  }
+
+  function setOrderFlowChoiceSelected_(btn, selected){
+    if (!btn) return;
+    const isSelected = !!selected;
+    btn.classList.toggle('is-selected', isSelected);
+    btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+  }
+
+  function renderOrderFlowModalTitle_(){
+    if (!orderFlowTitle) return;
+    if (ORDER_FLOW_MODE !== 'blocking' && ORDER_FLOW_MODE !== 'fulfillment') {
+      orderFlowTitle.textContent = 'Place Order';
+      orderFlowTitle.removeAttribute('aria-label');
+      return;
+    }
+
+    const dealNumber = String(getDealNumber() || '--').trim() || '--';
+    orderFlowTitle.innerHTML = '';
+    orderFlowTitle.setAttribute('aria-label', 'Project ' + dealNumber + ' Snapshot');
+    orderFlowTitle.appendChild(createEl('span', 'orderFlowTitleText', 'Project'));
+    orderFlowTitle.appendChild(createEl('span', 'orderFlowTitleAccent', dealNumber));
+    orderFlowTitle.appendChild(createEl('span', 'orderFlowTitleText', 'Snapshot'));
+  }
+
+  function appendOrderFlowSummaryCell_(parent, text, valueClass){
+    const cell = createEl('div', 'orderFlowSummaryJobCell');
+    cell.appendChild(createEl('span', 'orderFlowSummaryJobCellVal' + (valueClass ? (' ' + valueClass) : ''), text));
+    parent.appendChild(cell);
+  }
+
+  function buildOrderFlowSummaryNoteNode_(){
+    const note = createEl('div', 'orderFlowSummaryNote');
+    note.textContent = 'Shipping, Taxes & Fees calculated at checkout. Turn time begins once payment is received.';
+    return note;
+  }
+
+  function getOrderFlowAccountPersonName_(){
+    return String(
+      ACCOUNT_SUMMARY.primaryContactName
+      || ACCOUNT_SUMMARY.billingContactName
+      || getClientName()
+      || '--'
+    ).trim() || '--';
+  }
+
+  function getOrderFlowAccountOrganizationName_(){
+    return String(ACCOUNT_SUMMARY.orgName || '').trim() || 'Individual';
+  }
+
+  function getOrderFlowTermsApprovedLabel_(){
+    const raw = String(ACCOUNT_SUMMARY.termsStatus || '').trim();
+    const normalized = raw.toLowerCase();
+    if (raw && normalized !== 'approved' && normalized !== 'pending_submission' && normalized !== 'not_started') {
+      return raw;
+    }
+    return 'Approved';
+  }
+
+  function getOrderFlowTaxActionLabel_(){
+    const status = String(ACCOUNT_SUMMARY.taxExemptStatus || '').trim().toLowerCase();
+    if (status === 'pending_submission') return 'Sales Tax Exemption Request Pending';
+    return 'Add sales tax exemption to your account';
+  }
+
+  function getOrderFlowTermsActionLabel_(){
+    const status = String(ACCOUNT_SUMMARY.termsStatus || '').trim().toLowerCase();
+    if (status === 'pending_submission') return 'P.O. submission request pending';
+    return 'Unlock P.O. submission on your account';
+  }
+
+  function renderOrderFlowAccountBanner_(){
+    if (!orderFlowAccountBanner) return;
+    const showBanner = ORDER_FLOW_MODE === 'fulfillment';
+    orderFlowAccountBanner.hidden = !showBanner;
+    if (!showBanner) {
+      orderFlowAccountBanner.innerHTML = '';
+      return;
+    }
+
+    orderFlowAccountBanner.innerHTML = '';
+
+    const identity = createEl('div', 'orderFlowAccountIdentity');
+    identity.appendChild(createEl('span', 'orderFlowAccountPerson', getOrderFlowAccountPersonName_()));
+    const org = createEl('span', 'orderFlowAccountOrg');
+    org.appendChild(createEl('span', '', getOrderFlowAccountOrganizationName_()));
+    identity.appendChild(org);
+    orderFlowAccountBanner.appendChild(identity);
+
+    const actionsRow = createEl('div', 'orderFlowAccountActionsRow');
+
+    if (ACCOUNT_SUMMARY.taxExemptActive || ACCOUNT_SUMMARY.taxExemptApproved) {
+      actionsRow.appendChild(
+        createEl('div', 'orderFlowAccountStatusLine', 'Sales Tax Exemption: On file')
+      );
+    } else {
+      const taxBtn = createEl('button', 'orderFlowAccountActionBtn', getOrderFlowTaxActionLabel_());
+      taxBtn.type = 'button';
+      taxBtn.id = 'orderFlowTaxActionBtn';
+      if (ORDER_FLOW_TAX_ACTION_IN_FLIGHT) {
+        taxBtn.disabled = true;
+        taxBtn.classList.add('is-busy');
+        taxBtn.textContent = 'Recording sales tax exemption request...';
+      }
+      taxBtn.addEventListener('click', requestOrderFlowTaxExemptSubmission_);
+      actionsRow.appendChild(taxBtn);
+    }
+
+    if (ACCOUNT_SUMMARY.poAvailable || ACCOUNT_SUMMARY.termsApproved) {
+      actionsRow.appendChild(
+        createEl('div', 'orderFlowAccountStatusLine', 'Terms Approved: ' + getOrderFlowTermsApprovedLabel_())
+      );
+    } else {
+      const termsBtn = createEl('button', 'orderFlowAccountActionBtn', getOrderFlowTermsActionLabel_());
+      termsBtn.type = 'button';
+      termsBtn.id = 'orderFlowTermsActionBtn';
+      if (ORDER_FLOW_TERMS_ACTION_IN_FLIGHT) {
+        termsBtn.disabled = true;
+        termsBtn.classList.add('is-busy');
+        termsBtn.textContent = 'Recording P.O. submission request...';
+      }
+      if (ORDER_FLOW_PO_UNLOCK_ERROR) {
+        termsBtn.classList.add('is-attention');
+      }
+      termsBtn.addEventListener('click', requestOrderFlowTermsEnrollment_);
+      actionsRow.appendChild(termsBtn);
+    }
+
+    orderFlowAccountBanner.appendChild(actionsRow);
   }
 
   function renderOrderFlowSummaryCard(){
     if (!orderFlowSummaryGrid) return;
     orderFlowSummaryGrid.innerHTML = '';
-    buildOrderFlowSummaryItems().forEach(([label, value]) => {
-      const cell = createEl('div', 'orderFlowSummaryItem');
-      cell.appendChild(createEl('span', 'orderFlowSummaryKey', label));
-      cell.appendChild(createEl('span', 'orderFlowSummaryVal', value));
-      orderFlowSummaryGrid.appendChild(cell);
+
+    const title = createEl('h3', 'orderFlowSummaryTitle', 'Order Summary');
+    orderFlowSummaryGrid.appendChild(title);
+
+    const inner = createEl('div', 'orderFlowSummaryInner');
+    const top = createEl('div', 'orderFlowSummaryTop');
+    const includedTotals = getOrderFlowIncludedTotals_();
+    const topItems = [
+      ['Total Units: ', String(includedTotals.units || 0)],
+      ['Total Cost: ', money(includedTotals.totalCents / 100)],
+      ['Ready to ship/pickup: ', getOrderFlowReadyDateLabel_()]
+    ];
+    topItems.forEach(([label, value]) => {
+      const item = createEl('div', 'orderFlowSummaryTopItem');
+      item.appendChild(createEl('span', 'orderFlowSummaryTopLabel', label));
+      item.appendChild(createEl('span', 'orderFlowSummaryTopAccent', value));
+      top.appendChild(item);
     });
+    inner.appendChild(top);
+
+    const jobs = createEl('div', 'orderFlowSummaryJobs');
+    const rows = getOrderFlowJobSummaryRows_();
+    if (!rows.length) {
+      jobs.appendChild(createEl('div', 'orderFlowSummaryEmpty', 'No active print jobs are currently included in this order.'));
+    } else {
+      rows.forEach(row => {
+        const jobRow = createEl('div', 'orderFlowSummaryJobRow');
+        appendOrderFlowSummaryCell_(jobRow, row.name, 'orderFlowSummaryJobName');
+        appendOrderFlowSummaryCell_(jobRow, 'Units: ' + row.units);
+        appendOrderFlowSummaryCell_(jobRow, 'Cost: ' + row.total);
+        appendOrderFlowSummaryCell_(jobRow, 'Turn Time: ' + row.production);
+        jobs.appendChild(jobRow);
+      });
+      jobs.appendChild(buildOrderFlowSummaryNoteNode_());
+    }
+    inner.appendChild(jobs);
+
+    orderFlowSummaryGrid.appendChild(inner);
   }
 
   function setOrderFlowStatePill(text){
@@ -12124,9 +13661,203 @@
     orderFlowStatePill.textContent = String(text || 'Checkout');
   }
 
+  function getOrderFlowIncludedTotals_(){
+    return getOrderFlowIncludedJobs_().reduce((acc, job) => {
+      const summary = JOB_SUMMARIES.get(job.printJobId) || {};
+      acc.units += Number(summary.units) || 0;
+      acc.totalCents += Math.max(0, Math.round((Number(summary.total) || 0) * 100));
+      return acc;
+    }, { units: 0, totalCents: 0 });
+  }
+
+  function getOrderFlowPortalTotalCents_(){
+    return getOrderFlowIncludedTotals_().totalCents;
+  }
+
+  function getOrderFlowFulfillmentState_(method){
+    const normalized = String(method || '').trim().toLowerCase();
+    const totalCents = getOrderFlowPortalTotalCents_();
+    if (normalized === 'shipping') {
+      const qualifiesForFreeShipping = totalCents > 50000;
+      return {
+        fulfillmentMethod: 'shipping',
+        shippingChargeCents: qualifiesForFreeShipping ? 0 : 2500,
+        shippingModeLabel: 'UPS Standard Ground Services',
+        qualifiesForFreeShipping: qualifiesForFreeShipping
+      };
+    }
+    if (normalized === 'pickup') {
+      return {
+        fulfillmentMethod: 'pickup',
+        shippingChargeCents: 0,
+        shippingModeLabel: 'Local Pickup',
+        qualifiesForFreeShipping: false
+      };
+    }
+    return {
+      fulfillmentMethod: '',
+      shippingChargeCents: 0,
+      shippingModeLabel: '',
+      qualifiesForFreeShipping: false
+    };
+  }
+
+  function applyOrderFlowFulfillmentSelection_(method){
+    const fulfillment = getOrderFlowFulfillmentState_(method);
+    ORDER_FLOW_SELECTED_FULFILLMENT = fulfillment.fulfillmentMethod;
+    ORDER_FLOW_SHIPPING_CHARGE_CENTS = fulfillment.shippingChargeCents;
+    ORDER_FLOW_SHIPPING_MODE_LABEL = fulfillment.shippingModeLabel;
+    ORDER_FLOW_FULFILLMENT_ERROR = false;
+    renderOrderFlowFulfillmentSection();
+    renderOrderFlowSummaryCard();
+    return fulfillment;
+  }
+
+  function applyOrderFlowMethodSelection_(method){
+    ORDER_FLOW_SELECTED_METHOD = String(method || '').trim().toLowerCase();
+    ORDER_FLOW_METHOD_ERROR = false;
+    ORDER_FLOW_PO_UNLOCK_ERROR = false;
+    renderOrderFlowFulfillmentSection();
+  }
+
+  function clearOrderFlowSelections_(){
+    ORDER_FLOW_SELECTED_FULFILLMENT = '';
+    ORDER_FLOW_SHIPPING_CHARGE_CENTS = 0;
+    ORDER_FLOW_SHIPPING_MODE_LABEL = '';
+    ORDER_FLOW_SELECTED_METHOD = '';
+    ORDER_FLOW_FULFILLMENT_ERROR = false;
+    ORDER_FLOW_METHOD_ERROR = false;
+    ORDER_FLOW_PO_UNLOCK_ERROR = false;
+    clearNotice();
+    renderOrderFlowFulfillmentSection();
+    renderOrderFlowSummaryCard();
+  }
+
+  async function requestOrderFlowTermsEnrollment_(){
+    if (ORDER_FLOW_TERMS_ACTION_IN_FLIGHT || ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    ORDER_FLOW_TERMS_ACTION_IN_FLIGHT = true;
+    ORDER_FLOW_PO_UNLOCK_ERROR = false;
+    renderOrderFlowAccountBanner_();
+    renderOrderFlowFulfillmentSection();
+    try {
+      const resp = await callServer('requestTermsEnrollment', { token: CURRENT_TOKEN });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to start terms enrollment.'));
+      }
+      ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
+    } catch (err) {
+      showNotice(String((err && err.message) || err), 'err');
+    } finally {
+      ORDER_FLOW_TERMS_ACTION_IN_FLIGHT = false;
+      renderOrderFlowAccountBanner_();
+      renderOrderFlowFulfillmentSection();
+    }
+  }
+
+  async function requestOrderFlowTaxExemptSubmission_(){
+    if (ORDER_FLOW_TAX_ACTION_IN_FLIGHT || ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    ORDER_FLOW_TAX_ACTION_IN_FLIGHT = true;
+    renderOrderFlowAccountBanner_();
+    try {
+      const resp = await callServer('requestTaxExemptSubmission', { token: CURRENT_TOKEN });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to start tax exemption submission.'));
+      }
+      ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
+    } catch (err) {
+      showNotice(String((err && err.message) || err), 'err');
+    } finally {
+      ORDER_FLOW_TAX_ACTION_IN_FLIGHT = false;
+      renderOrderFlowAccountBanner_();
+    }
+  }
+
+  function submitOrderFlowSelection_(){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    if (maybeBlockOrderFlow()) return;
+    if (maybeBlockOrderFlowMinimums()) return;
+    ORDER_FLOW_FULFILLMENT_ERROR = !ORDER_FLOW_SELECTED_FULFILLMENT;
+    ORDER_FLOW_METHOD_ERROR = !ORDER_FLOW_SELECTED_METHOD;
+    ORDER_FLOW_PO_UNLOCK_ERROR = ORDER_FLOW_SELECTED_METHOD === 'purchase_order' && !(ACCOUNT_SUMMARY.poAvailable === true || ACCOUNT_SUMMARY.termsApproved === true);
+    renderOrderFlowFulfillmentSection();
+    if (ORDER_FLOW_FULFILLMENT_ERROR || ORDER_FLOW_METHOD_ERROR || ORDER_FLOW_PO_UNLOCK_ERROR) {
+      clearNotice();
+      if (ORDER_FLOW_FULFILLMENT_ERROR && orderFlowShipBtn) {
+        orderFlowShipBtn.focus();
+      } else if (ORDER_FLOW_METHOD_ERROR && orderFlowCardBtn) {
+        orderFlowCardBtn.focus();
+      } else if (ORDER_FLOW_PO_UNLOCK_ERROR) {
+        const termsBtn = document.getElementById('orderFlowTermsActionBtn');
+        if (termsBtn) termsBtn.focus();
+      }
+      return;
+    }
+    if (ORDER_FLOW_SELECTED_METHOD === 'card' || ORDER_FLOW_SELECTED_METHOD === 'ach') {
+      startOrderFlowCheckout(ORDER_FLOW_SELECTED_METHOD);
+      return;
+    }
+    if (ORDER_FLOW_SELECTED_METHOD === 'purchase_order') {
+      submitOrderFlowPo();
+      return;
+    }
+    ORDER_FLOW_SELECTED_METHOD = 'check';
+    submitOrderFlowManual();
+  }
+
+  function renderOrderFlowFulfillmentSection(){
+    const readyDateLabel = getOrderFlowReadyDateLabel_();
+    const cardFee = getOrderFlowConvenienceFeeLabel_(0.03);
+    renderOrderFlowAccountBanner_();
+    if (orderFlowShipDateLabel) orderFlowShipDateLabel.textContent = readyDateLabel;
+    if (orderFlowPickupDateLabel) orderFlowPickupDateLabel.textContent = readyDateLabel;
+    if (orderFlowCardFeeLabel) orderFlowCardFeeLabel.textContent = 'Item costs will increase by 3% (' + cardFee + ')';
+    if (orderFlowFulfillmentHeading) {
+      orderFlowFulfillmentHeading.textContent = '1. Select a delivery method.';
+      orderFlowFulfillmentHeading.classList.toggle('is-error-step', !!ORDER_FLOW_FULFILLMENT_ERROR);
+    }
+    if (orderFlowPaymentHeading) {
+      orderFlowPaymentHeading.textContent = '2. Select a payment method.';
+      orderFlowPaymentHeading.hidden = false;
+      orderFlowPaymentHeading.style.display = '';
+      orderFlowPaymentHeading.classList.toggle('is-error-step', !!ORDER_FLOW_METHOD_ERROR);
+    }
+    setOrderFlowChoiceSelected_(orderFlowShipBtn, ORDER_FLOW_SELECTED_FULFILLMENT === 'shipping');
+    setOrderFlowChoiceSelected_(orderFlowPickupBtn, ORDER_FLOW_SELECTED_FULFILLMENT === 'pickup');
+    setOrderFlowChoiceSelected_(orderFlowCardBtn, ORDER_FLOW_SELECTED_METHOD === 'card');
+    setOrderFlowChoiceSelected_(orderFlowAchBtn, ORDER_FLOW_SELECTED_METHOD === 'ach');
+    setOrderFlowChoiceSelected_(orderFlowCheckBtn, ORDER_FLOW_SELECTED_METHOD === 'check');
+    setOrderFlowChoiceSelected_(orderFlowPoBtn, ORDER_FLOW_SELECTED_METHOD === 'purchase_order');
+    if (orderFlowSelectionConfirmBtn) {
+      orderFlowSelectionConfirmBtn.hidden = false;
+      orderFlowSelectionConfirmBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT;
+    }
+    if (orderFlowSelectionErrorStack) {
+      orderFlowSelectionErrorStack.hidden = !(ORDER_FLOW_FULFILLMENT_ERROR || ORDER_FLOW_METHOD_ERROR || ORDER_FLOW_PO_UNLOCK_ERROR);
+    }
+    if (orderFlowFulfillmentErrorCard) {
+      orderFlowFulfillmentErrorCard.hidden = !ORDER_FLOW_FULFILLMENT_ERROR;
+    }
+    if (orderFlowMethodErrorCard) {
+      orderFlowMethodErrorCard.hidden = !ORDER_FLOW_METHOD_ERROR;
+    }
+    if (orderFlowPoUnlockErrorCard) {
+      orderFlowPoUnlockErrorCard.hidden = !ORDER_FLOW_PO_UNLOCK_ERROR;
+    }
+  }
+
   function setOrderFlowMode(mode){
-    const validModes = new Set(['method', 'manual', 'po', 'blocking', 'checkout', 'result']);
-    ORDER_FLOW_MODE = validModes.has(mode) ? mode : 'method';
+    const validModes = new Set(['fulfillment', 'method', 'manual', 'po', 'blocking', 'checkout', 'result']);
+    ORDER_FLOW_MODE = validModes.has(mode) ? mode : 'fulfillment';
+    if (orderFlowModal) orderFlowModal.classList.toggle('isBlocking', ORDER_FLOW_MODE === 'blocking');
+    if (orderFlowModal) orderFlowModal.classList.toggle('isSelection', ORDER_FLOW_MODE === 'fulfillment');
+    if (orderFlowModal) orderFlowModal.classList.toggle('isMinimumsBlocking', ORDER_FLOW_MODE === 'blocking' && ORDER_FLOW_BLOCKING_KIND === 'minimums');
+    if (orderFlowAccountBanner) orderFlowAccountBanner.hidden = ORDER_FLOW_MODE !== 'fulfillment';
+    renderOrderFlowModalTitle_();
+    if (orderFlowTitle) orderFlowTitle.hidden = false;
+    if (orderFlowStatePill) {
+      orderFlowStatePill.hidden = ORDER_FLOW_MODE === 'blocking' || ORDER_FLOW_MODE === 'fulfillment';
+    }
+    if (orderFlowFulfillmentSection) orderFlowFulfillmentSection.hidden = ORDER_FLOW_MODE !== 'fulfillment';
     if (orderFlowMethodSection) orderFlowMethodSection.hidden = ORDER_FLOW_MODE !== 'method';
     if (orderFlowManualSection) orderFlowManualSection.hidden = ORDER_FLOW_MODE !== 'manual';
     if (orderFlowPoSection) orderFlowPoSection.hidden = ORDER_FLOW_MODE !== 'po';
@@ -12139,17 +13870,21 @@
     }
     if (ORDER_FLOW_MODE === 'blocking') {
       renderOrderFlowBlockingJobs();
+    } else if (ORDER_FLOW_MODE === 'fulfillment') {
+      renderOrderFlowFulfillmentSection();
     }
   }
 
   function setOrderFlowButtonsBusy(busy){
     ORDER_FLOW_REQUEST_IN_FLIGHT = !!busy;
     [
+      orderFlowShipBtn,
+      orderFlowPickupBtn,
       orderFlowCheckBtn,
-      orderFlowCashBtn,
       orderFlowPoBtn,
       orderFlowCardBtn,
       orderFlowAchBtn,
+      orderFlowSelectionConfirmBtn,
       orderFlowManualConfirmBtn,
       orderFlowPoConfirmBtn,
       orderFlowSubmitTermsBtn,
@@ -12216,7 +13951,7 @@
       '<head>',
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      '<title>Red Threads Secure Payment</title>',
+      '<title>Red Threads Checkout</title>',
       '<style>',
       '  :root{',
       '    --rt-bg:#05060a;',
@@ -12225,6 +13960,8 @@
       '    --rt-text:rgba(255,255,255,0.92);',
       '    --rt-muted:rgba(255,255,255,0.72);',
       '    --rt-red:#e11d48;',
+      '    --rt-redBright:#f43f5e;',
+      '    --rt-panel:rgba(16,16,24,0.9);',
       '  }',
       '  *{box-sizing:border-box;}',
       '  html,body{height:100%;}',
@@ -12237,8 +13974,9 @@
       '    justify-content:center;',
       '    padding:24px;',
       '    background:',
-      '      radial-gradient(circle at top, rgba(20,51,92,.95) 0%, rgba(9,18,31,.96) 48%, rgba(3,6,11,1) 100%),',
-      '      linear-gradient(180deg, #0a1421 0%, #05060a 100%);',
+      '      radial-gradient(circle at 50% 12%, rgba(143,24,50,.18) 0%, rgba(143,24,50,0) 30%),',
+      '      radial-gradient(circle at 50% 78%, rgba(226,38,76,.08) 0%, rgba(226,38,76,0) 38%),',
+      '      linear-gradient(180deg, #0a0b12 0%, #06070c 42%, #04050a 100%);',
       '    color:var(--rt-text);',
       '    font:600 16px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
       '    overflow:hidden;',
@@ -12248,18 +13986,29 @@
       '    position:fixed;',
       '    inset:-18%;',
       '    background:',
-      '      radial-gradient(circle at 50% 34%, rgba(225,29,72,.10) 0%, rgba(225,29,72,0) 44%),',
-      '      radial-gradient(circle at 50% 78%, rgba(96,165,250,.08) 0%, rgba(96,165,250,0) 34%);',
+      '      radial-gradient(circle at 50% 30%, rgba(225,29,72,.16) 0%, rgba(225,29,72,0) 36%),',
+      '      radial-gradient(circle at 20% 80%, rgba(103,16,42,.12) 0%, rgba(103,16,42,0) 28%),',
+      '      radial-gradient(circle at 80% 82%, rgba(103,16,42,.10) 0%, rgba(103,16,42,0) 26%);',
       '    pointer-events:none;',
+      '  }',
+      '  body::after{',
+      '    content:"";',
+      '    position:fixed;',
+      '    inset:0;',
+      '    background-image:linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.016) 1px, transparent 1px);',
+      '    background-size:36px 36px;',
+      '    opacity:.12;',
+      '    pointer-events:none;',
+      '    mix-blend-mode:screen;',
       '  }',
       '  .rt-payment-shell{',
       '    position:relative;',
-      '    width:min(560px, calc(100vw - 48px));',
-      '    padding:34px 28px;',
+      '    width:min(620px, calc(100vw - 48px));',
+      '    padding:38px 30px 34px;',
       '    border:1px solid var(--rt-glassBorder);',
-      '    border-radius:20px;',
-      '    background:linear-gradient(170deg, rgba(15,17,27,.92) 0%, rgba(5,6,10,.9) 100%);',
-      '    box-shadow:0 24px 50px rgba(0,0,0,.54), inset 0 1px 0 rgba(255,255,255,.08);',
+      '    border-radius:24px;',
+      '    background:linear-gradient(170deg, rgba(15,16,24,.94) 0%, rgba(7,8,13,.92) 100%);',
+      '    box-shadow:0 26px 60px rgba(0,0,0,.58), inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px rgba(225,29,72,.05);',
       '    backdrop-filter:blur(18px) saturate(130%);',
       '    -webkit-backdrop-filter:blur(18px) saturate(130%);',
       '    text-align:center;',
@@ -12267,40 +14016,51 @@
       '    transform:translateY(8px) scale(.98);',
       '    opacity:0;',
       '  }',
-      '  .rt-payment-badge{',
-      '    display:inline-flex;',
-      '    align-items:center;',
-      '    justify-content:center;',
-      '    margin-bottom:14px;',
-      '    color:rgba(255,255,255,.7);',
-      '    font-size:12px;',
-      '    font-weight:800;',
-      '    letter-spacing:.16em;',
-      '    text-transform:uppercase;',
-      '  }',
       '  .rt-spinner{',
-      '    width:48px;',
-      '    height:48px;',
-      '    margin:0 auto 18px;',
-      '    border-radius:999px;',
-      '    border:4px solid rgba(225,29,72,.24);',
-      '    border-top-color:var(--rt-red);',
-      '    border-right-color:rgba(244,63,94,.74);',
-      '    animation:rtSpin 860ms linear infinite;',
-      '    filter:drop-shadow(0 0 12px rgba(225,29,72,.45));',
+      '    width:72px;',
+      '    height:72px;',
+      '    margin:0 auto 22px;',
       '    position:relative;',
+      '    display:grid;',
+      '    place-items:center;',
+      '    filter:drop-shadow(0 0 16px rgba(225,29,72,.36));',
       '  }',
-      '  .rt-spinner::after{',
+      '  .rt-spinner::before{',
       '    content:"";',
       '    position:absolute;',
-      '    inset:7px;',
+      '    inset:0;',
       '    border-radius:999px;',
-      '    border:2px solid rgba(244,63,94,.36);',
+      '    background:',
+      '      conic-gradient(from 210deg,',
+      '        rgba(225,29,72,.18) 0deg,',
+      '        rgba(225,29,72,.26) 78deg,',
+      '        rgba(244,63,94,.95) 78deg,',
+      '        rgba(244,63,94,.95) 186deg,',
+      '        rgba(225,29,72,.18) 186deg,',
+      '        rgba(225,29,72,.18) 360deg);',
+      '    -webkit-mask:radial-gradient(circle, transparent 58%, #000 60%);',
+      '    mask:radial-gradient(circle, transparent 58%, #000 60%);',
+      '    animation:rtSpin 1180ms linear infinite;',
+      '  }',
+      '  .rt-spinner-icon{',
+      '    position:relative;',
+      '    z-index:1;',
+      '    width:37px;',
+      '    height:37px;',
+      '    object-fit:contain;',
+      '    user-select:none;',
+      '    -webkit-user-drag:none;',
       '    animation:rtPulse 1200ms ease-in-out infinite;',
+      '    filter:drop-shadow(0 1px 4px rgba(0,0,0,.18));',
+      '  }',
+      '  .rt-copy-stack{',
+      '    display:grid;',
+      '    gap:10px;',
+      '    justify-items:center;',
       '  }',
       '  .rt-payment-title{',
-      '    margin:0 0 10px;',
-      '    font-size:42px;',
+      '    margin:0;',
+      '    font-size:40px;',
       '    line-height:1.02;',
       '    font-weight:900;',
       '    letter-spacing:-.03em;',
@@ -12308,10 +14068,10 @@
       '  }',
       '  .rt-payment-sub{',
       '    margin:0 auto;',
-      '    max-width:34ch;',
+      '    max-width:28ch;',
       '    color:var(--rt-muted);',
-      '    font-size:19.5px;',
-      '    line-height:1.35;',
+      '    font-size:18px;',
+      '    line-height:1.4;',
       '  }',
       '  @keyframes rtPopIn{',
       '    to{transform:translateY(0) scale(1);opacity:1;}',
@@ -12327,10 +14087,11 @@
       '</head>',
       '<body>',
       '  <div class="rt-payment-shell" role="status" aria-live="polite">',
-      '    <div class="rt-payment-badge">Red Threads</div>',
-      '    <div class="rt-spinner" aria-hidden="true"></div>',
-      '    <h1 class="rt-payment-title">Secure Payment</h1>',
-      '    <p class="rt-payment-sub">Preparing your hosted Stripe Checkout. This tab will continue automatically as soon as the secure session is ready.</p>',
+      '    <div class="rt-spinner" aria-hidden="true"><img class="rt-spinner-icon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt=""></div>',
+      '    <div class="rt-copy-stack">',
+      '      <h1 class="rt-payment-title">Loading Checkout...</h1>',
+      '      <p class="rt-payment-sub">Sit tight, the secure Red Threads checkout screen will be up soon.</p>',
+      '    </div>',
       '  </div>',
       '</body>',
       '</html>'
@@ -12343,7 +14104,7 @@
       if (!popup) return null;
       try { popup.opener = null; } catch (_) {}
       try {
-        popup.document.title = 'Red Threads Secure Payment';
+        popup.document.title = 'Red Threads Checkout';
         popup.document.open();
         popup.document.write(buildPendingOrderFlowCheckoutWindowHtml());
         popup.document.close();
@@ -12407,7 +14168,7 @@
   }
 
   function renderOrderFlowManualSection(){
-    const label = ORDER_FLOW_SELECTED_METHOD === 'cash' ? 'cash' : 'check';
+    const label = 'check';
     if (orderFlowManualBody) {
       orderFlowManualBody.textContent = 'We will generate an invoice, email it to you, and lock this portal while ' + label + ' payment is pending.';
     }
@@ -12422,7 +14183,7 @@
       });
     }
     if (orderFlowManualConfirmBtn) {
-      orderFlowManualConfirmBtn.textContent = 'Confirm Pay by ' + (label === 'cash' ? 'Cash' : 'Check');
+      orderFlowManualConfirmBtn.textContent = 'Confirm Pay by Check';
     }
   }
 
@@ -12478,21 +14239,33 @@
     if (orderFlowDoneBtn) orderFlowDoneBtn.focus();
   }
 
-  function setOrderFlowBlockingJobsState(blockingJobs){
+  function setOrderFlowBlockingJobsState(blockingJobs, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    ORDER_FLOW_BLOCKING_KIND = String(opts.kind || 'artwork').trim().toLowerCase() === 'minimums'
+      ? 'minimums'
+      : 'artwork';
+    ORDER_FLOW_BLOCKING_ALERT_TEXT = String(opts.alertText || '').trim()
+      || (ORDER_FLOW_BLOCKING_KIND === 'minimums'
+        ? 'We are unable to proceed with your order because your quantities entered do not meet our minimums to order.'
+        : 'Order cannot be placed until all artwork is approved');
     ORDER_FLOW_BLOCKING_JOBS = (Array.isArray(blockingJobs) ? blockingJobs : [])
       .map(job => {
         const printJobId = String(job && job.printJobId || '').trim();
         const fallbackNumber = printJobId ? getPrintJobDisplayNumber(printJobId) : '';
         const title = String(job && job.title || '').trim()
           || (fallbackNumber ? ('Print Job ' + fallbackNumber) : 'Print Job');
+        const subline = String(job && job.subline || '').trim();
+        const extraLine = String(job && job.extraLine || '').trim();
         return {
           printJobId: printJobId,
-          title: title
+          title: title,
+          subline: subline,
+          extraLine: extraLine
         };
       })
       .filter(job => job.title);
     if (!ORDER_FLOW_BLOCKING_JOBS.length) return false;
-    setOrderFlowStatePill('Checkout');
+    setOrderFlowStatePill(ORDER_FLOW_BLOCKING_KIND === 'minimums' ? 'Minimums' : 'Approval');
     setOrderFlowMode('blocking');
     if (orderFlowBlockingJobs) {
       const firstBtn = orderFlowBlockingJobs.querySelector('.orderFlowJobBtn');
@@ -12509,9 +14282,32 @@
       const name = String(job.printJobName || ('Project ' + number)).trim();
       return {
         printJobId: job.printJobId,
-        title: 'Print Job ' + number + ': ' + name
+        title: 'Print Job ' + number + ': ' + name,
+        subline: 'Click here to approve artwork'
       };
-    }));
+    }), {
+      kind: 'artwork',
+      alertText: 'Order cannot be placed until all artwork is approved'
+    });
+  }
+
+  function maybeBlockOrderFlowMinimums(){
+    const blockingJobs = getOrderFlowMinimumBlockingJobs_();
+    if (!blockingJobs.length) return false;
+    return setOrderFlowBlockingJobsState(blockingJobs.map(item => {
+      const job = item.job;
+      const number = getPrintJobDisplayNumber(job.printJobId);
+      const name = String(job.printJobName || ('Project ' + number)).trim();
+      return {
+        printJobId: job.printJobId,
+        title: name,
+        subline: 'Total units entered: ' + String(item.enteredUnits),
+        extraLine: 'Minimum units to order: ' + String(item.minimumUnits)
+      };
+    }), {
+      kind: 'minimums',
+      alertText: 'We are unable to proceed with your order because your quantities entered do not meet our minimums to order.'
+    });
   }
 
   function handleOrderFlowActionError(resp, options){
@@ -12598,14 +14394,27 @@
     renderOrderFlowSummaryCard();
   }
 
-  function resetOrderFlowModalState(){
+  function resetOrderFlowModalState(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const preserveSelections = opts.preserveSelections === true;
     ORDER_FLOW_BLOCKING_JOBS = [];
-    ORDER_FLOW_SELECTED_METHOD = '';
+    ORDER_FLOW_BLOCKING_KIND = 'artwork';
+    ORDER_FLOW_BLOCKING_ALERT_TEXT = 'Order cannot be placed until all artwork is approved';
+    if (!preserveSelections) {
+      ORDER_FLOW_SELECTED_FULFILLMENT = '';
+      ORDER_FLOW_SHIPPING_CHARGE_CENTS = 0;
+      ORDER_FLOW_SHIPPING_MODE_LABEL = '';
+      ORDER_FLOW_SELECTED_METHOD = '';
+    }
     ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
     ORDER_FLOW_RESULT_KIND = 'info';
+    ORDER_FLOW_FULFILLMENT_ERROR = false;
+    ORDER_FLOW_METHOD_ERROR = false;
+    ORDER_FLOW_PO_UNLOCK_ERROR = false;
     setOrderFlowButtonsBusy(false);
-    setOrderFlowMode('method');
-    setOrderFlowStatePill('Checkout');
+    renderOrderFlowFulfillmentSection();
+    setOrderFlowMode('fulfillment');
+    setOrderFlowStatePill('Fulfillment');
     renderOrderFlowSummaryCard();
     if (orderFlowCheckoutBody) orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
     if (orderFlowCheckoutMeta) orderFlowCheckoutMeta.textContent = '';
@@ -12630,12 +14439,16 @@
       showNotice('This order has already been placed. Messaging is still available if you need follow-up support.', 'ok');
       return;
     }
-    resetOrderFlowModalState();
+    closeIntroModal();
+    recalcAll();
+    resetOrderFlowModalState({ preserveSelections: true });
     orderFlowBackdrop.hidden = false;
+    const blocked = maybeBlockOrderFlowMinimums() || maybeBlockOrderFlow();
     requestAnimationFrame(() => {
       orderFlowBackdrop.classList.add('open');
       syncOverlayScrollLock();
-      if (orderFlowCardBtn) orderFlowCardBtn.focus();
+      if (blocked) return;
+      if (orderFlowShipBtn) orderFlowShipBtn.focus();
     });
   }
 
@@ -12651,29 +14464,39 @@
     }
     if (immediate) {
       orderFlowBackdrop.hidden = true;
-      resetOrderFlowModalState();
+      resetOrderFlowModalState({ preserveSelections: true });
       return;
     }
     ORDER_FLOW_HIDE_TIMER = setTimeout(() => {
       ORDER_FLOW_HIDE_TIMER = 0;
       if (!orderFlowBackdrop.classList.contains('open')) {
         orderFlowBackdrop.hidden = true;
-        resetOrderFlowModalState();
+        resetOrderFlowModalState({ preserveSelections: true });
       }
     }, 170);
   }
 
   function enterOrderFlowManual(method){
     if (maybeBlockOrderFlow()) return;
-    ORDER_FLOW_SELECTED_METHOD = String(method || 'check');
+    if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
+      setOrderFlowStatePill('Fulfillment');
+      setOrderFlowMode('fulfillment');
+      return;
+    }
+    ORDER_FLOW_SELECTED_METHOD = 'check';
     renderOrderFlowManualSection();
-    setOrderFlowStatePill(ORDER_FLOW_SELECTED_METHOD === 'cash' ? 'Cash' : 'Check');
+    setOrderFlowStatePill('Check');
     setOrderFlowMode('manual');
     if (orderFlowManualConfirmBtn) orderFlowManualConfirmBtn.focus();
   }
 
   function enterOrderFlowPo(){
     if (maybeBlockOrderFlow()) return;
+    if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
+      setOrderFlowStatePill('Fulfillment');
+      setOrderFlowMode('fulfillment');
+      return;
+    }
     ORDER_FLOW_SELECTED_METHOD = 'purchase_order';
     renderOrderFlowPoSection();
     setOrderFlowStatePill('P.O.');
@@ -12687,7 +14510,7 @@
 
   async function submitOrderFlowManual(){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
-    const method = ORDER_FLOW_SELECTED_METHOD === 'cash' ? 'cash' : 'check';
+    const method = 'check';
     const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
     setOrderFlowButtonsBusy(true);
     try {
@@ -12793,17 +14616,19 @@
   async function startOrderFlowCheckout(method){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
     if (maybeBlockOrderFlow()) return;
+    if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
+      setOrderFlowStatePill('Fulfillment');
+      setOrderFlowMode('fulfillment');
+      return;
+    }
     const paymentLabel = method === 'ach' ? 'ACH bank payment' : 'card payment';
     const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
     const pendingWindow = openPendingOrderFlowCheckoutWindow();
     ORDER_FLOW_CHECKOUT_WINDOW = pendingWindow;
     setOrderFlowButtonsBusy(true);
-    setOrderFlowStatePill(method === 'ach' ? 'ACH' : 'Card');
-    setOrderFlowMode('checkout');
-    if (orderFlowCheckoutBody) {
-      orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
-    }
-    if (orderFlowCheckoutMeta) orderFlowCheckoutMeta.textContent = 'Creating your secure Stripe Checkout for ' + paymentLabel + '.';
+    closeIntroModal();
+    setOrderFlowStatePill('Checkout');
+    setOrderFlowMode('fulfillment');
     resetOrderFlowCheckoutLaunchState();
     try {
       const resp = await callServer('createCheckoutAttempt', {
@@ -12854,22 +14679,17 @@
         }
         ORDER_FLOW_CHECKOUT_WINDOW = null;
         setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, { launched: false });
-        if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = false;
-        if (orderFlowCheckoutOpenLink) {
-          orderFlowCheckoutOpenLink.href = checkoutUrl;
-          orderFlowCheckoutOpenLink.hidden = false;
-        }
-        if (orderFlowCheckoutHint) {
-          orderFlowCheckoutHint.hidden = false;
-          orderFlowCheckoutHint.textContent = 'Your secure Stripe Checkout is ready. Click below to continue payment in a secure tab.';
-        }
-        showNotice('Secure payment is ready. Use the button in the modal to continue.', 'ok');
+        setOrderFlowStatePill('Checkout');
+        setOrderFlowMode('fulfillment');
+        showNotice('Your browser blocked the payment tab. Allow pop-ups, then click Place Order again to continue.', 'err');
         return;
       }
       setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, {
         launched: true,
         showActions: false
       });
+      setOrderFlowStatePill('Checkout');
+      setOrderFlowMode('fulfillment');
       showNotice('Secure payment opened in a new tab.', 'ok');
     } catch (err) {
       if (pendingWindow && !pendingWindow.closed) {
@@ -12877,7 +14697,7 @@
       }
       showNotice(String((err && err.message) || err), 'err');
       setOrderFlowStatePill('Checkout');
-      setOrderFlowMode('method');
+      setOrderFlowMode('fulfillment');
     } finally {
       setOrderFlowButtonsBusy(false);
     }
@@ -13107,6 +14927,10 @@
     nextState.quantities = Object.keys(domQuantities).length
       ? domQuantities
       : collectQuantityMapFromState(currentState);
+    const fulfillment = getOrderFlowFulfillmentState_(ORDER_FLOW_SELECTED_FULFILLMENT || currentState.fulfillmentMethod || nextState.fulfillmentMethod);
+    nextState.fulfillmentMethod = fulfillment.fulfillmentMethod;
+    nextState.shippingChargeCents = fulfillment.shippingChargeCents;
+    nextState.shippingModeLabel = fulfillment.shippingModeLabel;
     return nextState;
   }
 
@@ -13385,9 +15209,8 @@
     if (!CAN_EDIT()) return;
     const job = PRINT_JOBS.find(item => item.printJobId === jobId);
     if (!job) return;
-    PORTAL_STATE.printJobs[jobId] = buildInitialJobState(job);
-    REMOVED_ADDONS_BY_JOB[jobId] = new Set();
-    clearDraftColorRowsForJob(jobId);
+    const state = getJobState(jobId);
+    state.hidden = false;
     if (!activePrintJobId || getJobState(activePrintJobId).hidden) {
       activePrintJobId = jobId;
       PORTAL_STATE.activePrintJobId = activePrintJobId;
@@ -13714,11 +15537,14 @@
     const detailsBottomRow = createEl('div', 'detailsBottomRow');
     const notesInline = createEl('div', 'notesInline');
     notesInline.appendChild(createEl('span', 'notesInlineLabel', 'Job Notes:'));
-    notesInline.appendChild(createEl('span', 'notesInlineText', ' ' + (job.printJobNotes || getIntroMessage() || '--')));
+    notesInline.appendChild(createEl('span', 'notesInlineText', String(job.printJobNotes || getIntroMessage() || '--')));
     detailsBottomRow.appendChild(notesInline);
 
     const detailsSummaryHost = createEl('div', 'detailsSummaryHost detailsAddOnsCol');
     const totalsCard = createEl('div', 'totalsCard detailsTotalsCard');
+    const addOnsHeading = createEl('div', 'detailsAddOnsHeading', 'Add-Ons:');
+    addOnsHeading.hidden = true;
+    totalsCard.appendChild(addOnsHeading);
     const addOnsList = createEl('div', 'addOnsList');
     addOnsList.dataset.addOnsList = job.printJobId;
     totalsCard.appendChild(addOnsList);
@@ -13758,6 +15584,7 @@
     section.appendChild(compareInline);
 
     const skuList = createEl('div', 'pjSkusList');
+    const hiddenSkuRestoreRows = [];
 
     let visibleSkuIndex = 0;
     job.skus.forEach(sku => {
@@ -13776,7 +15603,7 @@
             renderPortal();
           });
           restoreRow.appendChild(restoreBtn);
-          skuList.appendChild(restoreRow);
+          hiddenSkuRestoreRows.push(restoreRow);
         }
         return;
       }
@@ -13837,7 +15664,7 @@
 
       const entryPanel = createEl('div', 'sku-entry-panel');
       entryPanel.style.setProperty('--sku-grid-cols',
-        '24px clamp(140px,18vw,220px) repeat(' + sku.sizesAllowed.length + ', minmax(64px, 1fr)) 68px 132px');
+        '24px var(--sku-grid-color-col) repeat(' + sku.sizesAllowed.length + ', minmax(0, 1fr)) var(--sku-grid-qty-col) var(--sku-grid-total-col)');
 
       const gridHeader = createEl('div', 'sku-grid-header');
       gridHeader.appendChild(createEl('div', 'sku-grid-head rowRemoveHead', ''));
@@ -13892,7 +15719,7 @@
           hideColorBtn = createEl('button', 'hideEntityBtn colorRowRemoveBtn', 'X');
           hideColorBtn.type = 'button';
           hideColorBtn.title = 'Remove color row';
-          hideColorBtn.addEventListener('click', () => {
+          hideColorBtn.addEventListener('click', async () => {
             syncSkuDomToState(sku.skuId, job.printJobId);
             debugSkuState('COLOR_REMOVE:before', job.printJobId, sku.skuId, {
               color: color || '',
@@ -13902,7 +15729,7 @@
             if (isDraft) {
               const draftQty = sku.sizesAllowed.reduce((sum, size) => sum + clampInt(item.row && item.row.qtyBySize ? item.row.qtyBySize[size] : 0), 0);
               if (draftQty > 0) {
-                const proceedDraft = window.confirm('This color has quantities entered. Remove anyway?');
+                const proceedDraft = await requestColorRemoveConfirmation_();
                 if (!proceedDraft) {
                   debugLog('COLOR_REMOVE:cancelled', { printJobId: job.printJobId, skuId: sku.skuId, draftId: item.row.id, qty: draftQty });
                   return;
@@ -13925,7 +15752,7 @@
             const stateBeforeRemove = getColorState(job.printJobId, sku, color);
             const rowHasQty = sku.sizesAllowed.reduce((sum, size) => sum + clampInt(stateBeforeRemove.qtyBySize[size]), 0) > 0;
             if (rowHasQty) {
-              const proceed = window.confirm('This color has quantities entered. Remove anyway?');
+              const proceed = await requestColorRemoveConfirmation_();
               if (!proceed) {
                 debugLog('COLOR_REMOVE:cancelled', {
                   printJobId: job.printJobId,
@@ -13939,15 +15766,8 @@
             if (isSnapshotColor) {
               const stateToHide = getColorState(job.printJobId, sku, color);
               stateToHide.hidden = true;
-              sku.sizesAllowed.forEach(size => {
-                stateToHide.qtyBySize[size] = 0;
-                setQuantityMapValue(job.printJobId, sku.skuId, color, size, 0);
-              });
             } else if (skuStateRef && skuStateRef.colorways && skuStateRef.colorways[color]) {
-              sku.sizesAllowed.forEach(size => {
-                setQuantityMapValue(job.printJobId, sku.skuId, color, size, 0);
-              });
-              delete skuStateRef.colorways[color];
+              skuStateRef.colorways[color].hidden = true;
             }
             maybeCollapseSkuAfterColorHide();
             debugSkuState('COLOR_REMOVE:after-before-render', job.printJobId, sku.skuId, {
@@ -14118,12 +15938,17 @@
       skuList.appendChild(skuSection);
     });
 
+    hiddenSkuRestoreRows.forEach(row => {
+      skuList.appendChild(row);
+    });
+
     section.appendChild(skuList);
 
     JOB_DOM.set(job.printJobId, {
       section: section,
       compareTable: compareTable,
       addOnsList: addOnsList,
+      addOnsHeading: addOnsHeading,
       addOnsResetBtn: resetBtn,
       turnaround: turnaroundInline,
       shipByLine: shipByLine,
@@ -14447,7 +16272,7 @@
     if (totalPricingMiniEl) totalPricingMiniEl.textContent = pricingText;
 
     const freeShipMini = document.getElementById('headerFreeShipMini');
-    const qualifies = hasQty && grandTotal >= 500;
+    const qualifies = hasQty && grandTotal > 500;
 
     if (freeShipMini) freeShipMini.style.display = qualifies ? 'block' : 'none';
   }
@@ -14464,6 +16289,10 @@
     const visible = job.addOns
       .filter(addOn => isPortalDisplay(addOn))
       .filter(addOn => !shouldExcludeAddOnFromPortal(addOn, removed));
+
+    if (dom.addOnsHeading) {
+      dom.addOnsHeading.hidden = visible.length === 0;
+    }
 
     let staticPositive = 0;
     visible.forEach(addOn => {
@@ -14602,12 +16431,15 @@
 
       const addOnData = renderAddOnsForJob(job, subtotal);
       const jobTotal = subtotal + addOnData.addOnTotal;
+      let shipDate = '--';
+      let shipDateValue = null;
 
       if (dom.turnaround) {
         const turnaroundText = addOnData.turnaround || pickBaseTurnaround(job) || '';
         if (turnaroundText) {
           const shipEtaRaw = getHeaderEtaText(job, { turnaround: turnaroundText });
-          const shipDate = String(shipEtaRaw || '--').replace(/^By\s+/i, '').trim() || '--';
+          shipDate = String(shipEtaRaw || '--').replace(/^By\s+/i, '').trim() || '--';
+          shipDateValue = getHeaderEtaDateValue(job, { turnaround: turnaroundText });
           dom.turnaround.textContent = 'Turnaround: ' + turnaroundText;
           dom.turnaround.classList.toggle('rush', /\(rush\)/i.test(turnaroundText));
           dom.turnaround.style.display = 'block';
@@ -14634,7 +16466,9 @@
         name: job.printJobName,
         units: jobQty,
         total: jobTotal,
-        turnaround: addOnData.turnaround || pickBaseTurnaround(job) || ''
+        turnaround: addOnData.turnaround || pickBaseTurnaround(job) || '',
+        readyDateLabel: typeof shipDate !== 'undefined' ? shipDate : '--',
+        readyDateValue: typeof shipDateValue !== 'undefined' ? shipDateValue : null
       });
     });
 
@@ -15093,6 +16927,7 @@
         closeIntroModal();
         closeSendModal();
         closeUnsavedLeaveModal();
+        cancelColorRemoveConfirm_();
         closeArtworkApproveModal();
         closeOrderFlowModal();
       }
@@ -15143,6 +16978,22 @@
         if (e.target === unsavedLeaveBackdrop) closeUnsavedLeaveModal();
       });
     }
+    if (colorRemoveConfirmCancelBtn) {
+      colorRemoveConfirmCancelBtn.addEventListener('click', () => {
+        cancelColorRemoveConfirm_();
+      });
+    }
+    if (colorRemoveConfirmProceedBtn) {
+      colorRemoveConfirmProceedBtn.addEventListener('click', () => {
+        proceedColorRemoveConfirm_();
+      });
+    }
+    if (colorRemoveConfirmBackdrop) {
+      colorRemoveConfirmBackdrop.addEventListener('click', evt => {
+        if (evt.target !== colorRemoveConfirmBackdrop) return;
+        cancelColorRemoveConfirm_();
+      });
+    }
     if (artworkApproveClose) {
       artworkApproveClose.addEventListener('click', () => {
         closeArtworkApproveModal();
@@ -15160,6 +17011,16 @@
     }
     if (artworkApproveDoneBtn) {
       artworkApproveDoneBtn.addEventListener('click', () => {
+        if (ARTWORK_APPROVE_SAVE_IN_FLIGHT) {
+          if (ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW && ARTWORK_APPROVE_MODE === 'success' && ARTWORK_APPROVE_JUST_APPROVED) {
+            queueArtworkApprovalContinue_();
+          }
+          return;
+        }
+        if (ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW && ARTWORK_APPROVE_MODE === 'success' && ARTWORK_APPROVE_JUST_APPROVED) {
+          continueArtworkApprovalOrderFlow_();
+          return;
+        }
         closeArtworkApproveModal();
       });
     }
@@ -15242,27 +17103,39 @@
     }
     if (orderFlowBackBtn) {
       orderFlowBackBtn.addEventListener('click', () => {
-        closeOrderFlowModal();
+        setOrderFlowStatePill('Fulfillment');
+        setOrderFlowMode('fulfillment');
       });
     }
-    if (orderFlowCheckBtn) orderFlowCheckBtn.addEventListener('click', () => enterOrderFlowManual('check'));
-    if (orderFlowCashBtn) orderFlowCashBtn.addEventListener('click', () => enterOrderFlowManual('cash'));
-    if (orderFlowPoBtn) orderFlowPoBtn.addEventListener('click', enterOrderFlowPo);
-    if (orderFlowCardBtn) orderFlowCardBtn.addEventListener('click', () => startOrderFlowCheckout('card'));
-    if (orderFlowAchBtn) orderFlowAchBtn.addEventListener('click', () => startOrderFlowCheckout('ach'));
+    if (orderFlowShipBtn) {
+      orderFlowShipBtn.addEventListener('click', () => {
+        applyOrderFlowFulfillmentSelection_('shipping');
+        if (orderFlowCardBtn) orderFlowCardBtn.focus();
+      });
+    }
+    if (orderFlowPickupBtn) {
+      orderFlowPickupBtn.addEventListener('click', () => {
+        applyOrderFlowFulfillmentSelection_('pickup');
+        if (orderFlowCardBtn) orderFlowCardBtn.focus();
+      });
+    }
+    if (orderFlowClearSelectionsBtn) orderFlowClearSelectionsBtn.addEventListener('click', clearOrderFlowSelections_);
+    if (orderFlowCardBtn) orderFlowCardBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('card'));
+    if (orderFlowAchBtn) orderFlowAchBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('ach'));
+    if (orderFlowCheckBtn) orderFlowCheckBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('check'));
+    if (orderFlowPoBtn) orderFlowPoBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('purchase_order'));
+    if (orderFlowSelectionConfirmBtn) orderFlowSelectionConfirmBtn.addEventListener('click', submitOrderFlowSelection_);
     if (orderFlowManualBackBtn) {
       orderFlowManualBackBtn.addEventListener('click', () => {
-        ORDER_FLOW_SELECTED_METHOD = '';
         setOrderFlowStatePill('Checkout');
-        setOrderFlowMode('method');
+        setOrderFlowMode('fulfillment');
       });
     }
     if (orderFlowManualConfirmBtn) orderFlowManualConfirmBtn.addEventListener('click', submitOrderFlowManual);
     if (orderFlowPoBackBtn) {
       orderFlowPoBackBtn.addEventListener('click', () => {
-        ORDER_FLOW_SELECTED_METHOD = '';
         setOrderFlowStatePill('Checkout');
-        setOrderFlowMode('method');
+        setOrderFlowMode('fulfillment');
       });
     }
     if (orderFlowPoConfirmBtn) orderFlowPoConfirmBtn.addEventListener('click', submitOrderFlowPo);
@@ -15272,7 +17145,7 @@
         setOrderFlowButtonsBusy(false);
         resetOrderFlowCheckoutLaunchState();
         setOrderFlowStatePill('Checkout');
-        setOrderFlowMode('method');
+        setOrderFlowMode('fulfillment');
       });
     }
     if (orderFlowCheckoutLaunchBtn) orderFlowCheckoutLaunchBtn.addEventListener('click', launchOrderFlowCheckout);
@@ -15358,7 +17231,7 @@
     renderPortalStatusBanner();
     renderPortal();
     handleCheckoutReturnNotice();
-    if (!IS_TEAM && !CHECKOUT_RETURN_RESULT) initIntro();
+    if (!IS_TEAM && !CHECKOUT_RETURN_RESULT && shouldAutoShowIntro()) initIntro();
     wireEvents();
     syncTeamModeUi();
     notifyPortalReady({ reason: 'snapshot-ready' });
