@@ -1,3 +1,18 @@
+/* ============================================================
+ * Portal Server Section Map
+ * 1. Runtime constants + workbook contracts
+ * 2. Web app routing (`doGet` / `doPost`)
+ * 3. Auth/session services
+ * 4. Dashboard + snapshot-load services
+ * 5. Order action gateway + account services
+ * 6. Portal VM assembly
+ * 7. Workbook infrastructure + shared row/header helpers
+ * 8. Order draft normalization + pricing helpers
+ * 9. Order persistence + invoices + notifications
+ * 10. Stripe checkout + webhook/finalization services
+ * 11. Low-level auth/workbook utilities
+ * ============================================================ */
+
 const REQUIRED_SHEET_ID = '16KrxpEv8s-U5gjLX-DZK25GbrnkeKbjgInngie8Ce_c';
 
 const CONFIG_KEYS = {
@@ -14,6 +29,8 @@ const CONFIG_KEYS = {
   STRIPE_WEBHOOK_SECRET: 'STRIPE_WEBHOOK_SECRET',
   STRIPE_WEBHOOK_FORWARD_SHARED_SECRET: 'STRIPE_WEBHOOK_FORWARD_SHARED_SECRET',
   TERMS_DOCUMENT_URL: 'TERMS_DOCUMENT_URL',
+  CREDIT_TERMS_FORM_FILE_ID: 'CREDIT_TERMS_FORM_FILE_ID',
+  TAX_EXEMPT_FORM_FILE_ID: 'TAX_EXEMPT_FORM_FILE_ID',
   INVOICE_DRIVE_FOLDER_ID: 'INVOICE_DRIVE_FOLDER_ID',
   TERMS_DRIVE_FOLDER_ID: 'TERMS_DRIVE_FOLDER_ID',
   TAX_EXEMPT_DRIVE_FOLDER_ID: 'TAX_EXEMPT_DRIVE_FOLDER_ID',
@@ -27,6 +44,15 @@ const DEFAULT_TEAM_MODE_PASSWORD = 'R3dthreads!';
 const DEFAULT_PORTAL_ORDERS_SHEET = 'PORTAL_ORDERS';
 const DEFAULT_PORTAL_ACCOUNTS_SHEET = 'PORTAL_ACCOUNTS';
 const DEFAULT_TERMS_DOCUMENT_URL = 'https://docs.google.com/document/d/e/2PACX-1vTEXZ7SlwqZF_gc_OAdyjHoYSCiw698FTtM4FT7BBpUtZxR3k-jvj3p66_aVMUpvW6dPkNK95woGWmu/pub';
+const DEFAULT_CREDIT_TERMS_FORM_FILE_ID = '1UJH35hEi4cGVGZJxXRvSqrD3-CRq3lBx';
+const DEFAULT_CREDIT_TERMS_FORM_PAGE_1_FILE_ID = '1hQRaT0MgsQ-3I-y6BZkRxkQATwx1bhY7';
+const DEFAULT_CREDIT_TERMS_FORM_PAGE_2_FILE_ID = '1DShGuutc1h1hTvQTZlpTLGstkoXY7YOp';
+const DEFAULT_CREDIT_TERMS_FORM_PAGE_3_FILE_ID = '15bagD3tiAmqrgYJODucDkqH6LZJFNpjD';
+const DEFAULT_CREDIT_TERMS_FORM_PAGE_4_FILE_ID = '1oGkorKL2BaPZ8uwGFVA16MZqxAKZ1qWY';
+const DEFAULT_CREDIT_TERMS_FORM_PAGE_5_FILE_ID = '14zA8F2PJXnWjdE3ulEwrIHIb3Nggc641';
+const DEFAULT_TAX_EXEMPT_FORM_FILE_ID = '1YFX3fr9KQezRY_zkPrI8_A-qTlNnOxTc';
+const DEFAULT_TAX_EXEMPT_FORM_PAGE_1_FILE_ID = '15mx_j0YXlnfdBFkQdc_xpeH8XIXusyf3';
+const DEFAULT_TAX_EXEMPT_FORM_PAGE_2_FILE_ID = '1GYkbUhqaD7t4yDUy8t8FrwhMS0IJqH1l';
 const DEFAULT_INVOICE_DRIVE_FOLDER_ID = '1TrrLxq4jOS38kMPs7sQIf_rd3iepwlej';
 const DEFAULT_TERMS_DRIVE_FOLDER_ID = '1uuF9c4DvROk37AoaFrh9qcf9lsFc0uj0';
 const DEFAULT_TAX_EXEMPT_DRIVE_FOLDER_ID = '1ixz5zXLMW5GWBQ0VIhGHy89_JYwKiyyT';
@@ -34,7 +60,11 @@ const DEFAULT_STRIPE_PRICE_CURRENCY = 'USD';
 const DEFAULT_STRIPE_MODE = 'test';
 const DEFAULT_STRIPE_CHECKOUT_SESSION_API_VERSION = '2025-08-27.basil';
 const NOTIFICATION_SENDER_NAME = 'Red Threads';
+const NOTIFICATION_FROM_ALIAS = 'noreply@redthreads.com';
 const NOTIFICATION_REPLY_NOTICE = 'This inbox is not monitored. Please use your portal link below to view updates or respond.';
+const DOCUMENT_REVIEW_EMAIL = 'hello@redthreads.com';
+const MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES = 5 * 1024 * 1024;
+const TEAM_MODE_AUTH_TTL_MS = 12 * 60 * 60 * 1000;
 const EXPORT_LOG_COLUMNS = {
   chatLogJson: 28
 };
@@ -145,6 +175,13 @@ const PORTAL_ACCOUNT_HEADERS = [
   'termsDocumentUrl',
   'signedTermsFileUrl',
   'signedTermsSubmittedAt',
+  'approvedPaymentTermsCode',
+  'approvedPaymentTermsLabel',
+  'approvedPaymentTermsDays',
+  'approvedPaymentTermsNotes',
+  'approvedPaymentTermsSetAt',
+  'approvedPaymentTermsSetByName',
+  'approvedPaymentTermsSetByEmail',
   'taxExemptStatus',
   'taxExemptApproved',
   'taxExemptApprovedAt',
@@ -225,6 +262,18 @@ const AUTH_SHEETS = {
   USER_SESSIONS: 'USER_SESSIONS'
 };
 
+const ACCOUNT_DOCUMENT_TYPES = {
+  credit_terms: 'credit_terms',
+  tax_exempt: 'tax_exempt'
+};
+
+const APPROVED_PAYMENT_TERMS_OPTIONS = [
+  { code: 'net_15', label: 'Net 15', days: 15 },
+  { code: 'net_30', label: 'Net 30', days: 30 },
+  { code: 'net_60', label: 'Net 60', days: 60 },
+  { code: 'net_90', label: 'Net 90', days: 90 }
+];
+
 const AUTH_COLUMNS = {
   USERS: {
     userId: 'userid',
@@ -269,6 +318,8 @@ const AUTH_POLICY = {
 const EXPORT_LOG_PERSON_EMAIL_HEADER = 'personemail';
 const LOGIN_DENY_MESSAGE =
   'No account exists. To access your Job data, log in with the email you used to communicate this job to Red Threads.';
+
+/* ---------------- Web App Routing ---------------- */
 
 function doGet(e) {
   try {
@@ -345,31 +396,15 @@ function doGet(e) {
       );
     }
 
-    const portalState = safeJsonParse_(row.portalstatejson, null);
-    const chatLog = normalizeChatLog_(safeJsonParse_(row.chatlogjson, []));
-    const readOnly = isLockedPortalRow_(row, portalState);
+    const built = buildPortalVmForRow_(rowInfo, token, mode);
+    if (!built || built.ok !== true || !built.vm) {
+      return renderMessage_(
+        mode === 'team' ? 'Team Link Error' : 'Link Error',
+        String((built && built.error) || 'Unable to load project.')
+      );
+    }
 
-    const tpl = createIndexTemplate_({
-      token: token,
-      mode: mode,
-      status: status,
-      readOnly: readOnly,
-      row: row,
-      snapshot: snapshot,
-      portalState: portalState,
-      chatLog: chatLog,
-      postUrl: getWebAppUrl_(),
-      diagnostics: {
-        token: token,
-        status: status,
-        contractVersion: contractVersion,
-        snapshotId: String(row.snapshotid || '').trim(),
-        exportedAt: String(row.exportedat || '').trim(),
-        printJobsCount: printJobIds.length,
-        printJobIds: printJobIds,
-        snapshotSnippet: snapshotRaw.slice(0, 500)
-      }
-    });
+    const tpl = createIndexTemplate_(built.vm);
 
     return tpl.evaluate()
       .setTitle('Red Threads Estimate Portal')
@@ -387,6 +422,10 @@ function createIndexTemplate_(vm) {
   return tpl;
 }
 
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(String(filename || '').trim()).getContent();
+}
+
 function encodeVmPayload_(vm) {
   const json = JSON.stringify(vm || {});
   return Utilities.base64EncodeWebSafe(
@@ -400,6 +439,7 @@ function appendChatMessage(payload) {
     const token = String(p.token || '').trim();
     const text = String(p.text || '').trim();
     const sender = String(p.sender || '').trim().toLowerCase();
+    const teamSenderName = String(p.teamSenderName || '').trim();
 
     const validSender = sender === 'client' || sender === 'team';
     if (!token || !text || text.length > 1000 || !validSender) {
@@ -420,7 +460,9 @@ function appendChatMessage(payload) {
     if (!chatCol) return { ok: false, error: 'Invalid input' };
 
     const chatLog = readChatLogForRow_(sheet, rowInfo);
-    const nextMsg = createChatMessage_(sender, text);
+    const nextMsg = createChatMessage_(sender, text, '', {
+      authorName: sender === 'team' ? teamSenderName : ''
+    });
     const nextChatLog = normalizeChatLog_(chatLog.concat([nextMsg]));
 
     sheet.getRange(row, chatCol).setValue(JSON.stringify(nextChatLog));
@@ -443,15 +485,19 @@ function appendChatMessage(payload) {
       statusOut = String(persisted.status || statusOut || '');
     }
 
-    sendChatNotificationToMake_(
-      buildChatNotificationPayload_(rowInfo, nextMsg, {
-        token: token,
-        senderType: sender,
-        messageText: String(p.messageText || '').trim(),
-        projectName: String(p.projectName || '').trim(),
-        printJobId: String(p.printJobId || '').trim()
-      })
-    );
+    const notificationPayload = buildChatNotificationPayload_(rowInfo, nextMsg, {
+      token: token,
+      senderType: sender,
+      teamSenderName: teamSenderName,
+      messageText: String(p.messageText || '').trim(),
+      projectName: String(p.projectName || '').trim(),
+      printJobId: String(p.printJobId || '').trim()
+    });
+    if (sender === 'team') {
+      sendPortalMessageNotificationEmail_(rowInfo, nextMsg, notificationPayload);
+    } else {
+      sendChatNotificationToMake_(notificationPayload);
+    }
 
     return { ok: true, chatLog: nextChatLog, status: statusOut, savedAt: savedAt };
   } catch (err) {
@@ -807,6 +853,30 @@ function doPost(e) {
     if (action === 'request_tax_exempt_submission') {
       return jsonOutput_(requestTaxExemptSubmission(payload));
     }
+    if (action === 'email_account_document_source') {
+      return jsonOutput_(emailAccountDocumentSource(payload));
+    }
+    if (action === 'download_account_document_source') {
+      return jsonOutput_(downloadAccountDocumentSource(payload));
+    }
+    if (action === 'submit_account_document_upload') {
+      return jsonOutput_(submitAccountDocumentUpload(payload));
+    }
+    if (action === 'submit_tax_exempt_guided_submission') {
+      return jsonOutput_(submitTaxExemptGuidedSubmission(payload));
+    }
+    if (action === 'email_tax_exempt_submission_copy') {
+      return jsonOutput_(emailTaxExemptSubmissionCopy(payload));
+    }
+    if (action === 'get_tax_exempt_team_review') {
+      return jsonOutput_(getTaxExemptTeamReview(payload));
+    }
+    if (action === 'approve_tax_exempt_submission') {
+      return jsonOutput_(approveTaxExemptSubmission(payload));
+    }
+    if (action === 'deny_tax_exempt_submission') {
+      return jsonOutput_(denyTaxExemptSubmission(payload));
+    }
     if (action === 'admin_mark_manual_payment_received') {
       return jsonOutput_(adminMarkManualPaymentReceived(payload));
     }
@@ -822,7 +892,7 @@ function doPost(e) {
   }
 }
 
-/* ---------------- Auth ---------------- */
+/* ---------------- Auth + Session Services ---------------- */
 
 /**
  * PHASE 1 (Login only):
@@ -1109,6 +1179,8 @@ function listProjectsForEmail_(exportSheet, email) {
   return projects;
 }
 
+/* ---------------- Dashboard + Snapshot-Load Services ---------------- */
+
 function buildDashboardHomeData_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const cfg = opts.cfg || getConfig_();
@@ -1260,6 +1332,8 @@ function authLoadProject(payload) {
 
 function buildEphemeralAccountSummary_(identity, cfg) {
   const merged = buildAccountIdentityFromInputs_(identity);
+  const creditTermsWorkflow = buildAccountDocumentWorkflowSummary_({}, ACCOUNT_DOCUMENT_TYPES.credit_terms, cfg);
+  const taxExemptWorkflow = buildAccountDocumentWorkflowSummary_({}, ACCOUNT_DOCUMENT_TYPES.tax_exempt, cfg);
   return {
     accountId: '',
     orgId: merged.orgId,
@@ -1269,16 +1343,35 @@ function buildEphemeralAccountSummary_(identity, cfg) {
     termsStatus: 'not_started',
     termsApproved: false,
     termsApprovedAt: '',
+    signedTermsFileUrl: '',
+    signedTermsSubmittedAt: '',
+    approvedPaymentTermsCode: '',
+    approvedPaymentTermsLabel: '',
+    approvedPaymentTermsDays: 0,
+    approvedPaymentTermsNotes: '',
+    approvedPaymentTermsSetAt: '',
+    approvedPaymentTermsSetByName: '',
+    approvedPaymentTermsSetByEmail: '',
     taxExemptStatus: 'not_started',
     taxExemptApproved: false,
     taxExemptExpiresAt: '',
     taxExemptActive: false,
+    taxExemptCertificateUrl: '',
+    taxExemptCertificateNumber: '',
+    taxExemptSubmittedAt: '',
     poAvailable: false,
-    termsDocumentUrl: String((cfg && cfg.termsDocumentUrl) || '').trim(),
+    termsDocumentUrl: creditTermsWorkflow ? creditTermsWorkflow.sourceDocumentUrl : String((cfg && cfg.termsDocumentUrl) || '').trim(),
+    termsDocumentDownloadUrl: creditTermsWorkflow ? creditTermsWorkflow.sourceDocumentDownloadUrl : '',
+    taxExemptDocumentUrl: taxExemptWorkflow ? taxExemptWorkflow.sourceDocumentUrl : '',
+    taxExemptDocumentDownloadUrl: taxExemptWorkflow ? taxExemptWorkflow.sourceDocumentDownloadUrl : '',
     billingContactEmail: merged.billingContactEmail || merged.personEmail,
     billingContactName: merged.billingContactName || merged.personName,
     createdAt: '',
-    updatedAt: ''
+    updatedAt: '',
+    documentWorkflows: {
+      creditTerms: creditTermsWorkflow,
+      taxExempt: taxExemptWorkflow
+    }
   };
 }
 
@@ -1335,6 +1428,8 @@ function getAccountStatus(payload) {
     return { ok: false, error: String((err && err.message) || err) };
   }
 }
+
+/* ---------------- Order Action Gateway + Validation Services ---------------- */
 
 function buildOrderActionContext_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
@@ -1461,29 +1556,61 @@ function buildOrderActionError_(code, message, extra) {
   return Object.assign(base, (extra && typeof extra === 'object') ? extra : {});
 }
 
-function getBlockingArtworkJobsForOrderAction_(ctx) {
-  const context = (ctx && typeof ctx === 'object') ? ctx : {};
-  const row = (context.row && typeof context.row === 'object') ? context.row : {};
-  const snapshot = context.snapshot || {};
-  const printJobs = normalizePrintJobsForOrder_(snapshot && snapshot.printJobs);
-  const portalState = normalizePortalStateForOrder_(context.portalState || {}, printJobs);
-  const blocked = [];
-  printJobs.forEach((job, idx) => {
-    const jobState = portalState && portalState.printJobs ? portalState.printJobs[job.printJobId] : null;
-    if (jobState && jobState.hidden === true) return;
-    const artStatusHeader = normalizeHeaderKey_(getPrintJobArtStatusHeader_(idx + 1));
-    if (boolFromCell_(row[artStatusHeader])) return;
-    blocked.push({
-      printJobId: job.printJobId,
-      title: 'Print Job ' + (idx + 1) + ': ' + (trimString_(job.printJobName) || ('Project ' + (idx + 1)))
+function getMinimumBlockingJobsForOrderAction_(ctx) {
+  const ruleState = (ctx && typeof ctx === 'object' && Array.isArray(ctx.includedJobSelectionStates))
+    ? ctx
+    : buildOrderActionRuleState_(ctx);
+  return ruleState.includedJobSelectionStates
+    .filter(function(item) {
+      return item.minimumUnits > 0 && item.enteredUnits < item.minimumUnits;
+    })
+    .map(function(item) {
+      const job = item.job || {};
+      const number = item.printJobNumber || getPrintJobDisplayNumberForOrder_(ruleState.printJobs, job.printJobId) || 1;
+      const name = trimString_(job.printJobName) || ('Project ' + number);
+      return {
+        printJobId: trimString_(job.printJobId),
+        title: name,
+        subline: 'Total units entered: ' + String(item.enteredUnits),
+        extraLine: 'Minimum units to order: ' + String(item.minimumUnits)
+      };
     });
-  });
-  return blocked;
+}
+
+function getBlockingArtworkJobsForOrderAction_(ctx) {
+  const ruleState = (ctx && typeof ctx === 'object' && Array.isArray(ctx.includedJobSelectionStates))
+    ? ctx
+    : buildOrderActionRuleState_(ctx);
+  return ruleState.includedJobSelectionStates
+    .filter(function(item) {
+      const number = item.printJobNumber || getPrintJobDisplayNumberForOrder_(ruleState.printJobs, item.printJobId) || 1;
+      const artStatusHeader = normalizeHeaderKey_(getPrintJobArtStatusHeader_(number));
+      return !boolFromCell_(ruleState.row[artStatusHeader]);
+    })
+    .map(function(item) {
+      const job = item.job || {};
+      const number = item.printJobNumber || getPrintJobDisplayNumberForOrder_(ruleState.printJobs, job.printJobId) || 1;
+      const name = trimString_(job.printJobName) || ('Project ' + number);
+      return {
+        printJobId: trimString_(job.printJobId),
+        title: 'Print Job ' + number + ': ' + name,
+        subline: 'Click here to approve artwork'
+      };
+    });
 }
 
 function validateOrderPlacementForAction_(ctx, options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const blockingJobs = getBlockingArtworkJobsForOrderAction_(ctx);
+  const ruleState = buildOrderActionRuleState_(ctx);
+  const minimumBlockingJobs = getMinimumBlockingJobsForOrderAction_(ruleState);
+  if (minimumBlockingJobs.length) {
+    return buildOrderActionError_(
+      'minimum_quantity_required',
+      'We are unable to proceed with your order because your quantities entered do not meet our minimums to order.',
+      { blockingJobs: minimumBlockingJobs }
+    );
+  }
+  const blockingJobs = getBlockingArtworkJobsForOrderAction_(ruleState);
   if (blockingJobs.length) {
     return buildOrderActionError_(
       'artwork_approval_required',
@@ -1542,72 +1669,19 @@ function overridePortalPayloadState_(portalPayload, portalState) {
   return payload;
 }
 
-function createCheckoutAttempt(payload) {
+/* ---------------- Checkout + Manual / PO Transition Sequencing ---------------- */
+
+// Current sequencing is intentionally preserved here so the next hardening slice
+// can change persistence timing and failure handling with smaller, clearer seams.
+function buildPreparedOrderActionContext_(payload) {
+  const ctx = buildOrderActionContext_(payload);
+  persistLatestPortalStateForOrderAction_(ctx);
+  return ctx;
+}
+
+function buildOrderActionPortalPayload_(ctx, exportRowInfo) {
   try {
-    const ctx = buildOrderActionContext_(payload);
-    persistLatestPortalStateForOrderAction_(ctx);
-    const paymentMethodSelected = trimString_(ctx.payload.paymentMethodSelected).toLowerCase();
-    if (paymentMethodSelected !== PAYMENT_METHODS.card && paymentMethodSelected !== PAYMENT_METHODS.ach) {
-      return { ok: false, error: 'Unsupported payment method.' };
-    }
-    const validationError = validateOrderPlacementForAction_(ctx, { requirePositiveCheckoutTotal: true });
-    if (validationError) return validationError;
-
-    const checkoutAttemptId = newPortalId_('chk');
-    const created = createPortalOrder_(Object.assign({}, ctx, {
-      orderDraft: Object.assign({}, ctx.orderDraft, {
-        paymentMethodSelected: paymentMethodSelected,
-        paymentState: PAYMENT_STATES.checkout_created,
-        orderState: ORDER_STATES.payment_in_progress,
-        productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-        portalLockState: PORTAL_LOCK_STATES.editable
-      }),
-      checkoutAttemptId: checkoutAttemptId,
-      paymentMethodSelected: paymentMethodSelected,
-      paymentState: PAYMENT_STATES.checkout_created,
-      orderState: ORDER_STATES.payment_in_progress,
-      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-      portalLockState: PORTAL_LOCK_STATES.editable
-    }));
-
-    const stripe = createStripeCheckoutSession_(ctx.orderDraft, {
-      cfg: ctx.cfg,
-      paymentMethodSelected: paymentMethodSelected,
-      checkoutAttemptId: checkoutAttemptId,
-      orderId: created.summary.orderId,
-      returnUrl: trimString_(ctx.payload.returnUrl || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(ctx.orderDraft.token))
-    });
-
-    let finalOrderInfo = created.rowInfo;
-    if (stripe.ok && trimString_(stripe.sessionId)) {
-      finalOrderInfo = updatePortalOrderState_({
-        cfg: ctx.cfg,
-        ss: ctx.ss,
-        infra: ctx.infra,
-        orderRowInfo: created.rowInfo,
-        stripeSessionId: stripe.sessionId
-      });
-    }
-
-    const orderSummary = buildPortalOrderSummary_(finalOrderInfo.rowObjNormalized);
-    const exportRowInfo = writeCurrentOrderPointersToExportLog_({
-      cfg: ctx.cfg,
-      ss: ctx.ss,
-      infra: ctx.infra,
-      rowInfo: ctx.rowInfo,
-      orderSummary: Object.assign({}, orderSummary, {
-        checkoutAttemptId: checkoutAttemptId,
-        paymentMethodSelected: paymentMethodSelected,
-        paymentState: PAYMENT_STATES.checkout_created,
-        orderState: ORDER_STATES.payment_in_progress,
-        productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-        portalLockState: PORTAL_LOCK_STATES.editable
-      }),
-      accountSummary: ctx.accountInfo.summary,
-      status: 'Editable'
-    });
-
-    const portalPayload = overridePortalPayloadState_(
+    return overridePortalPayloadState_(
       refreshPortalPayloadForToken_(ctx.orderDraft.token, {
         cfg: ctx.cfg,
         ss: ctx.ss,
@@ -1616,45 +1690,170 @@ function createCheckoutAttempt(payload) {
       }),
       ctx.portalState
     );
-
-    return {
-      ok: true,
-      checkoutReady: stripe.ok === true && !!trimString_(stripe.checkoutUrl || stripe.url),
-      accountSummary: ctx.accountInfo.summary,
-      orderSummary: Object.assign({}, orderSummary, {
-        checkoutAttemptId: checkoutAttemptId
-      }),
-      stripe: stripe,
-      portalPayload: portalPayload,
-      warnings: stripe.ok ? [] : [String(stripe.error || 'Stripe checkout is not configured.')]
-    };
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    console.log('[RT-CHECKOUT-PORTAL-PAYLOAD] ' + JSON.stringify({
+      ok: false,
+      token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
+      error: String((err && err.message) || err)
+    }));
+    return null;
   }
 }
 
-function initiateManualPaymentOrder_(payload) {
-  const ctx = buildOrderActionContext_(payload);
-  persistLatestPortalStateForOrderAction_(ctx);
-  const method = trimString_(ctx.payload.paymentMethodSelected).toLowerCase();
-  if (method !== PAYMENT_METHODS.check && method !== PAYMENT_METHODS.cash) {
-    throw new Error('Unsupported manual payment method.');
+function buildCheckoutAttemptIdentity_() {
+  return {
+    orderId: newPortalId_('ord'),
+    checkoutAttemptId: newPortalId_('chk')
+  };
+}
+
+function hasUsableCheckoutSession_(stripe) {
+  const session = (stripe && typeof stripe === 'object') ? stripe : {};
+  return session.ok === true
+    && !!trimString_(session.sessionId)
+    && !!trimString_(session.checkoutUrl || session.url);
+}
+
+function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkoutIdentity) {
+  return {
+    cfg: ctx.cfg,
+    paymentMethodSelected: paymentMethodSelected,
+    checkoutAttemptId: trimString_(checkoutIdentity && checkoutIdentity.checkoutAttemptId),
+    orderId: trimString_(checkoutIdentity && checkoutIdentity.orderId),
+    returnUrl: trimString_(ctx.payload.returnUrl || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(ctx.orderDraft.token))
+  };
+}
+
+function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe) {
+  const identity = (checkoutIdentity && typeof checkoutIdentity === 'object') ? checkoutIdentity : {};
+  const stripeResult = (stripe && typeof stripe === 'object') ? stripe : {};
+  const orderDraft = Object.assign({}, ctx.orderDraft, {
+    paymentMethodSelected: paymentMethodSelected,
+    paymentState: PAYMENT_STATES.checkout_created,
+    orderState: ORDER_STATES.payment_in_progress,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    portalLockState: PORTAL_LOCK_STATES.editable
+  });
+  return Object.assign({}, ctx, {
+    orderDraft: orderDraft,
+    orderId: trimString_(identity.orderId),
+    checkoutAttemptId: trimString_(identity.checkoutAttemptId),
+    paymentMethodSelected: paymentMethodSelected,
+    paymentState: PAYMENT_STATES.checkout_created,
+    orderState: ORDER_STATES.payment_in_progress,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    portalLockState: PORTAL_LOCK_STATES.editable,
+    stripeSessionId: trimString_(stripeResult.sessionId)
+  });
+}
+
+function updateCheckoutAttemptOrderWithStripeSession_(ctx, created, stripe) {
+  const createdInfo = created && created.rowInfo;
+  if (!createdInfo) return null;
+  const desiredSessionId = trimString_(stripe && stripe.sessionId);
+  if (!desiredSessionId) return createdInfo;
+  const currentSessionId = trimString_(createdInfo.rowObjNormalized && createdInfo.rowObjNormalized.stripesessionid);
+  if (currentSessionId === desiredSessionId) return createdInfo;
+  return updatePortalOrderState_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    orderRowInfo: createdInfo,
+    stripeSessionId: desiredSessionId
+  });
+}
+
+function writeCheckoutAttemptPointers_(ctx, orderSummary, paymentMethodSelected, checkoutAttemptId) {
+  return writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: Object.assign({}, orderSummary, {
+      checkoutAttemptId: checkoutAttemptId,
+      paymentMethodSelected: paymentMethodSelected,
+      paymentState: PAYMENT_STATES.checkout_created,
+      orderState: ORDER_STATES.payment_in_progress,
+      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+      portalLockState: PORTAL_LOCK_STATES.editable
+    }),
+    accountSummary: ctx.accountInfo.summary,
+    status: 'Editable'
+  });
+}
+
+function buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutAttemptId, stripe, portalPayload) {
+  return {
+    ok: true,
+    checkoutReady: stripe.ok === true && !!trimString_(stripe.checkoutUrl || stripe.url),
+    accountSummary: ctx.accountInfo.summary,
+    orderSummary: Object.assign({}, orderSummary, {
+      checkoutAttemptId: checkoutAttemptId
+    }),
+    stripe: stripe,
+    portalPayload: portalPayload,
+    warnings: stripe.ok ? [] : [String(stripe.error || 'Stripe checkout is not configured.')]
+  };
+}
+
+function buildCheckoutAttemptFailureResponse_(stripe, options) {
+  const stripeResult = (stripe && typeof stripe === 'object') ? stripe : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const failureCode = trimString_(opts.code || stripeResult.code) || 'checkout_unavailable';
+  const isGrandTotalFailure = failureCode === 'non_positive_checkout_total';
+  const errorMessage = trimString_(
+    opts.error || (isGrandTotalFailure
+      ? stripeResult.error
+      : 'Secure payment could not start. Please try again or contact Red Threads.')
+  ) || 'Secure payment could not start. Please try again or contact Red Threads.';
+  const response = {
+    ok: false,
+    code: failureCode,
+    error: errorMessage
+  };
+  [
+    'configured',
+    'statusCode',
+    'amountGrandTotal',
+    'currency'
+  ].forEach(function(key) {
+    if (!Object.prototype.hasOwnProperty.call(stripeResult, key)) return;
+    response[key] = stripeResult[key];
+  });
+  if (Object.prototype.hasOwnProperty.call(opts, 'warnings')) {
+    response.warnings = opts.warnings;
+  } else if (trimString_(stripeResult.error) && stripeResult.error !== errorMessage) {
+    response.warnings = [String(stripeResult.error)];
   }
-  const validationError = validateOrderPlacementForAction_(ctx);
-  if (validationError) return validationError;
+  response.stripe = stripeResult;
+  return response;
+}
+
+function buildOrderInvoiceArtifacts_(ctx) {
   const invoiceInfo = generateInvoiceDocumentForOrder_(ctx.orderDraft, { cfg: ctx.cfg });
   const emailResult = sendInvoiceEmailForOrder_(ctx.orderDraft, invoiceInfo, {
     to: ctx.orderDraft.personEmail
   });
-  const now = nowIso_();
-  const created = createPortalOrder_(Object.assign({}, ctx, {
-    orderDraft: Object.assign({}, ctx.orderDraft, {
-      paymentMethodSelected: method,
-      paymentState: PAYMENT_STATES.manual_pending,
-      orderState: ORDER_STATES.awaiting_manual_payment,
-      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-      portalLockState: PORTAL_LOCK_STATES.locked
-    }),
+  return {
+    invoiceInfo: invoiceInfo,
+    emailResult: emailResult,
+    nowIso: nowIso_()
+  };
+}
+
+function buildManualPaymentOrderCreateOptions_(ctx, method, invoiceArtifacts) {
+  const invoiceInfo = invoiceArtifacts.invoiceInfo;
+  const emailResult = invoiceArtifacts.emailResult;
+  const now = invoiceArtifacts.nowIso;
+  const orderDraft = Object.assign({}, ctx.orderDraft, {
+    paymentMethodSelected: method,
+    paymentState: PAYMENT_STATES.manual_pending,
+    orderState: ORDER_STATES.awaiting_manual_payment,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    portalLockState: PORTAL_LOCK_STATES.locked
+  });
+  return Object.assign({}, ctx, {
+    orderDraft: orderDraft,
     portalLockState: PORTAL_LOCK_STATES.locked,
     paymentMethodSelected: method,
     paymentState: PAYMENT_STATES.manual_pending,
@@ -1665,7 +1864,36 @@ function initiateManualPaymentOrder_(payload) {
     invoicePdfUrl: invoiceInfo.invoicePdfUrl,
     invoiceSentToEmail: emailResult.ok ? emailResult.email : normalizeEmail_(ctx.orderDraft.personEmail),
     invoiceSentAt: emailResult.ok ? now : ''
-  }));
+  });
+}
+
+function buildPurchaseOrderCreateOptions_(ctx, invoiceArtifacts) {
+  const invoiceInfo = invoiceArtifacts.invoiceInfo;
+  const emailResult = invoiceArtifacts.emailResult;
+  const now = invoiceArtifacts.nowIso;
+  const orderDraft = Object.assign({}, ctx.orderDraft, {
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order,
+    paymentState: PAYMENT_STATES.not_started,
+    orderState: ORDER_STATES.awaiting_po_submission,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
+    portalLockState: PORTAL_LOCK_STATES.locked
+  });
+  return Object.assign({}, ctx, {
+    orderDraft: orderDraft,
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order,
+    paymentState: PAYMENT_STATES.not_started,
+    orderState: ORDER_STATES.awaiting_po_submission,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    lockedAt: now,
+    invoiceNumber: invoiceInfo.invoiceNumber,
+    invoicePdfUrl: invoiceInfo.invoicePdfUrl,
+    invoiceSentToEmail: emailResult.ok ? emailResult.email : normalizeEmail_(ctx.orderDraft.personEmail),
+    invoiceSentAt: emailResult.ok ? now : ''
+  });
+}
+
+function finalizeLockedOrderTransition_(ctx, created) {
   const exportRowInfo = writeCurrentOrderPointersToExportLog_({
     cfg: ctx.cfg,
     ss: ctx.ss,
@@ -1676,15 +1904,13 @@ function initiateManualPaymentOrder_(payload) {
     status: 'locked'
   });
   setPortalClientLockForRow_(ctx.infra.exportSheet, exportRowInfo, true, { token: ctx.orderDraft.token });
-  const portalPayload = overridePortalPayloadState_(
-    refreshPortalPayloadForToken_(ctx.orderDraft.token, {
-      cfg: ctx.cfg,
-      ss: ctx.ss,
-      infra: ctx.infra,
-      rowInfo: exportRowInfo
-    }),
-    ctx.portalState
-  );
+  return {
+    exportRowInfo: exportRowInfo,
+    portalPayload: buildOrderActionPortalPayload_(ctx, exportRowInfo)
+  };
+}
+
+function buildLockedOrderTransitionResponse_(ctx, created, invoiceInfo, portalPayload) {
   return {
     ok: true,
     accountSummary: ctx.accountInfo.summary,
@@ -1692,6 +1918,177 @@ function initiateManualPaymentOrder_(payload) {
     invoice: invoiceInfo,
     portalPayload: portalPayload
   };
+}
+
+function buildCheckoutAttemptRollbackOrderDraft_(ctx) {
+  return Object.assign({}, ctx.orderDraft, {
+    paymentMethodSelected: '',
+    paymentState: PAYMENT_STATES.not_started,
+    orderState: ORDER_STATES.draft,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    portalLockState: PORTAL_LOCK_STATES.editable
+  });
+}
+
+function rollbackCheckoutAttemptOrder_(ctx, created, reason) {
+  if (!created || !created.rowInfo) return null;
+  try {
+    return updatePortalOrderState_({
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      orderRowInfo: created.rowInfo,
+      checkoutAttemptId: '',
+      stripeSessionId: '',
+      stripePaymentIntentId: '',
+      paymentMethodSelected: '',
+      paymentState: PAYMENT_STATES.not_started,
+      orderState: ORDER_STATES.draft,
+      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+      portalLockState: PORTAL_LOCK_STATES.editable,
+      lockedAt: '',
+      orderDraft: buildCheckoutAttemptRollbackOrderDraft_(ctx)
+    });
+  } catch (err) {
+    console.log('[RT-CHECKOUT-ROLLBACK] ' + JSON.stringify({
+      ok: false,
+      token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
+      orderId: trimString_(created && created.summary && created.summary.orderId),
+      checkoutAttemptId: trimString_(created && created.summary && created.summary.checkoutAttemptId),
+      error: String((err && err.message) || err)
+    }));
+    return null;
+  }
+}
+
+function resolveCreatedCheckoutOrderForRollback_(ctx, created, checkoutIdentity) {
+  if (created && created.rowInfo) return created;
+  const orderId = trimString_(checkoutIdentity && checkoutIdentity.orderId);
+  if (!orderId) return null;
+  const rowInfo = getPortalOrderByOrderId_(orderId, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    ordersSheet: ctx.infra && ctx.infra.ordersSheet
+  });
+  if (!rowInfo) return null;
+  return {
+    rowInfo: rowInfo,
+    summary: buildPortalOrderSummary_(rowInfo.rowObjNormalized)
+  };
+}
+
+function snapshotExportOrderPointers_(rowInfo) {
+  const row = (rowInfo && rowInfo.rowObjNormalized) ? rowInfo.rowObjNormalized : {};
+  return {
+    activeOrderId: trimString_(row.activeorderid),
+    latestCheckoutAttemptId: trimString_(row.latestcheckoutattemptid),
+    currentAccountId: trimString_(row.currentaccountid),
+    portalLockState: trimString_(row.portallockstate),
+    currentOrderState: trimString_(row.currentorderstate),
+    currentPaymentState: trimString_(row.currentpaymentstate),
+    currentProductionAuthorizationState: trimString_(row.currentproductionauthorizationstate),
+    currentPaymentMethod: trimString_(row.currentpaymentmethod),
+    termsApproved: boolFromCell_(row.termsapproved),
+    taxExemptApproved: boolFromCell_(row.taxexemptapproved),
+    latestInvoiceNumber: trimString_(row.latestinvoicenumber),
+    lastOrderUpdatedAt: trimString_(row.lastorderupdatedat),
+    status: trimString_(row.status)
+  };
+}
+
+function restoreExportOrderPointers_(ctx, pointerSnapshot) {
+  const snapshot = (pointerSnapshot && typeof pointerSnapshot === 'object') ? pointerSnapshot : {};
+  try {
+    return writeCurrentOrderPointersToExportLog_(Object.assign({}, snapshot, {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      rowInfo: ctx.rowInfo
+    }));
+  } catch (err) {
+    console.log('[RT-CHECKOUT-POINTER-RESTORE] ' + JSON.stringify({
+      ok: false,
+      token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
+      error: String((err && err.message) || err)
+    }));
+    return null;
+  }
+}
+
+function createCheckoutAttempt(payload) {
+  try {
+    const ctx = buildPreparedOrderActionContext_(payload);
+    const paymentMethodSelected = trimString_(ctx.payload.paymentMethodSelected).toLowerCase();
+    if (paymentMethodSelected !== PAYMENT_METHODS.card && paymentMethodSelected !== PAYMENT_METHODS.ach) {
+      return { ok: false, error: 'Unsupported payment method.' };
+    }
+    const validationError = validateOrderPlacementForAction_(ctx, { requirePositiveCheckoutTotal: true });
+    if (validationError) return validationError;
+
+    const checkoutIdentity = buildCheckoutAttemptIdentity_();
+    const stripe = createStripeCheckoutSession_(
+      ctx.orderDraft,
+      buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkoutIdentity)
+    );
+    if (!hasUsableCheckoutSession_(stripe)) {
+      return buildCheckoutAttemptFailureResponse_(stripe);
+    }
+
+    const pointerSnapshot = snapshotExportOrderPointers_(ctx.rowInfo);
+    let created = null;
+    let exportRowInfo = null;
+    let orderSummary = null;
+    try {
+      created = createPortalOrder_(
+        buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe)
+      );
+      const finalOrderInfo = updateCheckoutAttemptOrderWithStripeSession_(ctx, created, stripe);
+      orderSummary = buildPortalOrderSummary_(finalOrderInfo.rowObjNormalized);
+      exportRowInfo = writeCheckoutAttemptPointers_(ctx, orderSummary, paymentMethodSelected, checkoutIdentity.checkoutAttemptId);
+    } catch (persistErr) {
+      restoreExportOrderPointers_(ctx, pointerSnapshot);
+      rollbackCheckoutAttemptOrder_(
+        ctx,
+        resolveCreatedCheckoutOrderForRollback_(ctx, created, checkoutIdentity),
+        'checkout_activation_failed'
+      );
+      return buildCheckoutAttemptFailureResponse_(
+        stripe,
+        {
+          code: 'checkout_persistence_failed',
+          error: 'Secure payment could not start. Please try again or contact Red Threads.',
+          warnings: [String((persistErr && persistErr.message) || persistErr)]
+        }
+      );
+    }
+
+    const portalPayload = buildOrderActionPortalPayload_(ctx, exportRowInfo);
+
+    return buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutIdentity.checkoutAttemptId, stripe, portalPayload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function initiateManualPaymentOrder_(payload) {
+  const ctx = buildPreparedOrderActionContext_(payload);
+  const method = trimString_(ctx.payload.paymentMethodSelected).toLowerCase();
+  if (method !== PAYMENT_METHODS.check && method !== PAYMENT_METHODS.cash) {
+    throw new Error('Unsupported manual payment method.');
+  }
+  const validationError = validateOrderPlacementForAction_(ctx);
+  if (validationError) return validationError;
+  const invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx);
+  const created = createPortalOrder_(
+    buildManualPaymentOrderCreateOptions_(ctx, method, invoiceArtifacts)
+  );
+  const finalized = finalizeLockedOrderTransition_(ctx, created);
+  return buildLockedOrderTransitionResponse_(
+    ctx,
+    created,
+    invoiceArtifacts.invoiceInfo,
+    finalized.portalPayload
+  );
 }
 
 function initiateManualPayment(payload) {
@@ -1703,8 +2100,7 @@ function initiateManualPayment(payload) {
 }
 
 function initiatePurchaseOrderFlow_(payload) {
-  const ctx = buildOrderActionContext_(payload);
-  persistLatestPortalStateForOrderAction_(ctx);
+  const ctx = buildPreparedOrderActionContext_(payload);
   const validationError = validateOrderPlacementForAction_(ctx);
   if (validationError) return validationError;
   if (!ctx.accountInfo.summary.termsApproved) {
@@ -1717,56 +2113,15 @@ function initiatePurchaseOrderFlow_(payload) {
       message: 'Terms approval is required before you can submit a purchase order.'
     };
   }
-  const invoiceInfo = generateInvoiceDocumentForOrder_(ctx.orderDraft, { cfg: ctx.cfg });
-  const emailResult = sendInvoiceEmailForOrder_(ctx.orderDraft, invoiceInfo, {
-    to: ctx.orderDraft.personEmail
-  });
-  const now = nowIso_();
-  const created = createPortalOrder_(Object.assign({}, ctx, {
-    orderDraft: Object.assign({}, ctx.orderDraft, {
-      paymentMethodSelected: PAYMENT_METHODS.purchase_order,
-      paymentState: PAYMENT_STATES.not_started,
-      orderState: ORDER_STATES.awaiting_po_submission,
-      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
-      portalLockState: PORTAL_LOCK_STATES.locked
-    }),
-    paymentMethodSelected: PAYMENT_METHODS.purchase_order,
-    paymentState: PAYMENT_STATES.not_started,
-    orderState: ORDER_STATES.awaiting_po_submission,
-    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
-    portalLockState: PORTAL_LOCK_STATES.locked,
-    lockedAt: now,
-    invoiceNumber: invoiceInfo.invoiceNumber,
-    invoicePdfUrl: invoiceInfo.invoicePdfUrl,
-    invoiceSentToEmail: emailResult.ok ? emailResult.email : normalizeEmail_(ctx.orderDraft.personEmail),
-    invoiceSentAt: emailResult.ok ? now : ''
-  }));
-  const exportRowInfo = writeCurrentOrderPointersToExportLog_({
-    cfg: ctx.cfg,
-    ss: ctx.ss,
-    infra: ctx.infra,
-    rowInfo: ctx.rowInfo,
-    orderSummary: created.summary,
-    accountSummary: ctx.accountInfo.summary,
-    status: 'locked'
-  });
-  setPortalClientLockForRow_(ctx.infra.exportSheet, exportRowInfo, true, { token: ctx.orderDraft.token });
-  const portalPayload = overridePortalPayloadState_(
-    refreshPortalPayloadForToken_(ctx.orderDraft.token, {
-      cfg: ctx.cfg,
-      ss: ctx.ss,
-      infra: ctx.infra,
-      rowInfo: exportRowInfo
-    }),
-    ctx.portalState
+  const invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx);
+  const created = createPortalOrder_(buildPurchaseOrderCreateOptions_(ctx, invoiceArtifacts));
+  const finalized = finalizeLockedOrderTransition_(ctx, created);
+  return buildLockedOrderTransitionResponse_(
+    ctx,
+    created,
+    invoiceArtifacts.invoiceInfo,
+    finalized.portalPayload
   );
-  return {
-    ok: true,
-    accountSummary: ctx.accountInfo.summary,
-    orderSummary: created.summary,
-    invoice: invoiceInfo,
-    portalPayload: portalPayload
-  };
 }
 
 function initiatePurchaseOrder(payload) {
@@ -1777,12 +2132,16 @@ function initiatePurchaseOrder(payload) {
   }
 }
 
-function requestTermsEnrollment_(payload) {
+/* ---------------- Account Services + Shared Document Workflows ---------------- */
+
+function buildAccountDocumentContext_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   const cfg = getConfig_();
   const ss = SpreadsheetApp.openById(cfg.sheetId);
   const infra = ensurePortalInfrastructure_(ss, cfg);
   let identity = buildAccountIdentityFromInputs_(p);
+  let exportRowInfo = null;
+
   if (trimString_(p.sessionId)) {
     const userCtx = getUserContextBySessionId_(ss, p.sessionId);
     if (!userCtx.ok) return userCtx;
@@ -1793,31 +2152,1405 @@ function requestTermsEnrollment_(payload) {
       orgName: trimString_(userCtx.user && userCtx.user.rowObjNormalized.defaultorgname)
     });
   }
+
   if (trimString_(p.token)) {
-    const rowInfo = findRowByToken_(infra.exportSheet, trimString_(p.token));
-    if (!rowInfo) return { ok: false, error: 'Token not found.' };
-    identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(rowInfo.rowObjNormalized));
+    exportRowInfo = findRowByToken_(infra.exportSheet, trimString_(p.token));
+    if (!exportRowInfo) return { ok: false, error: 'Token not found.' };
+    identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(exportRowInfo.rowObjNormalized));
   }
+
   const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
     cfg: cfg,
     ss: ss,
     infra: infra,
     createIfMissing: true
   }));
-  const now = nowIso_();
-  setRowValuesByHeaderMap_(infra.accountsSheet, accountInfo.rowInfo.row, accountInfo.rowInfo.colMap, {
-    termsStatus: 'pending_submission',
-    termsDocumentUrl: cfg.termsDocumentUrl,
-    updatedAt: now
-  });
-  const refreshed = buildRowInfoFromSheet_(infra.accountsSheet, accountInfo.rowInfo.row);
+
   return {
     ok: true,
-    accountSummary: buildPortalAccountSummary_(refreshed.rowObjNormalized, cfg),
-    termsDocumentUrl: cfg.termsDocumentUrl,
-    uploadFolderId: cfg.termsDriveFolderId,
-    message: 'Terms enrollment request recorded. Upload/sign flows can be connected next.'
+    payload: p,
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    identity: identity,
+    exportRowInfo: exportRowInfo,
+    accountInfo: accountInfo
   };
+}
+
+function refreshAccountDocumentContextAccount_(ctx) {
+  const refreshed = buildRowInfoFromSheet_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row);
+  ctx.accountInfo = {
+    rowInfo: refreshed,
+    summary: buildPortalAccountSummary_(refreshed.rowObjNormalized, ctx.cfg)
+  };
+  return ctx.accountInfo;
+}
+
+function buildAccountDocumentWorkflowResponse_(ctx, documentType, message, extra) {
+  const type = normalizeAccountDocumentType_(documentType);
+  const summary = ctx.accountInfo && ctx.accountInfo.summary
+    ? ctx.accountInfo.summary
+    : buildEphemeralAccountSummary_(ctx.identity, ctx.cfg);
+  const definition = getAccountDocumentDefinition_(type, ctx.cfg);
+  const workflow = getAccountDocumentWorkflowFromSummary_(summary, type, ctx.cfg);
+  return Object.assign({
+    ok: true,
+    documentType: type,
+    accountSummary: summary,
+    documentWorkflow: workflow || null,
+    sourceDocumentUrl: definition ? definition.sourceDocumentUrl : '',
+    sourceDocumentDownloadUrl: definition ? definition.sourceDocumentDownloadUrl : '',
+    message: trimString_(message)
+  }, (extra && typeof extra === 'object') ? extra : {});
+}
+
+function buildAccountDocumentSourceDataPayload_(definition) {
+  if (!definition || !trimString_(definition.sourceFileId)) {
+    throw new Error('Source document is not configured.');
+  }
+  const sourceFile = getDriveFileByIdSafe_(definition.sourceFileId);
+  if (!sourceFile) {
+    throw new Error('Source document could not be loaded.');
+  }
+  const blob = sourceFile.getBlob();
+  const bytes = blob.getBytes();
+  if (!bytes || !bytes.length) {
+    throw new Error('Source document is empty.');
+  }
+  return {
+    fileName: sanitizeUploadedDocumentName_(sourceFile.getName(), definition.shortLabel + '.pdf'),
+    mimeType: trimString_(blob.getContentType()) || MimeType.PDF,
+    sizeBytes: bytes.length,
+    base64Data: Utilities.base64Encode(bytes)
+  };
+}
+
+function buildDriveFilePublicViewAssetUrl_(fileId) {
+  const id = trimString_(fileId);
+  return id ? ('https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id)) : '';
+}
+
+function buildDriveFilePublicImageCandidates_(fileId) {
+  const id = trimString_(fileId);
+  if (!id) return [];
+  const enc = encodeURIComponent(id);
+  return [
+    'https://drive.usercontent.google.com/download?id=' + enc + '&export=view',
+    'https://lh3.googleusercontent.com/d/' + enc,
+    'https://drive.google.com/uc?export=view&id=' + enc
+  ];
+}
+
+function buildDriveBinaryDataPayload_(fileId, fallbackName, fallbackMimeType) {
+  const id = trimString_(fileId);
+  if (!id) {
+    throw new Error('Source asset is not configured.');
+  }
+
+  let blob = null;
+  let fileName = sanitizeUploadedDocumentName_(fallbackName, fallbackName || 'asset');
+  const sourceFile = getDriveFileByIdSafe_(id);
+  if (sourceFile) {
+    blob = sourceFile.getBlob();
+    fileName = sanitizeUploadedDocumentName_(sourceFile.getName(), fileName);
+  } else {
+    const response = UrlFetchApp.fetch(buildDriveFilePublicViewAssetUrl_(id), {
+      followRedirects: true,
+      muteHttpExceptions: true
+    });
+    const statusCode = Number(response && response.getResponseCode && response.getResponseCode()) || 0;
+    if (statusCode < 200 || statusCode >= 300) {
+      throw new Error('Source asset could not be loaded.');
+    }
+    blob = response.getBlob();
+  }
+
+  const bytes = blob && typeof blob.getBytes === 'function' ? blob.getBytes() : [];
+  if (!bytes || !bytes.length) {
+    throw new Error('Source asset is empty.');
+  }
+  const mimeType = trimString_(blob.getContentType()) || trimString_(fallbackMimeType) || 'application/octet-stream';
+  return {
+    fileName: fileName,
+    mimeType: mimeType,
+    sizeBytes: bytes.length,
+    base64Data: Utilities.base64Encode(bytes)
+  };
+}
+
+function buildTaxFormViewerAssetsPayload_() {
+  const pageAssets = [
+    {
+      page: 1,
+      fileId: DEFAULT_TAX_EXEMPT_FORM_PAGE_1_FILE_ID,
+      fileName: 'mi-tax-form-3372-page-1.png'
+    },
+    {
+      page: 2,
+      fileId: DEFAULT_TAX_EXEMPT_FORM_PAGE_2_FILE_ID,
+      fileName: 'mi-tax-form-3372-page-2.png'
+    }
+  ];
+  return pageAssets.map(function(asset) {
+    const payload = buildDriveBinaryDataPayload_(asset.fileId, asset.fileName, 'image/png');
+    return {
+      page: asset.page,
+      fileName: payload.fileName,
+      mimeType: payload.mimeType,
+      sizeBytes: payload.sizeBytes,
+      base64Data: payload.base64Data
+    };
+  });
+}
+
+function buildCreditTermsViewerAssetsPayload_() {
+  const pageAssets = [
+    { page: 1, fileId: DEFAULT_CREDIT_TERMS_FORM_PAGE_1_FILE_ID, fileName: 'credit-terms-page-1.png' },
+    { page: 2, fileId: DEFAULT_CREDIT_TERMS_FORM_PAGE_2_FILE_ID, fileName: 'credit-terms-page-2.png' },
+    { page: 3, fileId: DEFAULT_CREDIT_TERMS_FORM_PAGE_3_FILE_ID, fileName: 'credit-terms-page-3.png' },
+    { page: 4, fileId: DEFAULT_CREDIT_TERMS_FORM_PAGE_4_FILE_ID, fileName: 'credit-terms-page-4.png' },
+    { page: 5, fileId: DEFAULT_CREDIT_TERMS_FORM_PAGE_5_FILE_ID, fileName: 'credit-terms-page-5.png' }
+  ];
+  return pageAssets.map(function(asset) {
+    const payload = {
+      page: asset.page,
+      fileId: asset.fileId,
+      fileName: asset.fileName,
+      imageCandidates: buildDriveFilePublicImageCandidates_(asset.fileId)
+    };
+    if (asset.page === 1) {
+      try {
+        const inlinePayload = buildDriveBinaryDataPayload_(asset.fileId, asset.fileName, 'image/png');
+        payload.mimeType = trimString_(inlinePayload.mimeType) || 'image/png';
+        payload.base64Data = trimString_(inlinePayload.base64Data);
+      } catch (_) {}
+    }
+    return payload;
+  });
+}
+
+function sanitizeUploadedDocumentName_(name, fallbackBaseName) {
+  const fallback = trimString_(fallbackBaseName) || 'document';
+  const raw = trimString_(name) || fallback;
+  const cleaned = raw.replace(/[^\w.\- ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || fallback;
+}
+
+function buildAccountDocumentArtifactName_(ctx, definition, suffix) {
+  const orgLabel = trimString_(ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.orgName)
+    || trimString_(ctx.identity && ctx.identity.orgName)
+    || 'Account';
+  const safeOrg = sanitizeUploadedDocumentName_(orgLabel, 'Account').replace(/\s+/g, '_');
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyyMMdd_HHmmss');
+  return safeOrg + ' - ' + definition.shortLabel + ' - ' + trimString_(suffix || stamp);
+}
+
+function decodeAccountDocumentUpload_(payload, definition, ctx) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const base64Data = trimString_(p.base64Data || p.fileDataBase64 || p.fileBase64);
+  if (!base64Data) throw new Error('Choose a completed document before uploading.');
+  const bytes = Utilities.base64Decode(base64Data);
+  if (!bytes || !bytes.length) throw new Error('Unable to read the uploaded document.');
+  if (bytes.length > MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES) {
+    throw new Error('Uploaded documents must be 5 MB or smaller for this MVP flow.');
+  }
+  const mimeType = trimString_(p.mimeType) || 'application/octet-stream';
+  const fallbackExt = mimeType === 'application/pdf' ? '.pdf' : '';
+  const fileName = sanitizeUploadedDocumentName_(
+    p.fileName,
+    buildAccountDocumentArtifactName_(ctx, definition, 'Uploaded') + fallbackExt
+  );
+  return {
+    bytes: bytes,
+    mimeType: mimeType,
+    fileName: fileName,
+    sizeBytes: bytes.length,
+    blob: Utilities.newBlob(bytes, mimeType, fileName)
+  };
+}
+
+function decodeAccountDocumentUploads_(payload, definition, ctx) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const files = Array.isArray(p.files) ? p.files.filter(function(item) {
+    return item && typeof item === 'object';
+  }) : [];
+  if (!files.length) {
+    return [decodeAccountDocumentUpload_(payload, definition, ctx)];
+  }
+  return files.map(function(filePayload) {
+    return decodeAccountDocumentUpload_(filePayload, definition, ctx);
+  });
+}
+
+function decodeTaxExemptRenderedArtifact_(payload, definition, ctx) {
+  const rendered = payload && payload.renderedArtifact && typeof payload.renderedArtifact === 'object'
+    ? payload.renderedArtifact
+    : null;
+  if (!rendered) return null;
+  const base64Data = trimString_(rendered.base64Data || rendered.fileDataBase64 || rendered.fileBase64);
+  if (!base64Data) return null;
+  const bytes = Utilities.base64Decode(base64Data);
+  if (!bytes || !bytes.length) {
+    throw new Error('Unable to read the completed document image.');
+  }
+  if (bytes.length > MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES) {
+    throw new Error('Completed document image must be 5 MB or smaller.');
+  }
+  const mimeType = trimString_(rendered.mimeType) || 'image/png';
+  const fallbackExt = mimeType === 'image/jpeg' ? '.jpg' : '.png';
+  const fileName = sanitizeUploadedDocumentName_(
+    rendered.fileName,
+    buildAccountDocumentArtifactName_(ctx, definition, 'Rendered Submission') + fallbackExt
+  );
+  return {
+    bytes: bytes,
+    mimeType: mimeType,
+    fileName: fileName,
+    sizeBytes: bytes.length,
+    blob: Utilities.newBlob(bytes, mimeType, fileName)
+  };
+}
+
+function createAccountDocumentDriveFile_(ctx, definition, uploadInfo) {
+  const folder = getDriveFolderByIdSafe_(definition.uploadFolderId);
+  if (!folder) {
+    throw new Error(definition.label + ' folder is not configured.');
+  }
+  const file = folder.createFile(uploadInfo.blob.setName(uploadInfo.fileName));
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (_) {}
+  return {
+    fileId: file.getId(),
+    fileUrl: file.getUrl(),
+    fileName: file.getName(),
+    mimeType: uploadInfo.mimeType,
+    sizeBytes: uploadInfo.sizeBytes
+  };
+}
+
+function sanitizeTaxExemptGuidedForm_(payload, ctx) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const account = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const identity = ctx && ctx.identity ? ctx.identity : {};
+  const form = {
+    legalBusinessName: trimString_(p.legalBusinessName || account.orgName || identity.orgName),
+    doingBusinessAs: trimString_(p.doingBusinessAs),
+    addressLine1: trimString_(p.addressLine1),
+    addressLine2: trimString_(p.addressLine2),
+    city: trimString_(p.city),
+    state: trimString_(p.state || 'MI').toUpperCase(),
+    zip: trimString_(p.zip),
+    contactName: trimString_(p.contactName || account.billingContactName || account.primaryContactName || identity.personName),
+    contactTitle: trimString_(p.contactTitle),
+    contactEmail: normalizeEmail_(p.contactEmail || account.billingContactEmail || account.primaryEmail || identity.personEmail),
+    contactPhone: trimString_(p.contactPhone),
+    exemptionReason: trimString_(p.exemptionReason),
+    certificateNumber: trimString_(p.certificateNumber),
+    businessType: trimString_(p.businessType),
+    itemsPurchased: trimString_(p.itemsPurchased),
+    signerName: trimString_(p.signerName || p.contactName || account.billingContactName || account.primaryContactName || identity.personName),
+    signerTitle: trimString_(p.signerTitle || p.contactTitle),
+    signedDate: trimString_(p.signedDate || nowIso_().slice(0, 10)),
+    additionalNotes: trimString_(p.additionalNotes || p.notes),
+    signatureDataUrl: trimString_(p.signatureDataUrl)
+  };
+  [
+    ['legalBusinessName', 'Enter the legal business name for the exemption certificate.'],
+    ['addressLine1', 'Enter the street address for the exemption certificate.'],
+    ['city', 'Enter the city for the exemption certificate.'],
+    ['state', 'Enter the state for the exemption certificate.'],
+    ['zip', 'Enter the ZIP code for the exemption certificate.'],
+    ['exemptionReason', 'Enter the exemption reason for the Michigan certificate.'],
+    ['signerName', 'Enter the signer name for the exemption certificate.'],
+    ['signerTitle', 'Enter the signer title for the exemption certificate.'],
+    ['signedDate', 'Enter the signature date for the exemption certificate.']
+  ].forEach(function(requirement) {
+    if (!trimString_(form[requirement[0]])) {
+      throw new Error(requirement[1]);
+    }
+  });
+  return form;
+}
+
+function decodeDataUrlImageBlob_(dataUrl, fallbackName) {
+  const raw = trimString_(dataUrl);
+  const match = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!match) return null;
+  const mimeType = trimString_(match[1]) || 'image/png';
+  const bytes = Utilities.base64Decode(String(match[2] || '').replace(/\s+/g, ''));
+  if (!bytes || !bytes.length) return null;
+  const ext = mimeType === 'image/jpeg' ? '.jpg' : '.png';
+  return Utilities.newBlob(bytes, mimeType, sanitizeUploadedDocumentName_(fallbackName || ('signature' + ext), 'signature' + ext));
+}
+
+function generateTaxExemptGuidedArtifact_(ctx, formData) {
+  const definition = getAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx.cfg);
+  const folder = getDriveFolderByIdSafe_(definition.uploadFolderId);
+  if (!folder) throw new Error('Tax exemption folder is not configured.');
+
+  const title = buildAccountDocumentArtifactName_(ctx, definition, 'Guided Submission');
+  const doc = DocumentApp.create(title);
+  const body = doc.getBody();
+  body.clear();
+  body.appendParagraph('Michigan Sales Tax Exemption Submission').setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  body.appendParagraph('Structured portal submission for Red Threads review.');
+  body.appendParagraph('Red Threads will review this account-level submission before approving tax-exempt eligibility.');
+  body.appendParagraph('');
+  body.appendParagraph('Business Information').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  body.appendParagraph('Legal Business Name: ' + formData.legalBusinessName);
+  if (formData.doingBusinessAs) body.appendParagraph('DBA: ' + formData.doingBusinessAs);
+  body.appendParagraph('Address 1: ' + formData.addressLine1);
+  if (formData.addressLine2) body.appendParagraph('Address 2: ' + formData.addressLine2);
+  body.appendParagraph('City / State / ZIP: ' + [formData.city, formData.state, formData.zip].filter(Boolean).join(', '));
+  body.appendParagraph('');
+  body.appendParagraph('Contact').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  body.appendParagraph('Name: ' + formData.contactName);
+  if (formData.contactTitle) body.appendParagraph('Title: ' + formData.contactTitle);
+  if (formData.contactEmail) body.appendParagraph('Email: ' + formData.contactEmail);
+  if (formData.contactPhone) body.appendParagraph('Phone: ' + formData.contactPhone);
+  body.appendParagraph('');
+  body.appendParagraph('Michigan Certificate Details').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  body.appendParagraph('Exemption Reason: ' + formData.exemptionReason);
+  if (formData.businessType) body.appendParagraph('Business Type: ' + formData.businessType);
+  if (formData.itemsPurchased) body.appendParagraph('Items / Services: ' + formData.itemsPurchased);
+  if (formData.certificateNumber) body.appendParagraph('Certificate Number: ' + formData.certificateNumber);
+  body.appendParagraph('');
+  body.appendParagraph('Signature').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  body.appendParagraph('Signer Name: ' + formData.signerName);
+  body.appendParagraph('Signer Title: ' + formData.signerTitle);
+  body.appendParagraph('Signed Date: ' + formData.signedDate);
+  if (formData.signatureDataUrl) {
+    const signatureBlob = decodeDataUrlImageBlob_(formData.signatureDataUrl, title + ' - Signature.png');
+    if (signatureBlob) {
+      body.appendParagraph('Signature Preview:');
+      body.appendImage(signatureBlob);
+    }
+  }
+  if (formData.additionalNotes) {
+    body.appendParagraph('');
+    body.appendParagraph('Additional Notes').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    body.appendParagraph(formData.additionalNotes);
+  }
+  doc.saveAndClose();
+
+  const docFile = DriveApp.getFileById(doc.getId());
+  const pdfBlob = docFile.getAs(MimeType.PDF).setName(title + '.pdf');
+  const pdfFile = folder.createFile(pdfBlob);
+  try {
+    pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (_) {}
+  docFile.setTrashed(true);
+
+  return {
+    fileId: pdfFile.getId(),
+    fileUrl: pdfFile.getUrl(),
+    fileName: pdfFile.getName(),
+    mimeType: MimeType.PDF,
+    sizeBytes: pdfBlob.getBytes().length
+  };
+}
+
+function buildAccountDocumentSubmissionEntry_(ctx, definition, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const now = trimString_(opts.submittedAt) || nowIso_();
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const payload = ctx.payload || {};
+  return {
+    submittedAt: now,
+    submittedByName: trimString_(opts.submittedByName || accountSummary.billingContactName || accountSummary.primaryContactName || ctx.identity.personName || payload.personName),
+    submittedByEmail: normalizeEmail_(opts.submittedByEmail || accountSummary.billingContactEmail || accountSummary.primaryEmail || ctx.identity.personEmail || payload.personEmail),
+    submissionSource: trimString_(opts.submissionSource),
+    artifactFileId: trimString_(opts.artifactFileId),
+    artifactUrl: trimString_(opts.artifactUrl),
+    artifactName: trimString_(opts.artifactName),
+    artifactMimeType: trimString_(opts.artifactMimeType),
+    artifactSizeBytes: Math.max(0, parseInt(String(opts.artifactSizeBytes || 0), 10) || 0),
+    artifactFiles: normalizeAccountDocumentArtifactFiles_(opts.artifactFiles),
+    certificateNumber: definition.certificateNumberField ? trimString_(opts.certificateNumber) : '',
+    notes: trimString_(opts.notes),
+    guidedFormData: opts.guidedFormData && typeof opts.guidedFormData === 'object'
+      ? sanitizeGuidedFormDataForStorage_(opts.guidedFormData)
+      : null
+  };
+}
+
+function normalizeAccountDocumentArtifactFiles_(value) {
+  const items = Array.isArray(value) ? value : [];
+  return items.map(function(item) {
+    const source = (item && typeof item === 'object') ? item : {};
+    return {
+      fileId: trimString_(source.fileId),
+      fileUrl: trimString_(source.fileUrl),
+      fileName: trimString_(source.fileName),
+      mimeType: trimString_(source.mimeType),
+      sizeBytes: Math.max(0, parseInt(String(source.sizeBytes || 0), 10) || 0)
+    };
+  }).filter(function(item) {
+    return !!item.fileId;
+  });
+}
+
+function getAccountDocumentSubmissionArtifactFiles_(submissionEntry) {
+  var submission = (submissionEntry && typeof submissionEntry === 'object') ? submissionEntry : {};
+  var artifactFiles = normalizeAccountDocumentArtifactFiles_(submission.artifactFiles);
+  if (artifactFiles.length) return artifactFiles;
+  var fallbackId = trimString_(submission.artifactFileId);
+  if (!fallbackId) return [];
+  return [{
+    fileId: fallbackId,
+    fileUrl: trimString_(submission.artifactUrl),
+    fileName: trimString_(submission.artifactName),
+    mimeType: trimString_(submission.artifactMimeType),
+    sizeBytes: Math.max(0, parseInt(String(submission.artifactSizeBytes || 0), 10) || 0)
+  }];
+}
+
+function sanitizeGuidedFormDataForStorage_(guidedFormData) {
+  const cloned = cloneJsonValue_(guidedFormData, {});
+  if (!cloned || typeof cloned !== 'object' || Array.isArray(cloned)) return null;
+  const signatureDataUrl = trimString_(cloned.signatureDataUrl);
+  if (signatureDataUrl) {
+    cloned.signatureIncludedInArtifact = true;
+  }
+  delete cloned.signatureDataUrl;
+  return cloned;
+}
+
+function persistAccountDocumentSubmission_(ctx, documentType, submissionEntry) {
+  const definition = getAccountDocumentDefinition_(documentType, ctx.cfg);
+  if (!definition) throw new Error('Unsupported document type.');
+  const currentRow = ctx.accountInfo.rowInfo.rowObjNormalized;
+  const now = trimString_(submissionEntry.submittedAt) || nowIso_();
+  const notesText = updatePortalAccountDocumentNotes_(currentRow, definition.type, function(current) {
+    const next = (current && typeof current === 'object' && !Array.isArray(current)) ? current : {};
+    if (definition.type === ACCOUNT_DOCUMENT_TYPES.credit_terms) {
+      next.submissions = [submissionEntry];
+    } else {
+      const submissions = Array.isArray(next.submissions) ? next.submissions.slice(0, 9) : [];
+      submissions.unshift(submissionEntry);
+      next.submissions = submissions;
+    }
+    next.lastSubmission = submissionEntry;
+    return next;
+  });
+  const updates = {
+    updatedAt: now,
+    notes: notesText
+  };
+  updates[definition.statusField] = 'submitted';
+  updates[definition.approvedField] = false;
+  updates[definition.approvedAtField] = '';
+  updates[definition.approvedByNameField] = '';
+  updates[definition.approvedByEmailField] = '';
+  updates[definition.artifactUrlField] = trimString_(submissionEntry.artifactUrl);
+  updates[definition.submittedAtField] = now;
+  if (definition.sourceUrlField) updates[definition.sourceUrlField] = trimString_(definition.sourceDocumentUrl);
+  if (definition.certificateNumberField) updates[definition.certificateNumberField] = trimString_(submissionEntry.certificateNumber);
+  if (definition.expiresAtField) updates[definition.expiresAtField] = '';
+  if (definition.paymentTermsCodeField) updates[definition.paymentTermsCodeField] = '';
+  if (definition.paymentTermsLabelField) updates[definition.paymentTermsLabelField] = '';
+  if (definition.paymentTermsDaysField) updates[definition.paymentTermsDaysField] = 0;
+  if (definition.paymentTermsNotesField) updates[definition.paymentTermsNotesField] = '';
+  if (definition.paymentTermsSetAtField) updates[definition.paymentTermsSetAtField] = '';
+  if (definition.paymentTermsSetByNameField) updates[definition.paymentTermsSetByNameField] = '';
+  if (definition.paymentTermsSetByEmailField) updates[definition.paymentTermsSetByEmailField] = '';
+  setRowValuesByHeaderMap_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row, ctx.accountInfo.rowInfo.colMap, updates);
+  refreshAccountDocumentContextAccount_(ctx);
+  return ctx.accountInfo;
+}
+
+function recordAccountDocumentBlankEmail_(ctx, documentType, recipients) {
+  const definition = getAccountDocumentDefinition_(documentType, ctx.cfg);
+  const now = nowIso_();
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const notesText = updatePortalAccountDocumentNotes_(ctx.accountInfo.rowInfo.rowObjNormalized, definition.type, function(current) {
+    const next = (current && typeof current === 'object' && !Array.isArray(current)) ? current : {};
+    next.lastBlankEmail = {
+      sentAt: now,
+      sentByName: trimString_(accountSummary.billingContactName || accountSummary.primaryContactName || ctx.identity.personName),
+      sentByEmail: normalizeEmail_(accountSummary.billingContactEmail || accountSummary.primaryEmail || ctx.identity.personEmail),
+      recipients: normalizeEmailRecipients_(recipients)
+    };
+    return next;
+  });
+  setRowValuesByHeaderMap_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row, ctx.accountInfo.rowInfo.colMap, {
+    updatedAt: now,
+    notes: notesText
+  });
+  refreshAccountDocumentContextAccount_(ctx);
+}
+
+function buildDefaultAccountDocumentBlankEmailPayload_(ctx, definition, recipients) {
+  const emailList = normalizeEmailRecipients_(recipients);
+  if (!emailList.length) throw new Error('Enter at least one valid email address.');
+  const sourceFile = getDriveFileByIdSafe_(definition.sourceFileId);
+  const subject = definition.blankEmailSubject;
+  const body = [
+    definition.label + ' blank PDF attached.',
+    'Organization: ' + trimString_(ctx.accountInfo.summary.orgName || ctx.identity.orgName || '--'),
+    definition.sourceDocumentUrl ? ('View document: ' + definition.sourceDocumentUrl) : '',
+    definition.sourceDocumentDownloadUrl ? ('Download PDF: ' + definition.sourceDocumentDownloadUrl) : '',
+    '',
+    NOTIFICATION_REPLY_NOTICE
+  ].filter(Boolean).join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">' + escapeHtml_(definition.label) + '</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">The blank PDF is attached for your department to review and complete.</p>',
+    definition.sourceDocumentUrl
+      ? ('    <p style="margin:0 0 12px;"><a href="' + escapeHtml_(definition.sourceDocumentUrl) + '" style="color:#12b5ea;">View Source Document</a></p>')
+      : '',
+    definition.sourceDocumentDownloadUrl
+      ? ('    <p style="margin:0 0 12px;"><a href="' + escapeHtml_(definition.sourceDocumentDownloadUrl) + '" style="color:#12b5ea;">Download Blank PDF</a></p>')
+      : '',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return {
+    toList: emailList,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: sourceFile ? [sourceFile.getBlob().setName(sanitizeUploadedDocumentName_(sourceFile.getName(), definition.shortLabel + '.pdf'))] : []
+  };
+}
+
+function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
+  const emailList = normalizeEmailRecipients_(recipients);
+  if (!emailList.length) throw new Error('Enter at least one valid email address.');
+  const sourceFile = getDriveFileByIdSafe_(definition.sourceFileId);
+  const taxBlankEmailFooter = 'This inbox is not monitored. Please do not reply or respond.';
+  const body = [
+    'The blank PDF is attached for your department to review and complete. Please log back into your portal and upload the finished document. Red Threads will review the complete document and notify you upon successful review.',
+    '',
+    taxBlankEmailFooter
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">' + escapeHtml_(definition.label) + '</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">The blank PDF is attached for your department to review and complete. Please log back into your portal and upload the finished document. Red Threads will review the complete document and notify you upon successful review.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(taxBlankEmailFooter) + '</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return {
+    toList: emailList,
+    subject: definition.blankEmailSubject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: sourceFile ? [sourceFile.getBlob().setName(sanitizeUploadedDocumentName_(sourceFile.getName(), definition.shortLabel + '.pdf'))] : []
+  };
+}
+
+function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
+  const emailList = normalizeEmailRecipients_(recipients);
+  if (!emailList.length) throw new Error('Enter at least one valid email address.');
+  const sourceFile = getDriveFileByIdSafe_(definition.sourceFileId);
+  const creditTermsBlankEmailFooter = 'This inbox is not monitored. Please do not reply or respond.';
+  const body = [
+    'The blank PDF is attached for your department to review and complete. When the document is complete, please log back into your portal and upload the completed file. The Red Threads team will notify you if your terms have been approved and purchase order submission ability unlocked.',
+    '',
+    creditTermsBlankEmailFooter
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">' + escapeHtml_(definition.label) + '</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.7;color:#35435a;">The blank PDF is attached for your department to review and complete. When the document is complete, please log back into your portal and upload the completed file. The Red Threads team will notify you if your terms have been approved and purchase order submission ability unlocked.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(creditTermsBlankEmailFooter) + '</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return {
+    toList: emailList,
+    subject: definition.blankEmailSubject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: sourceFile ? [sourceFile.getBlob().setName(sanitizeUploadedDocumentName_(sourceFile.getName(), definition.shortLabel + '.pdf'))] : []
+  };
+}
+
+function buildAccountDocumentBlankEmailPayload_(ctx, definition, recipients) {
+  if (definition.type === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
+    return buildTaxExemptBlankEmailPayload_(ctx, definition, recipients);
+  }
+  if (definition.type === ACCOUNT_DOCUMENT_TYPES.credit_terms) {
+    return buildCreditTermsBlankEmailPayload_(ctx, definition, recipients);
+  }
+  return buildDefaultAccountDocumentBlankEmailPayload_(ctx, definition, recipients);
+}
+
+function sendAccountDocumentSourceEmail_(ctx, definition, recipients) {
+  return sendNotificationEmail_(buildAccountDocumentBlankEmailPayload_(ctx, definition, recipients));
+}
+
+function buildDefaultAccountDocumentSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const token = trimString_(ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const portalUrl = token ? buildPortalDirectUrl_(token) : '';
+  const teamReviewUrl = buildAccountDocumentTeamReviewUrl_(definition.type, token, ctx.cfg) || portalUrl;
+  const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
+  const orgLabel = trimString_(accountSummary.orgName || 'Unknown organization');
+  const subject = 'Red Threads Portal: ' + definition.teamReviewSubject + ' - ' + trimString_(orgLabel || reviewerLabel || 'Account');
+  const body = [
+    definition.label + ' submission received.',
+    '',
+    'Submitted By: ' + reviewerLabel,
+    'Organization: ' + orgLabel,
+    'Account ID: ' + trimString_(accountSummary.accountId || '--'),
+    'Submitter Email: ' + normalizeEmail_(submissionEntry.submittedByEmail || '--'),
+    'Submitted At: ' + trimString_(submissionEntry.submittedAt || '--'),
+    'Submission Source: ' + trimString_(submissionEntry.submissionSource || '--'),
+    submissionEntry.certificateNumber ? ('Certificate Number: ' + trimString_(submissionEntry.certificateNumber)) : '',
+    submissionEntry.artifactUrl ? ('Submission Artifact: ' + trimString_(submissionEntry.artifactUrl)) : '',
+    teamReviewUrl ? ('Team Review: ' + teamReviewUrl) : '',
+    submissionEntry.notes ? ('Notes: ' + trimString_(submissionEntry.notes)) : ''
+  ].filter(Boolean).join('\n');
+  return {
+    to: DOCUMENT_REVIEW_EMAIL,
+    subject: subject,
+    body: body,
+    htmlBody: '',
+    attachments: []
+  };
+}
+
+function buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const submittedByName = trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client';
+  const orgName = trimString_(accountSummary.orgName || '--');
+  const submittedAt = trimString_(submissionEntry && submissionEntry.submittedAt) || '--';
+  const artifactUrl = trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl));
+  const teamReviewUrl = trimString_(opts.teamReviewUrl);
+  return [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:20px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Team Review Required</div>',
+    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#142033;">Signed credit terms document submitted</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A client uploaded a completed credit terms document and needs Red Threads review.</p>',
+    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#fff6f7;border:1px solid #fecdd3;">',
+    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Submitted At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
+    artifactUrl
+      ? ('      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
+      : '',
+    '    </div>',
+    '    <div style="margin:0 0 22px;padding:16px 18px;border-radius:16px;background:#fff1f2;border:1px solid #fda4af;text-align:center;">',
+    '      <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#be123c;font-weight:900;margin-bottom:6px;">🔐 Team Mode Password 🔐</div>',
+    '      <div style="font-size:24px;line-height:1.2;color:#9f1239;font-weight:900;"><strong>' + escapeHtml_(DEFAULT_TEAM_MODE_PASSWORD) + '</strong></div>',
+    '    </div>',
+    teamReviewUrl
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Click Here to Review Credit Terms</a></p>')
+      : '',
+    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">This inbox is not monitored. Please review the submission in the portal.</p>',
+    '  </div>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+}
+
+function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const token = trimString_(ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const teamReviewUrl = buildAccountDocumentTeamReviewUrl_(definition.type, token, ctx.cfg);
+  const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
+  const artifactFiles = getAccountDocumentSubmissionArtifactFiles_(submissionEntry);
+  const attachments = artifactFiles.map(function(item) {
+    const file = getDriveFileByIdSafe_(item.fileId);
+    if (!file) return null;
+    return file.getBlob().setName(
+      sanitizeUploadedDocumentName_(
+        item.fileName || file.getName(),
+        item.fileName || file.getName()
+      )
+    );
+  }).filter(Boolean);
+  return {
+    to: DOCUMENT_REVIEW_EMAIL,
+    subject: '🔥 ' + reviewerLabel + ' submitted signed credit terms and your review is required',
+    body: [
+      'A signed credit terms document is ready for team review.',
+      '',
+      'Submitted By: ' + reviewerLabel,
+      'Organization: ' + trimString_(accountSummary.orgName || 'Unknown organization'),
+      'Account ID: ' + trimString_(accountSummary.accountId || '--'),
+      'Submitter Email: ' + normalizeEmail_(submissionEntry.submittedByEmail || '--'),
+      'Submitted At: ' + trimString_(submissionEntry.submittedAt || '--'),
+      'Submission Source: ' + trimString_(submissionEntry.submissionSource || '--'),
+      submissionEntry.artifactUrl ? ('Submission Artifact: ' + trimString_(submissionEntry.artifactUrl)) : '',
+      teamReviewUrl ? ('Team Review: ' + teamReviewUrl) : '',
+      '🔥 Team mode password: ' + DEFAULT_TEAM_MODE_PASSWORD,
+      submissionEntry.notes ? ('Notes: ' + trimString_(submissionEntry.notes)) : ''
+    ].filter(Boolean).join('\n'),
+    htmlBody: buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, {
+      teamReviewUrl: teamReviewUrl,
+      artifactUrl: trimString_(submissionEntry.artifactUrl)
+    }),
+    attachments: attachments
+  };
+}
+
+function buildTaxExemptSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const token = trimString_(ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const portalUrl = token ? buildPortalDirectUrl_(token) : '';
+  const teamReviewUrl = buildTeamTaxExemptReviewUrl_(token);
+  const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
+  const artifactFile = trimString_(submissionEntry.artifactFileId)
+    ? getDriveFileByIdSafe_(submissionEntry.artifactFileId)
+    : null;
+  return {
+    to: DOCUMENT_REVIEW_EMAIL,
+    subject: '🔥 ' + reviewerLabel + ' has completed the sales tax exempt form and your review is required',
+    body: [
+      'A Michigan sales tax exemption form is ready for team review.',
+      '',
+      'Submitted By: ' + reviewerLabel,
+      'Organization: ' + trimString_(accountSummary.orgName || 'Unknown organization'),
+      'Account ID: ' + trimString_(accountSummary.accountId || '--'),
+      'Submitter Email: ' + normalizeEmail_(submissionEntry.submittedByEmail || '--'),
+      'Submitted At: ' + trimString_(submissionEntry.submittedAt || '--'),
+      'Submission Source: ' + trimString_(submissionEntry.submissionSource || '--'),
+      submissionEntry.certificateNumber ? ('Certificate Number: ' + trimString_(submissionEntry.certificateNumber)) : '',
+      submissionEntry.artifactUrl ? ('Submission Artifact: ' + trimString_(submissionEntry.artifactUrl)) : '',
+      teamReviewUrl ? ('Team Review: ' + teamReviewUrl) : '',
+      '🔥 Team mode password: ' + DEFAULT_TEAM_MODE_PASSWORD,
+      submissionEntry.notes ? ('Notes: ' + trimString_(submissionEntry.notes)) : ''
+    ].filter(Boolean).join('\n'),
+    htmlBody: buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, {
+      teamReviewUrl: teamReviewUrl,
+      artifactUrl: trimString_(submissionEntry.artifactUrl),
+      portalUrl: portalUrl
+    }),
+    attachments: artifactFile ? [
+      artifactFile.getBlob().setName(
+        sanitizeUploadedDocumentName_(
+          submissionEntry.artifactName || artifactFile.getName(),
+          submissionEntry.artifactName || artifactFile.getName()
+        )
+      )
+    ] : []
+  };
+}
+
+function buildAccountDocumentSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
+  if (definition.type === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
+    return buildTaxExemptSubmissionNotificationPayload_(ctx, definition, submissionEntry);
+  }
+  if (definition.type === ACCOUNT_DOCUMENT_TYPES.credit_terms) {
+    return buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submissionEntry);
+  }
+  return buildDefaultAccountDocumentSubmissionNotificationPayload_(ctx, definition, submissionEntry);
+}
+
+function sendAccountDocumentSubmissionNotification_(ctx, definition, submissionEntry) {
+  return sendNotificationEmail_(buildAccountDocumentSubmissionNotificationPayload_(ctx, definition, submissionEntry));
+}
+
+function buildTeamTaxExemptReviewUrl_(token) {
+  return buildAccountDocumentTeamReviewUrl_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, token);
+}
+
+function getLatestAccountDocumentSubmission_(ctx, documentType) {
+  const definition = getAccountDocumentDefinition_(documentType, ctx && ctx.cfg);
+  if (!definition) return null;
+  const notesMeta = getPortalAccountDocumentNotes_(
+    ctx && ctx.accountInfo && ctx.accountInfo.rowInfo && ctx.accountInfo.rowInfo.rowObjNormalized,
+    definition.type
+  );
+  const submission = notesMeta && notesMeta.lastSubmission && typeof notesMeta.lastSubmission === 'object'
+    ? cloneJsonValue_(notesMeta.lastSubmission, {})
+    : null;
+  return submission && typeof submission === 'object' && !Array.isArray(submission) ? submission : null;
+}
+
+function buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const submittedByName = trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client';
+  const orgName = trimString_(accountSummary.orgName || '--');
+  const submittedAt = trimString_(submissionEntry && submissionEntry.submittedAt) || '--';
+  const artifactUrl = trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl));
+  const teamReviewUrl = trimString_(opts.teamReviewUrl);
+  const portalUrl = trimString_(opts.portalUrl);
+  return [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:20px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Team Review Required</div>',
+    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#142033;">Michigan sales tax exemption form submitted</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A client has completed the sales tax exempt form and needs review.</p>',
+    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#fff6f7;border:1px solid #fecdd3;">',
+    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Completed At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
+    artifactUrl
+      ? ('      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
+      : '',
+    '    </div>',
+    '    <div style="margin:0 0 22px;padding:16px 18px;border-radius:16px;background:#fff1f2;border:1px solid #fda4af;text-align:center;">',
+    '      <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#be123c;font-weight:900;margin-bottom:6px;">🔐 Team Mode Password 🔐</div>',
+    '      <div style="font-size:24px;line-height:1.2;color:#9f1239;font-weight:900;"><strong>' + escapeHtml_(DEFAULT_TEAM_MODE_PASSWORD) + '</strong></div>',
+    '    </div>',
+    teamReviewUrl
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Click Here to Review and Approve</a></p>')
+      : '',
+    portalUrl
+      ? ('    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#64748b;">If the button does not open, use this direct portal link: <a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;">Open portal</a></p>')
+      : '',
+    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">This inbox is not monitored. Please review the submission in the portal.</p>',
+    '  </div>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+}
+
+function buildAccountDocumentDecisionEntry_(definition, decision, ctx, payload, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const normalizedDecision = String(decision || '').trim().toLowerCase() === 'approved' ? 'approved' : 'rejected';
+  const submittedAt = trimString_(opts.decidedAt) || nowIso_();
+  const reason = trimString_(payload && payload.reason);
+  return {
+    decidedAt: submittedAt,
+    decision: normalizedDecision,
+    decidedByName: trimString_(opts.decidedByName || getVisibleTeamAuthorName_(ctx && ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized)),
+    decidedByEmail: normalizeEmail_(opts.decidedByEmail || DOCUMENT_REVIEW_EMAIL),
+    reason: normalizedDecision === 'rejected' ? reason : ''
+  };
+}
+
+function persistAccountDocumentDecision_(ctx, definition, decisionEntry, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const now = trimString_(decisionEntry && decisionEntry.decidedAt) || nowIso_();
+  const isApproved = String(decisionEntry && decisionEntry.decision || '').trim() === 'approved';
+  const notesText = updatePortalAccountDocumentNotes_(
+    ctx.accountInfo.rowInfo.rowObjNormalized,
+    definition.type,
+    function(current) {
+      const next = (current && typeof current === 'object' && !Array.isArray(current)) ? current : {};
+      next.lastDecision = decisionEntry;
+      const reviews = Array.isArray(next.reviews) ? next.reviews.slice(0, 11) : [];
+      reviews.unshift(decisionEntry);
+      next.reviews = reviews;
+      return next;
+    }
+  );
+  const updates = {
+    updatedAt: now,
+    notes: notesText,
+    [definition.statusField]: isApproved ? 'approved' : 'rejected',
+    [definition.approvedField]: isApproved,
+    [definition.approvedAtField]: isApproved ? now : '',
+    [definition.approvedByNameField]: isApproved ? trimString_(decisionEntry.decidedByName) : '',
+    [definition.approvedByEmailField]: isApproved ? normalizeEmail_(decisionEntry.decidedByEmail) : ''
+  };
+  if (!isApproved) {
+    if (definition.paymentTermsCodeField) updates[definition.paymentTermsCodeField] = '';
+    if (definition.paymentTermsLabelField) updates[definition.paymentTermsLabelField] = '';
+    if (definition.paymentTermsDaysField) updates[definition.paymentTermsDaysField] = 0;
+    if (definition.paymentTermsNotesField) updates[definition.paymentTermsNotesField] = '';
+    if (definition.paymentTermsSetAtField) updates[definition.paymentTermsSetAtField] = '';
+    if (definition.paymentTermsSetByNameField) updates[definition.paymentTermsSetByNameField] = '';
+    if (definition.paymentTermsSetByEmailField) updates[definition.paymentTermsSetByEmailField] = '';
+  }
+  if (opts.extraRowUpdates && typeof opts.extraRowUpdates === 'object') {
+    Object.keys(opts.extraRowUpdates).forEach((key) => {
+      if (!trimString_(key)) return;
+      updates[key] = opts.extraRowUpdates[key];
+    });
+  }
+  setRowValuesByHeaderMap_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row, ctx.accountInfo.rowInfo.colMap, updates);
+  refreshAccountDocumentContextAccount_(ctx);
+  if (ctx.exportRowInfo) {
+    try {
+      writeCurrentOrderPointersToExportLog_({
+        cfg: ctx.cfg,
+        ss: ctx.ss,
+        infra: ctx.infra,
+        rowInfo: ctx.exportRowInfo,
+        token: trimString_(ctx.exportRowInfo.rowObjNormalized.token),
+        accountSummary: ctx.accountInfo.summary
+      });
+    } catch (_) {}
+  }
+  return ctx.accountInfo.summary;
+}
+
+function buildTaxExemptDecisionEntry_(decision, ctx, payload) {
+  const definition = getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx && ctx.cfg);
+  return buildAccountDocumentDecisionEntry_(definition, decision, ctx, payload);
+}
+
+function persistTaxExemptDecision_(ctx, decisionEntry) {
+  const definition = getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx && ctx.cfg);
+  return persistAccountDocumentDecision_(ctx, definition, decisionEntry);
+}
+
+function buildCreditTermsDecisionEntry_(decision, ctx, payload) {
+  const definition = getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, ctx && ctx.cfg);
+  return buildAccountDocumentDecisionEntry_(definition, decision, ctx, payload);
+}
+
+function buildCreditTermsApprovalRowUpdates_(definition, paymentTermsSelection, decisionEntry) {
+  const selection = (paymentTermsSelection && typeof paymentTermsSelection === 'object') ? paymentTermsSelection : {};
+  const decision = (decisionEntry && typeof decisionEntry === 'object') ? decisionEntry : {};
+  const updates = {};
+  if (definition.paymentTermsCodeField) updates[definition.paymentTermsCodeField] = trimString_(selection.code);
+  if (definition.paymentTermsLabelField) updates[definition.paymentTermsLabelField] = trimString_(selection.label);
+  if (definition.paymentTermsDaysField) updates[definition.paymentTermsDaysField] = Math.max(0, parseInt(String(selection.days || 0), 10) || 0);
+  if (definition.paymentTermsNotesField) updates[definition.paymentTermsNotesField] = trimString_(selection.notes);
+  if (definition.paymentTermsSetAtField) updates[definition.paymentTermsSetAtField] = trimString_(decision.decidedAt) || nowIso_();
+  if (definition.paymentTermsSetByNameField) updates[definition.paymentTermsSetByNameField] = trimString_(decision.decidedByName);
+  if (definition.paymentTermsSetByEmailField) updates[definition.paymentTermsSetByEmailField] = normalizeEmail_(decision.decidedByEmail);
+  return updates;
+}
+
+function persistCreditTermsDecision_(ctx, decisionEntry, options) {
+  const definition = getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, ctx && ctx.cfg);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const isApproved = String(decisionEntry && decisionEntry.decision || '').trim() === 'approved';
+  const extraRowUpdates = isApproved
+    ? buildCreditTermsApprovalRowUpdates_(definition, opts.paymentTermsSelection, decisionEntry)
+    : {};
+  return persistAccountDocumentDecision_(ctx, definition, decisionEntry, {
+    extraRowUpdates: extraRowUpdates
+  });
+}
+
+function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const token = trimString_(ctx && ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const portalUrl = token ? buildExternalPortalUrl_(token) : '';
+  const recipients = normalizeEmailRecipients_([
+    submissionEntry && submissionEntry.submittedByEmail,
+    accountSummary.billingContactEmail,
+    accountSummary.primaryEmail,
+    ctx && ctx.identity && ctx.identity.personEmail
+  ]);
+  if (!recipients.length) return { ok: false, skipped: true, reason: 'missing-email' };
+  const submittedByName = trimString_(
+    submissionEntry && submissionEntry.submittedByName ||
+    accountSummary.billingContactName ||
+    accountSummary.primaryContactName ||
+    'there'
+  );
+  const subject = 'Update on your Red Threads credit terms submission';
+  const body = [
+    'Hi ' + submittedByName + ',',
+    '',
+    'Red Threads reviewed your signed credit terms document, but we need a correction before approval.',
+    '',
+    'Reason:',
+    reason,
+    '',
+    'Please return to the portal, update the form, and resubmit it for review.' + (portalUrl ? (' ' + portalUrl) : ''),
+    '',
+    'This inbox is not monitored. Please do not reply or respond.'
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">We need a correction before approval</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Your signed credit terms document was reviewed, but it could not be approved yet.</p>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(reason).replace(/\n/g, '<br>') + '</div>',
+    portalUrl
+      ? ('    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;"><a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Please return to the portal, update the form, and resubmit it for review.</a></p>')
+      : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#35435a;">Please return to the portal, update the form, and resubmit it for review.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody
+  });
+}
+
+function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelection) {
+  const attachments = getAccountDocumentSubmissionArtifactFiles_(submissionEntry).map(function(item) {
+    const file = getDriveFileByIdSafe_(item.fileId);
+    if (!file) return null;
+    return file.getBlob().setName(
+      sanitizeUploadedDocumentName_(
+        item.fileName || file.getName(),
+        item.fileName || file.getName()
+      )
+    );
+  }).filter(Boolean);
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const recipients = normalizeEmailRecipients_([
+    submissionEntry && submissionEntry.submittedByEmail,
+    accountSummary.billingContactEmail,
+    accountSummary.primaryEmail,
+    ctx && ctx.identity && ctx.identity.personEmail
+  ]);
+  if (!recipients.length) return { ok: false, skipped: true, reason: 'missing-email' };
+  const personName = trimString_(
+    (submissionEntry && submissionEntry.submittedByName) ||
+    (ctx && ctx.identity && ctx.identity.personName) ||
+    accountSummary.billingContactName ||
+    accountSummary.primaryContactName ||
+    ''
+  );
+  const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
+  const selection = (paymentTermsSelection && typeof paymentTermsSelection === 'object') ? paymentTermsSelection : {};
+  const paymentLabel = trimString_(selection.label) || 'Approved Terms';
+  const subject = 'Your Red Threads credit terms are approved';
+  const body = [
+    'Hi ' + firstName + ',',
+    '',
+    'Congratulations, your credit terms have been approved for purchases within Red Threads LLC.',
+    'Approved payment terms: ' + paymentLabel + '.',
+    '',
+    'Attached is a copy of the signed credit terms document for your records.',
+    '',
+    'This inbox is not monitored. Please do not reply or respond.',
+    '',
+    '- Red Threads Team'
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your credit terms are approved</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Congratulations, your credit terms have been approved for purchases within Red Threads LLC.</p>',
+    '    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#35435a;"><strong>Approved payment terms:</strong> ' + escapeHtml_(paymentLabel) + '</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Attached is a copy of the signed credit terms document for your records.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: attachments
+  });
+}
+
+function sendTaxExemptDenialEmail_(ctx, submissionEntry, reason) {
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const token = trimString_(ctx && ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const portalUrl = token ? buildExternalPortalUrl_(token) : '';
+  const recipients = normalizeEmailRecipients_([
+    submissionEntry && submissionEntry.submittedByEmail,
+    accountSummary.billingContactEmail,
+    accountSummary.primaryEmail,
+    ctx && ctx.identity && ctx.identity.personEmail
+  ]);
+  if (!recipients.length) return { ok: false, skipped: true, reason: 'missing-email' };
+  const submittedByName = trimString_(
+    submissionEntry && submissionEntry.submittedByName ||
+    accountSummary.billingContactName ||
+    accountSummary.primaryContactName ||
+    'there'
+  );
+  const subject = 'Update on your Michigan sales tax exemption form';
+  const body = [
+    'Hi ' + submittedByName + ',',
+    '',
+    'Red Threads reviewed your Michigan sales tax exemption form, but it could not be approved yet.',
+    '',
+    'Reason:',
+    reason,
+    '',
+    'Please return to the portal, update the form, and resubmit it for review.' + (portalUrl ? (' ' + portalUrl) : ''),
+    '',
+    'This inbox is not monitored. Please do not reply or respond.'
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">We need a correction before approval</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Your Michigan sales tax exemption form was reviewed, but it could not be approved yet.</p>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(reason).replace(/\n/g, '<br>') + '</div>',
+    portalUrl
+      ? ('    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;"><a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Please return to the portal, update the form, and resubmit it for review.</a></p>')
+      : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#35435a;">Please return to the portal, update the form, and resubmit it for review.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody
+  });
+}
+
+function getTaxExemptTeamReview_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.tax_exempt);
+  if (!submissionEntry) {
+    return { ok: false, error: 'No submitted tax exemption document is available to review.' };
+  }
+  const artifactFileId = trimString_(submissionEntry.artifactFileId);
+  if (!artifactFileId) {
+    return { ok: false, error: 'The submitted tax exemption artifact is unavailable.' };
+  }
+  const artifact = buildDriveBinaryDataPayload_(
+    artifactFileId,
+    submissionEntry.artifactName || 'Tax-Exempt-Submission.png',
+    submissionEntry.artifactMimeType || 'image/png'
+  );
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Team review artifact ready.',
+    {
+      reviewArtifact: {
+        fileId: artifactFileId,
+        fileName: artifact.fileName,
+        mimeType: artifact.mimeType,
+        base64Data: artifact.base64Data,
+        fileUrl: trimString_(submissionEntry.artifactUrl),
+        submittedAt: trimString_(submissionEntry.submittedAt),
+        submittedByName: trimString_(submissionEntry.submittedByName),
+        submittedByEmail: normalizeEmail_(submissionEntry.submittedByEmail),
+        orgName: trimString_(ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.orgName)
+      }
+    }
+  );
+}
+
+function getTaxExemptTeamReview(payload) {
+  try {
+    return getTaxExemptTeamReview_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function approveTaxExemptSubmission_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.tax_exempt);
+  if (!submissionEntry) return { ok: false, error: 'No submitted tax exemption document is available to approve.' };
+  const decisionEntry = buildTaxExemptDecisionEntry_('approved', ctx, payload);
+  persistTaxExemptDecision_(ctx, decisionEntry);
+  let warnings = [];
+  try {
+    sendApprovedTaxExemptEmail_(ctx, submissionEntry);
+  } catch (notifyErr) {
+    warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
+  }
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Tax exemption approved.',
+    {
+      decision: 'approved',
+      warnings: warnings
+    }
+  );
+}
+
+function approveTaxExemptSubmission(payload) {
+  try {
+    return approveTaxExemptSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function denyTaxExemptSubmission_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const reason = trimString_(payload && payload.reason);
+  if (!reason) return { ok: false, error: 'Enter a reason before denying the form.' };
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.tax_exempt);
+  if (!submissionEntry) return { ok: false, error: 'No submitted tax exemption document is available to deny.' };
+  const decisionEntry = buildTaxExemptDecisionEntry_('rejected', ctx, payload);
+  persistTaxExemptDecision_(ctx, decisionEntry);
+  try {
+    sendTaxExemptDenialEmail_(ctx, submissionEntry, reason);
+  } catch (_) {}
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Tax exemption denied.',
+    {
+      decision: 'rejected'
+    }
+  );
+}
+
+function denyTaxExemptSubmission(payload) {
+  try {
+    return denyTaxExemptSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getCreditTermsTeamReview_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.credit_terms);
+  if (!submissionEntry) {
+    return { ok: false, error: 'No submitted credit terms document is available to review.' };
+  }
+  const artifactFileId = trimString_(submissionEntry.artifactFileId);
+  if (!artifactFileId) {
+    return { ok: false, error: 'The submitted credit terms document is unavailable.' };
+  }
+  const artifactFiles = getAccountDocumentSubmissionArtifactFiles_(submissionEntry);
+  const primaryArtifact = artifactFiles[0] || {
+    fileId: artifactFileId,
+    fileUrl: trimString_(submissionEntry.artifactUrl),
+    fileName: trimString_(submissionEntry.artifactName),
+    mimeType: trimString_(submissionEntry.artifactMimeType),
+    sizeBytes: Math.max(0, parseInt(String(submissionEntry.artifactSizeBytes || 0), 10) || 0)
+  };
+  const mimeType = trimString_(primaryArtifact.mimeType) || 'application/pdf';
+  const isImage = /^image\//i.test(mimeType);
+  const imageAssets = artifactFiles
+    .filter(function(item) { return /^image\//i.test(trimString_(item.mimeType)); })
+    .map(function(item, index) {
+      return {
+        fileId: trimString_(item.fileId),
+        fileName: trimString_(item.fileName) || ('Credit-Terms-Image-' + (index + 1) + '.png'),
+        fileUrl: trimString_(item.fileUrl) || buildDriveFileViewUrl_(item.fileId),
+        downloadUrl: buildDriveFileDownloadUrl_(item.fileId),
+        imageCandidates: buildDriveFilePublicImageCandidates_(item.fileId)
+      };
+    });
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Credit terms review artifact ready.',
+    {
+      reviewArtifact: {
+        fileId: artifactFileId,
+        fileName: trimString_(primaryArtifact.fileName) || 'Credit-Terms-Submission.pdf',
+        mimeType: mimeType,
+        fileUrl: trimString_(primaryArtifact.fileUrl) || buildDriveFileViewUrl_(artifactFileId),
+        previewUrl: buildDriveFilePreviewUrl_(artifactFileId),
+        imageUrl: isImage ? buildDriveFilePublicViewAssetUrl_(artifactFileId) : '',
+        imageCandidates: isImage ? buildDriveFilePublicImageCandidates_(artifactFileId) : [],
+        imageAssets: imageAssets,
+        downloadUrl: buildDriveFileDownloadUrl_(artifactFileId),
+        submittedAt: trimString_(submissionEntry.submittedAt),
+        submittedByName: trimString_(submissionEntry.submittedByName),
+        submittedByEmail: normalizeEmail_(submissionEntry.submittedByEmail),
+        orgName: trimString_(accountSummary.orgName)
+      },
+      paymentTermOptions: getApprovedPaymentTermsOptions_(),
+      approvedPaymentTerms: {
+        code: trimString_(accountSummary.approvedPaymentTermsCode),
+        label: trimString_(accountSummary.approvedPaymentTermsLabel),
+        days: Math.max(0, parseInt(String(accountSummary.approvedPaymentTermsDays || 0), 10) || 0),
+        notes: trimString_(accountSummary.approvedPaymentTermsNotes)
+      }
+    }
+  );
+}
+
+function getCreditTermsTeamReview(payload) {
+  try {
+    return getCreditTermsTeamReview_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function approveCreditTermsSubmission_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.credit_terms);
+  if (!submissionEntry) return { ok: false, error: 'No submitted credit terms document is available to approve.' };
+  const paymentTermsSelection = buildApprovedPaymentTermsSelection_(payload);
+  const decisionEntry = buildCreditTermsDecisionEntry_('approved', ctx, payload);
+  persistCreditTermsDecision_(ctx, decisionEntry, {
+    paymentTermsSelection: paymentTermsSelection
+  });
+  let warnings = [];
+  try {
+    sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelection);
+  } catch (notifyErr) {
+    warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
+  }
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Credit terms approved and payment terms assigned.',
+    {
+      decision: 'approved',
+      approvedPaymentTerms: paymentTermsSelection,
+      warnings: warnings
+    }
+  );
+}
+
+function approveCreditTermsSubmission(payload) {
+  try {
+    return approveCreditTermsSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function denyCreditTermsSubmission_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const reason = trimString_(payload && payload.reason);
+  if (!reason) return { ok: false, error: 'Enter a reason before requesting changes.' };
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.credit_terms);
+  if (!submissionEntry) return { ok: false, error: 'No submitted credit terms document is available to review.' };
+  const decisionEntry = buildCreditTermsDecisionEntry_('rejected', ctx, payload);
+  persistCreditTermsDecision_(ctx, decisionEntry);
+  try {
+    sendCreditTermsDenialEmail_(ctx, submissionEntry, reason);
+  } catch (_) {}
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Credit terms changes requested.',
+    {
+      decision: 'rejected'
+    }
+  );
+}
+
+function denyCreditTermsSubmission(payload) {
+  try {
+    return denyCreditTermsSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function requestTermsEnrollment_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Credit terms workflow is ready. View the blank document, email it to another department, and upload the completed signed copy for Red Threads review.'
+  );
 }
 
 function requestTermsEnrollment(payload) {
@@ -1829,49 +3562,391 @@ function requestTermsEnrollment(payload) {
 }
 
 function requestTaxExemptSubmission_(payload) {
-  const p = (payload && typeof payload === 'object') ? payload : {};
-  const cfg = getConfig_();
-  const ss = SpreadsheetApp.openById(cfg.sheetId);
-  const infra = ensurePortalInfrastructure_(ss, cfg);
-  let identity = buildAccountIdentityFromInputs_(p);
-  if (trimString_(p.sessionId)) {
-    const userCtx = getUserContextBySessionId_(ss, p.sessionId);
-    if (!userCtx.ok) return userCtx;
-    identity = mergeAccountIdentity_(identity, {
-      personEmail: userCtx.email,
-      personName: trimString_(userCtx.user && userCtx.user.rowObjNormalized.displayname),
-      orgId: trimString_(userCtx.user && userCtx.user.rowObjNormalized.defaultorgid),
-      orgName: trimString_(userCtx.user && userCtx.user.rowObjNormalized.defaultorgname)
-    });
-  }
-  if (trimString_(p.token)) {
-    const rowInfo = findRowByToken_(infra.exportSheet, trimString_(p.token));
-    if (!rowInfo) return { ok: false, error: 'Token not found.' };
-    identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(rowInfo.rowObjNormalized));
-  }
-  const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
-    cfg: cfg,
-    ss: ss,
-    infra: infra,
-    createIfMissing: true
-  }));
-  const now = nowIso_();
-  setRowValuesByHeaderMap_(infra.accountsSheet, accountInfo.rowInfo.row, accountInfo.rowInfo.colMap, {
-    taxExemptStatus: 'pending_submission',
-    updatedAt: now
-  });
-  const refreshed = buildRowInfoFromSheet_(infra.accountsSheet, accountInfo.rowInfo.row);
-  return {
-    ok: true,
-    accountSummary: buildPortalAccountSummary_(refreshed.rowObjNormalized, cfg),
-    uploadFolderId: cfg.taxExemptDriveFolderId,
-    message: 'Tax exemption submission request recorded. Upload flows can be connected next.'
-  };
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Tax exemption workflow is ready. Submit either the guided form or a completed certificate for review.'
+  );
 }
 
 function requestTaxExemptSubmission(payload) {
   try {
     return requestTaxExemptSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getTaxExemptWorkspace_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const definition = getAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx.cfg);
+  if (!definition) return { ok: false, error: 'Tax exemption document is not configured.' };
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Tax exemption workspace ready.',
+    {
+      sourceDocumentData: buildAccountDocumentSourceDataPayload_(definition)
+    }
+  );
+}
+
+function getTaxExemptWorkspace(payload) {
+  try {
+    return getTaxExemptWorkspace_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getTaxFormViewerAssets_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Tax form viewer assets ready.',
+    {
+      pageImages: buildTaxFormViewerAssetsPayload_()
+    }
+  );
+}
+
+function getTaxFormViewerAssets(payload) {
+  try {
+    return getTaxFormViewerAssets_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getCreditTermsViewerAssets_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Credit terms viewer assets ready.',
+    {
+      pageImages: buildCreditTermsViewerAssetsPayload_()
+    }
+  );
+}
+
+function getCreditTermsViewerAssets(payload) {
+  try {
+    return getCreditTermsViewerAssets_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function downloadAccountDocumentSource_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const definition = getAccountDocumentDefinition_(payload && payload.documentType, ctx.cfg);
+  if (!definition) return { ok: false, error: 'Unsupported document type.' };
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    definition.type,
+    'Blank ' + definition.shortLabel.toLowerCase() + ' document ready.',
+    {
+      sourceDocumentData: buildAccountDocumentSourceDataPayload_(definition)
+    }
+  );
+}
+
+function downloadAccountDocumentSource(payload) {
+  try {
+    return downloadAccountDocumentSource_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function emailAccountDocumentSource_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const definition = getAccountDocumentDefinition_(payload && payload.documentType, ctx.cfg);
+  if (!definition) return { ok: false, error: 'Unsupported document type.' };
+  const recipients = normalizeEmailRecipients_(payload && payload.recipients);
+  if (!recipients.length) return { ok: false, error: 'Enter at least one valid email address.' };
+  sendAccountDocumentSourceEmail_(ctx, definition, recipients);
+  recordAccountDocumentBlankEmail_(ctx, definition.type, recipients);
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    definition.type,
+    'Blank ' + definition.shortLabel.toLowerCase() + ' document emailed successfully.',
+    { recipients: recipients }
+  );
+}
+
+function emailAccountDocumentSource(payload) {
+  try {
+    return emailAccountDocumentSource_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function submitAccountDocumentUpload_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const definition = getAccountDocumentDefinition_(payload && payload.documentType, ctx.cfg);
+  if (!definition) return { ok: false, error: 'Unsupported document type.' };
+
+  const uploadInfos = decodeAccountDocumentUploads_(payload, definition, ctx);
+  const uploadedFiles = uploadInfos.map(function(uploadInfo) {
+    return createAccountDocumentDriveFile_(ctx, definition, uploadInfo);
+  });
+  const uploadedFile = uploadedFiles[0];
+  const submissionEntry = buildAccountDocumentSubmissionEntry_(ctx, definition, {
+    submissionSource: 'upload',
+    artifactFileId: uploadedFile.fileId,
+    artifactUrl: uploadedFile.fileUrl,
+    artifactName: uploadedFile.fileName,
+    artifactMimeType: uploadedFile.mimeType,
+    artifactSizeBytes: uploadedFile.sizeBytes,
+    artifactFiles: uploadedFiles,
+    certificateNumber: definition.certificateNumberField ? trimString_(payload && payload.certificateNumber) : '',
+    notes: trimString_(payload && payload.notes)
+  });
+  persistAccountDocumentSubmission_(ctx, definition.type, submissionEntry);
+  let warnings = [];
+  try {
+    sendAccountDocumentSubmissionNotification_(ctx, definition, submissionEntry);
+  } catch (notifyErr) {
+    warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
+  }
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    definition.type,
+    definition.shortLabel + ' document' + (uploadedFiles.length > 1 ? 's' : '') + ' submitted for Red Threads review.',
+    {
+      uploadedDocumentUrl: uploadedFile.fileUrl,
+      warnings: warnings
+    }
+  );
+}
+
+function submitAccountDocumentUpload(payload) {
+  try {
+    return submitAccountDocumentUpload_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function submitTaxExemptGuidedSubmission_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const definition = getAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx.cfg);
+  const formData = sanitizeTaxExemptGuidedForm_((payload && payload.formData) || payload, ctx);
+  const renderedArtifactUpload = decodeTaxExemptRenderedArtifact_(payload, definition, ctx);
+  const artifact = renderedArtifactUpload
+    ? createAccountDocumentDriveFile_(ctx, definition, renderedArtifactUpload)
+    : generateTaxExemptGuidedArtifact_(ctx, formData);
+  const submissionEntry = buildAccountDocumentSubmissionEntry_(ctx, definition, {
+    submissionSource: 'guided',
+    artifactFileId: artifact.fileId,
+    artifactUrl: artifact.fileUrl,
+    artifactName: artifact.fileName,
+    artifactMimeType: artifact.mimeType,
+    artifactSizeBytes: artifact.sizeBytes,
+    certificateNumber: formData.certificateNumber,
+    notes: formData.additionalNotes,
+    guidedFormData: formData
+  });
+  persistAccountDocumentSubmission_(ctx, definition.type, submissionEntry);
+  let warnings = [];
+  try {
+    sendAccountDocumentSubmissionNotification_(ctx, definition, submissionEntry);
+  } catch (notifyErr) {
+    warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
+  }
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    definition.type,
+    'Tax exemption submission sent to Red Threads for review.',
+    {
+      artifactFileId: artifact.fileId,
+      uploadedDocumentUrl: artifact.fileUrl,
+      warnings: warnings
+    }
+  );
+}
+
+function submitTaxExemptGuidedSubmission(payload) {
+  try {
+    return submitTaxExemptGuidedSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function emailTaxExemptSubmissionCopy_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const artifactFileId = trimString_(payload && payload.artifactFileId);
+  if (!artifactFileId) return { ok: false, error: 'Submitted document copy is not available yet.' };
+  const file = getDriveFileByIdSafe_(artifactFileId);
+  if (!file) return { ok: false, error: 'Submitted document copy could not be loaded.' };
+  const recipients = normalizeEmailRecipients_((payload && payload.recipients) || [
+    ctx.identity && ctx.identity.personEmail,
+    ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.billingContactEmail,
+    ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.primaryEmail
+  ]);
+  if (!recipients.length) return { ok: false, error: 'No recipient email is available for this account.' };
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const personName = trimString_(
+    (ctx.identity && ctx.identity.personName) ||
+    (accountSummary && accountSummary.billingContactName) ||
+    (accountSummary && accountSummary.primaryContactName) ||
+    ''
+  );
+  const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
+  const subject = 'Copy of your completed tax exempt form';
+  const body = [
+    'Hi ' + firstName + ',',
+    '',
+    'Here is a completed copy of your form.',
+    'Your form is under review by the Red Threads team, and you will get a notification when your form is approved.',
+    '',
+    'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+    '',
+    '- Red Threads Team'
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Copy of your completed tax exempt form</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Here is a completed copy of your form.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Your form is under review by the Red Threads team, and you will get a notification when your form is approved.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">📩 This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: [file.getBlob().setName(sanitizeUploadedDocumentName_(file.getName(), 'Michigan-Tax-Exemption-Submission'))]
+  });
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Submitted document copy emailed successfully.',
+    {
+      recipients: recipients
+    }
+  );
+}
+
+function sendApprovedTaxExemptEmail_(ctx, submissionEntry) {
+  const artifactFileId = trimString_(submissionEntry && submissionEntry.artifactFileId);
+  if (!artifactFileId) return { ok: false, skipped: true, reason: 'missing-artifact' };
+  const file = getDriveFileByIdSafe_(artifactFileId);
+  if (!file) return { ok: false, skipped: true, reason: 'missing-file' };
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const recipients = normalizeEmailRecipients_([
+    submissionEntry && submissionEntry.submittedByEmail,
+    accountSummary.billingContactEmail,
+    accountSummary.primaryEmail,
+    ctx && ctx.identity && ctx.identity.personEmail
+  ]);
+  if (!recipients.length) return { ok: false, skipped: true, reason: 'missing-email' };
+  const personName = trimString_(
+    (submissionEntry && submissionEntry.submittedByName) ||
+    (ctx && ctx.identity && ctx.identity.personName) ||
+    accountSummary.billingContactName ||
+    accountSummary.primaryContactName ||
+    ''
+  );
+  const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
+  const subject = 'Copy of your completed tax exempt form + Quick Guidelines';
+  const body = [
+    'Hi ' + firstName + ',',
+    '',
+    'Congratulations, your tax exempt form has been approved for use for purchases within Red Threads LLC.',
+    '',
+    'Thanks for completing your Michigan Sales Tax Exemption Form!',
+    'Attached is a copy for your records.',
+    '',
+    'Before using this exemption, here are a few quick things to keep in mind:',
+    '',
+    'When exemption typically applies:',
+    '- Purchases made for resale',
+    '- Government entities making direct purchases',
+    '- Qualified organizations purchasing items for an exempt purpose (not end use)',
+    '',
+    'When exemption typically does NOT apply:',
+    '- Items used for giveaways, promotions, or fundraising distribution',
+    '- Purchases for staff, members, or internal use',
+    '- When you are the final user of the product',
+    '',
+    'Important:',
+    'It is your responsibility to determine whether your purchase qualifies for sales tax exemption. By submitting this form, you certify that your use complies with applicable tax laws.',
+    '',
+    'Red Threads LLC does not provide tax or legal advice. If you\'re unsure, please consult your accountant or tax professional.',
+    '',
+    'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+    '',
+    '- Red Threads Team'
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Copy of your completed tax exempt form + Quick Guidelines</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Congratulations, your tax exempt form has been approved for use for purchases within Red Threads LLC.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Thanks for completing your Michigan Sales Tax Exemption Form! Attached is a copy for your records.</p>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Before using this exemption, here are a few quick things to keep in mind:</p>',
+    '    <div style="margin:0 0 16px;padding:14px 16px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0;">',
+    '      <div style="margin:0 0 8px;font-size:15px;line-height:1.5;color:#166534;font-weight:800;">✅ When exemption typically applies:</div>',
+    '      <ul style="margin:0;padding-left:20px;color:#35435a;font-size:15px;line-height:1.7;">',
+    '        <li>Purchases made for resale</li>',
+    '        <li>Government entities making direct purchases</li>',
+    '        <li>Qualified organizations purchasing items for an exempt purpose (not end use)</li>',
+    '      </ul>',
+    '    </div>',
+    '    <div style="margin:0 0 16px;padding:14px 16px;border-radius:14px;background:#fff7f7;border:1px solid #fecdd3;">',
+    '      <div style="margin:0 0 8px;font-size:15px;line-height:1.5;color:#be123c;font-weight:800;">❌ When exemption typically does NOT apply:</div>',
+    '      <ul style="margin:0;padding-left:20px;color:#35435a;font-size:15px;line-height:1.7;">',
+    '        <li>Items used for giveaways, promotions, or fundraising distribution</li>',
+    '        <li>Purchases for staff, members, or internal use</li>',
+    '        <li>When you are the final user of the product</li>',
+    '      </ul>',
+    '    </div>',
+    '    <div style="margin:0 0 16px;padding:14px 16px;border-radius:14px;background:#fffaf0;border:1px solid #fde68a;">',
+    '      <div style="margin:0 0 8px;font-size:15px;line-height:1.5;color:#92400e;font-weight:800;">⚠️ Important:</div>',
+    '      <p style="margin:0 0 10px;font-size:15px;line-height:1.7;color:#35435a;">It is your responsibility to determine whether your purchase qualifies for sales tax exemption. By submitting this form, you certify that your use complies with applicable tax laws.</p>',
+    '      <p style="margin:0;font-size:15px;line-height:1.7;color:#35435a;">Red Threads LLC does not provide tax or legal advice. If you\'re unsure, please consult your accountant or tax professional.</p>',
+    '    </div>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">📩 This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: [file.getBlob().setName(sanitizeUploadedDocumentName_(file.getName(), 'Michigan-Tax-Exemption-Submission'))]
+  });
+}
+
+function emailTaxExemptSubmissionCopy(payload) {
+  try {
+    return emailTaxExemptSubmissionCopy_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -1892,6 +3967,8 @@ function generateInvoice(payload) {
     return { ok: false, error: String((err && err.message) || err) };
   }
 }
+
+/* ---------------- Order Finalization + Admin Transition Helpers ---------------- */
 
 function adminMarkManualPaymentReceived_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
@@ -2230,6 +4307,8 @@ function handlePaymentIntentFailed_(paymentIntentObj) {
   return { ok: true };
 }
 
+/* ---------------- Stripe Event Processing + Portal Finalization ---------------- */
+
 function processStripeEventPayload_(eventPayload) {
   const eventObj = (eventPayload && typeof eventPayload === 'object') ? eventPayload : {};
   const type = trimString_(eventObj.type);
@@ -2409,11 +4488,54 @@ function verifyTeamModePassword(payload) {
 
     return {
       ok: true,
-      senderName: getVisibleTeamAuthorName_(rowInfo.rowObjNormalized)
+      senderName: getVisibleTeamAuthorName_(rowInfo.rowObjNormalized),
+      teamAuthKey: buildTeamModeAuthKey_(token, cfg)
     };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
+}
+
+function buildTeamModeAuthKey_(token, cfg, options) {
+  const id = trimString_(token);
+  if (!id) return '';
+  const config = cfg || getConfig_();
+  const opts = (options && typeof options === 'object') ? options : {};
+  const issuedAt = Math.max(0, parseInt(String(opts.issuedAt || Date.now()), 10) || Date.now());
+  const payload = id + '|' + String(issuedAt);
+  const secret = String(config.teamModePassword || '');
+  const signature = Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(payload, secret)
+  ).replace(/=+$/g, '');
+  return String(issuedAt) + '.' + signature;
+}
+
+function validateTeamModeAuthKey_(token, authKey, cfg) {
+  const id = trimString_(token);
+  const key = trimString_(authKey);
+  if (!id || !key) return false;
+  const parts = key.split('.');
+  if (parts.length !== 2) return false;
+  const issuedAt = Math.max(0, parseInt(String(parts[0] || 0), 10) || 0);
+  const signature = trimString_(parts[1]);
+  if (!issuedAt || !signature) return false;
+  if ((Date.now() - issuedAt) > TEAM_MODE_AUTH_TTL_MS) return false;
+  return buildTeamModeAuthKey_(id, cfg, { issuedAt: issuedAt }) === key;
+}
+
+function assertTeamModeAuthorized_(ctx, payload) {
+  const token = trimString_(
+    payload && payload.token ||
+    ctx && ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token
+  );
+  if (!token) {
+    throw new Error('Team review link is missing.');
+  }
+  const authKey = trimString_(payload && payload.teamAuthKey);
+  if (!validateTeamModeAuthKey_(token, authKey, ctx && ctx.cfg)) {
+    throw new Error('Team authorization expired. Re-enter the team password and try again.');
+  }
+  return true;
 }
 
 function authSendResetCode(payload) {
@@ -2535,7 +4657,7 @@ function authResetPassword(payload) {
   }
 }
 
-/* ---------------- Helpers ---------------- */
+/* ---------------- Portal VM Assembly ---------------- */
 
 function buildAuthShellVm_() {
   return {
@@ -2713,6 +4835,8 @@ function normalizeMode_(value) {
   return (s === 'team') ? 'team' : 'client';
 }
 
+/* ---------------- Workbook Infrastructure + Shared Helpers ---------------- */
+
 function getConfig_() {
   const props = PropertiesService.getScriptProperties();
 
@@ -2737,6 +4861,8 @@ function getConfig_() {
   const stripeWebhookSecret = String(props.getProperty(CONFIG_KEYS.STRIPE_WEBHOOK_SECRET) || '').trim();
   const stripeWebhookForwardSharedSecret = String(props.getProperty(CONFIG_KEYS.STRIPE_WEBHOOK_FORWARD_SHARED_SECRET) || '').trim();
   const termsDocumentUrl = String(props.getProperty(CONFIG_KEYS.TERMS_DOCUMENT_URL) || DEFAULT_TERMS_DOCUMENT_URL).trim();
+  const creditTermsFormFileId = String(props.getProperty(CONFIG_KEYS.CREDIT_TERMS_FORM_FILE_ID) || DEFAULT_CREDIT_TERMS_FORM_FILE_ID).trim();
+  const taxExemptFormFileId = String(props.getProperty(CONFIG_KEYS.TAX_EXEMPT_FORM_FILE_ID) || DEFAULT_TAX_EXEMPT_FORM_FILE_ID).trim();
   const invoiceDriveFolderId = String(props.getProperty(CONFIG_KEYS.INVOICE_DRIVE_FOLDER_ID) || DEFAULT_INVOICE_DRIVE_FOLDER_ID).trim();
   const termsDriveFolderId = String(props.getProperty(CONFIG_KEYS.TERMS_DRIVE_FOLDER_ID) || DEFAULT_TERMS_DRIVE_FOLDER_ID).trim();
   const taxExemptDriveFolderId = String(props.getProperty(CONFIG_KEYS.TAX_EXEMPT_DRIVE_FOLDER_ID) || DEFAULT_TAX_EXEMPT_DRIVE_FOLDER_ID).trim();
@@ -2758,6 +4884,8 @@ function getConfig_() {
     stripeWebhookSecret: stripeWebhookSecret,
     stripeWebhookForwardSharedSecret: stripeWebhookForwardSharedSecret,
     termsDocumentUrl: termsDocumentUrl,
+    creditTermsFormFileId: creditTermsFormFileId,
+    taxExemptFormFileId: taxExemptFormFileId,
     invoiceDriveFolderId: invoiceDriveFolderId,
     termsDriveFolderId: termsDriveFolderId,
     taxExemptDriveFolderId: taxExemptDriveFolderId,
@@ -2843,6 +4971,8 @@ function ensureNamedSheetWithHeaders_(ss, name, headers) {
   return sheet;
 }
 
+// Keep the live workbook contract frozen here: EXPORT_LOG, USERS,
+// USER_SESSIONS, PORTAL_ORDERS, and PORTAL_ACCOUNTS.
 function ensurePortalInfrastructure_(ss, cfg) {
   const exportSheet = ss.getSheetByName(cfg.exportLogSheetName);
   if (!exportSheet) {
@@ -2965,30 +5095,406 @@ function mergeAccountIdentity_(baseIdentity, overrideIdentity) {
   };
 }
 
+function normalizeAccountDocumentType_(value) {
+  const raw = trimString_(value).toLowerCase();
+  if (raw === 'terms' || raw === 'credit_terms' || raw === 'creditterms') return ACCOUNT_DOCUMENT_TYPES.credit_terms;
+  if (raw === 'tax' || raw === 'tax_exempt' || raw === 'taxexempt' || raw === 'michigan_tax_exempt') return ACCOUNT_DOCUMENT_TYPES.tax_exempt;
+  return '';
+}
+
+function getAccountDocumentWorkflowKey_(documentType) {
+  const type = normalizeAccountDocumentType_(documentType);
+  if (type === ACCOUNT_DOCUMENT_TYPES.credit_terms) return 'creditTerms';
+  if (type === ACCOUNT_DOCUMENT_TYPES.tax_exempt) return 'taxExempt';
+  return '';
+}
+
+function normalizeAccountDocumentStatus_(value) {
+  const raw = trimString_(value).toLowerCase();
+  if (!raw) return 'not_started';
+  if (raw === 'pending_submission') return 'submitted';
+  if (raw === 'submitted' || raw === 'under_review' || raw === 'approved' || raw === 'rejected' || raw === 'not_started') {
+    return raw;
+  }
+  return raw;
+}
+
+function buildDriveFileViewUrl_(fileId) {
+  const id = trimString_(fileId);
+  return id ? ('https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view') : '';
+}
+
+function buildDriveFilePreviewUrl_(fileId) {
+  const id = trimString_(fileId);
+  return id ? ('https://drive.google.com/file/d/' + encodeURIComponent(id) + '/preview') : '';
+}
+
+function buildDriveFileDownloadUrl_(fileId) {
+  const id = trimString_(fileId);
+  return id ? ('https://drive.google.com/uc?export=download&id=' + encodeURIComponent(id)) : '';
+}
+
+function getApprovedPaymentTermsOptions_() {
+  return APPROVED_PAYMENT_TERMS_OPTIONS.map(function(option) {
+    return {
+      code: trimString_(option.code),
+      label: trimString_(option.label),
+      days: Math.max(0, parseInt(String(option.days || 0), 10) || 0)
+    };
+  });
+}
+
+function getApprovedPaymentTermsOptionByCode_(value) {
+  const code = trimString_(value).toLowerCase();
+  if (!code) return null;
+  const options = getApprovedPaymentTermsOptions_();
+  for (var i = 0; i < options.length; i += 1) {
+    if (trimString_(options[i].code).toLowerCase() === code) {
+      return options[i];
+    }
+  }
+  return null;
+}
+
+function buildApprovedPaymentTermsSelection_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const option = getApprovedPaymentTermsOptionByCode_(
+    p.paymentTermsCode || p.approvedPaymentTermsCode || p.termsCode || p.code
+  );
+  if (!option) {
+    throw new Error('Select an approved payment term before approving credit terms.');
+  }
+  return {
+    code: option.code,
+    label: option.label,
+    days: option.days,
+    notes: trimString_(p.paymentTermsNotes || p.approvedPaymentTermsNotes || p.notes)
+  };
+}
+
+function buildApprovedPaymentTermsSummaryFromRow_(row) {
+  const source = (row && typeof row === 'object') ? row : {};
+  return {
+    code: trimString_(source.approvedpaymenttermscode || source.approvedPaymentTermsCode),
+    label: trimString_(source.approvedpaymenttermslabel || source.approvedPaymentTermsLabel),
+    days: Math.max(0, parseInt(String(source.approvedpaymenttermsdays || source.approvedPaymentTermsDays || 0), 10) || 0),
+    notes: trimString_(source.approvedpaymenttermsnotes || source.approvedPaymentTermsNotes),
+    setAt: trimString_(source.approvedpaymenttermssetat || source.approvedPaymentTermsSetAt),
+    setByName: trimString_(source.approvedpaymenttermssetbyname || source.approvedPaymentTermsSetByName),
+    setByEmail: normalizeEmail_(source.approvedpaymenttermssetbyemail || source.approvedPaymentTermsSetByEmail)
+  };
+}
+
+function getDriveFileByIdSafe_(fileId) {
+  const id = trimString_(fileId);
+  if (!id) return null;
+  try {
+    return DriveApp.getFileById(id);
+  } catch (_) {
+    return null;
+  }
+}
+
+function cloneJsonValue_(value, fallback) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function parsePortalAccountNotes_(rawValue) {
+  const raw = trimString_(rawValue);
+  if (!raw) return {};
+  const parsed = safeJsonParse_(raw, null);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  return { legacyText: raw };
+}
+
+function buildPortalAccountNotesText_(notesObj) {
+  const notes = (notesObj && typeof notesObj === 'object' && !Array.isArray(notesObj)) ? notesObj : {};
+  return JSON.stringify(notes);
+}
+
+function getPortalAccountDocumentNotes_(accountRow, documentType) {
+  const type = normalizeAccountDocumentType_(documentType);
+  if (!type) return {};
+  const row = (accountRow && typeof accountRow === 'object') ? accountRow : {};
+  const notes = parsePortalAccountNotes_(row.notes);
+  const workflows = (notes.documentWorkflow && typeof notes.documentWorkflow === 'object' && !Array.isArray(notes.documentWorkflow))
+    ? notes.documentWorkflow
+    : {};
+  const entry = workflows[type];
+  return (entry && typeof entry === 'object' && !Array.isArray(entry)) ? entry : {};
+}
+
+function updatePortalAccountDocumentNotes_(accountRow, documentType, mutateFn) {
+  const row = (accountRow && typeof accountRow === 'object') ? accountRow : {};
+  const type = normalizeAccountDocumentType_(documentType);
+  const notes = parsePortalAccountNotes_(row.notes);
+  if (!notes.documentWorkflow || typeof notes.documentWorkflow !== 'object' || Array.isArray(notes.documentWorkflow)) {
+    notes.documentWorkflow = {};
+  }
+  const current = notes.documentWorkflow[type] && typeof notes.documentWorkflow[type] === 'object' && !Array.isArray(notes.documentWorkflow[type])
+    ? cloneJsonValue_(notes.documentWorkflow[type], {})
+    : {};
+  const next = typeof mutateFn === 'function' ? mutateFn(current, notes) : current;
+  notes.documentWorkflow[type] = (next && typeof next === 'object' && !Array.isArray(next)) ? next : {};
+  return buildPortalAccountNotesText_(notes);
+}
+
+function normalizeEmailRecipients_(value) {
+  const rawItems = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[\n,;]+/);
+  const seen = {};
+  const recipients = [];
+  rawItems.forEach((item) => {
+    const email = normalizeEmail_(item);
+    if (!email || seen[email]) return;
+    seen[email] = true;
+    recipients.push(email);
+  });
+  return recipients;
+}
+
+function getAccountDocumentDefinition_(documentType, cfg) {
+  const type = normalizeAccountDocumentType_(documentType);
+  const config = cfg || getConfig_();
+  if (type === ACCOUNT_DOCUMENT_TYPES.credit_terms) {
+    const sourceFileId = trimString_(config.creditTermsFormFileId);
+    return {
+      type: type,
+      workflowKey: 'creditTerms',
+      teamReviewQueryValue: 'credit_terms',
+      label: 'Red Threads Credit Terms',
+      shortLabel: 'Credit Terms',
+      sourceFileId: sourceFileId,
+      sourceDocumentUrl: buildDriveFileViewUrl_(sourceFileId) || trimString_(config.termsDocumentUrl),
+      sourceDocumentDownloadUrl: buildDriveFileDownloadUrl_(sourceFileId),
+      uploadFolderId: trimString_(config.termsDriveFolderId),
+      statusField: 'termsStatus',
+      approvedField: 'termsApproved',
+      approvedAtField: 'termsApprovedAt',
+      approvedByNameField: 'termsApprovedByName',
+      approvedByEmailField: 'termsApprovedByEmail',
+      artifactUrlField: 'signedTermsFileUrl',
+      submittedAtField: 'signedTermsSubmittedAt',
+      sourceUrlField: 'termsDocumentUrl',
+      paymentTermsCodeField: 'approvedPaymentTermsCode',
+      paymentTermsLabelField: 'approvedPaymentTermsLabel',
+      paymentTermsDaysField: 'approvedPaymentTermsDays',
+      paymentTermsNotesField: 'approvedPaymentTermsNotes',
+      paymentTermsSetAtField: 'approvedPaymentTermsSetAt',
+      paymentTermsSetByNameField: 'approvedPaymentTermsSetByName',
+      paymentTermsSetByEmailField: 'approvedPaymentTermsSetByEmail',
+      supportsGuidedForm: false,
+      uploadLabel: 'Upload signed terms document',
+      blankEmailSubject: 'Red Threads Credit Terms PDF',
+      teamReviewSubject: 'Credit terms document submitted'
+    };
+  }
+  if (type === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
+    const sourceFileId = trimString_(config.taxExemptFormFileId);
+    return {
+      type: type,
+      workflowKey: 'taxExempt',
+      teamReviewQueryValue: 'tax_exempt',
+      label: 'Michigan Sales Tax Exemption',
+      shortLabel: 'Tax Exemption',
+      sourceFileId: sourceFileId,
+      sourceDocumentUrl: buildDriveFileViewUrl_(sourceFileId),
+      sourceDocumentDownloadUrl: buildDriveFileDownloadUrl_(sourceFileId),
+      uploadFolderId: trimString_(config.taxExemptDriveFolderId),
+      statusField: 'taxExemptStatus',
+      approvedField: 'taxExemptApproved',
+      approvedAtField: 'taxExemptApprovedAt',
+      approvedByNameField: 'taxExemptApprovedByName',
+      approvedByEmailField: 'taxExemptApprovedByEmail',
+      artifactUrlField: 'taxExemptCertificateUrl',
+      submittedAtField: 'taxExemptSubmittedAt',
+      certificateNumberField: 'taxExemptCertificateNumber',
+      expiresAtField: 'taxExemptExpiresAt',
+      supportsGuidedForm: true,
+      uploadLabel: 'Upload completed exemption document',
+      blankEmailSubject: 'Michigan Sales Tax Exemption PDF',
+      teamReviewSubject: 'Tax exemption document submitted'
+    };
+  }
+  return null;
+}
+
+function getRequiredAccountDocumentDefinition_(documentType, cfg) {
+  const definition = getAccountDocumentDefinition_(documentType, cfg);
+  if (!definition) {
+    throw new Error('Unsupported document type.');
+  }
+  return definition;
+}
+
+function getAccountDocumentWorkflowFromSummary_(summary, documentType, cfg) {
+  const definition = getAccountDocumentDefinition_(documentType, cfg);
+  if (!definition || !definition.workflowKey) return null;
+  const source = (summary && typeof summary === 'object') ? summary : {};
+  const workflows = (source.documentWorkflows && typeof source.documentWorkflows === 'object')
+    ? source.documentWorkflows
+    : {};
+  return workflows[definition.workflowKey] || null;
+}
+
+function buildAccountDocumentTeamReviewUrl_(documentType, token, cfg) {
+  const id = trimString_(token);
+  if (!id) return '';
+  const definition = getAccountDocumentDefinition_(documentType, cfg);
+  const portalUrl = buildPortalDirectUrl_(id);
+  const params = { mode: 'team' };
+  const reviewQueryValue = trimString_(definition && definition.teamReviewQueryValue);
+  if (reviewQueryValue) params.teamReview = reviewQueryValue;
+  return appendQueryParamsToUrl_(portalUrl, params);
+}
+
+function sanitizeAccountDocumentClientMeta_(meta) {
+  const source = (meta && typeof meta === 'object') ? meta : {};
+  const lastSubmission = (source.lastSubmission && typeof source.lastSubmission === 'object')
+    ? source.lastSubmission
+    : {};
+  const lastDecision = (source.lastDecision && typeof source.lastDecision === 'object')
+    ? source.lastDecision
+    : {};
+  const submissions = Array.isArray(source.submissions) ? source.submissions : [];
+  return {
+    submissionCount: submissions.length,
+    lastSubmission: {
+      submittedAt: trimString_(lastSubmission.submittedAt),
+      submittedByName: trimString_(lastSubmission.submittedByName),
+      submittedByEmail: normalizeEmail_(lastSubmission.submittedByEmail),
+      submissionSource: trimString_(lastSubmission.submissionSource),
+      artifactUrl: trimString_(lastSubmission.artifactUrl),
+      artifactName: trimString_(lastSubmission.artifactName),
+      artifactFiles: normalizeAccountDocumentArtifactFiles_(lastSubmission.artifactFiles),
+      certificateNumber: trimString_(lastSubmission.certificateNumber),
+      guidedFormData: lastSubmission.guidedFormData && typeof lastSubmission.guidedFormData === 'object'
+        ? cloneJsonValue_(lastSubmission.guidedFormData, {})
+        : null
+    },
+    lastDecision: {
+      decidedAt: trimString_(lastDecision.decidedAt),
+      decision: trimString_(lastDecision.decision),
+      decidedByName: trimString_(lastDecision.decidedByName),
+      decidedByEmail: normalizeEmail_(lastDecision.decidedByEmail),
+      reason: trimString_(lastDecision.reason)
+    },
+    lastBlankEmail: source.lastBlankEmail && typeof source.lastBlankEmail === 'object'
+      ? {
+          sentAt: trimString_(source.lastBlankEmail.sentAt),
+          sentByName: trimString_(source.lastBlankEmail.sentByName),
+          sentByEmail: normalizeEmail_(source.lastBlankEmail.sentByEmail),
+          recipients: normalizeEmailRecipients_(source.lastBlankEmail.recipients)
+        }
+      : null
+  };
+}
+
+function buildAccountDocumentWorkflowSummary_(accountRow, documentType, cfg) {
+  const row = (accountRow && typeof accountRow === 'object') ? accountRow : {};
+  const definition = getAccountDocumentDefinition_(documentType, cfg);
+  if (!definition) return null;
+  const notesMeta = getPortalAccountDocumentNotes_(row, definition.type);
+  const status = normalizeAccountDocumentStatus_(row[normalizeHeaderKey_(definition.statusField)] || row[definition.statusField]);
+  const approved = boolFromCell_(row[normalizeHeaderKey_(definition.approvedField)] || row[definition.approvedField])
+    || status === 'approved';
+  const uploadedDocumentUrl = trimString_(row[normalizeHeaderKey_(definition.artifactUrlField)] || row[definition.artifactUrlField])
+    || trimString_(notesMeta.lastSubmission && notesMeta.lastSubmission.artifactUrl);
+  const submittedAt = trimString_(row[normalizeHeaderKey_(definition.submittedAtField)] || row[definition.submittedAtField])
+    || trimString_(notesMeta.lastSubmission && notesMeta.lastSubmission.submittedAt);
+  const certificateNumber = definition.certificateNumberField
+    ? trimString_(row[normalizeHeaderKey_(definition.certificateNumberField)] || row[definition.certificateNumberField])
+    : '';
+  const expiresAt = definition.expiresAtField
+    ? trimString_(row[normalizeHeaderKey_(definition.expiresAtField)] || row[definition.expiresAtField])
+    : '';
+  const approvedPaymentTerms = definition.paymentTermsCodeField
+    ? buildApprovedPaymentTermsSummaryFromRow_(row)
+    : {
+        code: '',
+        label: '',
+        days: 0,
+        notes: '',
+        setAt: '',
+        setByName: '',
+        setByEmail: ''
+      };
+  return {
+    type: definition.type,
+    label: definition.label,
+    shortLabel: definition.shortLabel,
+    status: status,
+    approved: approved,
+    active: definition.type === ACCOUNT_DOCUMENT_TYPES.tax_exempt ? isTaxExemptActive_(row) : approved,
+    submittedAt: submittedAt,
+    uploadedDocumentUrl: uploadedDocumentUrl,
+    certificateNumber: certificateNumber,
+    expiresAt: expiresAt,
+    sourceDocumentUrl: definition.sourceDocumentUrl,
+    sourceDocumentDownloadUrl: definition.sourceDocumentDownloadUrl,
+    supportsGuidedForm: definition.supportsGuidedForm === true,
+    approvedPaymentTermsCode: approvedPaymentTerms.code,
+    approvedPaymentTermsLabel: approvedPaymentTerms.label,
+    approvedPaymentTermsDays: approvedPaymentTerms.days,
+    approvedPaymentTermsNotes: approvedPaymentTerms.notes,
+    approvedPaymentTermsSetAt: approvedPaymentTerms.setAt,
+    approvedPaymentTermsSetByName: approvedPaymentTerms.setByName,
+    approvedPaymentTermsSetByEmail: approvedPaymentTerms.setByEmail,
+    clientMeta: sanitizeAccountDocumentClientMeta_(notesMeta)
+  };
+}
+
 function buildPortalAccountSummary_(accountRow, cfg) {
   const row = (accountRow && typeof accountRow === 'object') ? accountRow : {};
   const termsApproved = isTermsApproved_(row);
   const taxExemptApproved = isTaxExemptApproved_(row);
   const taxExemptActive = isTaxExemptActive_(row);
+  const approvedPaymentTerms = buildApprovedPaymentTermsSummaryFromRow_(row);
+  const creditTermsWorkflow = buildAccountDocumentWorkflowSummary_(row, ACCOUNT_DOCUMENT_TYPES.credit_terms, cfg);
+  const taxExemptWorkflow = buildAccountDocumentWorkflowSummary_(row, ACCOUNT_DOCUMENT_TYPES.tax_exempt, cfg);
   const summary = {
     accountId: trimString_(row.accountid || row.accountId),
     orgId: trimString_(row.orgid || row.orgId),
     orgName: trimString_(row.orgname || row.orgName),
     primaryEmail: normalizeEmail_(row.primaryemail || row.primaryEmail),
     primaryContactName: trimString_(row.primarycontactname || row.primaryContactName),
-    termsStatus: trimString_(row.termsstatus || row.termsStatus),
+    termsStatus: normalizeAccountDocumentStatus_(row.termsstatus || row.termsStatus),
     termsApproved: termsApproved,
     termsApprovedAt: trimString_(row.termsapprovedat || row.termsApprovedAt),
-    taxExemptStatus: trimString_(row.taxexemptstatus || row.taxExemptStatus),
+    signedTermsFileUrl: trimString_(row.signedtermsfileurl || row.signedTermsFileUrl),
+    signedTermsSubmittedAt: trimString_(row.signedtermssubmittedat || row.signedTermsSubmittedAt),
+    approvedPaymentTermsCode: approvedPaymentTerms.code,
+    approvedPaymentTermsLabel: approvedPaymentTerms.label,
+    approvedPaymentTermsDays: approvedPaymentTerms.days,
+    approvedPaymentTermsNotes: approvedPaymentTerms.notes,
+    approvedPaymentTermsSetAt: approvedPaymentTerms.setAt,
+    approvedPaymentTermsSetByName: approvedPaymentTerms.setByName,
+    approvedPaymentTermsSetByEmail: approvedPaymentTerms.setByEmail,
+    taxExemptStatus: normalizeAccountDocumentStatus_(row.taxexemptstatus || row.taxExemptStatus),
     taxExemptApproved: taxExemptApproved,
     taxExemptExpiresAt: trimString_(row.taxexemptexpiresat || row.taxExemptExpiresAt),
     taxExemptActive: taxExemptActive,
+    taxExemptCertificateUrl: trimString_(row.taxexemptcertificateurl || row.taxExemptCertificateUrl),
+    taxExemptCertificateNumber: trimString_(row.taxexemptcertificatenumber || row.taxExemptCertificateNumber),
+    taxExemptSubmittedAt: trimString_(row.taxexemptsubmittedat || row.taxExemptSubmittedAt),
     poAvailable: termsApproved,
     termsDocumentUrl: trimString_(row.termsdocumenturl || row.termsDocumentUrl) || String(cfg.termsDocumentUrl || '').trim(),
+    termsDocumentDownloadUrl: creditTermsWorkflow ? creditTermsWorkflow.sourceDocumentDownloadUrl : '',
+    taxExemptDocumentUrl: taxExemptWorkflow ? taxExemptWorkflow.sourceDocumentUrl : '',
+    taxExemptDocumentDownloadUrl: taxExemptWorkflow ? taxExemptWorkflow.sourceDocumentDownloadUrl : '',
     billingContactEmail: normalizeEmail_(row.billingcontactemail || row.billingContactEmail),
     billingContactName: trimString_(row.billingcontactname || row.billingContactName),
     createdAt: trimString_(row.createdat || row.createdAt),
-    updatedAt: trimString_(row.updatedat || row.updatedAt)
+    updatedAt: trimString_(row.updatedat || row.updatedAt),
+    documentWorkflows: {
+      creditTerms: creditTermsWorkflow,
+      taxExempt: taxExemptWorkflow
+    }
   };
   return summary;
 }
@@ -2996,13 +5502,13 @@ function buildPortalAccountSummary_(accountRow, cfg) {
 function isTermsApproved_(account) {
   const row = (account && typeof account === 'object') ? account : {};
   return boolFromCell_(row.termsapproved || row.termsApproved) ||
-    trimString_(row.termsstatus || row.termsStatus).toLowerCase() === 'approved';
+    normalizeAccountDocumentStatus_(row.termsstatus || row.termsStatus) === 'approved';
 }
 
 function isTaxExemptApproved_(account) {
   const row = (account && typeof account === 'object') ? account : {};
   return boolFromCell_(row.taxexemptapproved || row.taxExemptApproved) ||
-    trimString_(row.taxexemptstatus || row.taxExemptStatus).toLowerCase() === 'approved';
+    normalizeAccountDocumentStatus_(row.taxexemptstatus || row.taxExemptStatus) === 'approved';
 }
 
 function isTaxExemptActive_(account) {
@@ -3061,6 +5567,7 @@ function createPortalAccountIfMissing_(opts) {
   const header = accountsSheet.getRange(1, 1, 1, accountsSheet.getLastColumn()).getValues()[0];
   const colMap = buildColumnMap_(header);
   const identity = buildAccountIdentityFromInputs_(options);
+  const creditTermsDefinition = getAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, cfg);
   const now = nowIso_();
   const rowVals = new Array(accountsSheet.getLastColumn()).fill('');
 
@@ -3071,7 +5578,8 @@ function createPortalAccountIfMissing_(opts) {
   rowVals[colMap.primarycontactname - 1] = identity.personName;
   rowVals[colMap.termsstatus - 1] = 'not_started';
   rowVals[colMap.termsapproved - 1] = false;
-  rowVals[colMap.termsdocumenturl - 1] = cfg.termsDocumentUrl;
+  rowVals[colMap.termsdocumenturl - 1] = creditTermsDefinition ? creditTermsDefinition.sourceDocumentUrl : cfg.termsDocumentUrl;
+  rowVals[colMap.approvedpaymenttermsdays - 1] = 0;
   rowVals[colMap.taxexemptstatus - 1] = 'not_started';
   rowVals[colMap.taxexemptapproved - 1] = false;
   rowVals[colMap.billingcontactemail - 1] = identity.billingContactEmail || identity.personEmail;
@@ -3097,6 +5605,12 @@ function buildPortalDirectUrl_(token) {
   const tokenValue = String(token || '').trim();
   if (!baseUrl || !tokenValue) return '';
   return baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + 't=' + encodeURIComponent(tokenValue);
+}
+
+function buildExternalPortalUrl_(token) {
+  const tokenValue = String(token || '').trim();
+  if (!tokenValue) return '';
+  return 'https://www.redthreads.com/portal?t=' + encodeURIComponent(tokenValue);
 }
 
 function appendQueryParamsToUrl_(baseUrl, params) {
@@ -3198,6 +5712,8 @@ function normalizeSkusForOrder_(rawSkus, jobId) {
   }
   return out;
 }
+
+/* ---------------- Order Draft Normalization + Pricing Helpers ---------------- */
 
 function normalizePrintJobsForOrder_(rawPrintJobs) {
   const rawList = Array.isArray(rawPrintJobs)
@@ -3333,6 +5849,15 @@ function getVisibleJobsForOrder_(printJobs, portalState) {
   });
 }
 
+function getPrintJobDisplayNumberForOrder_(printJobs, printJobId) {
+  const cleanId = trimString_(printJobId);
+  const list = Array.isArray(printJobs) ? printJobs : [];
+  for (let i = 0; i < list.length; i += 1) {
+    if (trimString_(list[i] && list[i].printJobId) === cleanId) return i + 1;
+  }
+  return 0;
+}
+
 function getVisibleSkusForOrder_(job, portalState) {
   const jobState = portalState && portalState.printJobs ? portalState.printJobs[job.printJobId] : null;
   return (Array.isArray(job && job.skus) ? job.skus : []).filter((sku) => {
@@ -3370,6 +5895,64 @@ function getQtyBySizeForOrder_(jobId, sku, colorName, portalState) {
     qtyBySize[String(size)] = Math.max(0, parseInt(String(colorState && colorState.qtyBySize ? colorState.qtyBySize[size] : 0), 10) || 0);
   });
   return qtyBySize;
+}
+
+function getEnteredUnitsForOrderJob_(job, portalState) {
+  if (!job || !job.printJobId) return 0;
+  return getVisibleSkusForOrder_(job, portalState).reduce(function(jobTotal, sku) {
+    return jobTotal + getVisibleColorsForOrder_(job.printJobId, sku, portalState).reduce(function(skuTotal, colorName) {
+      const qtyBySize = getQtyBySizeForOrder_(job.printJobId, sku, colorName, portalState);
+      return skuTotal + Object.keys(qtyBySize).reduce(function(colorTotal, size) {
+        return colorTotal + Math.max(0, parseInt(String(qtyBySize[size] || 0), 10) || 0);
+      }, 0);
+    }, 0);
+  }, 0);
+}
+
+function getMinimumUnitsForOrderJob_(job, portalState) {
+  if (!job) return 0;
+  const tiers = normalizeTierListForOrder_(job.priceTiers, getVisibleSkusForOrder_(job, portalState))
+    .map(function(tier) { return Number(tier); })
+    .filter(function(tier) { return Number.isFinite(tier) && tier > 0 && tier < 2000; })
+    .sort(function(a, b) { return a - b; });
+  return tiers.length ? tiers[0] : 0;
+}
+
+function buildOrderJobSelectionStateForOrder_(job, portalState, printJobs) {
+  return {
+    job: job,
+    printJobId: trimString_(job && job.printJobId),
+    printJobNumber: getPrintJobDisplayNumberForOrder_(printJobs, job && job.printJobId),
+    enteredUnits: getEnteredUnitsForOrderJob_(job, portalState),
+    minimumUnits: getMinimumUnitsForOrderJob_(job, portalState)
+  };
+}
+
+function getOrderJobSelectionStatesForOrder_(printJobs, portalState) {
+  return getVisibleJobsForOrder_(printJobs, portalState).map(function(job) {
+    return buildOrderJobSelectionStateForOrder_(job, portalState, printJobs);
+  });
+}
+
+function getIncludedOrderJobSelectionStates_(printJobs, portalState) {
+  return getOrderJobSelectionStatesForOrder_(printJobs, portalState).filter(function(item) {
+    return item.enteredUnits > 0;
+  });
+}
+
+function buildOrderActionRuleState_(ctx) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const row = (context.row && typeof context.row === 'object') ? context.row : {};
+  const snapshot = context.snapshot || {};
+  const printJobs = normalizePrintJobsForOrder_(snapshot && snapshot.printJobs);
+  const portalState = normalizePortalStateForOrder_(context.portalState || {}, printJobs);
+  return {
+    row: row,
+    snapshot: snapshot,
+    printJobs: printJobs,
+    portalState: portalState,
+    includedJobSelectionStates: getIncludedOrderJobSelectionStates_(printJobs, portalState)
+  };
 }
 
 function pickActiveTierForOrder_(tiers, totalQty) {
@@ -3541,7 +6124,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   portalState.shippingModeLabel = trimString_(portalStateSource && portalStateSource.shippingModeLabel);
   const accountSummary = options.accountSummary || null;
   const dealNumber = trimString_(row.dealnumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber));
-  const visibleJobs = getVisibleJobsForOrder_(printJobs, portalState);
+  const includedJobSelectionStates = getIncludedOrderJobSelectionStates_(printJobs, portalState);
   const taxExemptApplied = Boolean(accountSummary && accountSummary.taxExemptActive);
   const selectedJobs = [];
   const canceledJobs = [];
@@ -3561,7 +6144,9 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
     }
   });
 
-  visibleJobs.forEach((job, jobIndex) => {
+  includedJobSelectionStates.forEach((selectionState) => {
+    const job = selectionState.job;
+    const printJobNumber = selectionState.printJobNumber || getPrintJobDisplayNumberForOrder_(printJobs, job && job.printJobId) || 1;
     const visibleSkus = getVisibleSkusForOrder_(job, portalState);
     let jobQty = 0;
     let jobSubtotal = 0;
@@ -3685,7 +6270,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
     totalUnits += jobQty;
     selectedJobs.push({
       printJobId: job.printJobId,
-      printJobNumber: jobIndex + 1,
+      printJobNumber: printJobNumber,
       printJobName: job.printJobName,
       deliveryEstimate: job.deliveryEstimate,
       turnaroundTime: job.turnaroundTime,
@@ -3953,6 +6538,7 @@ function updatePortalOrderState_(opts) {
     lastUpdatedAt: now
   };
   [
+    'checkoutAttemptId',
     'portalLockState',
     'orderState',
     'paymentMethodSelected',
@@ -3991,6 +6577,8 @@ function updatePortalOrderState_(opts) {
   return buildRowInfoFromSheet_(ordersSheet, orderInfo.row);
 }
 
+/* ---------------- Order Persistence + Invoices + Notifications ---------------- */
+
 function writeCurrentOrderPointersToExportLog_(opts) {
   const options = (opts && typeof opts === 'object') ? opts : {};
   const cfg = options.cfg || getConfig_();
@@ -4015,10 +6603,10 @@ function writeCurrentOrderPointersToExportLog_(opts) {
     latestInvoiceNumber: trimString_(orderSummary.invoiceNumber || options.latestInvoiceNumber),
     lastOrderUpdatedAt: trimString_(orderSummary.lastUpdatedAt || options.lastOrderUpdatedAt || nowIso_())
   };
-  setRowValuesByHeaderMap_(exportSheet, rowInfo.row, rowInfo.colMap, updates);
   if (Object.prototype.hasOwnProperty.call(options, 'status')) {
-    setRowValuesByHeaderMap_(exportSheet, rowInfo.row, rowInfo.colMap, { status: options.status });
+    updates.status = options.status;
   }
+  setRowValuesByHeaderMap_(exportSheet, rowInfo.row, rowInfo.colMap, updates);
   SpreadsheetApp.flush();
   return buildRowInfoFromSheet_(exportSheet, rowInfo.row);
 }
@@ -4160,13 +6748,68 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
   });
 }
 
+function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const recipientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+  if (!recipientEmail) return { ok: false, skipped: true, reason: 'missing-email' };
+
+  const senderName = trimString_(opts.senderName || getVisibleTeamAuthorName_(row) || 'Red Threads Team');
+  const clientName = trimString_(
+    row.personname ||
+    row.clientname ||
+    row.orgname ||
+    'there'
+  );
+  const firstName = trimString_(clientName.split(/\s+/)[0]) || 'there';
+  const portalUrl = buildExternalPortalUrl_(trimString_(opts.token || row.token));
+  const projectName = trimString_(opts.projectName || deriveProjectNameForNotification_(row, safeJsonParse_(row.snapshotjson, null), opts));
+  const subject = '🚩 ' + senderName + ' has responded to your message';
+  const body = [
+    'Hi ' + firstName + ',',
+    '',
+    senderName + ' has responded to your message in your Red Threads portal.',
+    portalUrl ? ('Open your portal here: ' + portalUrl) : '',
+    '',
+    'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+    '',
+    '- Red Threads Team'
+  ].filter(Boolean).join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads Portal Message</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">You have a new message</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;"><strong>' + escapeHtml_(senderName) + '</strong> has responded to your message in your Red Threads portal.</p>',
+    projectName
+      ? ('    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#f7f9fc;border:1px solid #e6ebf3;"><div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div></div>')
+      : '',
+    portalUrl
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">Open Your Portal Message</a></p>')
+      : '',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '  </div>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+
+  return sendNotificationEmail_({
+    to: recipientEmail,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+}
+
 function sendNotificationEmail_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const email = normalizeEmail_(opts.to);
-  if (!email) return { ok: false, skipped: true, reason: 'missing-email' };
+  const recipients = normalizeEmailRecipients_(opts.toList || opts.to);
+  if (!recipients.length) return { ok: false, skipped: true, reason: 'missing-email' };
 
   const message = {
-    to: email,
+    to: recipients.join(','),
     subject: trimString_(opts.subject),
     body: String(opts.body || '').trim() || 'Red Threads notification.',
     name: NOTIFICATION_SENDER_NAME,
@@ -4176,15 +6819,48 @@ function sendNotificationEmail_(options) {
   if (htmlBody) {
     message.htmlBody = htmlBody;
   }
+  if (Array.isArray(opts.attachments) && opts.attachments.length) {
+    message.attachments = opts.attachments;
+  }
+  const fromAlias = normalizeEmail_(opts.fromAlias);
+  const replyTo = normalizeEmail_(opts.replyTo);
+  if (fromAlias) {
+    try {
+      const aliases = (typeof GmailApp !== 'undefined' && GmailApp.getAliases) ? GmailApp.getAliases() : [];
+      const matchingAlias = aliases.find(alias => normalizeEmail_(alias) === fromAlias);
+      if (matchingAlias) {
+        const gmailOptions = {
+          name: NOTIFICATION_SENDER_NAME,
+          htmlBody: message.htmlBody,
+          attachments: message.attachments,
+          from: matchingAlias,
+          replyTo: replyTo || matchingAlias,
+          noReply: true
+        };
+        GmailApp.sendEmail(message.to, message.subject, message.body, gmailOptions);
+        return {
+          ok: true,
+          email: recipients[0],
+          emails: recipients,
+          noReply: true,
+          senderName: NOTIFICATION_SENDER_NAME,
+          fromAlias: matchingAlias
+        };
+      }
+    } catch (_) {}
+  }
 
   MailApp.sendEmail(message);
   return {
     ok: true,
-    email: email,
+    email: recipients[0],
+    emails: recipients,
     noReply: true,
     senderName: NOTIFICATION_SENDER_NAME
   };
 }
+
+/* ---------------- Hosted Stripe Checkout Builders + Transport ---------------- */
 
 function uniqueTrimmedStrings_(values) {
   const seen = {};
@@ -5019,6 +7695,7 @@ function createStripeCheckoutSession_(orderDraft, options) {
       ok: false,
       configured: true,
       error: 'Stripe Checkout Session creation failed.',
+      code: 'checkout_session_create_failed',
       statusCode: statusCode,
       body: body || String(response.getContentText() || '').slice(0, 500)
     };
@@ -5051,6 +7728,21 @@ function createStripeCheckoutSession_(orderDraft, options) {
     hasAnyImages: hasAnyImages,
     imageLineItemCount: lineItemDiagnostics.filter((item) => item.hasImage === true).length
   }));
+  if (!sessionId) {
+    console.log('[RT-STRIPE-CHECKOUT] ' + JSON.stringify({
+      ok: false,
+      paymentMethodSelected: trimString_(opts.paymentMethodSelected),
+      error: 'checkout_session_id_missing'
+    }));
+    return {
+      ok: false,
+      configured: true,
+      code: 'checkout_session_id_missing',
+      error: 'Stripe Checkout session identifier missing from session response.',
+      statusCode: statusCode,
+      body: body
+    };
+  }
   if (!checkoutUrl) {
     console.log('[RT-STRIPE-CHECKOUT] ' + JSON.stringify({
       ok: false,
@@ -5061,6 +7753,7 @@ function createStripeCheckoutSession_(orderDraft, options) {
     return {
       ok: false,
       configured: true,
+      code: 'checkout_url_missing',
       error: 'Stripe Checkout URL missing from session response.',
       statusCode: statusCode,
       body: body
@@ -5145,8 +7838,11 @@ function getVisibleTeamAuthorName_(row) {
 }
 
 function deriveSenderNameForNotification_(row, senderType) {
+  const opts = arguments[2] && typeof arguments[2] === 'object' ? arguments[2] : {};
   const normalizedRow = (row && typeof row === 'object') ? row : {};
   if (String(senderType || '').trim().toLowerCase() === 'team') {
+    const override = String(opts.teamSenderName || '').trim();
+    if (override) return override;
     return getVisibleTeamAuthorName_(normalizedRow);
   }
   return String(
@@ -5166,7 +7862,7 @@ function buildChatNotificationPayload_(rowInfo, message, options) {
   const snapshot = safeJsonParse_(row.snapshotjson, null);
   const token = String(opts.token || row.token || '').trim();
   const personEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
-  const teamMemberName = getVisibleTeamAuthorName_(row);
+  const teamMemberName = String(opts.teamSenderName || '').trim() || getVisibleTeamAuthorName_(row);
   const projectName = deriveProjectNameForNotification_(row, snapshot, opts);
   const messageText = String(opts.messageText || normalizedMessage.text || '').trim() || String(normalizedMessage.text || '').trim();
 
@@ -5176,10 +7872,11 @@ function buildChatNotificationPayload_(rowInfo, message, options) {
     senderType: senderType === 'team' ? 'team' : 'client',
     messageText: messageText,
     messageCreatedAt: String(normalizedMessage.ts || new Date().toISOString()),
-    senderName: deriveSenderNameForNotification_(row, senderType),
+    senderName: deriveSenderNameForNotification_(row, senderType, opts),
     teamMemberName: teamMemberName,
     projectName: projectName,
     personEmail: personEmail,
+    teamInboxEmail: DOCUMENT_REVIEW_EMAIL,
     portalDirectUrl: buildPortalDirectUrl_(token)
   };
 }
@@ -5496,6 +8193,8 @@ function createSession_(sessionsSheet, email) {
   return { sessionId: sessionId, email: normalizeEmail_(email), expiresAt: expiresAt };
 }
 
+/* ---------------- Low-Level Auth + Workbook Row Utilities ---------------- */
+
 function validateSession_(sessionsSheet, sessionId) {
   const id = String(sessionId || '').trim();
   if (!id) return { ok: false, error: 'Missing session.' };
@@ -5685,6 +8384,7 @@ function normalizeChatLog_(input) {
       const sender = senderRaw === 'team'
         ? 'team'
         : (senderRaw === 'system' ? 'system' : 'client');
+      const authorName = String(m.authorName || m.senderName || '').trim();
       if (!text) return null;
       const tsRaw = String(m.ts || m.tsIso || '').trim();
       const ts = tsRaw && !isNaN(new Date(tsRaw).getTime()) ? tsRaw : new Date().toISOString();
@@ -5692,6 +8392,7 @@ function normalizeChatLog_(input) {
         id: String(m.id || ('msg_' + Utilities.getUuid())),
         ts: ts,
         sender: sender,
+        authorName: authorName,
         text: text
       };
     })
@@ -5767,11 +8468,13 @@ function readChatLogForRow_(sheet, rowInfo) {
   return normalizeChatLog_(safeJsonParse_(existingRaw, []));
 }
 
-function createChatMessage_(sender, text, tsOverride) {
+function createChatMessage_(sender, text, tsOverride, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
   return {
     id: 'msg_' + Utilities.getUuid(),
     ts: String(tsOverride || new Date().toISOString()),
     sender: String(sender || '').trim().toLowerCase() || 'client',
+    authorName: String(opts.authorName || '').trim(),
     text: String(text || '').trim()
   };
 }
