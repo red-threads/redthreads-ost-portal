@@ -20,8 +20,6 @@ const CONFIG_KEYS = {
   EXPORT_LOG_SHEET: 'EXPORT_LOG_SHEET',
   PORTAL_ORDERS_SHEET: 'PORTAL_ORDERS_SHEET',
   PORTAL_ACCOUNTS_SHEET: 'PORTAL_ACCOUNTS_SHEET',
-  MAKE_WEBHOOK_URL: 'MAKE_WEBHOOK_URL',
-  MAKE_WEBHOOK_SECRET: 'MAKE_WEBHOOK_SECRET',
   TEAM_MODE_PASSWORD: 'TEAM_MODE_PASSWORD',
   SUCCESS_REDIRECT_URL: 'SUCCESS_REDIRECT_URL',
   STRIPE_PUBLISHABLE_KEY: 'STRIPE_PUBLISHABLE_KEY',
@@ -39,7 +37,6 @@ const CONFIG_KEYS = {
   STRIPE_RETURN_URL: 'STRIPE_RETURN_URL'
 };
 
-const DEFAULT_MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/rpulw78oq9tup5smtsb7kv4c7bc607lm';
 const DEFAULT_TEAM_MODE_PASSWORD = 'R3dthreads!';
 const DEFAULT_PORTAL_ORDERS_SHEET = 'PORTAL_ORDERS';
 const DEFAULT_PORTAL_ACCOUNTS_SHEET = 'PORTAL_ACCOUNTS';
@@ -56,6 +53,7 @@ const DEFAULT_TAX_EXEMPT_FORM_PAGE_2_FILE_ID = '1GYkbUhqaD7t4yDUy8t8FrwhMS0IJqH1
 const DEFAULT_INVOICE_DRIVE_FOLDER_ID = '1TrrLxq4jOS38kMPs7sQIf_rd3iepwlej';
 const DEFAULT_TERMS_DRIVE_FOLDER_ID = '1uuF9c4DvROk37AoaFrh9qcf9lsFc0uj0';
 const DEFAULT_TAX_EXEMPT_DRIVE_FOLDER_ID = '1ixz5zXLMW5GWBQ0VIhGHy89_JYwKiyyT';
+const DEFAULT_UPDATED_ART_FILES_DRIVE_FOLDER_ID = '1F00mJO_0UiYiRDuHxlNkrd1vJR4Wg3-f';
 const DEFAULT_STRIPE_PRICE_CURRENCY = 'USD';
 const DEFAULT_STRIPE_MODE = 'test';
 const DEFAULT_STRIPE_CHECKOUT_SESSION_API_VERSION = '2025-08-27.basil';
@@ -64,9 +62,21 @@ const NOTIFICATION_FROM_ALIAS = 'noreply@redthreads.com';
 const NOTIFICATION_REPLY_NOTICE = 'This inbox is not monitored. Please use your portal link below to view updates or respond.';
 const DOCUMENT_REVIEW_EMAIL = 'hello@redthreads.com';
 const MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_SUMMARY_EXPORT_PDF_BYTES = 20 * 1024 * 1024;
+const MAX_TEAM_ARTWORK_OVERRIDE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const TEAM_MODE_AUTH_TTL_MS = 12 * 60 * 60 * 1000;
 const EXPORT_LOG_COLUMNS = {
   chatLogJson: 28
+};
+const TEAM_ARTWORK_OVERRIDE_ALLOWED_MIME_TYPES = {
+  'image/png': true,
+  'image/jpeg': true,
+  'image/webp': true
+};
+const TEAM_ARTWORK_OVERRIDE_SLOT_KEYS = {
+  1: 'preview',
+  2: 'art',
+  3: 'garment'
 };
 
 const EXPORT_LOG_POINTER_HEADERS = [
@@ -78,10 +88,13 @@ const EXPORT_LOG_POINTER_HEADERS = [
   'currentPaymentState',
   'currentProductionAuthorizationState',
   'currentPaymentMethod',
+  'teamWorkflowMode',
+  'teamJobCompletionJson',
   'termsApproved',
   'taxExemptApproved',
   'latestInvoiceNumber',
-  'lastOrderUpdatedAt'
+  'lastOrderUpdatedAt',
+  'artworkOverridesJson'
 ];
 
 const USER_HEADERS = [
@@ -250,11 +263,47 @@ const ORDER_STATES = {
   closed: 'closed'
 };
 
+const PORTAL_DISPLAY_ORDER_STATUSES = {
+  editable: 'Editable / Estimate',
+  locked: 'Order Finalized / Locked',
+  processing: 'Order Placed / Processing'
+};
+
+const TEAM_WORKFLOW_MODES = {
+  none: '',
+  team_hold: 'team_hold',
+  checkout_reset: 'checkout_reset'
+};
+
+const PURCHASE_ORDER_DRAFT_STATUSES = {
+  draft_ready: 'draft_ready',
+  email_sent: 'email_sent'
+};
+
+const PORTAL_LIFECYCLE_STAGES = {
+  editable: 'editable',
+  checkout_started: 'checkout_started',
+  po_draft_locked: 'po_draft_locked',
+  manual_pending_locked: 'manual_pending_locked',
+  po_submitted_unpaid: 'po_submitted_unpaid',
+  paid_or_authorized: 'paid_or_authorized',
+  in_production_or_complete: 'in_production_or_complete'
+};
+
+const SUMMARY_DOCUMENT_MODES = {
+  estimate: 'estimate',
+  po_draft_invoice: 'po_draft_invoice',
+  manual_pending_invoice: 'manual_pending_invoice',
+  locked_invoice: 'locked_invoice'
+};
+
 const FINAL_LOCK_STATUSES = {
   submitted: true,
   placed: true,
   ordered: true,
-  locked: true
+  locked: true,
+  'order finalized / locked': true,
+  'order placed / processing': true
 };
 
 const AUTH_SHEETS = {
@@ -468,7 +517,7 @@ function appendChatMessage(payload) {
     sheet.getRange(row, chatCol).setValue(JSON.stringify(nextChatLog));
 
     let savedAt = '';
-    let statusOut = String(rowInfo.rowObjNormalized.status || '').trim() || 'Editable';
+    let statusOut = derivePortalDisplayOrderStatus_(rowInfo.rowObjNormalized, rowInfo.rowObjNormalized.status);
 
     if (Object.prototype.hasOwnProperty.call(p, 'portalState')) {
       const portalState = parsePortalStateInput_(p.portalState);
@@ -476,7 +525,6 @@ function appendChatMessage(payload) {
       const isLocked = isLockedPortalRow_(rowInfo.rowObjNormalized, rowPortalState);
       const persisted = persistPortalStateForRow_(sheet, rowInfo, portalState, {
         locked: isLocked,
-        status: isLocked ? getFinalStatusForRow_(rowInfo.rowObjNormalized) : 'Editable',
         chatLog: nextChatLog,
         clearSubmittedAt: !isLocked
       });
@@ -496,7 +544,7 @@ function appendChatMessage(payload) {
     if (sender === 'team') {
       sendPortalMessageNotificationEmail_(rowInfo, nextMsg, notificationPayload);
     } else {
-      sendChatNotificationToMake_(notificationPayload);
+      sendClientPortalMessageAlertEmail_(rowInfo, nextMsg, notificationPayload);
     }
 
     return { ok: true, chatLog: nextChatLog, status: statusOut, savedAt: savedAt };
@@ -547,6 +595,244 @@ function buildArtworkAuditText_(rowInfo, printJobIndex, action) {
   return 'Artwork approved for ' + label + '.';
 }
 
+function normalizeArtworkOverrideSlotIndex_(slotIndex) {
+  const numeric = parseInt(String(slotIndex || '').trim(), 10);
+  return TEAM_ARTWORK_OVERRIDE_SLOT_KEYS[numeric] ? numeric : 0;
+}
+
+function getArtworkOverrideSlotKey_(slotIndex) {
+  const normalizedIndex = normalizeArtworkOverrideSlotIndex_(slotIndex);
+  return normalizedIndex ? TEAM_ARTWORK_OVERRIDE_SLOT_KEYS[normalizedIndex] : '';
+}
+
+function getArtworkOverridesHeaderName_() {
+  return 'artworkOverridesJson';
+}
+
+function normalizeArtworkOverrideEntry_(entry, slotIndex) {
+  const raw = (entry && typeof entry === 'object' && !Array.isArray(entry)) ? entry : null;
+  const normalizedIndex = normalizeArtworkOverrideSlotIndex_(
+    raw && Object.prototype.hasOwnProperty.call(raw, 'slotIndex') ? raw.slotIndex : slotIndex
+  );
+  if (!raw || !normalizedIndex) return null;
+  const slotKey = getArtworkOverrideSlotKey_(normalizedIndex);
+  const fileId = trimString_(raw.fileId);
+  const fileName = trimString_(raw.fileName);
+  const mimeType = trimString_(raw.mimeType);
+  const fileUrl = trimString_(raw.fileUrl || (fileId ? buildDriveFileViewUrl_(fileId) : ''));
+  const previewUrl = trimString_(raw.previewUrl || raw.imageUrl || fileUrl || (fileId ? buildDriveFilePreviewUrl_(fileId) : ''));
+  const downloadUrl = trimString_(raw.downloadUrl || (fileId ? buildDriveFileDownloadUrl_(fileId) : ''));
+  if (!fileId && !previewUrl && !fileUrl) return null;
+  return {
+    slotIndex: normalizedIndex,
+    slotKey: slotKey,
+    fileId: fileId,
+    fileName: fileName,
+    mimeType: mimeType,
+    fileUrl: fileUrl,
+    previewUrl: previewUrl,
+    downloadUrl: downloadUrl,
+    uploadedAt: trimString_(raw.uploadedAt),
+    uploadedByName: trimString_(raw.uploadedByName)
+  };
+}
+
+function normalizeArtworkOverridesJson_(input) {
+  const parsed = safeJsonParse_(input, null);
+  const raw = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  const jobsRaw = (raw.jobs && typeof raw.jobs === 'object' && !Array.isArray(raw.jobs)) ? raw.jobs : {};
+  const out = {
+    version: 1,
+    jobs: {}
+  };
+  Object.keys(jobsRaw).forEach(function(printJobId) {
+    const cleanJobId = trimString_(printJobId);
+    const jobRaw = jobsRaw[printJobId];
+    if (!cleanJobId || !jobRaw || typeof jobRaw !== 'object' || Array.isArray(jobRaw)) return;
+    const jobOut = {};
+    Object.keys(TEAM_ARTWORK_OVERRIDE_SLOT_KEYS).forEach(function(slotIndexKey) {
+      const slotIndex = normalizeArtworkOverrideSlotIndex_(slotIndexKey);
+      const slotKey = getArtworkOverrideSlotKey_(slotIndex);
+      const sourceEntry = jobRaw[String(slotIndex)] || jobRaw[slotKey];
+      const normalizedEntry = normalizeArtworkOverrideEntry_(sourceEntry, slotIndex);
+      if (normalizedEntry) {
+        jobOut[String(slotIndex)] = normalizedEntry;
+      }
+    });
+    if (Object.keys(jobOut).length) {
+      out.jobs[cleanJobId] = jobOut;
+    }
+  });
+  return out;
+}
+
+function applyArtworkOverridesRuntimeLayerToSnapshot_(snapshot, artworkOverridesInput) {
+  const snapshotObj = (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) ? snapshot : null;
+  const normalizedOverrides = normalizeArtworkOverridesJson_(artworkOverridesInput);
+  if (!snapshotObj) return normalizedOverrides;
+  const rawPrintJobs = Array.isArray(snapshotObj.printJobs)
+    ? snapshotObj.printJobs
+    : ((snapshotObj.printJobs && typeof snapshotObj.printJobs === 'object')
+      ? Object.keys(snapshotObj.printJobs).sort().map(function(key) { return snapshotObj.printJobs[key]; })
+      : []);
+  rawPrintJobs.forEach(function(rawJob, idx) {
+    if (!rawJob || typeof rawJob !== 'object' || Array.isArray(rawJob)) return;
+    const printJobId = trimString_(rawJob.printJobId) || ('PJ' + (idx + 1));
+    const bySlot = normalizedOverrides.jobs[printJobId] || {};
+    rawJob.artworkOverridesBySlot = JSON.parse(JSON.stringify(bySlot));
+  });
+  return normalizedOverrides;
+}
+
+function buildArtworkOverrideDriveFileMeta_(file, uploadedByName, slotIndex) {
+  const fileId = trimString_(file && file.getId());
+  return {
+    slotIndex: normalizeArtworkOverrideSlotIndex_(slotIndex),
+    slotKey: getArtworkOverrideSlotKey_(slotIndex),
+    fileId: fileId,
+    fileName: trimString_(file && file.getName()),
+    mimeType: trimString_(file && file.getMimeType()),
+    fileUrl: buildDriveFileViewUrl_(fileId),
+    previewUrl: buildDriveFilePreviewUrl_(fileId),
+    downloadUrl: buildDriveFileDownloadUrl_(fileId),
+    uploadedAt: nowIso_(),
+    uploadedByName: trimString_(uploadedByName)
+  };
+}
+
+function storeArtworkOverrideBlob_(opts) {
+  const options = (opts && typeof opts === 'object') ? opts : {};
+  const mimeType = trimString_(options.mimeType).toLowerCase();
+  if (!TEAM_ARTWORK_OVERRIDE_ALLOWED_MIME_TYPES[mimeType]) {
+    throw new Error('Allowed artwork uploads are PNG, JPG, or WEBP.');
+  }
+  const base64Data = trimString_(options.base64Data || options.fileBase64 || options.fileDataBase64).replace(/^data:[^;]+;base64,/i, '');
+  if (!base64Data) {
+    throw new Error('Artwork image payload is missing.');
+  }
+  const bytes = Utilities.base64Decode(base64Data);
+  if (!bytes || !bytes.length) {
+    throw new Error('Unable to read the uploaded artwork image.');
+  }
+  if (bytes.length > MAX_TEAM_ARTWORK_OVERRIDE_UPLOAD_BYTES) {
+    throw new Error('Artwork uploads must be 10 MB or smaller.');
+  }
+  const folder = getDriveFolderByIdSafe_(DEFAULT_UPDATED_ART_FILES_DRIVE_FOLDER_ID);
+  if (!folder) {
+    throw new Error('UPDATED_ART_FILES folder is not available.');
+  }
+  const defaultName = trimString_(options.defaultFileName || options.fileName || 'Updated-Artwork');
+  const fileName = sanitizeUploadedDocumentName_(options.fileName, defaultName);
+  const blob = Utilities.newBlob(bytes, mimeType, fileName);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return buildArtworkOverrideDriveFileMeta_(file, options.uploadedByName, options.slotIndex);
+}
+
+function uploadTeamArtworkOverride(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = trimString_(p.token);
+    const printJobId = trimString_(p.printJobId);
+    const slotIndex = normalizeArtworkOverrideSlotIndex_(p.slotIndex);
+    const mimeType = trimString_(p.mimeType).toLowerCase();
+    const uploadedByName = trimString_(p.uploadedByName);
+    if (!token) return { ok: false, error: 'Missing token.' };
+    if (!printJobId) return { ok: false, error: 'Missing print job id.' };
+    if (!slotIndex) return { ok: false, error: 'Slot must be 1, 2, or 3.' };
+    if (!TEAM_ARTWORK_OVERRIDE_ALLOWED_MIME_TYPES[mimeType]) {
+      return { ok: false, error: 'Allowed artwork uploads are PNG, JPG, or WEBP.' };
+    }
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const infra = ensurePortalInfrastructure_(ss, cfg);
+    const exportSheet = infra.exportSheet;
+    if (!exportSheet) return { ok: false, error: 'EXPORT_LOG sheet not found.' };
+
+    const rowInfo = findRowByToken_(exportSheet, token);
+    if (!rowInfo) return { ok: false, error: 'Token not found.' };
+
+    assertTeamModeAuthorized_({ cfg: cfg, exportRowInfo: rowInfo }, p);
+
+    const snapshot = safeJsonParse_(rowInfo.rowObjNormalized.snapshotjson, null);
+    if (!snapshot || typeof snapshot !== 'object') {
+      return { ok: false, error: 'Snapshot data is missing.' };
+    }
+    const printJobs = normalizePrintJobsForOrder_(snapshot && snapshot.printJobs);
+    const targetJob = printJobs.find(function(job) {
+      return trimString_(job && job.printJobId) === printJobId;
+    });
+    if (!targetJob) {
+      return { ok: false, error: 'Print job not found.' };
+    }
+
+    const displayNumber = getPrintJobDisplayNumberForOrder_(printJobs, printJobId) || 1;
+    const artStatusHeader = getPrintJobArtStatusHeader_(displayNumber);
+    const artStatusCol = artStatusHeader ? rowInfo.colMap[normalizeHeaderKey_(artStatusHeader)] : 0;
+    const previousArtStatus = trimString_(
+      artStatusHeader ? rowInfo.rowObjNormalized[normalizeHeaderKey_(artStatusHeader)] : ''
+    ).toLowerCase();
+    const artworkApprovalCleared = previousArtStatus === 'approved';
+    const storedMeta = storeArtworkOverrideBlob_({
+      slotIndex: slotIndex,
+      fileName: p.fileName,
+      mimeType: mimeType,
+      base64Data: p.base64Data,
+      uploadedByName: uploadedByName || getVisibleTeamAuthorName_(rowInfo.rowObjNormalized),
+      defaultFileName: 'Print-Job-' + displayNumber + '-Slot-' + slotIndex + '-' + getArtworkOverrideSlotKey_(slotIndex)
+    });
+
+    const existingOverrides = normalizeArtworkOverridesJson_(rowInfo.rowObjNormalized[getArtworkOverridesHeaderName_().toLowerCase()]);
+    if (!existingOverrides.jobs[printJobId]) {
+      existingOverrides.jobs[printJobId] = {};
+    }
+    existingOverrides.jobs[printJobId][String(slotIndex)] = storedMeta;
+    const rowUpdates = {
+      artworkOverridesJson: JSON.stringify(existingOverrides)
+    };
+    if (artStatusHeader && artStatusCol && artworkApprovalCleared) {
+      rowUpdates[artStatusHeader] = '';
+    }
+    setRowValuesByHeaderMap_(exportSheet, rowInfo.row, rowInfo.colMap, rowUpdates);
+
+    let nextChatLog = appendUniqueChatMessage_(
+      readChatLogForRow_(exportSheet, rowInfo),
+      createChatMessage_(
+        'system',
+        'Updated artwork uploaded for Print Job ' + displayNumber + ' — Slot ' + slotIndex + '.'
+      )
+    );
+    if (artworkApprovalCleared) {
+      nextChatLog = appendUniqueChatMessage_(
+        nextChatLog,
+        createChatMessage_(
+          'system',
+          'Artwork approval cleared for Print Job ' + displayNumber + ' after artwork was updated.'
+        )
+      );
+    }
+    const persisted = persistActionChatLogForRow_(exportSheet, rowInfo, nextChatLog);
+    if (!persisted.ok) return persisted;
+
+    return {
+      ok: true,
+      printJobId: printJobId,
+      printJobNumber: displayNumber,
+      slotIndex: slotIndex,
+      slotKey: getArtworkOverrideSlotKey_(slotIndex),
+      override: storedMeta,
+      artworkApprovalCleared: artworkApprovalCleared,
+      printJobArtStatus: artworkApprovalCleared ? '' : previousArtStatus,
+      chatLog: persisted.chatLog,
+      savedAt: trimString_(persisted.savedAt),
+      status: trimString_(persisted.status)
+    };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function persistActionChatLogForRow_(sheet, rowInfo, chatLog, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const nextChatLog = normalizeChatLog_(chatLog);
@@ -561,7 +847,10 @@ function persistActionChatLogForRow_(sheet, rowInfo, chatLog, options) {
       ok: true,
       chatLog: nextChatLog,
       savedAt: '',
-      status: String((rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.status) || '').trim()
+      status: derivePortalDisplayOrderStatus_(
+        rowInfo && rowInfo.rowObjNormalized,
+        rowInfo && rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.status
+      )
     };
   }
 
@@ -571,7 +860,6 @@ function persistActionChatLogForRow_(sheet, rowInfo, chatLog, options) {
   const persisted = persistPortalStateForRow_(sheet, rowInfo, portalState, {
     token: String(opts.token || ''),
     locked: isLocked,
-    status: isLocked ? getFinalStatusForRow_(rowInfo.rowObjNormalized) : 'Editable',
     chatLog: nextChatLog,
     clearSubmittedAt: !isLocked
   });
@@ -734,12 +1022,11 @@ function savePortalState(token, portalStateInput) {
       return { ok: false, error: 'Portal is finalized.' };
     }
 
-    return persistPortalStateForRow_(sheet, rowInfo, portalState, {
-      token: tokenValue,
-      locked: false,
-      status: 'Editable',
-      clearSubmittedAt: true
-    });
+  return persistPortalStateForRow_(sheet, rowInfo, portalState, {
+    token: tokenValue,
+    locked: false,
+    clearSubmittedAt: true
+  });
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -788,7 +1075,6 @@ function finalizePortalAfterPayment(payload) {
     const persisted = persistPortalStateForRow_(sheet, rowInfo, portalState, {
       token: token,
       locked: true,
-      status: 'submitted',
       chatLog: nextChatLog,
       submittedAt: submittedAt,
       writeSubmittedState: true
@@ -798,7 +1084,7 @@ function finalizePortalAfterPayment(payload) {
     return {
       ok: true,
       token: token,
-      status: String(persisted.status || 'submitted'),
+      status: String(persisted.status || PORTAL_DISPLAY_ORDER_STATUSES.locked),
       savedAt: String(persisted.savedAt || submittedAt),
       submittedAt: String(persisted.submittedAt || submittedAt),
       chatLog: nextChatLog
@@ -847,6 +1133,12 @@ function doPost(e) {
     if (action === 'get_account_status') {
       return jsonOutput_(getAccountStatus(payload));
     }
+    if (action === 'get_dashboard_project_peek') {
+      return jsonOutput_(getDashboardProjectPeek(payload));
+    }
+    if (action === 'get_dashboard_project_status_batch') {
+      return jsonOutput_(getDashboardProjectStatusBatch(payload));
+    }
     if (action === 'request_terms_enrollment') {
       return jsonOutput_(requestTermsEnrollment(payload));
     }
@@ -882,6 +1174,33 @@ function doPost(e) {
     }
     if (action === 'admin_mark_po_received') {
       return jsonOutput_(adminMarkPoReceived(payload));
+    }
+    if (action === 'admin_unlock_project_snapshot') {
+      return jsonOutput_(adminUnlockProjectSnapshot(payload));
+    }
+    if (action === 'admin_reset_checkout_selection') {
+      return jsonOutput_(adminResetCheckoutSelection(payload));
+    }
+    if (action === 'admin_reopen_po_submission') {
+      return jsonOutput_(adminReopenPoSubmission(payload));
+    }
+    if (action === 'admin_lock_project_without_ordering') {
+      return jsonOutput_(adminLockProjectWithoutOrdering(payload));
+    }
+    if (action === 'admin_resend_locked_order_link') {
+      return jsonOutput_(adminResendLockedOrderLink(payload));
+    }
+    if (action === 'admin_mark_jobs_completed') {
+      return jsonOutput_(adminMarkJobsCompleted(payload));
+    }
+    if (action === 'admin_reset_credit_terms_account_workflow') {
+      return jsonOutput_(adminResetCreditTermsAccountWorkflow(payload));
+    }
+    if (action === 'admin_reset_tax_exempt_account_workflow') {
+      return jsonOutput_(adminResetTaxExemptAccountWorkflow(payload));
+    }
+    if (action === 'create_locked_order_payment_checkout') {
+      return jsonOutput_(createLockedOrderPaymentCheckout(payload));
     }
     if (action === 'begin_internal_order_adjustment') {
       return jsonOutput_(beginInternalOrderAdjustment(payload));
@@ -1013,12 +1332,6 @@ function loginUser(payload) {
     if (sessionUpdates && Object.keys(sessionUpdates).length) {
       setRowValuesByHeaderMap_(sessionsSheet, sessionsSheet.getLastRow(), buildColumnMap_(sessionsSheet.getRange(1, 1, 1, sessionsSheet.getLastColumn()).getValues()[0]), sessionUpdates);
     }
-    updateUserColumns_(usersSheet, user, {
-      lastloginat: nowIso_(),
-      status: 'active'
-    });
-    timings.sessionMs = Date.now() - sessionStart;
-
     let dashboardHomeData = null;
     const dashboardStart = Date.now();
     try {
@@ -1037,6 +1350,24 @@ function loginUser(payload) {
         dashboardHomeData = builtDashboardHomeData;
       }
     } catch (_) {}
+    const userUpdates = {
+      lastloginat: nowIso_(),
+      status: 'active'
+    };
+    const accountSummary = dashboardHomeData && dashboardHomeData.accountSummary
+      ? dashboardHomeData.accountSummary
+      : null;
+    const currentUser = (user && user.rowObjNormalized && typeof user.rowObjNormalized === 'object')
+      ? user.rowObjNormalized
+      : {};
+    if (!trimString_(currentUser.defaultorgid) && trimString_(accountSummary && accountSummary.orgId)) {
+      userUpdates[AUTH_COLUMNS.USERS.defaultOrgId] = trimString_(accountSummary.orgId);
+    }
+    if (!trimString_(currentUser.defaultorgname) && trimString_(accountSummary && accountSummary.orgName)) {
+      userUpdates[AUTH_COLUMNS.USERS.defaultOrgName] = trimString_(accountSummary.orgName);
+    }
+    updateUserColumns_(usersSheet, user, userUpdates);
+    timings.sessionMs = Date.now() - sessionStart;
     timings.dashboardMs = Date.now() - dashboardStart;
 
     return withTiming({
@@ -1097,7 +1428,8 @@ function authSessionCheck(payload) {
   return validateSession(payload);
 }
 
-function listProjectsForEmail_(exportSheet, email) {
+function listProjectsForEmail_(exportSheet, email, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
   const normalizedEmail = normalizeEmail_(email);
   if (!exportSheet) throw new Error('Auth configuration is incomplete.');
   if (!normalizedEmail) return [];
@@ -1107,7 +1439,11 @@ function listProjectsForEmail_(exportSheet, email) {
   const cached = cache.get(cacheKey);
   if (cached) {
     const parsedCached = safeJsonParse_(cached, null);
-    if (parsedCached && Array.isArray(parsedCached.projects)) {
+    if (
+      parsedCached &&
+      Array.isArray(parsedCached.projects) &&
+      parsedCached.projects.every(isValidDashboardHomeProjectPayload_)
+    ) {
       return parsedCached.projects;
     }
   }
@@ -1129,54 +1465,1197 @@ function listProjectsForEmail_(exportSheet, email) {
 
   const personEmailIdx = personEmailCol - 1;
   const tokenIdx = tokenCol - 1;
-  const dealNumberIdx = colMap.dealnumber ? (colMap.dealnumber - 1) : -1;
-  const dealTitleIdx = colMap.dealtitle ? (colMap.dealtitle - 1) : -1;
-  const orgNameIdx = colMap.orgname ? (colMap.orgname - 1) : -1;
-  const personNameIdx = colMap.personname ? (colMap.personname - 1) : -1;
-  const exportedAtIdx = colMap.exportedat ? (colMap.exportedat - 1) : -1;
-  const createdAtIdx = colMap.createdat ? (colMap.createdat - 1) : -1;
-  const statusIdx = colMap.status ? (colMap.status - 1) : -1;
 
-  const projects = [];
+  const projectEntries = [];
 
   for (let i = 0; i < rowCount; i++) {
     const rowVals = rows[i] || [];
+    const rowInfo = buildRowInfoFromSheet_(exportSheet, i + 2, header, rowVals);
+    const rowState = rowInfo.rowObjNormalized;
     const personEmail = normalizeEmail_(rowVals[personEmailIdx]);
     if (!personEmail || personEmail !== normalizedEmail) continue;
 
     const token = String(rowVals[tokenIdx] || '').trim();
     if (!token) continue;
-
-    const dealNumber = dealNumberIdx >= 0 ? rowVals[dealNumberIdx] : '';
-    const dealTitle = dealTitleIdx >= 0 ? rowVals[dealTitleIdx] : '';
-    const orgName = orgNameIdx >= 0 ? rowVals[orgNameIdx] : '';
-    const personName = personNameIdx >= 0 ? rowVals[personNameIdx] : '';
-    const exportedAtRaw = exportedAtIdx >= 0 ? rowVals[exportedAtIdx] : '';
-    const createdAtRaw = createdAtIdx >= 0 ? rowVals[createdAtIdx] : '';
-    const status = statusIdx >= 0 ? rowVals[statusIdx] : '';
-    const exportedAt = exportedAtRaw || createdAtRaw || '';
-
-    projects.push({
+    projectEntries.push({
       token: token,
-      dealNumber: String(dealNumber || '').trim(),
-      dealTitle: String(dealTitle || '').trim(),
-      orgName: String(orgName || '').trim(),
-      personName: String(personName || '').trim(),
-      exportedAt: String(exportedAt || '').trim(),
-      createdAt: String(exportedAt || '').trim(),
-      status: String(status || '').trim()
+      rowInfo: rowInfo,
+      rowState: rowState,
+      runtimeMeta: buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState),
+      includeLatestOrderSummary: shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState),
+      exportedAt: trimString_(rowState.exportedat || rowState.createdat),
+      createdAt: trimString_(rowState.createdat || rowState.exportedat)
     });
   }
 
-  projects.sort((a, b) => {
-    const da = Date.parse(a.exportedAt || a.createdAt || '');
-    const db = Date.parse(b.exportedAt || b.createdAt || '');
+  projectEntries.sort((a, b) => {
+    const da = Date.parse(a && (a.exportedAt || a.createdAt || ''));
+    const db = Date.parse(b && (b.exportedAt || b.createdAt || ''));
     if (!isNaN(da) && !isNaN(db)) return db - da;
     return 0;
   });
 
-  cache.put(cacheKey, JSON.stringify({ projects: projects }), AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+  const latestOrderMapByToken = buildLatestPortalOrderInfoMapByToken_(
+    projectEntries
+      .filter(function(entry) { return entry && entry.includeLatestOrderSummary === true; })
+      .map(function(entry) { return entry.token; }),
+    {
+      cfg: opts.cfg,
+      ss: opts.ss,
+      ordersSheet: opts.infra && opts.infra.ordersSheet
+    }
+  );
+
+  const projects = projectEntries.map(function(entry, index) {
+    const latestOrderInfo = latestOrderMapByToken[entry.token] || null;
+    const latestOrderSummary = latestOrderInfo
+      ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized)
+      : null;
+    const projectionContext = buildDashboardProjectProjectionContext_(entry.rowInfo, {
+      rowInfo: entry.rowInfo,
+      runtimeMeta: entry.runtimeMeta,
+      cfg: opts.cfg,
+      ss: opts.ss,
+      infra: opts.infra,
+      accountSummary: opts.accountSummary,
+      latestOrderInfo: latestOrderInfo,
+      latestOrderSummary: latestOrderSummary
+    });
+    const shouldInlinePeek = index < 6;
+    return buildDashboardProjectHomeMetaFromProjectionContext_(projectionContext, {
+      peekInline: shouldInlinePeek,
+      peekPreview: shouldInlinePeek
+        ? buildDashboardProjectPeekMetaFromProjectionContext_(projectionContext)
+        : null
+    });
+  });
+
+  try {
+    cache.put(cacheKey, JSON.stringify({ projects: projects }), AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+  } catch (_) {
+    // Larger first-view peek payloads should never block dashboard rendering.
+  }
   return projects;
+}
+
+function buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState) {
+  const row = (rowState && typeof rowState === 'object') ? rowState : {};
+  const snapshot = safeJsonParse_(row.snapshotjson, null);
+  if (!snapshot || typeof snapshot !== 'object') {
+    return {
+      row: row,
+      snapshot: null,
+      printJobs: []
+    };
+  }
+  applyArtworkOverridesRuntimeLayerToSnapshot_(snapshot, row.artworkoverridesjson);
+  return {
+    row: row,
+    snapshot: snapshot,
+    printJobs: normalizePrintJobsForOrder_(snapshot && snapshot.printJobs)
+  };
+}
+
+function getDashboardProjectProjectionVersion_() {
+  return 'v3';
+}
+
+function shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState) {
+  const row = (rowState && typeof rowState === 'object') ? rowState : {};
+  const activeOrderId = trimString_(row.activeorderid || row.currentactiveorderid);
+  const portalLockState = trimString_(row.currentportallockstate || row.portallockstate).toLowerCase();
+  const orderState = trimString_(row.currentorderstate || row.orderstate).toLowerCase();
+  const paymentState = trimString_(row.currentpaymentstate || row.paymentstate).toLowerCase();
+  const productionAuthorizationState = trimString_(
+    row.currentproductionauthorizationstate ||
+    row.productionauthorizationstate
+  ).toLowerCase();
+  return !!(
+    activeOrderId ||
+    portalLockState === PORTAL_LOCK_STATES.locked ||
+    (orderState && orderState !== ORDER_STATES.draft) ||
+    paymentState ||
+    productionAuthorizationState ||
+    trimString_(row.paidat) ||
+    trimString_(row.posubmittedat) ||
+    trimString_(row.authorizedtoproduceat) ||
+    hasNonBlankJsonSignal_(row.teamjobcompletionjson)
+  );
+}
+
+function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const info = (opts.rowInfo && typeof opts.rowInfo === 'object')
+    ? opts.rowInfo
+    : ((rowStateOrInfo && typeof rowStateOrInfo === 'object' && rowStateOrInfo.rowObjNormalized)
+      ? rowStateOrInfo
+      : null);
+  const row = info && info.rowObjNormalized
+    ? info.rowObjNormalized
+    : ((rowStateOrInfo && typeof rowStateOrInfo === 'object') ? rowStateOrInfo : {});
+  const runtimeMeta = (opts.runtimeMeta && typeof opts.runtimeMeta === 'object')
+    ? opts.runtimeMeta
+    : buildDashboardProjectSnapshotRuntimeMetaFromRow_(row);
+  const snapshot = runtimeMeta && typeof runtimeMeta === 'object' ? runtimeMeta.snapshot : null;
+  const printJobs = Array.isArray(runtimeMeta && runtimeMeta.printJobs) ? runtimeMeta.printJobs : [];
+  const cfg = opts.cfg || null;
+  const ss = opts.ss || null;
+  const infra = opts.infra || null;
+  const includeLatestOrderSummary = opts.includeLatestOrderSummary === true;
+  let latestOrderInfo = (opts.latestOrderInfo && typeof opts.latestOrderInfo === 'object') ? opts.latestOrderInfo : null;
+  let latestOrderSummary = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object') ? opts.latestOrderSummary : null;
+
+  if (includeLatestOrderSummary && !latestOrderSummary && trimString_(row.token) && cfg && ss && infra) {
+    latestOrderInfo = latestOrderInfo || getLatestPortalOrderByToken_(trimString_(row.token), {
+      cfg: cfg,
+      ss: ss,
+      ordersSheet: infra.ordersSheet
+    });
+    latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
+  }
+
+  const accountSummary = (opts.accountSummary && typeof opts.accountSummary === 'object')
+    ? opts.accountSummary
+    : buildDashboardPeekLightweightAccountSummaryFromRow_(row);
+  const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderSummary);
+  const workflowContext = buildTeamWorkflowContext_({
+    row: row,
+    latestOrderSummary: latestOrderSummary,
+    currentStateSummary: currentStateSummary,
+    accountSummary: accountSummary
+  });
+  const variant = workflowContext.variant || deriveDashboardWorkflowVariant_(row, latestOrderSummary, currentStateSummary);
+  const portalStateSource = safeJsonParse_(row.portalstatejson, {}) || {};
+  const portalState = normalizePortalStateForOrder_(portalStateSource, printJobs);
+  const lockedStateSource = safeJsonParse_(row.submittedstatejson || row.portalstatejson, {}) || {};
+  const lockedPortalState = normalizePortalStateForOrder_(lockedStateSource, printJobs);
+  const isLocked = workflowContext.isLocked === true;
+  const flags = deriveDashboardProjectStepFlags_(
+    info || { rowObjNormalized: row },
+    snapshot,
+    portalState,
+    latestOrderSummary,
+    currentStateSummary,
+    {
+      printJobs: printJobs,
+      variant: variant,
+      workflowContext: workflowContext
+    }
+  );
+  const timeline = deriveDashboardTimelineMeta_({
+    row: row,
+    flags: flags,
+    variant: variant,
+    latestOrderInfo: latestOrderInfo,
+    latestOrderSummary: latestOrderSummary,
+    runtimeMeta: runtimeMeta,
+    approvedPaymentTermsDays: accountSummary && typeof accountSummary === 'object'
+      ? accountSummary.approvedPaymentTermsDays
+      : null,
+    approvedPaymentTermsLabel: accountSummary && typeof accountSummary === 'object'
+      ? accountSummary.approvedPaymentTermsLabel
+      : ''
+  });
+  const presentation = buildDashboardStatusPresentationMeta_({
+    flags: flags,
+    variant: variant,
+    timeline: timeline
+  });
+  const displayStatus = derivePortalDisplayOrderStatus_(
+    Object.assign({}, row || {}, currentStateSummary || {}, latestOrderSummary || {}),
+    row && row.status
+  );
+  return {
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    rowInfo: info,
+    row: row,
+    runtimeMeta: runtimeMeta,
+    snapshot: snapshot,
+    printJobs: printJobs,
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    accountSummary: accountSummary,
+    currentStateSummary: currentStateSummary,
+    latestOrderInfo: latestOrderInfo,
+    latestOrderSummary: latestOrderSummary,
+    workflowContext: workflowContext,
+    variant: variant,
+    portalStateSource: portalStateSource,
+    portalState: portalState,
+    lockedStateSource: lockedStateSource,
+    lockedPortalState: lockedPortalState,
+    isLocked: isLocked,
+    flags: flags,
+    timeline: timeline,
+    presentation: presentation,
+    displayStatus: displayStatus,
+    dealNumber: trimString_(row.dealnumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber)),
+    dealTitle: deriveProjectNameForNotification_(row, snapshot, {}),
+    token: trimString_(row.token)
+  };
+}
+
+function buildDashboardProjectStatusMetaFromProjectionContext_(context) {
+  const safeContext = (context && typeof context === 'object') ? context : {};
+  const flags = (safeContext.flags && typeof safeContext.flags === 'object') ? safeContext.flags : {};
+  const variant = trimString_(safeContext.variant).toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
+  const timeline = (safeContext.timeline && typeof safeContext.timeline === 'object') ? safeContext.timeline : {};
+  const presentation = (safeContext.presentation && typeof safeContext.presentation === 'object') ? safeContext.presentation : {};
+  const steps = buildDashboardStatusBarModel_(flags, variant, presentation);
+  const copy = buildDashboardStatusCopyMeta_({
+    variant: variant,
+    flags: flags,
+    timeline: timeline,
+    presentation: presentation
+  });
+  return {
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    token: trimString_(safeContext.token),
+    ok: true,
+    variant: variant,
+    steps: steps,
+    flags: flags,
+    production: buildDashboardProductionMeta_(flags, variant, { dateValue: null, dateLabel: '' }),
+    copy: copy,
+    helperText: trimString_(copy && copy.helperPlainText),
+    helperTone: trimString_(copy && copy.tone) || 'current',
+    fallbackStatus: trimString_(safeContext.displayStatus) || derivePortalDisplayOrderStatus_(safeContext.row, safeContext.row && safeContext.row.status)
+  };
+}
+
+function isValidDashboardStatusSeedPayload_(seed) {
+  const safeSeed = (seed && typeof seed === 'object') ? seed : null;
+  return !!(
+    safeSeed &&
+    trimString_(safeSeed.projectionVersion) === getDashboardProjectProjectionVersion_() &&
+    Array.isArray(safeSeed.steps) &&
+    safeSeed.steps.length &&
+    safeSeed.copy &&
+    Array.isArray(safeSeed.copy.helperRuns) &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'stateMode') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'variant') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'poSubmittedDateLabel') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'printStartDateLabel') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'paymentDueDateLabel') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'paidDateLabel') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'paymentMethodLabel') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'poNumber') &&
+    Object.prototype.hasOwnProperty.call(safeSeed.copy, 'orderPlacedDateLabel')
+  );
+}
+
+function isValidDashboardPeekPayload_(peekPayload) {
+  const payload = (peekPayload && typeof peekPayload === 'object') ? peekPayload : null;
+  const project = payload && typeof payload.project === 'object' ? payload.project : null;
+  const totals = payload && typeof payload.totals === 'object' ? payload.totals : null;
+  const header = project && typeof project.header === 'object' ? project.header : null;
+  const summary = project && typeof project.summary === 'object' ? project.summary : null;
+  const timelineFacts = project && typeof project.timelineFacts === 'object' ? project.timelineFacts : null;
+  return !!(
+    payload &&
+    payload.ok === true &&
+    trimString_(payload.projectionVersion) === getDashboardProjectProjectionVersion_() &&
+    trimString_(payload.peekVersion) === getDashboardProjectPeekPayloadVersion_() &&
+    project &&
+    header &&
+    summary &&
+    timelineFacts &&
+    totals &&
+    Array.isArray(payload.jobs) &&
+    payload.isPartial === false
+  );
+}
+
+function isValidDashboardHomeProjectPayload_(project) {
+  const safeProject = (project && typeof project === 'object') ? project : null;
+  const hasPeekInlineFlag = !!(
+    safeProject &&
+    Object.prototype.hasOwnProperty.call(safeProject, 'peekInline')
+  );
+  if (!safeProject || !hasPeekInlineFlag) return false;
+  if (trimString_(safeProject.projectionVersion) !== getDashboardProjectProjectionVersion_()) return false;
+  if (!isValidDashboardStatusSeedPayload_(safeProject.statusSeed)) return false;
+  if (safeProject.peekInline === true) {
+    return isValidDashboardPeekPayload_(safeProject.peekPreview);
+  }
+  return safeProject.peekInline === false;
+}
+
+function buildDashboardProjectHomeMetaFromProjectionContext_(context, options) {
+  const safeContext = (context && typeof context === 'object') ? context : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const preview = buildDashboardProjectPreviewMetaFromProjectionContext_(safeContext);
+  const row = (safeContext.row && typeof safeContext.row === 'object') ? safeContext.row : {};
+  const exportedAt = trimString_(row.exportedat || row.createdat);
+  const createdAt = trimString_(row.createdat || row.exportedat);
+  const sourceMode = safeContext.isLocked === true
+    ? (safeContext.workflowContext && safeContext.workflowContext.isPoFlow === true ? 'locked_po' : 'locked_standard')
+    : 'editable';
+  const peekInline = opts.peekInline === true;
+  const peekPreview = peekInline && isValidDashboardPeekPayload_(opts.peekPreview)
+    ? opts.peekPreview
+    : null;
+  return {
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    sourceMode: sourceMode,
+    jobSource: sourceMode === 'editable' ? 'portal_state' : 'selected_jobs',
+    peekInline: peekInline,
+    peekPreview: peekPreview,
+    token: trimString_(safeContext.token),
+    dealNumber: trimString_(safeContext.dealNumber),
+    dealTitle: trimString_(safeContext.dealTitle),
+    orgName: trimString_(row.orgname),
+    personName: trimString_(row.personname),
+    exportedAt: exportedAt,
+    createdAt: createdAt,
+    status: trimString_(safeContext.displayStatus),
+    statusSeed: buildDashboardProjectStatusMetaFromProjectionContext_(safeContext),
+    previewImageUrl: trimString_(preview && preview.url),
+    previewImageCandidates: Array.isArray(preview && preview.candidates)
+      ? preview.candidates.map(function(url) { return trimString_(url); }).filter(Boolean)
+      : [],
+    previewImageAlt: trimString_(preview && preview.alt)
+  };
+}
+
+function buildDashboardPeekLightweightAccountSummaryFromRow_(row) {
+  const normalizedRow = (row && typeof row === 'object') ? row : {};
+  return {
+    taxExemptApproved: boolFromCell_(normalizedRow.taxexemptapproved),
+    taxExemptActive: boolFromCell_(normalizedRow.taxexemptapproved) || boolFromCell_(normalizedRow.taxexemptactive)
+  };
+}
+
+function getDashboardProjectPeekPayloadVersion_() {
+  return 'v6';
+}
+
+function buildDashboardProjectPreviewMeta_(rowState, runtimeMeta) {
+  const row = (rowState && typeof rowState === 'object') ? rowState : {};
+  const runtime = (runtimeMeta && typeof runtimeMeta === 'object')
+    ? runtimeMeta
+    : buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState);
+  const snapshot = runtime.snapshot;
+  const printJobs = Array.isArray(runtime.printJobs) ? runtime.printJobs : [];
+  if (!snapshot || typeof snapshot !== 'object') {
+    return { url: '', alt: '' };
+  }
+  const firstJob = (Array.isArray(printJobs) && printJobs.length) ? printJobs[0] : null;
+  if (!firstJob) {
+    return { url: '', alt: '' };
+  }
+
+  const candidates = [];
+  const overrideBySlot = (firstJob.artworkOverridesBySlot && typeof firstJob.artworkOverridesBySlot === 'object')
+    ? firstJob.artworkOverridesBySlot
+    : {};
+  const previewOverride = overrideBySlot['1'] || overrideBySlot.preview || null;
+  if (previewOverride) {
+    buildDashboardProjectPreviewCandidatesFromOverride_(previewOverride).forEach(function(url) {
+      candidates.push(url);
+    });
+  }
+  buildDashboardProjectPreviewCandidatesFromMockups_(firstJob.mockups).forEach(function(url) {
+    candidates.push(url);
+  });
+  const resolvedUrl = chooseDashboardProjectPreviewCandidate_(candidates);
+  const printJobName = trimString_(firstJob.printJobName) || 'Job 1';
+  return {
+    url: resolvedUrl,
+    candidates: uniqueTrimmedStrings_(candidates),
+    alt: printJobName + ' preview'
+  };
+}
+
+function buildDashboardProjectPreviewMetaFromProjectionContext_(context) {
+  const safeContext = (context && typeof context === 'object') ? context : {};
+  const runtimeMeta = (safeContext.runtimeMeta && typeof safeContext.runtimeMeta === 'object') ? safeContext.runtimeMeta : null;
+  const printJobs = Array.isArray(safeContext.printJobs) ? safeContext.printJobs : [];
+  const row = (safeContext.row && typeof safeContext.row === 'object') ? safeContext.row : {};
+  const fallbackPreview = buildDashboardProjectPreviewMeta_(row, runtimeMeta);
+
+  if (safeContext.isLocked === true) {
+    const latestOrderInfo = (safeContext.latestOrderInfo && typeof safeContext.latestOrderInfo === 'object') ? safeContext.latestOrderInfo : null;
+    const workflowContext = (safeContext.workflowContext && typeof safeContext.workflowContext === 'object') ? safeContext.workflowContext : {};
+    const lockedDraft = workflowContext.isPoDraftLocked === true
+      ? buildDashboardPeekDraftFromProjectionContext_(safeContext)
+      : (latestOrderInfo
+        ? (safeJsonParse_(latestOrderInfo.rowObjNormalized && latestOrderInfo.rowObjNormalized.orderdraftjson, {}) || {})
+        : {});
+    const contexts = buildDashboardPeekLockedJobContexts_(lockedDraft, printJobs);
+    const firstLocked = (Array.isArray(contexts) && contexts.length) ? contexts[0] : null;
+    if (firstLocked) {
+      const lockedPreview = buildDashboardPeekPreviewMetaForJob_(
+        firstLocked.snapshotJob && Object.keys(firstLocked.snapshotJob).length
+          ? firstLocked.snapshotJob
+          : firstLocked.job
+      );
+      if (trimString_(lockedPreview && lockedPreview.url) || (Array.isArray(lockedPreview && lockedPreview.candidates) && lockedPreview.candidates.length)) {
+        return lockedPreview;
+      }
+    }
+    return fallbackPreview;
+  }
+
+  const portalStateSource = (safeContext.portalStateSource && typeof safeContext.portalStateSource === 'object')
+    ? safeContext.portalStateSource
+    : {};
+  const visibleContexts = buildDashboardPeekEditableJobContexts_(
+    printJobs,
+    safeContext.portalState,
+    normalizeSummaryOptionsForOrderDraft_(portalStateSource.summaryOptions)
+  );
+  const firstVisible = (Array.isArray(visibleContexts) && visibleContexts.length) ? visibleContexts[0] : null;
+  if (!firstVisible || !firstVisible.job) return fallbackPreview;
+  const visiblePreview = buildDashboardPeekPreviewMetaForJob_(firstVisible.job);
+  if (trimString_(visiblePreview && visiblePreview.url) || (Array.isArray(visiblePreview && visiblePreview.candidates) && visiblePreview.candidates.length)) {
+    return visiblePreview;
+  }
+  return fallbackPreview;
+}
+
+function buildDashboardPeekDraftFromProjectionContext_(context) {
+  const safeContext = (context && typeof context === 'object') ? context : {};
+  try {
+    return buildOrderDraftFromSnapshotAndPortalState_({
+      rowInfo: safeContext.rowInfo,
+      row: safeContext.row,
+      snapshot: safeContext.snapshot,
+      portalState: safeContext.portalStateSource,
+      accountSummary: safeContext.accountSummary,
+      token: safeContext.token || (safeContext.row && safeContext.row.token)
+    });
+  } catch (_) {
+    return {};
+  }
+}
+
+function buildDashboardPeekEditableJobContexts_(printJobs, portalState, summaryOptions) {
+  const normalizedSummaryOptions = normalizeSummaryOptionsForOrderDraft_(summaryOptions);
+  const hiddenZeroQtyIds = new Set(
+    (normalizedSummaryOptions.hiddenZeroQtyJobIds || [])
+      .map(function(id) { return trimString_(id); })
+      .filter(Boolean)
+  );
+  return getVisibleJobsForOrder_(printJobs, portalState)
+    .map(function(job) {
+      const safeJob = (job && typeof job === 'object') ? job : null;
+      if (!safeJob) return null;
+      const printJobId = trimString_(safeJob.printJobId);
+      if (!printJobId) return null;
+      const enteredUnits = getEnteredUnitsForOrderJob_(safeJob, portalState);
+      if (enteredUnits <= 0 && hiddenZeroQtyIds.has(printJobId)) return null;
+      return {
+        printJobId: printJobId,
+        printJobNumber: getPrintJobDisplayNumberForOrder_(printJobs, printJobId) || 1,
+        job: safeJob,
+        enteredUnits: enteredUnits,
+        skuRows: getVisibleSkusForOrder_(safeJob, portalState).map(function(sku) {
+          return {
+            skuId: trimString_(sku && sku.skuId),
+            skuKey: trimString_(sku && sku.skuKey),
+            label: trimString_(sku && (sku.uiName || sku.skuKey || sku.skuId)) || '--',
+            units: sumEnteredUnitsForDashboardPeekSku_(printJobId, sku, portalState)
+          };
+        }).filter(function(row) {
+          return !!trimString_(row && (row.skuId || row.skuKey || row.label));
+        })
+      };
+    })
+    .filter(Boolean)
+    .filter(function(item) {
+      return Array.isArray(item.skuRows) && item.skuRows.length > 0;
+    });
+}
+
+function buildDashboardPeekLockedJobContexts_(lockedDraft, printJobs) {
+  const draft = (lockedDraft && typeof lockedDraft === 'object') ? lockedDraft : {};
+  const selectedJobs = Array.isArray(draft.selectedJobs) ? draft.selectedJobs : [];
+  const canceledIds = new Set(
+    (Array.isArray(draft.canceledJobs) ? draft.canceledJobs : [])
+      .map(function(job) { return trimString_(job && job.printJobId); })
+      .filter(Boolean)
+  );
+  const printJobsById = {};
+  (Array.isArray(printJobs) ? printJobs : []).forEach(function(job, index) {
+    const printJobId = trimString_(job && job.printJobId);
+    if (!printJobId) return;
+    printJobsById[printJobId] = {
+      job: job,
+      printJobNumber: index + 1
+    };
+  });
+  return selectedJobs
+    .map(function(selectedJob) {
+      const selected = (selectedJob && typeof selectedJob === 'object') ? selectedJob : null;
+      if (!selected) return null;
+      const printJobId = trimString_(selected.printJobId);
+      if (!printJobId || canceledIds.has(printJobId)) return null;
+      const totalUnits = Math.max(0, parseInt(String(selected.units || 0), 10) || 0);
+      if (totalUnits <= 0) return null;
+      const source = printJobsById[printJobId] || {};
+      const snapshotJob = (source.job && typeof source.job === 'object') ? source.job : {};
+      const resolvedJob = Object.assign({}, snapshotJob, selected);
+      const skuRows = (Array.isArray(selected.skus) ? selected.skus : [])
+        .map(function(sku) {
+          const units = Math.max(0, parseInt(String(sku && sku.units || 0), 10) || 0);
+          if (units <= 0) return null;
+          return {
+            skuId: trimString_(sku && sku.skuId),
+            skuKey: trimString_(sku && sku.skuKey),
+            label: trimString_(sku && (sku.uiName || sku.skuKey || sku.skuId)) || '--',
+            units: units
+          };
+        })
+        .filter(Boolean);
+      if (!skuRows.length) return null;
+      return {
+        printJobId: printJobId,
+        printJobNumber: Math.max(
+          1,
+          parseInt(String(selected.printJobNumber || source.printJobNumber || getPrintJobDisplayNumberForOrder_(printJobs, printJobId) || 1), 10) || 1
+        ),
+        job: resolvedJob,
+        snapshotJob: snapshotJob,
+        selectedJob: selected,
+        enteredUnits: totalUnits,
+        skuRows: skuRows
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildDashboardPeekPreviewMetaForJob_(job) {
+  const normalizedJob = (job && typeof job === 'object') ? job : {};
+  const candidates = [];
+  const overrideBySlot = (normalizedJob.artworkOverridesBySlot && typeof normalizedJob.artworkOverridesBySlot === 'object')
+    ? normalizedJob.artworkOverridesBySlot
+    : {};
+  const previewOverride = overrideBySlot['1'] || overrideBySlot.preview || null;
+  if (previewOverride) {
+    buildDashboardProjectPreviewCandidatesFromOverride_(previewOverride).forEach(function(url) {
+      candidates.push(url);
+    });
+  }
+  buildDashboardProjectPreviewCandidatesFromMockups_(normalizedJob.mockups).forEach(function(url) {
+    candidates.push(url);
+  });
+  const resolvedUrl = chooseDashboardProjectPreviewCandidate_(candidates);
+  const printJobName = trimString_(normalizedJob.printJobName) || 'Job preview';
+  return {
+    url: resolvedUrl,
+    candidates: uniqueTrimmedStrings_(candidates),
+    alt: printJobName + ' preview'
+  };
+}
+
+function buildDashboardProjectPeekMetaForToken_(projectToken, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const exportSheet = infra.exportSheet;
+  if (!exportSheet) {
+    return { ok: false, error: 'Auth configuration is incomplete.' };
+  }
+
+  const cleanToken = trimString_(projectToken);
+  if (!cleanToken) {
+    return { ok: false, error: 'Missing project token.' };
+  }
+
+  let rowInfo = opts.rowInfo || findRowByToken_(exportSheet, cleanToken);
+  if (!rowInfo) return { ok: false, error: 'Link not found.' };
+
+  const row = rowInfo.rowObjNormalized || {};
+  const runtimeMeta = buildDashboardProjectSnapshotRuntimeMetaFromRow_(row);
+  if (!runtimeMeta.snapshot || typeof runtimeMeta.snapshot !== 'object') {
+    return { ok: false, error: 'Snapshot data is missing.' };
+  }
+  const accountSummary = buildDashboardPeekLightweightAccountSummaryFromRow_(row);
+  const projectionContext = buildDashboardProjectProjectionContext_(rowInfo, {
+    rowInfo: rowInfo,
+    runtimeMeta: runtimeMeta,
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    accountSummary: accountSummary,
+    includeLatestOrderSummary: true
+  });
+  return buildDashboardProjectPeekMetaFromProjectionContext_(projectionContext);
+}
+
+function sumEnteredUnitsForDashboardPeekSku_(jobId, sku, portalState) {
+  if (!jobId || !sku) return 0;
+  return getVisibleColorsForOrder_(jobId, sku, portalState).reduce(function(total, colorName) {
+    const qtyBySize = getQtyBySizeForOrder_(jobId, sku, colorName, portalState);
+    return total + Object.keys(qtyBySize).reduce(function(colorTotal, size) {
+      return colorTotal + Math.max(0, parseInt(String(qtyBySize[size] || 0), 10) || 0);
+    }, 0);
+  }, 0);
+}
+
+function buildDashboardPeekJobTypeLabel_(job) {
+  const decorations = Array.isArray(job && job.decorations) ? job.decorations : [];
+  if (!decorations.length) return '--';
+  const displayMethods = [];
+  const pushDisplayMethod = function(value) {
+    const clean = trimString_(value);
+    if (!clean || displayMethods.indexOf(clean) >= 0) return;
+    displayMethods.push(clean);
+  };
+  decorations.forEach(function(item) {
+    const rawMethod = trimString_(item && (item.decorationMethod || item.method || item.type || item.decoType));
+    if (/patch/i.test(rawMethod)) {
+      pushDisplayMethod('Patches');
+      return;
+    }
+    const normalized = normalizeStripeCheckoutDecorationMethod_(rawMethod);
+    if (/patch/i.test(normalized)) {
+      pushDisplayMethod('Patches');
+      return;
+    }
+    if (/supa\s*dtf/i.test(rawMethod)) {
+      pushDisplayMethod('SUPA DTF');
+      return;
+    }
+    if (normalized === 'embroidery') {
+      pushDisplayMethod('Embroidery');
+      return;
+    }
+    if (normalized === 'DTF') {
+      pushDisplayMethod('DTF');
+      return;
+    }
+    if (normalized === 'DTG') {
+      pushDisplayMethod('DTG');
+      return;
+    }
+    if (normalized === 'heat transfer') {
+      pushDisplayMethod('Heat Transfer');
+      return;
+    }
+    if (normalized === 'print' || /^\d+-color$/.test(normalized)) {
+      pushDisplayMethod('Screen Print');
+      return;
+    }
+    if (rawMethod) {
+      pushDisplayMethod(rawMethod);
+      return;
+    }
+  });
+  if (!displayMethods.length) return '--';
+  return displayMethods.join(', ');
+}
+
+function buildDashboardPeekHeaderMeta_(workflowContext, timeline) {
+  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  if (context.hasPlacedOrder !== true) {
+    return {
+      mode: 'not_placed',
+      primaryLabel: 'Not placed',
+      primaryDateLabel: '',
+      poNumber: '',
+      displayText: 'Not placed, production has not started.'
+    };
+  }
+  if (context.isPoSubmitted === true) {
+    const poNumber = trimString_(safeTimeline.poNumber || context.poNumber);
+    const submittedLabel = trimString_(safeTimeline.poSubmittedDateLabel);
+    const primaryLabel = poNumber ? ('Purchase Order #' + poNumber) : 'Purchase Order';
+    return {
+      mode: 'po_submitted',
+      primaryLabel: primaryLabel,
+      primaryDateLabel: submittedLabel,
+      poNumber: poNumber,
+      displayText: submittedLabel
+        ? (primaryLabel + ' received on ' + submittedLabel)
+        : (primaryLabel + ' received.')
+    };
+  }
+  if (context.isPaymentReceived === true) {
+    const paidLabel = trimString_(safeTimeline.paidDateLabel);
+    return {
+      mode: 'paid_standard',
+      primaryLabel: 'Payment received',
+      primaryDateLabel: paidLabel,
+      poNumber: '',
+      displayText: paidLabel ? ('Payment received: ' + paidLabel) : 'Payment received.'
+    };
+  }
+  if (context.isPoFlow === true) {
+    return {
+      mode: 'awaiting_po_submission',
+      primaryLabel: 'Order placed',
+      primaryDateLabel: '',
+      poNumber: '',
+      displayText: 'Order placed, awaiting purchase order submission.'
+    };
+  }
+  return {
+    mode: 'placed_standard',
+    primaryLabel: 'Order placed',
+    primaryDateLabel: '',
+    poNumber: '',
+    displayText: 'Order placed, awaiting payment.'
+  };
+}
+
+function hasDashboardPeekProductionStarted_(workflowContext) {
+  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  return context.isPoFlow === true
+    ? context.isPoSubmitted === true
+    : context.isPaymentReceived === true;
+}
+
+function formatDashboardPeekProjectName_(dealNumber, dealTitle) {
+  const projectNumber = trimString_(dealNumber);
+  const rawProjectTitle = trimString_(dealTitle);
+  if (!rawProjectTitle) return '';
+  if (!projectNumber) return rawProjectTitle;
+  const duplicatePrefixPattern = new RegExp('^' + projectNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[-:|]?\\s*', 'i');
+  return rawProjectTitle.replace(duplicatePrefixPattern, '').trim();
+}
+
+function buildDashboardPeekProjectHeader_(safeContext) {
+  const context = (safeContext && typeof safeContext === 'object') ? safeContext : {};
+  const row = (context.row && typeof context.row === 'object') ? context.row : {};
+  const snapshot = (context.snapshot && typeof context.snapshot === 'object') ? context.snapshot : null;
+  const projectNumber = trimString_(context.dealNumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber) || row.dealnumber);
+  const rawTitle = trimString_(context.dealTitle || row.dealtitle);
+  const projectName = formatDashboardPeekProjectName_(projectNumber, rawTitle);
+  return {
+    title: projectName
+      ? ('Project ' + (projectNumber || '--') + ': ' + projectName)
+      : ('Project ' + (projectNumber || '--')),
+    projectNumber: projectNumber,
+    projectName: projectName,
+    canOpenProject: !!trimString_(context.token || row.token)
+  };
+}
+
+function buildDashboardPeekTimelineFact_(label, value) {
+  return {
+    label: trimString_(label),
+    value: trimString_(value) || '--'
+  };
+}
+
+function buildDashboardPeekTimelineFacts_(workflowContext, timeline, row) {
+  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  const safeRow = (row && typeof row === 'object') ? row : {};
+  const productionStarted = hasDashboardPeekProductionStarted_(context);
+  const completionReached = safeTimeline.allJobsCompleted === true
+    || (
+      safeTimeline.hasAnyActualJobCompletion !== true
+      && hasDashboardDateReached_(safeTimeline.completionDateValue)
+    );
+  const startedOnDate = normalizeDashboardCalendarDate_(safeRow.exportedat || safeRow.createdat || safeRow.exportedAt || safeRow.createdAt);
+  const startedOnLabel = startedOnDate ? formatDashboardShortDate_(startedOnDate) : '--';
+  const poNumber = trimString_(safeTimeline.poNumber || context.poNumber);
+  const hasPoPlaced = context.isPoSubmitted === true || !!poNumber;
+  const orderPlacedFact = context.isPoFlow === true
+    ? buildDashboardPeekTimelineFact_(
+        hasPoPlaced
+          ? (poNumber ? ('Purchase Order #' + poNumber + ' placed') : 'Purchase Order placed')
+          : 'Order placed',
+        hasPoPlaced
+          ? trimString_(safeTimeline.poSubmittedDateLabel)
+          : trimString_(safeTimeline.orderPlacedDateLabel)
+      )
+    : buildDashboardPeekTimelineFact_('Order placed', trimString_(safeTimeline.orderPlacedDateLabel));
+  const paymentTypeLabel = context.isPaymentReceived === true
+    ? (
+        trimString_(safeTimeline.paymentMethodLabel)
+        || (context.isPoFlow === true ? 'Purchase Order' : '')
+      )
+    : '';
+  const paymentFactLabel = paymentTypeLabel
+    ? ('(' + paymentTypeLabel + ') Payment made')
+    : 'Payment made';
+  return {
+    startedOn: buildDashboardPeekTimelineFact_('Started on', startedOnLabel),
+    orderPlaced: orderPlacedFact,
+    paymentMade: buildDashboardPeekTimelineFact_(
+      paymentFactLabel,
+      context.isPaymentReceived === true ? trimString_(safeTimeline.paidDateLabel) : ''
+    ),
+    projectCompletedOn: buildDashboardPeekTimelineFact_(
+      'Project Completed on',
+      productionStarted && context.isPaymentReceived === true && completionReached
+        ? trimString_(safeTimeline.completionDateLabel)
+        : ''
+    )
+  };
+}
+
+function buildDashboardPeekSummaryMeta_(workflowContext, timeline, totals) {
+  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  const safeTotals = (totals && typeof totals === 'object') ? totals : {};
+  const productionStarted = hasDashboardPeekProductionStarted_(context);
+  const allJobsCompleted = safeTimeline.allJobsCompleted === true;
+  return {
+    totalUnits: Math.max(0, parseInt(String(safeTotals.totalUnits || 0), 10) || 0),
+    priceLabel: productionStarted ? 'Final Cost' : 'Estimated Price',
+    priceValue: Number.isFinite(Number(safeTotals.totalPrice)) ? Number(safeTotals.totalPrice) : null,
+    priceHelperText: productionStarted ? '' : 'Price excludes taxes, shipping, CC fees',
+    completionLabel: productionStarted
+      ? (allJobsCompleted ? 'Production Completed' : 'Production Will Finish')
+      : 'Estimated Completion',
+    completionValue: trimString_(safeTimeline.completionDateLabel) || '--',
+    completionHelperText: productionStarted ? '' : 'Date production is finished for all jobs'
+  };
+}
+
+function buildDashboardPeekJobMeta_(job, options) {
+  const safeJob = (job && typeof job === 'object') ? job : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const context = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
+  const timeline = (opts.timeline && typeof opts.timeline === 'object') ? opts.timeline : {};
+  const completionMap = normalizeTeamJobCompletionMap_(opts.teamJobCompletionByJobId);
+  const jobIsOrdered = opts.jobIsOrdered !== false;
+  const printJobId = trimString_(safeJob.printJobId);
+  const completionEntry = printJobId ? completionMap[printJobId] : null;
+  const completionDate = normalizeDashboardCalendarDate_(completionEntry && completionEntry.completionDate);
+  const turnaroundLabel = formatTurnaroundTextForDashboard_(pickBaseTurnaroundForDashboard_(safeJob)) || '--';
+  const productionStarted = hasDashboardPeekProductionStarted_(context);
+
+  if (completionDate) {
+    return {
+      typeLabel: buildDashboardPeekJobTypeLabel_(safeJob),
+      turnaroundLabel: turnaroundLabel,
+      finishedOnDateLabel: formatDashboardShortDate_(completionDate),
+      finishedOnDateValue: completionDate.getTime(),
+      finishedOnSource: 'team_completion'
+    };
+  }
+
+  if (context.hasPlacedOrder !== true || !jobIsOrdered || !productionStarted) {
+    return {
+      typeLabel: buildDashboardPeekJobTypeLabel_(safeJob),
+      turnaroundLabel: turnaroundLabel,
+      finishedOnDateLabel: '',
+      finishedOnDateValue: null,
+      finishedOnSource: 'none'
+    };
+  }
+
+  const referenceDateValue = context.isPoFlow === true
+    ? timeline.printStartDateValue
+    : timeline.paidDateValue || timeline.printStartDateValue;
+  const referenceDate = Number.isFinite(Number(referenceDateValue)) ? new Date(Number(referenceDateValue)) : null;
+  const readyCandidate = referenceDate ? deriveDashboardReadyCandidateForJob_(safeJob, referenceDate) : null;
+  return {
+    typeLabel: buildDashboardPeekJobTypeLabel_(safeJob),
+    turnaroundLabel: turnaroundLabel,
+    finishedOnDateLabel: trimString_(readyCandidate && readyCandidate.dateLabel),
+    finishedOnDateValue: Number.isFinite(Number(readyCandidate && readyCandidate.dateValue)) ? Number(readyCandidate.dateValue) : null,
+    finishedOnSource: readyCandidate
+      ? (context.isPoFlow === true ? 'projected_po' : 'projected_payment')
+      : 'none'
+  };
+}
+
+function buildDashboardPeekJobsFromEditableState_(printJobs, portalState, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  return buildDashboardPeekEditableJobContexts_(printJobs, portalState, opts.summaryOptions)
+    .map(function(context) {
+      const job = context.job;
+      const preview = buildDashboardPeekPreviewMetaForJob_(job);
+      const jobMeta = buildDashboardPeekJobMeta_(job, Object.assign({}, opts, {
+        jobIsOrdered: context.enteredUnits > 0
+      }));
+      const skuRows = Array.isArray(context.skuRows) ? context.skuRows : [];
+      return {
+        printJobId: trimString_(context.printJobId || (job && job.printJobId)),
+        printJobNumber: context.printJobNumber || getPrintJobDisplayNumberForOrder_(printJobs, job && job.printJobId) || 1,
+        printJobName: trimString_(job && job.printJobName) || ('Job ' + String(context.printJobNumber || 1)),
+        jobUnits: Math.max(0, parseInt(String(context && context.enteredUnits || 0), 10) || 0),
+        previewImageUrl: trimString_(preview.url),
+        previewImageCandidates: preview.candidates,
+        previewImageAlt: trimString_(preview.alt),
+        typeLabel: trimString_(jobMeta.typeLabel) || '--',
+        turnaroundLabel: trimString_(jobMeta.turnaroundLabel) || '--',
+        finishedOnDateLabel: trimString_(jobMeta.finishedOnDateLabel),
+        finishedOnDateValue: Number.isFinite(Number(jobMeta.finishedOnDateValue)) ? Number(jobMeta.finishedOnDateValue) : null,
+        finishedOnSource: trimString_(jobMeta.finishedOnSource) || 'none',
+        skuRows: skuRows
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildDashboardPeekJobsFromLockedDraft_(lockedDraft, printJobs, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  return buildDashboardPeekLockedJobContexts_(lockedDraft, printJobs)
+    .map(function(context) {
+      const resolvedJob = context.job;
+      const snapshotJob = context.snapshotJob;
+      const preview = buildDashboardPeekPreviewMetaForJob_(snapshotJob && Object.keys(snapshotJob).length ? snapshotJob : resolvedJob);
+      const skuRows = Array.isArray(context.skuRows) ? context.skuRows : [];
+      const jobMeta = buildDashboardPeekJobMeta_(resolvedJob, Object.assign({}, opts, {
+        jobIsOrdered: true
+      }));
+      return {
+        printJobId: trimString_(context.printJobId || (resolvedJob && resolvedJob.printJobId)),
+        printJobNumber: context.printJobNumber || getPrintJobDisplayNumberForOrder_(printJobs, resolvedJob && resolvedJob.printJobId) || 1,
+        printJobName: trimString_(resolvedJob && resolvedJob.printJobName) || ('Job ' + String(context.printJobNumber || 1)),
+        jobUnits: Math.max(0, parseInt(String(context && context.enteredUnits || 0), 10) || 0),
+        previewImageUrl: trimString_(preview.url),
+        previewImageCandidates: Array.isArray(preview.candidates) ? preview.candidates : [],
+        previewImageAlt: trimString_(preview.alt) || ((trimString_(resolvedJob && resolvedJob.printJobName) || 'Job ' + String(context.printJobNumber || 1)) + ' preview'),
+        typeLabel: trimString_(jobMeta.typeLabel) || '--',
+        turnaroundLabel: trimString_(jobMeta.turnaroundLabel) || '--',
+        finishedOnDateLabel: trimString_(jobMeta.finishedOnDateLabel),
+        finishedOnDateValue: Number.isFinite(Number(jobMeta.finishedOnDateValue)) ? Number(jobMeta.finishedOnDateValue) : null,
+        finishedOnSource: trimString_(jobMeta.finishedOnSource) || 'none',
+        skuRows: skuRows
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildDashboardProjectPeekMetaFromProjectionContext_(context) {
+  const safeContext = (context && typeof context === 'object') ? context : {};
+  const row = (safeContext.row && typeof safeContext.row === 'object') ? safeContext.row : {};
+  const snapshot = (safeContext.snapshot && typeof safeContext.snapshot === 'object') ? safeContext.snapshot : null;
+  const printJobs = Array.isArray(safeContext.printJobs) ? safeContext.printJobs : [];
+  const latestOrderInfo = (safeContext.latestOrderInfo && typeof safeContext.latestOrderInfo === 'object') ? safeContext.latestOrderInfo : null;
+  const latestOrderSummary = (safeContext.latestOrderSummary && typeof safeContext.latestOrderSummary === 'object') ? safeContext.latestOrderSummary : null;
+  const workflowContext = (safeContext.workflowContext && typeof safeContext.workflowContext === 'object') ? safeContext.workflowContext : {};
+  const timeline = (safeContext.timeline && typeof safeContext.timeline === 'object') ? safeContext.timeline : {};
+  const accountSummary = (safeContext.accountSummary && typeof safeContext.accountSummary === 'object') ? safeContext.accountSummary : {};
+  const cleanToken = trimString_(safeContext.token || row.token);
+  const isLocked = safeContext.isLocked === true;
+  const lockedDraft = workflowContext.isPoDraftLocked === true
+    ? buildDashboardPeekDraftFromProjectionContext_(safeContext)
+    : (latestOrderInfo
+      ? (safeJsonParse_(latestOrderInfo.rowObjNormalized && latestOrderInfo.rowObjNormalized.orderdraftjson, {}) || {})
+      : {});
+  const sourceMode = isLocked
+    ? (workflowContext.isPoDraftLocked === true
+      ? 'po_draft_locked'
+      : (workflowContext.isPoFlow === true ? 'locked_po' : 'locked_standard'))
+    : 'editable';
+  let jobs = [];
+  let totals = {
+    totalUnits: null,
+    totalPrice: null,
+    currency: DEFAULT_STRIPE_PRICE_CURRENCY,
+    priceLabel: hasDashboardPeekProductionStarted_(workflowContext) ? 'Final Cost' : 'Estimated Price',
+    priceDisclaimer: hasDashboardPeekProductionStarted_(workflowContext) ? '' : 'Price excludes taxes, shipping, CC fees'
+  };
+
+  if (isLocked) {
+    jobs = buildDashboardPeekJobsFromLockedDraft_(lockedDraft, printJobs, {
+      workflowContext: workflowContext,
+      timeline: timeline,
+      teamJobCompletionByJobId: latestOrderSummary && latestOrderSummary.teamJobCompletionByJobId
+    });
+    totals = buildDashboardPeekTotalsFromLockedDraft_(
+      lockedDraft,
+      workflowContext.isPoDraftLocked === true ? null : latestOrderSummary,
+      {
+      workflowContext: workflowContext
+      }
+    );
+  } else {
+    jobs = buildDashboardPeekJobsFromEditableState_(printJobs, safeContext.portalState, {
+      summaryOptions: normalizeSummaryOptionsForOrderDraft_(safeContext.portalStateSource && safeContext.portalStateSource.summaryOptions),
+      workflowContext: workflowContext,
+      timeline: timeline,
+      teamJobCompletionByJobId: latestOrderSummary && latestOrderSummary.teamJobCompletionByJobId
+    });
+    try {
+      const editableDraft = buildOrderDraftFromSnapshotAndPortalState_({
+        rowInfo: safeContext.rowInfo,
+        row: row,
+        snapshot: snapshot,
+        portalState: safeContext.portalStateSource,
+        accountSummary: accountSummary,
+        token: cleanToken
+      });
+      totals = buildDashboardPeekTotalsFromEditableDraft_(editableDraft, {
+        workflowContext: workflowContext
+      });
+    } catch (_) {
+      totals = Object.assign({}, totals, {
+        totalUnits: jobs.reduce(function(total, job) {
+          const skuRows = Array.isArray(job && job.skuRows) ? job.skuRows : [];
+          return total + skuRows.reduce(function(jobTotal, skuRow) {
+            return jobTotal + Math.max(0, parseInt(String(skuRow && skuRow.units || 0), 10) || 0);
+          }, 0);
+        }, 0)
+      });
+    }
+  }
+
+  return {
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    peekVersion: getDashboardProjectPeekPayloadVersion_(),
+    ok: true,
+    sourceMode: sourceMode,
+    jobSource: sourceMode === 'editable' ? 'portal_state' : 'selected_jobs',
+    project: {
+      token: cleanToken,
+      dealNumber: trimString_(safeContext.dealNumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber)),
+      dealTitle: trimString_(safeContext.dealTitle),
+      status: trimString_(safeContext.displayStatus),
+      mode: sourceMode === 'editable' ? 'editable' : 'locked',
+      headerMeta: buildDashboardPeekHeaderMeta_(workflowContext, timeline),
+      header: buildDashboardPeekProjectHeader_(Object.assign({}, safeContext, {
+        row: row,
+        snapshot: snapshot,
+        token: cleanToken
+      })),
+      summary: buildDashboardPeekSummaryMeta_(workflowContext, timeline, totals),
+      timelineFacts: buildDashboardPeekTimelineFacts_(workflowContext, timeline, row)
+    },
+    jobs: jobs,
+    totals: totals,
+    isPartial: false
+  };
+}
+
+function buildDashboardPeekTotalsFromEditableDraft_(draft, options) {
+  const normalizedDraft = (draft && typeof draft === 'object') ? draft : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const context = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
+  const productionStarted = hasDashboardPeekProductionStarted_(context);
+  return {
+    totalUnits: Math.max(0, parseInt(String(normalizedDraft.totalUnits || 0), 10) || 0),
+    totalPrice: roundMoney_(normalizedDraft.amountGrandTotal || 0),
+    currency: trimString_(normalizedDraft.currency || DEFAULT_STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY,
+    priceLabel: productionStarted ? 'Final Cost' : 'Estimated Price',
+    priceDisclaimer: productionStarted ? '' : 'Price excludes taxes, shipping, CC fees'
+  };
+}
+
+function buildDashboardPeekTotalsFromLockedDraft_(draft, latestOrderSummary, options) {
+  const normalizedDraft = (draft && typeof draft === 'object') ? draft : {};
+  const latest = (latestOrderSummary && typeof latestOrderSummary === 'object') ? latestOrderSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const context = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
+  const productionStarted = hasDashboardPeekProductionStarted_(context);
+  return {
+    totalUnits: Math.max(0, parseInt(String(normalizedDraft.totalUnits || 0), 10) || 0),
+    totalPrice: roundMoney_(latest.amountGrandTotal || normalizedDraft.amountGrandTotal || 0),
+    currency: trimString_(latest.currency || normalizedDraft.currency || DEFAULT_STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY,
+    priceLabel: productionStarted ? 'Final Cost' : 'Estimated Price',
+    priceDisclaimer: productionStarted ? '' : 'Price excludes taxes, shipping, CC fees'
+  };
+}
+
+function chooseDashboardProjectPreviewCandidate_(candidates) {
+  const uniqueCandidates = uniqueTrimmedStrings_(candidates);
+  return uniqueCandidates[0] || '';
+}
+
+function buildDashboardProjectPreviewCandidatesFromOverride_(overrideEntry) {
+  const raw = (overrideEntry && typeof overrideEntry === 'object') ? overrideEntry : {};
+  const fileId = trimString_(raw.fileId);
+  const previewUrl = trimString_(raw.previewUrl || raw.imageUrl || raw.fileUrl);
+  const fileUrl = trimString_(raw.fileUrl);
+  const candidates = [];
+  if (fileId) {
+    buildDriveFilePublicImageCandidates_(fileId).forEach(function(url) {
+      candidates.push(url);
+    });
+  }
+  [previewUrl, fileUrl].forEach(function(url) {
+    const clean = trimString_(url);
+    if (!clean) return;
+    const derivedFileId = extractDriveFileIdFromUrl_(clean);
+    if (derivedFileId) {
+      buildDriveFilePublicImageCandidates_(derivedFileId).forEach(function(candidate) {
+        candidates.push(candidate);
+      });
+    }
+    const safeHostedUrl = normalizeStripeHostedImageUrl_(clean);
+    if (safeHostedUrl) candidates.push(safeHostedUrl);
+  });
+  return uniqueTrimmedStrings_(candidates);
+}
+
+function buildDashboardProjectPreviewCandidatesFromMockups_(mockups) {
+  const raw = (mockups && typeof mockups === 'object') ? mockups : {};
+  const candidates = [];
+  const previewMockupFileId = trimString_(raw.previewMockupFileId);
+  if (previewMockupFileId) {
+    buildDriveFilePublicImageCandidates_(previewMockupFileId).forEach(function(url) {
+      candidates.push(url);
+    });
+  }
+  const previewUrl = trimString_(raw.previewUrl);
+  if (previewUrl) {
+    const previewFileId = extractDriveFileIdFromUrl_(previewUrl);
+    if (previewFileId) {
+      buildDriveFilePublicImageCandidates_(previewFileId).forEach(function(url) {
+        candidates.push(url);
+      });
+    }
+    const safeHostedUrl = normalizeStripeHostedImageUrl_(previewUrl);
+    if (safeHostedUrl) candidates.push(safeHostedUrl);
+  }
+  [
+    trimString_(raw.artMockupFileId),
+    trimString_(raw.garmentMockupFileId)
+  ].forEach(function(fileId) {
+    buildDriveFilePublicImageCandidates_(fileId).forEach(function(url) {
+      candidates.push(url);
+    });
+  });
+  return uniqueTrimmedStrings_(candidates);
+}
+
+function findMostRelevantExportRowForIdentity_(exportSheet, identityInput) {
+  const identity = buildAccountIdentityFromInputs_(identityInput);
+  const email = normalizeEmail_(identity.personEmail);
+  if (!exportSheet || !email) return null;
+  const desiredOrgId = trimString_(identity.orgId);
+  const desiredOrgName = trimString_(identity.orgName).toLowerCase();
+  const matches = listSheetRowInfos_(exportSheet).filter(function(info) {
+    const row = (info && info.rowObjNormalized && typeof info.rowObjNormalized === 'object')
+      ? info.rowObjNormalized
+      : {};
+    return normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER] || row.primaryemail) === email;
+  });
+  if (!matches.length) return null;
+
+  var narrowed = matches;
+  if (desiredOrgId) {
+    const byOrgId = matches.filter(function(info) {
+      return trimString_(info.rowObjNormalized && info.rowObjNormalized.orgid) === desiredOrgId;
+    });
+    if (byOrgId.length) narrowed = byOrgId;
+  } else if (desiredOrgName) {
+    const byOrgName = matches.filter(function(info) {
+      return trimString_(info.rowObjNormalized && info.rowObjNormalized.orgname).toLowerCase() === desiredOrgName;
+    });
+    if (byOrgName.length) narrowed = byOrgName;
+  }
+
+  narrowed.sort(function(a, b) {
+    const rowA = (a && a.rowObjNormalized) ? a.rowObjNormalized : {};
+    const rowB = (b && b.rowObjNormalized) ? b.rowObjNormalized : {};
+    const dateA = Date.parse(trimString_(rowA.exportedat || rowA.createdat || ''));
+    const dateB = Date.parse(trimString_(rowB.exportedat || rowB.createdat || ''));
+    if (!isNaN(dateA) && !isNaN(dateB) && dateA !== dateB) return dateB - dateA;
+    return Number((b && b.row) || 0) - Number((a && a.row) || 0);
+  });
+  return narrowed[0] || null;
+}
+
+function resolveClientIdentityFromExportLog_(exportSheet, identityInput) {
+  const identity = buildAccountIdentityFromInputs_(identityInput);
+  if (!exportSheet || !identity.personEmail) return identity;
+  const rowInfo = findMostRelevantExportRowForIdentity_(exportSheet, identity);
+  if (!rowInfo) return identity;
+  return mergeAccountIdentity_(identity, deriveOrgContextFromRow_(rowInfo.rowObjNormalized));
 }
 
 /* ---------------- Dashboard + Snapshot-Load Services ---------------- */
@@ -1195,8 +2674,16 @@ function buildDashboardHomeData_(options) {
   let email = normalizeEmail_(opts.email || identity.personEmail);
   let userCtx = opts.userCtx || null;
   const sessionId = trimString_(opts.sessionId);
+  const token = trimString_(opts.token);
 
-  if (sessionId) {
+  if (token) {
+    const rowInfo = findRowByToken_(exportSheet, token);
+    if (!rowInfo) return { ok: false, error: 'Link not found.' };
+    identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(rowInfo.rowObjNormalized));
+    email = normalizeEmail_(rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER] || identity.personEmail || email);
+  }
+
+  if (sessionId && !token) {
     userCtx = getUserContextBySessionId_(ss, sessionId);
     if (!userCtx.ok) return userCtx;
   }
@@ -1216,15 +2703,25 @@ function buildDashboardHomeData_(options) {
   }
 
   identity = mergeAccountIdentity_(identity, { personEmail: email });
+  identity = resolveClientIdentityFromExportLog_(exportSheet, identity);
+  email = normalizeEmail_(identity.personEmail || email);
 
-  const projects = listProjectsForEmail_(exportSheet, email);
-  const accountInfo = getPortalAccountByOrgOrEmail_(Object.assign({}, identity, {
+  const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  }));
+  const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(identity, cfg);
+  const projects = listProjectsForEmail_(exportSheet, email, {
     cfg: cfg,
     ss: ss,
     infra: infra,
-    createIfMissing: false
-  }));
-  const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(identity, cfg);
+    accountSummary: accountSummary
+  });
+  if (token) {
+    const tokenRowInfo = findRowByToken_(exportSheet, token);
+    maybeBackfillExportRowOrgContextFromAccount_(exportSheet, tokenRowInfo, accountSummary);
+  }
 
   return {
     ok: true,
@@ -1245,6 +2742,1098 @@ function getDashboardHomeData(payload) {
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
+}
+
+function getDashboardProjectPeek(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const projectToken = trimString_(p.projectToken || p.token);
+    if (!projectToken) {
+      return { ok: false, error: 'Missing project token.' };
+    }
+
+    const cfg = getConfig_();
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const infra = ensurePortalInfrastructure_(ss, cfg);
+    const exportSheet = infra.exportSheet;
+    if (!exportSheet) {
+      return { ok: false, error: 'Auth configuration is incomplete.' };
+    }
+    const sessionId = trimString_(p.sessionId);
+    const dashboardToken = trimString_(p.token);
+    let authorizedEmail = '';
+    if (sessionId) {
+      const userCtx = getUserContextBySessionId_(ss, sessionId);
+      if (!userCtx || userCtx.ok !== true) {
+        return userCtx || { ok: false, error: 'Missing session.' };
+      }
+      authorizedEmail = normalizeEmail_(userCtx.email);
+    } else if (dashboardToken) {
+      const dashboardRowInfo = findRowByToken_(exportSheet, dashboardToken);
+      if (!dashboardRowInfo) return { ok: false, error: 'Link not found.' };
+      authorizedEmail = normalizeEmail_(dashboardRowInfo.rowObjNormalized && dashboardRowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+    }
+    if (!authorizedEmail) {
+      return { ok: false, error: 'Missing session.' };
+    }
+
+    const rowInfo = findRowByToken_(exportSheet, projectToken);
+    if (!rowInfo) return { ok: false, error: 'Link not found.' };
+
+    const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+    if (!rowEmail || rowEmail !== authorizedEmail) {
+      return { ok: false, error: 'Unauthorized project access.' };
+    }
+
+    return buildDashboardProjectPeekMetaForToken_(projectToken, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      exportSheet: exportSheet,
+      rowInfo: rowInfo
+    });
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getDashboardProjectStatusBatch(payload) {
+  try {
+    return buildDashboardProjectStatusBatch_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function buildDashboardProjectStatusBatch_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const tokens = Array.isArray(opts.tokens)
+    ? opts.tokens.map(function(token) { return trimString_(token); }).filter(Boolean)
+    : [];
+  if (!tokens.length) {
+    return { ok: true, projects: [] };
+  }
+
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const exportSheet = infra.exportSheet;
+  if (!exportSheet) {
+    return { ok: false, error: 'Auth configuration is incomplete.' };
+  }
+
+  const sessionId = trimString_(opts.sessionId);
+  const dashboardToken = trimString_(opts.token);
+  let authorizedEmail = '';
+  if (sessionId) {
+    const userCtx = getUserContextBySessionId_(ss, sessionId);
+    if (!userCtx || userCtx.ok !== true) {
+      return userCtx || { ok: false, error: 'Missing session.' };
+    }
+    authorizedEmail = normalizeEmail_(userCtx.email);
+  } else if (dashboardToken) {
+    const dashboardRowInfo = findRowByToken_(exportSheet, dashboardToken);
+    if (!dashboardRowInfo) return { ok: false, error: 'Link not found.' };
+    authorizedEmail = normalizeEmail_(dashboardRowInfo.rowObjNormalized && dashboardRowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+  }
+
+  if (!authorizedEmail) {
+    return { ok: false, error: 'Missing session.' };
+  }
+
+  const projects = tokens.map(function(projectToken) {
+    const rowInfo = findRowByToken_(exportSheet, projectToken);
+    if (!rowInfo) {
+      return {
+        token: projectToken,
+        ok: false,
+        error: 'Link not found.'
+      };
+    }
+    const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+    if (!rowEmail || rowEmail !== authorizedEmail) {
+      return {
+        token: projectToken,
+        ok: false,
+        error: 'Unauthorized project access.'
+      };
+    }
+    try {
+      return buildDashboardProjectStatusMetaForToken_(projectToken, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        exportSheet: exportSheet,
+        rowInfo: rowInfo
+      });
+    } catch (err) {
+      return {
+        token: projectToken,
+        ok: false,
+        error: String((err && err.message) || err || 'Unable to derive dashboard status.'),
+        fallbackStatus: derivePortalDisplayOrderStatus_(rowInfo.rowObjNormalized || {}, rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.status)
+      };
+    }
+  });
+
+  return {
+    ok: true,
+    projects: projects
+  };
+}
+
+function buildDashboardProjectStatusMetaForToken_(token, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const rowInfo = opts.rowInfo || null;
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const cleanToken = trimString_(token || row.token);
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const accountSummary = (opts.accountSummary && typeof opts.accountSummary === 'object')
+    ? opts.accountSummary
+    : (() => {
+        const accountInfo = createPortalAccountIfMissing_(Object.assign({}, deriveOrgContextFromRow_(row), {
+          cfg: cfg,
+          ss: ss,
+          infra: infra
+        }));
+        return accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(deriveOrgContextFromRow_(row), cfg);
+      })();
+  const runtimeMeta = buildDashboardProjectSnapshotRuntimeMetaFromRow_(row);
+  const projectionContext = buildDashboardProjectProjectionContext_(rowInfo || row, {
+    rowInfo: rowInfo,
+    runtimeMeta: runtimeMeta,
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    accountSummary: accountSummary,
+    includeLatestOrderSummary: true
+  });
+  return buildDashboardProjectStatusMetaFromProjectionContext_(projectionContext);
+}
+
+function deriveDashboardWorkflowVariant_(row, latestOrderSummary, currentStateSummary) {
+  const normalizedRow = (row && typeof row === 'object') ? row : {};
+  const latest = (latestOrderSummary && typeof latestOrderSummary === 'object') ? latestOrderSummary : {};
+  const current = (currentStateSummary && typeof currentStateSummary === 'object') ? currentStateSummary : {};
+  const purchaseOrderDraft = normalizePurchaseOrderDraftState_(
+    current.purchaseOrderDraft
+    || readPurchaseOrderDraftFromPortalState_(safeJsonParse_(normalizedRow.portalstatejson, {}))
+  );
+  const paymentMethod = trimString_(
+    current.currentPaymentMethod ||
+    latest.paymentMethodSelected ||
+    normalizedRow.currentpaymentmethod ||
+    normalizedRow.paymentmethodselected
+  ).toLowerCase();
+  const orderState = trimString_(
+    current.currentOrderState ||
+    latest.orderState ||
+    normalizedRow.currentorderstate ||
+    normalizedRow.orderstate
+  ).toLowerCase();
+  const productionAuthorizationState = trimString_(
+    current.currentProductionAuthorizationState ||
+    latest.productionAuthorizationState ||
+    normalizedRow.currentproductionauthorizationstate ||
+    normalizedRow.productionauthorizationstate
+  ).toLowerCase();
+  const poSubmittedAt = trimString_(
+    latest.poSubmittedAt ||
+    normalizedRow.posubmittedat
+  );
+  const poNumber = trimString_(
+    latest.poNumber ||
+    normalizedRow.ponumber
+  );
+  const poDocumentUrl = trimString_(
+    latest.poDocumentUrl ||
+    normalizedRow.podocumenturl
+  );
+  return (
+    paymentMethod === PAYMENT_METHODS.purchase_order ||
+    orderState === ORDER_STATES.awaiting_po_submission ||
+    productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.po_pending ||
+    !!poSubmittedAt ||
+    !!poNumber ||
+    !!poDocumentUrl ||
+    !!purchaseOrderDraft
+  ) ? 'purchase_order' : 'standard';
+}
+
+function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latestOrderSummary, currentStateSummary, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const latest = (latestOrderSummary && typeof latestOrderSummary === 'object') ? latestOrderSummary : {};
+  const current = (currentStateSummary && typeof currentStateSummary === 'object') ? currentStateSummary : {};
+  const printJobs = Array.isArray(opts.printJobs) ? opts.printJobs : normalizePrintJobsForOrder_(snapshot && snapshot.printJobs);
+  const workflowContext = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : null;
+  const variant = workflowContext
+    ? (String(workflowContext.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard')
+    : (String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard');
+  const portalLockState = trimString_(
+    current.portalLockState ||
+    latest.portalLockState ||
+    row.currentportallockstate ||
+    row.portallockstate
+  ).toLowerCase();
+  const orderState = trimString_(
+    current.currentOrderState ||
+    latest.orderState ||
+    row.currentorderstate ||
+    row.orderstate
+  ).toLowerCase();
+  const paymentState = trimString_(
+    current.currentPaymentState ||
+    latest.paymentState ||
+    row.currentpaymentstate ||
+    row.paymentstate
+  ).toLowerCase();
+  const productionAuthorizationState = trimString_(
+    current.currentProductionAuthorizationState ||
+    latest.productionAuthorizationState ||
+    row.currentproductionauthorizationstate ||
+    row.productionauthorizationstate
+  ).toLowerCase();
+  const paymentMethodSelected = trimString_(
+    current.currentPaymentMethod ||
+    latest.paymentMethodSelected ||
+    row.currentpaymentmethod ||
+    row.paymentmethodselected
+  ).toLowerCase();
+  const purchaseOrderDraft = normalizePurchaseOrderDraftState_(
+    current.purchaseOrderDraft
+    || readPurchaseOrderDraftFromPortalState_(portalState)
+    || readPurchaseOrderDraftFromPortalState_(safeJsonParse_(row.portalstatejson, {}))
+  );
+  const teamWorkflowMode = normalizeTeamWorkflowMode_(
+    (workflowContext && workflowContext.teamWorkflowMode) ||
+    latest.teamWorkflowMode ||
+    current.teamWorkflowMode ||
+    row.teamworkflowmode
+  );
+  const paidAt = trimString_(latest.paidAt || row.paidat);
+  const authorizedToProduceAt = trimString_(latest.authorizedToProduceAt || row.authorizedtoproduceat);
+  const activeOrderId = trimString_(current.activeOrderId || latest.orderId || row.activeorderid);
+
+  const lockedPreOrderMode = teamWorkflowMode === TEAM_WORKFLOW_MODES.team_hold || teamWorkflowMode === TEAM_WORKFLOW_MODES.checkout_reset;
+  const poSubmitted = variant === 'purchase_order' && (
+    workflowContext
+      ? workflowContext.isPoSubmitted === true
+      : (
+          !!trimString_(latest.poSubmittedAt || row.posubmittedat) ||
+          productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized ||
+          orderState === ORDER_STATES.ready_for_production ||
+          orderState === ORDER_STATES.in_production ||
+          orderState === ORDER_STATES.closed
+        )
+  );
+  const poInitiated = variant === 'purchase_order' && (
+    workflowContext
+      ? (workflowContext.isAwaitingPoSubmission === true || workflowContext.isPoSubmitted === true)
+      : (
+          !!purchaseOrderDraft ||
+          paymentMethodSelected === PAYMENT_METHODS.purchase_order ||
+          orderState === ORDER_STATES.awaiting_po_submission ||
+          productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.po_pending ||
+          poSubmitted
+        )
+  );
+  const stripeCheckoutStarted = variant !== 'purchase_order'
+    && !lockedPreOrderMode
+    && !poSubmitted
+    && (
+      orderState === ORDER_STATES.payment_in_progress ||
+      paymentState === PAYMENT_STATES.checkout_created ||
+      paymentState === PAYMENT_STATES.submitted ||
+      paymentState === PAYMENT_STATES.pending ||
+      ((paymentMethodSelected === PAYMENT_METHODS.card || paymentMethodSelected === PAYMENT_METHODS.ach) && !!activeOrderId)
+    );
+  const orderPlaced = workflowContext
+    ? workflowContext.hasPlacedOrder === true
+    : (
+        variant === 'purchase_order'
+          ? poSubmitted
+          : (
+              !lockedPreOrderMode && !stripeCheckoutStarted && (
+                !!paidAt ||
+                !!authorizedToProduceAt ||
+                portalLockState === PORTAL_LOCK_STATES.locked ||
+                orderState === ORDER_STATES.awaiting_manual_payment ||
+                orderState === ORDER_STATES.awaiting_payment_confirmation ||
+                paymentState === PAYMENT_STATES.manual_pending ||
+                paymentState === PAYMENT_STATES.manual_received
+              )
+            )
+      );
+  const paymentReceived = workflowContext
+    ? workflowContext.isPaymentReceived === true
+    : (!!paidAt || paymentState === PAYMENT_STATES.paid || paymentState === PAYMENT_STATES.manual_received);
+  const paymentPending = workflowContext
+    ? workflowContext.isPaymentPending === true
+    : (!paymentReceived && (
+        paymentState === PAYMENT_STATES.checkout_created ||
+        paymentState === PAYMENT_STATES.submitted ||
+        paymentState === PAYMENT_STATES.pending ||
+        paymentState === PAYMENT_STATES.manual_pending
+      ));
+  const productionBegun = workflowContext
+    ? workflowContext.isProductionAuthorized === true
+    : (!!authorizedToProduceAt
+        || productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized
+        || orderState === ORDER_STATES.ready_for_production
+        || orderState === ORDER_STATES.in_production
+        || orderState === ORDER_STATES.closed);
+  const isLocked = workflowContext ? workflowContext.isLocked === true : portalLockState === PORTAL_LOCK_STATES.locked;
+  const shouldTreatAsPlaced = workflowContext
+    ? orderPlaced
+    : (orderPlaced || (portalLockState === PORTAL_LOCK_STATES.locked && !lockedPreOrderMode));
+
+  let hasIncludedJobs = false;
+  let minimumsMet = false;
+  let qtySizesComplete = false;
+  let artworkApprovalComplete = false;
+  let includedJobCount = 0;
+
+  if (shouldTreatAsPlaced) {
+    hasIncludedJobs = true;
+    minimumsMet = true;
+    qtySizesComplete = true;
+    artworkApprovalComplete = true;
+  } else {
+    const includedJobSelectionStates = getIncludedOrderJobSelectionStates_(printJobs, portalState);
+    includedJobCount = includedJobSelectionStates.length;
+    hasIncludedJobs = includedJobSelectionStates.length > 0;
+    minimumsMet = hasIncludedJobs && includedJobSelectionStates.every(function(item) {
+      return Math.max(0, parseInt(String(item.minimumUnits || 0), 10) || 0) <= 0
+        || Math.max(0, parseInt(String(item.enteredUnits || 0), 10) || 0) >= Math.max(0, parseInt(String(item.minimumUnits || 0), 10) || 0);
+    });
+    qtySizesComplete = hasIncludedJobs && minimumsMet;
+    artworkApprovalComplete = hasIncludedJobs && includedJobSelectionStates.every(function(item) {
+      return isDashboardArtworkApprovedForJobSelectionState_(row, printJobs, item);
+    });
+  }
+
+  return {
+    hasIncludedJobs: hasIncludedJobs,
+    minimumsMet: minimumsMet,
+    qtySizesComplete: qtySizesComplete,
+    artworkApprovalComplete: artworkApprovalComplete,
+    hasPurchaseOrderDraft: !!purchaseOrderDraft,
+    orderPlaced: orderPlaced,
+    paymentReceived: paymentReceived,
+    paymentPending: paymentPending,
+    poInitiated: poInitiated,
+    poSubmitted: poSubmitted,
+    productionBegun: productionBegun,
+    isLocked: isLocked,
+    teamWorkflowMode: teamWorkflowMode,
+    includedJobCount: includedJobCount
+  };
+}
+
+function isDashboardArtworkApprovedForJobSelectionState_(row, printJobs, selectionState) {
+  const normalizedRow = (row && typeof row === 'object') ? row : {};
+  const item = (selectionState && typeof selectionState === 'object') ? selectionState : {};
+  const displayNumber = Math.max(
+    1,
+    parseInt(String(item.printJobNumber || getPrintJobDisplayNumberForOrder_(printJobs, item.printJobId) || 1), 10) || 1
+  );
+  const artStatusHeader = normalizeHeaderKey_(getPrintJobArtStatusHeader_(displayNumber));
+  return trimString_(normalizedRow[artStatusHeader]).toLowerCase() === 'approved';
+}
+
+function buildDashboardStatusBarModel_(flags, variant, presentation) {
+  const safeFlags = (flags && typeof flags === 'object') ? flags : {};
+  const ui = (presentation && typeof presentation === 'object') ? presentation : {};
+  const flow = variant === 'purchase_order'
+    ? [
+        { key: 'qty_sizes', label: 'Qty/Sizes', done: !!safeFlags.qtySizesComplete },
+        { key: 'artwork', label: 'Artwork', done: !!safeFlags.artworkApprovalComplete },
+        { key: 'place_order', label: 'Order' },
+        { key: 'production', label: 'Production' },
+        { key: 'payment', label: 'Payment' }
+      ]
+    : [
+        { key: 'qty_sizes', label: 'Qty/Sizes' },
+        { key: 'artwork', label: 'Artwork' },
+        { key: 'place_order', label: 'Order' },
+        { key: 'payment', label: 'Payment' },
+        { key: 'production', label: 'Production' }
+      ];
+
+  if (String(ui.stateMode || '').trim().toLowerCase() === 'complete') {
+    return flow.map(function(step) {
+      return {
+        key: step.key,
+        label: step.label,
+        state: 'complete'
+      };
+    });
+  }
+
+  const currentKey = trimString_(ui.currentStepKey).toLowerCase() || flow[0].key;
+  const currentIndex = Math.max(0, flow.findIndex(function(step) {
+    return trimString_(step && step.key).toLowerCase() === currentKey;
+  }));
+
+  return flow.map(function(step, index) {
+    let state = 'future';
+    if (index < currentIndex) state = 'complete';
+    else if (index === currentIndex) state = 'current';
+    return {
+      key: step.key,
+      label: step.label,
+      state: state
+    };
+  });
+}
+
+function buildDashboardStatusPresentationMeta_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
+  const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
+  const timeline = (opts.timeline && typeof opts.timeline === 'object') ? opts.timeline : {};
+  const completionReached = !!timeline.allJobsCompleted
+    || (!timeline.hasAnyActualJobCompletion && hasDashboardDateReached_(timeline.completionDateValue));
+
+  if (!flags.qtySizesComplete) return { stateMode: 'tracker', currentStepKey: 'qty_sizes' };
+  if (!flags.artworkApprovalComplete) return { stateMode: 'tracker', currentStepKey: 'artwork' };
+
+  if (variant === 'purchase_order') {
+    if (flags.poInitiated && !flags.poSubmitted) {
+      return { stateMode: 'tracker', currentStepKey: 'place_order', poStageMode: 'upload_pending' };
+    }
+    if (!flags.orderPlaced) return { stateMode: 'tracker', currentStepKey: 'place_order', poStageMode: 'pre_initiation' };
+    if (flags.paymentReceived && completionReached) {
+      return { stateMode: 'complete', currentStepKey: 'complete' };
+    }
+    if (!flags.poSubmitted || !flags.productionBegun) {
+      return { stateMode: 'tracker', currentStepKey: 'production', poStageMode: 'print' };
+    }
+    if (!flags.paymentReceived) {
+      return { stateMode: 'tracker', currentStepKey: 'payment', poStageMode: 'payment_due' };
+    }
+    return { stateMode: 'tracker', currentStepKey: 'production', poStageMode: 'print' };
+  }
+
+  if (!flags.orderPlaced) return { stateMode: 'tracker', currentStepKey: 'place_order' };
+  if (!flags.paymentReceived) return { stateMode: 'tracker', currentStepKey: 'payment' };
+  if (completionReached) return { stateMode: 'complete', currentStepKey: 'complete' };
+  return { stateMode: 'tracker', currentStepKey: 'production' };
+}
+
+function buildDashboardStatusCopyMeta_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
+  const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
+  const timeline = (opts.timeline && typeof opts.timeline === 'object') ? opts.timeline : {};
+  const presentation = (opts.presentation && typeof opts.presentation === 'object') ? opts.presentation : {};
+  const stateMode = String(presentation.stateMode || 'tracker').trim().toLowerCase() === 'complete' ? 'complete' : 'tracker';
+  const currentStepKey = trimString_(presentation.currentStepKey).toLowerCase();
+  const poStageMode = trimString_(presentation.poStageMode).toLowerCase();
+  const poSubmittedLabel = trimString_(timeline.poSubmittedDateLabel);
+  const poNumber = trimString_(timeline.poNumber);
+  const orderPlacedDateLabel = trimString_(timeline.orderPlacedDateLabel);
+  const paidDateLabel = trimString_(timeline.paidDateLabel);
+  const printStartLabel = trimString_(timeline.printStartDateLabel);
+  const completionLabel = trimString_(timeline.completionDateLabel);
+  const paymentDueLabel = trimString_(timeline.paymentDueDateLabel);
+  const paymentTermsLabel = trimString_(timeline.paymentTermsLabel);
+  const paymentMethodLabel = trimString_(timeline.paymentMethodLabel);
+  const allJobsCompleted = timeline.allJobsCompleted === true;
+  const stageHelperMap = {};
+
+  if (stateMode === 'complete') {
+    const helperRuns = [
+      buildDashboardStatusCopyRun_('All orders completed on ' + (completionLabel || 'the final completion date') + '.', '')
+    ];
+    stageHelperMap.complete = buildDashboardStatusHelperPayloadFromRuns_(helperRuns);
+    return {
+      stateMode: 'complete',
+      tone: 'complete',
+      completeLabel: 'COMPLETE',
+      subtextRuns: [],
+      helperRuns: helperRuns,
+      helperPlainText: buildDashboardStatusPlainTextFromRuns_(helperRuns),
+      stageHelpers: stageHelperMap,
+      variant: variant,
+      currentStepKey: currentStepKey,
+      poStageMode: poStageMode,
+      poSubmittedDateLabel: poSubmittedLabel,
+      poNumber: poNumber,
+      orderPlacedDateLabel: orderPlacedDateLabel,
+      paidDateLabel: paidDateLabel,
+      printStartDateLabel: printStartLabel,
+      paymentDueDateLabel: paymentDueLabel,
+      paymentTermsLabel: paymentTermsLabel,
+      paymentMethodLabel: paymentMethodLabel,
+      allJobsCompleted: allJobsCompleted
+    };
+  }
+
+  let tone = 'current';
+  let subtextRuns = [];
+  let helperRuns = [];
+
+  if (currentStepKey === 'qty_sizes') {
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('Your next action:', 'blue'),
+      buildDashboardStatusCopyRun_(' Enter quantities for your preferred items, colorways, and sizes.', '')
+    ];
+    helperRuns = [
+      buildDashboardStatusCopyRun_('Open Project', 'red'),
+      buildDashboardStatusCopyRun_(' and add quantities and sizes to progress your order.', '')
+    ];
+    tone = 'current';
+  } else if (currentStepKey === 'artwork') {
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('Your next action:', 'blue'),
+      buildDashboardStatusCopyRun_(' Approve artwork for the active jobs in your project portal.', '')
+    ];
+    helperRuns = [
+      buildDashboardStatusCopyRun_('Approve Artwork', 'green'),
+      buildDashboardStatusCopyRun_(' for every active job with quantities to progress your order.', '')
+    ];
+    tone = 'current';
+  } else if (currentStepKey === 'place_order' && variant === 'purchase_order' && poStageMode === 'upload_pending') {
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('Your next action:', 'blue'),
+      buildDashboardStatusCopyRun_(' Upload your P.O. details in the project’s invoice tab to initiate production.', '')
+    ];
+    helperRuns = [
+      buildDashboardStatusCopyRun_('Open the project and upload your company\'s P.O. details on the invoice tab to progress your order.', '')
+    ];
+    tone = 'blocked';
+  } else if (currentStepKey === 'place_order') {
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('Your next action:', 'blue'),
+      buildDashboardStatusCopyRun_(' Place your order in the project portal.', '')
+    ];
+    helperRuns = [
+      buildDashboardStatusCopyRun_('Click the ', ''),
+      buildDashboardStatusCopyRun_('Place Your Order', 'blue'),
+      buildDashboardStatusCopyRun_(' button in the project portal with your preferred delivery / payment methods to progress your order', '')
+    ];
+    tone = 'current';
+  } else if (currentStepKey === 'payment' && variant === 'purchase_order') {
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('Your next action:', 'blue'),
+      buildDashboardStatusCopyRun_(' Open the project / invoice tab and pay by ' + (paymentDueLabel || 'the due date') + ' to avoid late fees.', '')
+    ];
+    helperRuns = [
+      buildDashboardStatusCopyRun_('Open the Project', 'red'),
+      buildDashboardStatusCopyRun_(' / invoice tab and make a payment by ' + (paymentDueLabel || 'the due date') + ' per your account terms: ' + (paymentTermsLabel || 'your approved terms') + '.', '')
+    ];
+    tone = 'current';
+  } else if (currentStepKey === 'payment') {
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('Your Next Action:', 'blue'),
+      buildDashboardStatusCopyRun_(' Submit a payment - required to begin production & turn times.', '')
+    ];
+    helperRuns = [
+      buildDashboardStatusCopyRun_('Open the Project', 'red'),
+      buildDashboardStatusCopyRun_(' invoice tab to view payment methods and/or make payments online. Production & Turnaround begins on payment receipt.', '')
+    ];
+    tone = 'blocked';
+  } else if (currentStepKey === 'production' && variant === 'purchase_order') {
+    if (flags.paymentReceived) {
+      subtextRuns = [
+        buildDashboardStatusCopyRun_('No action required. Production started on ' + (printStartLabel || 'the submission date') + '. ', ''),
+        buildDashboardStatusCopyRun_('Expand project details', ''),
+        buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+      ];
+    }
+    helperRuns = [
+      buildDashboardStatusCopyRun_('P.O. Submitted / Production began on ' + (printStartLabel || 'the submission date') + '. ', ''),
+      buildDashboardStatusCopyRun_('Expand project details', ''),
+      buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+    ];
+    tone = 'current';
+  } else if (currentStepKey === 'production') {
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('No action required. Production started on ' + (printStartLabel || 'the production start date') + '. ', ''),
+      buildDashboardStatusCopyRun_('Expand project details', ''),
+      buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+    ];
+    helperRuns = [
+      buildDashboardStatusCopyRun_('Production begins when your order is placed and payment is received. Click the project details image 👈 to view estimated completion dates.', '')
+    ];
+    tone = 'complete';
+  } else {
+    helperRuns = [buildDashboardStatusCopyRun_('Loading project status.', '')];
+    tone = 'current';
+  }
+
+  stageHelperMap.qty_sizes = buildDashboardStatusHelperPayloadFromRuns_([
+    buildDashboardStatusCopyRun_('Open Project', 'red'),
+    buildDashboardStatusCopyRun_(' and add quantities and sizes to progress your order.', '')
+  ]);
+  stageHelperMap.artwork = buildDashboardStatusHelperPayloadFromRuns_([
+    buildDashboardStatusCopyRun_('Approve Artwork', 'green'),
+    buildDashboardStatusCopyRun_(' for every active job with quantities to progress your order.', '')
+  ]);
+  stageHelperMap.place_order = buildDashboardStatusHelperPayloadFromRuns_(
+    variant === 'purchase_order' && poStageMode === 'upload_pending'
+      ? [buildDashboardStatusCopyRun_('Open the project and upload your company\'s P.O. details on the invoice tab to progress your order.', '')]
+      : [
+          buildDashboardStatusCopyRun_('Click the ', ''),
+          buildDashboardStatusCopyRun_('Place Your Order', 'blue'),
+          buildDashboardStatusCopyRun_(' button in the project portal with your preferred delivery / payment methods to progress your order', '')
+        ]
+  );
+  stageHelperMap.payment = buildDashboardStatusHelperPayloadFromRuns_(
+    variant === 'purchase_order'
+      ? [
+          buildDashboardStatusCopyRun_('Open the Project', 'red'),
+          buildDashboardStatusCopyRun_(' / invoice tab and make a payment by ' + (paymentDueLabel || 'the due date') + ' per your account terms: ' + (paymentTermsLabel || 'your approved terms') + '.', '')
+        ]
+      : [
+          buildDashboardStatusCopyRun_('Open the Project', 'red'),
+          buildDashboardStatusCopyRun_(' invoice tab to view payment methods and/or make payments online. Production & Turnaround begins on payment receipt.', '')
+        ]
+  );
+  stageHelperMap.production = buildDashboardStatusHelperPayloadFromRuns_(
+    variant === 'purchase_order'
+      ? [
+          buildDashboardStatusCopyRun_('P.O. Submitted / Production began on ' + (printStartLabel || 'the submission date') + '. ', ''),
+          buildDashboardStatusCopyRun_('Expand project details', ''),
+          buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+        ]
+      : [
+          buildDashboardStatusCopyRun_('Production begins when your order is placed and payment is received. Click the project details image 👈 to view estimated completion dates.', '')
+        ]
+  );
+
+  return {
+    stateMode: 'tracker',
+    tone: tone,
+    completeLabel: '',
+    subtextRuns: subtextRuns,
+    helperRuns: helperRuns,
+    helperPlainText: buildDashboardStatusPlainTextFromRuns_(helperRuns),
+    stageHelpers: stageHelperMap,
+    variant: variant,
+      currentStepKey: currentStepKey,
+      poStageMode: poStageMode,
+      poSubmittedDateLabel: poSubmittedLabel,
+    poNumber: poNumber,
+    orderPlacedDateLabel: orderPlacedDateLabel,
+    paidDateLabel: paidDateLabel,
+    printStartDateLabel: printStartLabel,
+    paymentDueDateLabel: paymentDueLabel,
+    paymentTermsLabel: paymentTermsLabel,
+    paymentMethodLabel: paymentMethodLabel,
+    allJobsCompleted: allJobsCompleted
+  };
+}
+
+function buildDashboardStatusCopyRun_(text, tone) {
+  const cleanText = String(text || '');
+  if (!cleanText) return null;
+  return {
+    text: cleanText,
+    tone: trimString_(tone).toLowerCase()
+  };
+}
+
+function buildDashboardStatusPlainTextFromRuns_(runs) {
+  return (Array.isArray(runs) ? runs : []).map(function(run) {
+    return trimString_(run && run.text);
+  }).join('').trim();
+}
+
+function buildDashboardStatusHelperPayloadFromRuns_(runs) {
+  const safeRuns = (Array.isArray(runs) ? runs : []).filter(function(run) {
+    return run && trimString_(run.text);
+  });
+  return {
+    runs: safeRuns,
+    plainText: buildDashboardStatusPlainTextFromRuns_(safeRuns)
+  };
+}
+
+function buildDashboardProductionMeta_(flags, variant, readyMeta) {
+  const safeFlags = (flags && typeof flags === 'object') ? flags : {};
+  const safeReadyMeta = (readyMeta && typeof readyMeta === 'object') ? readyMeta : {};
+  if (safeFlags.productionBegun) {
+    return {
+      mode: 'date',
+      label: trimString_(safeReadyMeta.dateLabel) || 'Production underway',
+      dateLabel: trimString_(safeReadyMeta.dateLabel),
+      dateValue: Number.isFinite(Number(safeReadyMeta.dateValue)) ? Number(safeReadyMeta.dateValue) : null
+    };
+  }
+  return {
+    mode: 'blocked',
+    label: deriveDashboardProductionBlockedLabel_(safeFlags, variant),
+    dateLabel: '',
+    dateValue: null
+  };
+}
+
+function deriveDashboardProductionBlockedLabel_(flags, variant) {
+  const safeFlags = (flags && typeof flags === 'object') ? flags : {};
+  if (!safeFlags.hasIncludedJobs) {
+    return 'Quantities still need to be entered before production can begin';
+  }
+  if (!safeFlags.minimumsMet) {
+    return 'Quantities must meet minimums before production can begin';
+  }
+  if (!safeFlags.artworkApprovalComplete) {
+    return 'Artwork approval is required before production can begin';
+  }
+  if (!safeFlags.orderPlaced) {
+    return 'The order must be placed before production can begin';
+  }
+  if (variant === 'purchase_order') {
+    if (!safeFlags.poSubmitted) {
+      return 'The purchase order must be submitted before production can begin';
+    }
+    return 'Production is being scheduled';
+  }
+  if (!safeFlags.paymentReceived) {
+    return 'Payment must be received before production can begin';
+  }
+  return 'Production is being scheduled';
+}
+
+function deriveDashboardActualCompletionMeta_(selectedJobs, completedJobsByJobId) {
+  const jobs = Array.isArray(selectedJobs) ? selectedJobs : [];
+  const completionMap = normalizeTeamJobCompletionMap_(completedJobsByJobId);
+  if (!jobs.length || !Object.keys(completionMap).length) {
+    return {
+      hasAnyActualCompletion: false,
+      allJobsCompleted: false,
+      dateValue: null,
+      dateLabel: ''
+    };
+  }
+  let latestValue = null;
+  jobs.forEach(function(job) {
+    const printJobId = trimString_(job && job.printJobId);
+    const entry = printJobId ? completionMap[printJobId] : null;
+    if (!entry || !trimString_(entry.completionDate)) return;
+    const date = normalizeDashboardCalendarDate_(entry.completionDate);
+    if (!date) return;
+    const ms = date.getTime();
+    if (latestValue == null || ms > latestValue) latestValue = ms;
+  });
+  const allJobsCompleted = jobs.length > 0 && jobs.every(function(job) {
+    const printJobId = trimString_(job && job.printJobId);
+    const entry = printJobId ? completionMap[printJobId] : null;
+    return !!trimString_(entry && entry.completionDate);
+  });
+  return {
+    hasAnyActualCompletion: latestValue != null,
+    allJobsCompleted: allJobsCompleted,
+    dateValue: latestValue,
+    dateLabel: latestValue != null ? formatDashboardShortDate_(new Date(latestValue)) : ''
+  };
+}
+
+function deriveDashboardTimelineMeta_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = (opts.row && typeof opts.row === 'object') ? opts.row : {};
+  const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
+  const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
+  const latestOrderInfo = opts.latestOrderInfo && typeof opts.latestOrderInfo === 'object' ? opts.latestOrderInfo : null;
+  const latestOrderSummary = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object')
+    ? opts.latestOrderSummary
+    : (latestOrderInfo && latestOrderInfo.rowObjNormalized ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : {});
+  const runtimeMeta = (opts.runtimeMeta && typeof opts.runtimeMeta === 'object')
+    ? opts.runtimeMeta
+    : buildDashboardProjectSnapshotRuntimeMetaFromRow_(row);
+  const printJobs = Array.isArray(opts.printJobs)
+    ? opts.printJobs
+    : (runtimeMeta && Array.isArray(runtimeMeta.printJobs) ? runtimeMeta.printJobs : []);
+  const completedJobsByJobId = normalizeTeamJobCompletionMap_(
+    (latestOrderSummary && latestOrderSummary.teamJobCompletionByJobId)
+    || safeJsonParse_(row.teamjobcompletionjson, {})
+  );
+  const selectedJobs = Array.isArray(latestOrderSummary && latestOrderSummary.selectedJobs) && latestOrderSummary.selectedJobs.length
+    ? latestOrderSummary.selectedJobs
+    : [];
+  const stateSource = safeJsonParse_(
+    flags.isLocked ? (row.submittedstatejson || row.portalstatejson) : row.portalstatejson,
+    {}
+  ) || {};
+  const portalState = normalizePortalStateForOrder_(stateSource, printJobs);
+  let completionMeta = { dateValue: null, dateLabel: '' };
+  const paymentDate = normalizeDashboardCalendarDate_(
+    latestOrderSummary.paidAt ||
+    row.paidat ||
+    latestOrderSummary.authorizedToProduceAt ||
+    row.authorizedtoproduceat
+  );
+  const paymentMethod = trimString_(
+    latestOrderSummary.paymentMethodSelected ||
+    row.currentpaymentmethod ||
+    row.paymentmethodselected
+  ).toLowerCase();
+  const poSubmittedDate = normalizeDashboardCalendarDate_(
+    latestOrderSummary.poSubmittedAt ||
+    row.posubmittedat ||
+    latestOrderSummary.authorizedToProduceAt ||
+    row.authorizedtoproduceat
+  );
+  const orderPlacedDate = normalizeDashboardCalendarDate_(
+    latestOrderSummary.lockedAt ||
+    row.lockedat ||
+    latestOrderSummary.authorizedToProduceAt ||
+    row.authorizedtoproduceat
+  );
+  const poNumber = trimString_(
+    latestOrderSummary.poNumber ||
+    row.ponumber
+  );
+  const printStart = variant === 'purchase_order'
+    ? normalizeDashboardProductionStartDate_(poSubmittedDate)
+    : normalizeDashboardProductionStartDate_(paymentDate);
+  try {
+    completionMeta = deriveDashboardReadyMeta_(printJobs, portalState, latestOrderInfo, {
+      flags: flags,
+      variant: variant,
+      referenceDate: printStart
+    });
+  } catch (_) {}
+  const actualCompletionMeta = deriveDashboardActualCompletionMeta_(selectedJobs, completedJobsByJobId);
+  if (actualCompletionMeta.allJobsCompleted && Number.isFinite(Number(actualCompletionMeta.dateValue))) {
+    completionMeta = {
+      dateValue: Number(actualCompletionMeta.dateValue),
+      dateLabel: trimString_(actualCompletionMeta.dateLabel)
+    };
+  }
+  const approvedPaymentTermsDays = Math.max(
+    0,
+    parseInt(String(
+      opts.approvedPaymentTermsDays != null
+        ? opts.approvedPaymentTermsDays
+        : (row.approvedpaymenttermsdays || row.approvedPaymentTermsDays || 0)
+    ), 10) || 0
+  );
+  const approvedPaymentTermsLabel = trimString_(
+    opts.approvedPaymentTermsLabel != null
+      ? opts.approvedPaymentTermsLabel
+      : (row.approvedpaymenttermslabel || row.approvedPaymentTermsLabel || '')
+  ) || (
+    approvedPaymentTermsDays > 0
+      ? ('Net ' + approvedPaymentTermsDays)
+      : ''
+  );
+  const paymentDueDate = variant === 'purchase_order' && poSubmittedDate
+    ? addCalendarDaysForDashboard_(approvedPaymentTermsDays, poSubmittedDate)
+    : null;
+  let paymentMethodLabel = '';
+  if (paymentMethod === PAYMENT_METHODS.card) paymentMethodLabel = 'Credit Card';
+  else if (paymentMethod === PAYMENT_METHODS.ach) paymentMethodLabel = 'ACH';
+  else if (paymentMethod === PAYMENT_METHODS.check) paymentMethodLabel = 'Check';
+  else if (paymentMethod === PAYMENT_METHODS.cash) paymentMethodLabel = 'Cash';
+
+  return {
+    poSubmittedDateValue: poSubmittedDate ? poSubmittedDate.getTime() : null,
+    poSubmittedDateLabel: poSubmittedDate ? formatDashboardShortDate_(poSubmittedDate) : '',
+    poNumber: poNumber,
+    orderPlacedDateValue: orderPlacedDate ? orderPlacedDate.getTime() : null,
+    orderPlacedDateLabel: orderPlacedDate ? formatDashboardShortDate_(orderPlacedDate) : '',
+    paidDateValue: paymentDate ? paymentDate.getTime() : null,
+    paidDateLabel: paymentDate ? formatDashboardShortDate_(paymentDate) : '',
+    paymentMethodLabel: paymentMethodLabel,
+    printStartDateValue: printStart ? printStart.getTime() : null,
+    printStartDateLabel: printStart ? formatDashboardShortDate_(printStart) : '',
+    completionDateValue: Number.isFinite(Number(completionMeta && completionMeta.dateValue)) ? Number(completionMeta.dateValue) : null,
+    completionDateLabel: trimString_(completionMeta && completionMeta.dateLabel),
+    hasAnyActualJobCompletion: actualCompletionMeta.hasAnyActualCompletion === true,
+    allJobsCompleted: actualCompletionMeta.allJobsCompleted === true,
+    paymentDueDateValue: paymentDueDate ? paymentDueDate.getTime() : null,
+    paymentDueDateLabel: paymentDueDate ? formatDashboardShortDate_(paymentDueDate) : '',
+    paymentTermsLabel: approvedPaymentTermsLabel
+  };
+}
+
+function deriveDashboardReadyMeta_(printJobs, portalState, latestOrderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
+  const latestOrderRow = latestOrderInfo && latestOrderInfo.rowObjNormalized ? latestOrderInfo.rowObjNormalized : null;
+  const latestOrderSummary = latestOrderRow ? buildPortalOrderSummary_(latestOrderRow) : {};
+  const referenceDateOverride = normalizeDashboardCalendarDate_(opts.referenceDate);
+  const referenceDateValue = trimString_(
+    latestOrderSummary.authorizedToProduceAt ||
+    latestOrderSummary.paidAt ||
+    latestOrderSummary.poSubmittedAt ||
+    latestOrderSummary.lockedAt
+  );
+  const referenceDate = referenceDateOverride || (referenceDateValue ? new Date(referenceDateValue) : new Date());
+  const jobs = [];
+
+  if (flags.productionBegun && latestOrderRow) {
+    const lockedDraft = safeJsonParse_(latestOrderRow.orderdraftjson, {}) || {};
+    (Array.isArray(lockedDraft.selectedJobs) ? lockedDraft.selectedJobs : []).forEach(function(job) {
+      jobs.push(job);
+    });
+  } else {
+    getIncludedOrderJobSelectionStates_(printJobs, portalState).forEach(function(item) {
+      if (item && item.job) jobs.push(item.job);
+    });
+  }
+
+  let furthestValue = null;
+  let furthestLabel = '';
+  jobs.forEach(function(job) {
+    const candidate = deriveDashboardReadyCandidateForJob_(job, referenceDate);
+    if (!candidate || !Number.isFinite(Number(candidate.dateValue))) return;
+    if (furthestValue == null || candidate.dateValue > furthestValue) {
+      furthestValue = candidate.dateValue;
+      furthestLabel = trimString_(candidate.dateLabel);
+    }
+  });
+
+  return {
+    dateValue: furthestValue,
+    dateLabel: furthestLabel
+  };
+}
+
+function normalizeDashboardCalendarDate_(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+function normalizeDashboardProductionStartDate_(value) {
+  const date = normalizeDashboardCalendarDate_(value);
+  if (!date) return null;
+  const day = date.getDay();
+  if (day === 6) date.setDate(date.getDate() + 2);
+  else if (day === 0) date.setDate(date.getDate() + 1);
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+function deriveDashboardReadyCandidateForJob_(job, referenceDate) {
+  const explicitDate = extractExplicitDateValueForDashboard_(job && job.deliveryEstimate)
+    || extractExplicitDateValueForDashboard_(job && job.turnaroundTime);
+  if (explicitDate) {
+    return {
+      dateValue: explicitDate.getTime(),
+      dateLabel: formatDashboardShortDate_(explicitDate)
+    };
+  }
+
+  const parsedTurnaround = parseBusinessDayCountForDashboard_(
+    pickBaseTurnaroundForDashboard_(job)
+  );
+  if (!parsedTurnaround) return null;
+  const targetDate = addBusinessDaysForDashboard_(parsedTurnaround.dayCount, referenceDate);
+  if (!targetDate) return null;
+  return {
+    dateValue: targetDate.getTime(),
+    dateLabel: formatDashboardShortDate_(targetDate) + (parsedTurnaround.rush ? ' (rush)' : '')
+  };
+}
+
+function pickBaseTurnaroundForDashboard_(job) {
+  const delivery = formatTurnaroundTextForDashboard_(job && job.deliveryEstimate);
+  const turnaround = formatTurnaroundTextForDashboard_(job && job.turnaroundTime);
+  const deliveryHasDayCount = /\b\d+\s*(business\s*)?day/i.test(delivery);
+  const turnaroundHasDayCount = /\b\d+\s*(business\s*)?day/i.test(turnaround);
+  if (deliveryHasDayCount) return delivery;
+  if (turnaroundHasDayCount) return turnaround;
+  if (delivery) return delivery;
+  if (turnaround && !/^standard$/i.test(turnaround)) return turnaround;
+  return turnaround || '';
+}
+
+function formatTurnaroundTextForDashboard_(value) {
+  return String(value || '').replace(/\s*from payment\s*/ig, '').trim();
+}
+
+function parseBusinessDayCountForDashboard_(value) {
+  const text = formatTurnaroundTextForDashboard_(value).replace(/^turnaround\s*:\s*/i, '').trim();
+  if (!text) return null;
+  const nums = text.match(/\d+/g) || [];
+  if (!nums.length) return null;
+  const dayCount = Number(nums[0]);
+  if (!Number.isFinite(dayCount) || dayCount <= 0) return null;
+  return {
+    dayCount: Math.max(1, Math.floor(dayCount)),
+    rush: /\brush\b/i.test(text)
+  };
+}
+
+function addBusinessDaysForDashboard_(dayCount, referenceDate) {
+  if (!Number.isFinite(dayCount) || dayCount <= 0) return null;
+  const date = referenceDate ? new Date(referenceDate) : new Date();
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(12, 0, 0, 0);
+  var remaining = Math.floor(dayCount);
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  return date;
+}
+
+function addCalendarDaysForDashboard_(dayCount, referenceDate) {
+  const date = normalizeDashboardCalendarDate_(referenceDate);
+  if (!date) return null;
+  const days = Math.max(0, Math.floor(Number(dayCount) || 0));
+  date.setDate(date.getDate() + days);
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+function hasDashboardDateReached_(dateValue) {
+  if (!Number.isFinite(Number(dateValue))) return false;
+  const target = new Date(Number(dateValue));
+  if (Number.isNaN(target.getTime())) return false;
+  target.setHours(12, 0, 0, 0);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  return target.getTime() <= today.getTime();
+}
+
+function extractExplicitDateValueForDashboard_(value) {
+  const text = formatTurnaroundTextForDashboard_(value);
+  if (!text) return null;
+  if (/\b\d+\s*(business\s*)?day/i.test(text)) return null;
+  if (/^standard$/i.test(text)) return null;
+
+  const monthPattern = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,\s*\d{2,4})?/i;
+  const monthMatch = text.match(monthPattern);
+  if (monthMatch && monthMatch[0]) {
+    const parsedMonth = new Date(monthMatch[0]);
+    if (!Number.isNaN(parsedMonth.getTime())) {
+      parsedMonth.setHours(12, 0, 0, 0);
+      return parsedMonth;
+    }
+  }
+
+  const slashMatch = text.match(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/);
+  if (slashMatch && slashMatch[0]) {
+    const parsedSlash = new Date(slashMatch[0]);
+    if (!Number.isNaN(parsedSlash.getTime())) {
+      parsedSlash.setHours(12, 0, 0, 0);
+      return parsedSlash;
+    }
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    parsed.setHours(12, 0, 0, 0);
+    return parsed;
+  }
+  return null;
+}
+
+function formatDashboardShortDate_(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone() || 'America/Detroit', 'MMM d');
 }
 
 /**
@@ -1401,14 +3990,18 @@ function getAccountStatus(payload) {
       if (!rowInfo) return { ok: false, error: 'Token not found.' };
       identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(rowInfo.rowObjNormalized));
     }
+    identity = resolveClientIdentityFromExportLog_(infra.exportSheet, identity);
 
-    const accountInfo = getPortalAccountByOrgOrEmail_(Object.assign({}, identity, {
+    const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
       cfg: cfg,
       ss: ss,
-      infra: infra,
-      createIfMissing: false
+      infra: infra
     }));
     const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(identity, cfg);
+    if (rowInfo) {
+      rowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, rowInfo, accountSummary) || rowInfo;
+      identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(rowInfo.rowObjNormalized));
+    }
     const latestOrderInfo = trimString_(p.token)
       ? getLatestPortalOrderByToken_(trimString_(p.token), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet })
       : null;
@@ -1459,10 +4052,15 @@ function buildOrderActionContext_(payload) {
     summary: buildEphemeralAccountSummary_(mergedIdentity, cfg),
     rowInfo: null
   };
+  const storedPortalState = safeJsonParse_(row.portalstatejson, {}) || {};
   const portalStateInput = Object.prototype.hasOwnProperty.call(p, 'portalState')
     ? parsePortalStateInput_(p.portalState)
-    : (safeJsonParse_(row.portalstatejson, {}) || { printJobs: {} });
-  const portalState = normalizePortalStateForOrderAction_(portalStateInput, snapshot);
+    : storedPortalState;
+  const storedPurchaseOrderDraft = readPurchaseOrderDraftFromPortalState_(storedPortalState);
+  const mergedPortalStateInput = storedPurchaseOrderDraft && !readPurchaseOrderDraftFromPortalState_(portalStateInput)
+    ? writePurchaseOrderDraftIntoPortalState_(portalStateInput, storedPurchaseOrderDraft)
+    : portalStateInput;
+  const portalState = normalizePortalStateForOrderAction_(mergedPortalStateInput, snapshot);
   const orderDraft = buildOrderDraftFromSnapshotAndPortalState_({
     token: token,
     rowInfo: rowInfo,
@@ -1513,8 +4111,11 @@ function normalizePortalStateForOrderAction_(rawState, snapshot) {
     fulfillmentMethod: normalizeFulfillmentMethod_(source.fulfillmentMethod),
     shippingChargeCents: Math.max(0, parseInt(String(source.shippingChargeCents || 0), 10) || 0),
     shippingModeLabel: trimString_(source.shippingModeLabel),
+    shippingDetails: normalizeOrderDraftShippingDetailsInput_(source.shippingDetails),
     printJobs: normalized.printJobs
   });
+  if (normalized.purchaseOrderDraft) out.purchaseOrderDraft = normalized.purchaseOrderDraft;
+  else delete out.purchaseOrderDraft;
   const chatLog = readChatLogFromPortalState_(source, []);
   if (hasEmbeddedChatLogInPortalState_(source)) {
     writeChatLogIntoPortalState_(out, chatLog);
@@ -1535,7 +4136,6 @@ function persistLatestPortalStateForOrderAction_(ctx) {
   const persisted = persistPortalStateForRow_(exportSheet, rowInfo, context.portalState, {
     token: trimString_(context.orderDraft && context.orderDraft.token) || trimString_(rowInfo.rowObjNormalized.token),
     locked: rowLocked,
-    status: rowLocked ? getFinalStatusForRow_(rowInfo.rowObjNormalized) : 'Editable',
     chatLog: chatLog,
     clearSubmittedAt: !rowLocked
   });
@@ -1681,15 +4281,12 @@ function buildPreparedOrderActionContext_(payload) {
 
 function buildOrderActionPortalPayload_(ctx, exportRowInfo) {
   try {
-    return overridePortalPayloadState_(
-      refreshPortalPayloadForToken_(ctx.orderDraft.token, {
-        cfg: ctx.cfg,
-        ss: ctx.ss,
-        infra: ctx.infra,
-        rowInfo: exportRowInfo
-      }),
-      ctx.portalState
-    );
+    return refreshPortalPayloadForToken_(ctx.orderDraft.token, {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      rowInfo: exportRowInfo
+    });
   } catch (err) {
     console.log('[RT-CHECKOUT-PORTAL-PAYLOAD] ' + JSON.stringify({
       ok: false,
@@ -1777,8 +4374,7 @@ function writeCheckoutAttemptPointers_(ctx, orderSummary, paymentMethodSelected,
       productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
       portalLockState: PORTAL_LOCK_STATES.editable
     }),
-    accountSummary: ctx.accountInfo.summary,
-    status: 'Editable'
+    accountSummary: ctx.accountInfo.summary
   });
 }
 
@@ -1900,8 +4496,7 @@ function finalizeLockedOrderTransition_(ctx, created) {
     infra: ctx.infra,
     rowInfo: ctx.rowInfo,
     orderSummary: created.summary,
-    accountSummary: ctx.accountInfo.summary,
-    status: 'locked'
+    accountSummary: ctx.accountInfo.summary
   });
   setPortalClientLockForRow_(ctx.infra.exportSheet, exportRowInfo, true, { token: ctx.orderDraft.token });
   return {
@@ -2015,9 +4610,267 @@ function restoreExportOrderPointers_(ctx, pointerSnapshot) {
   }
 }
 
+function buildInactivePreOrderDraftForSupersededOrder_(draft) {
+  const nextDraft = Object.assign({}, (draft && typeof draft === 'object') ? draft : {});
+  nextDraft.paymentMethodSelected = '';
+  nextDraft.paymentState = PAYMENT_STATES.not_started;
+  nextDraft.orderState = ORDER_STATES.draft;
+  nextDraft.productionAuthorizationState = PRODUCTION_AUTHORIZATION_STATES.not_authorized;
+  nextDraft.portalLockState = PORTAL_LOCK_STATES.editable;
+  return nextDraft;
+}
+
+function isSupersedableOrderRowForPaymentPathSwitch_(orderInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  if (!row || !trimString_(row.orderid)) return false;
+  const summary = buildPortalOrderSummary_(row);
+  const teamMeta = readTeamWorkflowMetaFromDraft_(safeJsonParse_(row.orderdraftjson, {}) || {});
+  if (
+    teamMeta.workflowMode === TEAM_WORKFLOW_MODES.team_hold
+    || teamMeta.workflowMode === TEAM_WORKFLOW_MODES.checkout_reset
+  ) {
+    return false;
+  }
+  const orderState = trimString_(summary.orderState).toLowerCase();
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  const productionState = trimString_(summary.productionAuthorizationState).toLowerCase();
+  if (trimString_(summary.paidAt)) return false;
+  if (trimString_(summary.authorizedToProduceAt)) return false;
+  if (trimString_(summary.poSubmittedAt)) return false;
+  if (paymentState === PAYMENT_STATES.paid || paymentState === PAYMENT_STATES.manual_received) return false;
+  if (productionState === PRODUCTION_AUTHORIZATION_STATES.authorized) return false;
+  if (
+    orderState === ORDER_STATES.ready_for_production
+    || orderState === ORDER_STATES.in_production
+    || orderState === ORDER_STATES.closed
+  ) {
+    return false;
+  }
+  return (
+    orderState === ORDER_STATES.draft
+    || orderState === ORDER_STATES.payment_in_progress
+    || orderState === ORDER_STATES.awaiting_manual_payment
+    || orderState === ORDER_STATES.awaiting_po_submission
+    || orderState === ORDER_STATES.awaiting_payment_confirmation
+    || paymentState === PAYMENT_STATES.not_started
+    || paymentState === PAYMENT_STATES.checkout_created
+    || paymentState === PAYMENT_STATES.submitted
+    || paymentState === PAYMENT_STATES.pending
+    || paymentState === PAYMENT_STATES.manual_pending
+    || productionState === PRODUCTION_AUTHORIZATION_STATES.po_pending
+  );
+}
+
+function supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
+  if (!token) return [];
+  const rows = listPortalOrdersByToken_(token, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    ordersSheet: ctx.infra.ordersSheet
+  });
+  const reason = trimString_(opts.revisionReason) || 'payment_method_superseded';
+  const updatedRows = [];
+  rows.forEach(function(orderInfo) {
+    if (!isSupersedableOrderRowForPaymentPathSwitch_(orderInfo)) return;
+    const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
+    const updated = updatePortalOrderState_({
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      orderRowInfo: orderInfo,
+      checkoutAttemptId: '',
+      portalLockState: PORTAL_LOCK_STATES.editable,
+      orderState: ORDER_STATES.draft,
+      paymentMethodSelected: '',
+      paymentState: PAYMENT_STATES.not_started,
+      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+      stripeSessionId: '',
+      stripePaymentIntentId: '',
+      invoiceNumber: '',
+      invoicePdfUrl: '',
+      invoiceSentToEmail: '',
+      invoiceSentAt: '',
+      poNumber: '',
+      poDocumentUrl: '',
+      poSubmittedBy: '',
+      poSubmittedAt: '',
+      paidAt: '',
+      authorizedToProduceAt: '',
+      lockedAt: '',
+      paymentReceivedManuallyBy: '',
+      paymentReceivedManuallyAt: '',
+      orderDraft: buildInactivePreOrderDraftForSupersededOrder_(currentDraft),
+      revisionReason: reason,
+      notes: trimString_(opts.notes) || 'Superseded by a new payment-method selection.'
+    });
+    updatedRows.push(updated);
+  });
+  return updatedRows;
+}
+
+function persistContextPortalState_(ctx, portalState, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const rowInfo = opts.rowInfo || ctx.rowInfo;
+  const exportSheet = ctx.infra && ctx.infra.exportSheet;
+  if (!rowInfo || !exportSheet) return null;
+  const nextPortalState = normalizePortalStateForOrderAction_(portalState || {}, ctx.snapshot);
+  const locked = opts.locked === true
+    ? true
+    : (opts.locked === false
+      ? false
+      : isLockedPortalRow_(rowInfo.rowObjNormalized, safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {})));
+  const chatLog = readChatLogFromPortalState_(nextPortalState, readChatLogForRow_(exportSheet, rowInfo));
+  const persisted = persistPortalStateForRow_(exportSheet, rowInfo, nextPortalState, {
+    token: trimString_(ctx.orderDraft && ctx.orderDraft.token) || trimString_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.token),
+    locked: locked,
+    chatLog: chatLog,
+    clearSubmittedAt: locked !== true,
+    currentOrderState: opts.currentOrderState,
+    currentPaymentState: opts.currentPaymentState,
+    currentProductionAuthorizationState: opts.currentProductionAuthorizationState,
+    currentPaymentMethod: opts.currentPaymentMethod,
+    paidAt: opts.paidAt,
+    authorizedToProduceAt: opts.authorizedToProduceAt
+  });
+  if (!persisted || persisted.ok !== true) {
+    throw new Error(String((persisted && persisted.error) || 'Unable to persist portal state.'));
+  }
+  ctx.rowInfo = buildRowInfoFromSheet_(exportSheet, rowInfo.row);
+  ctx.row = ctx.rowInfo.rowObjNormalized;
+  ctx.portalState = nextPortalState;
+  return ctx.rowInfo;
+}
+
+function clearCurrentOrderPointersToEditableState_(ctx, portalState) {
+  const clearedRowInfo = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    activeOrderId: '',
+    latestCheckoutAttemptId: '',
+    currentAccountId: trimString_(ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.accountId),
+    portalLockState: PORTAL_LOCK_STATES.editable,
+    currentOrderState: ORDER_STATES.draft,
+    currentPaymentState: PAYMENT_STATES.not_started,
+    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    currentPaymentMethod: '',
+    latestInvoiceNumber: '',
+    lastOrderUpdatedAt: nowIso_(),
+    teamWorkflowMode: normalizeTeamWorkflowMode_(ctx.rowInfo && ctx.rowInfo.rowObjNormalized && ctx.rowInfo.rowObjNormalized.teamworkflowmode),
+    termsApproved: ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.termsApproved === true,
+    taxExemptApproved: ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.taxExemptApproved === true,
+    paidAt: '',
+    authorizedToProduceAt: ''
+  });
+  return persistContextPortalState_(ctx, portalState, {
+    rowInfo: clearedRowInfo,
+    locked: false,
+    currentOrderState: ORDER_STATES.draft,
+    currentPaymentState: PAYMENT_STATES.not_started,
+    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    currentPaymentMethod: '',
+    paidAt: '',
+    authorizedToProduceAt: ''
+  });
+}
+
+function lockCurrentOrderPointersToPurchaseOrderDraftState_(ctx, portalState, draftState) {
+  const normalizedDraft = normalizePurchaseOrderDraftState_(draftState)
+    || readPurchaseOrderDraftFromPortalState_(portalState);
+  if (!normalizedDraft) {
+    throw new Error('Purchase-order draft state is missing.');
+  }
+  const nextPortalState = writePurchaseOrderDraftIntoPortalState_(portalState, normalizedDraft);
+  const lockedRowInfo = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    activeOrderId: '',
+    latestCheckoutAttemptId: '',
+    currentAccountId: trimString_(ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.accountId),
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    currentOrderState: ORDER_STATES.awaiting_po_submission,
+    currentPaymentState: PAYMENT_STATES.not_started,
+    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
+    currentPaymentMethod: PAYMENT_METHODS.purchase_order,
+    latestInvoiceNumber: trimString_(normalizedDraft.invoiceNumber),
+    lastOrderUpdatedAt: nowIso_(),
+    teamWorkflowMode: normalizeTeamWorkflowMode_(ctx.rowInfo && ctx.rowInfo.rowObjNormalized && ctx.rowInfo.rowObjNormalized.teamworkflowmode),
+    termsApproved: ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.termsApproved === true,
+    taxExemptApproved: ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.taxExemptApproved === true,
+    paidAt: '',
+    authorizedToProduceAt: ''
+  });
+  return persistContextPortalState_(ctx, nextPortalState, {
+    rowInfo: lockedRowInfo,
+    locked: true,
+    currentOrderState: ORDER_STATES.awaiting_po_submission,
+    currentPaymentState: PAYMENT_STATES.not_started,
+    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
+    currentPaymentMethod: PAYMENT_METHODS.purchase_order,
+    paidAt: '',
+    authorizedToProduceAt: ''
+  });
+}
+
+function buildLatestClientWorkflowContextForAction_(ctx) {
+  const latestOrderInfo = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    ordersSheet: ctx.infra.ordersSheet
+  });
+  const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : {};
+  const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(
+    ctx.rowInfo && ctx.rowInfo.rowObjNormalized,
+    ctx.accountInfo && ctx.accountInfo.summary,
+    latestOrderSummary
+  );
+  const workflowContext = buildTeamWorkflowContext_({
+    row: ctx.rowInfo && ctx.rowInfo.rowObjNormalized,
+    latestOrderSummary: latestOrderSummary,
+    currentStateSummary: currentStateSummary,
+    accountSummary: ctx.accountInfo && ctx.accountInfo.summary
+  });
+  return {
+    latestOrderInfo: latestOrderInfo,
+    latestOrderSummary: latestOrderSummary,
+    currentStateSummary: currentStateSummary,
+    workflowContext: workflowContext
+  };
+}
+
+function appendClientLifecycleAuditMessageToPortalState_(portalState, messageText, authorName) {
+  const nextPortalState = JSON.parse(JSON.stringify(
+    (portalState && typeof portalState === 'object' && !Array.isArray(portalState))
+      ? portalState
+      : { printJobs: {} }
+  ));
+  const nextChatLog = appendUniqueChatMessage_(
+    readChatLogFromPortalState_(nextPortalState, []),
+    createChatMessage_('client', messageText, nowIso_(), {
+      authorName: trimString_(authorName)
+    })
+  );
+  writeChatLogIntoPortalState_(nextPortalState, nextChatLog);
+  return nextPortalState;
+}
+
 function createCheckoutAttempt(payload) {
   try {
     const ctx = buildPreparedOrderActionContext_(payload);
+    if (readPurchaseOrderDraftFromPortalState_(ctx.portalState)) {
+      persistContextPortalState_(ctx, clearPurchaseOrderDraftFromPortalState_(ctx.portalState), {
+        locked: false,
+        currentOrderState: ORDER_STATES.draft,
+        currentPaymentState: PAYMENT_STATES.not_started,
+        currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+        currentPaymentMethod: ''
+      });
+    }
     const paymentMethodSelected = trimString_(ctx.payload.paymentMethodSelected).toLowerCase();
     if (paymentMethodSelected !== PAYMENT_METHODS.card && paymentMethodSelected !== PAYMENT_METHODS.ach) {
       return { ok: false, error: 'Unsupported payment method.' };
@@ -2072,6 +4925,15 @@ function createCheckoutAttempt(payload) {
 
 function initiateManualPaymentOrder_(payload) {
   const ctx = buildPreparedOrderActionContext_(payload);
+  if (readPurchaseOrderDraftFromPortalState_(ctx.portalState)) {
+    persistContextPortalState_(ctx, clearPurchaseOrderDraftFromPortalState_(ctx.portalState), {
+      locked: false,
+      currentOrderState: ORDER_STATES.draft,
+      currentPaymentState: PAYMENT_STATES.not_started,
+      currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+      currentPaymentMethod: ''
+    });
+  }
   const method = trimString_(ctx.payload.paymentMethodSelected).toLowerCase();
   if (method !== PAYMENT_METHODS.check && method !== PAYMENT_METHODS.cash) {
     throw new Error('Unsupported manual payment method.');
@@ -2113,15 +4975,12 @@ function initiatePurchaseOrderFlow_(payload) {
       message: 'Terms approval is required before you can submit a purchase order.'
     };
   }
-  const invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx);
-  const created = createPortalOrder_(buildPurchaseOrderCreateOptions_(ctx, invoiceArtifacts));
-  const finalized = finalizeLockedOrderTransition_(ctx, created);
-  return buildLockedOrderTransitionResponse_(
-    ctx,
-    created,
-    invoiceArtifacts.invoiceInfo,
-    finalized.portalPayload
-  );
+  return {
+    ok: true,
+    reviewRequired: true,
+    accountSummary: ctx.accountInfo.summary,
+    message: 'Review the invoice first, then email it or continue the purchase-order submission from the Summary tab.'
+  };
 }
 
 function initiatePurchaseOrder(payload) {
@@ -2158,13 +5017,21 @@ function buildAccountDocumentContext_(payload) {
     if (!exportRowInfo) return { ok: false, error: 'Token not found.' };
     identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(exportRowInfo.rowObjNormalized));
   }
+  identity = resolveClientIdentityFromExportLog_(infra.exportSheet, identity);
 
   const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
     cfg: cfg,
     ss: ss,
     infra: infra,
     createIfMissing: true
-  }));
+  })) || {
+    summary: buildEphemeralAccountSummary_(identity, cfg),
+    rowInfo: null
+  };
+  if (exportRowInfo) {
+    exportRowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, exportRowInfo, accountInfo.summary) || exportRowInfo;
+    identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(exportRowInfo.rowObjNormalized));
+  }
 
   return {
     ok: true,
@@ -2794,7 +5661,7 @@ function sendAccountDocumentSourceEmail_(ctx, definition, recipients) {
 
 function buildDefaultAccountDocumentSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
-  const token = trimString_(ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const token = resolveAccountDocumentPortalToken_(ctx);
   const portalUrl = token ? buildPortalDirectUrl_(token) : '';
   const teamReviewUrl = buildAccountDocumentTeamReviewUrl_(definition.type, token, ctx.cfg) || portalUrl;
   const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
@@ -2860,7 +5727,7 @@ function buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, optio
 
 function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
-  const token = trimString_(ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const token = resolveAccountDocumentPortalToken_(ctx);
   const teamReviewUrl = buildAccountDocumentTeamReviewUrl_(definition.type, token, ctx.cfg);
   const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
   const artifactFiles = getAccountDocumentSubmissionArtifactFiles_(submissionEntry);
@@ -2901,7 +5768,7 @@ function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submiss
 
 function buildTaxExemptSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
-  const token = trimString_(ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  const token = resolveAccountDocumentPortalToken_(ctx);
   const portalUrl = token ? buildPortalDirectUrl_(token) : '';
   const teamReviewUrl = buildTeamTaxExemptReviewUrl_(token);
   const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
@@ -3014,7 +5881,10 @@ function buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, options
 
 function buildAccountDocumentDecisionEntry_(definition, decision, ctx, payload, options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const normalizedDecision = String(decision || '').trim().toLowerCase() === 'approved' ? 'approved' : 'rejected';
+  const rawDecision = String(decision || '').trim().toLowerCase();
+  const normalizedDecision = rawDecision === 'approved'
+    ? 'approved'
+    : (rawDecision === 'denied' ? 'denied' : 'rejected');
   const submittedAt = trimString_(opts.decidedAt) || nowIso_();
   const reason = trimString_(payload && payload.reason);
   return {
@@ -3022,7 +5892,7 @@ function buildAccountDocumentDecisionEntry_(definition, decision, ctx, payload, 
     decision: normalizedDecision,
     decidedByName: trimString_(opts.decidedByName || getVisibleTeamAuthorName_(ctx && ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized)),
     decidedByEmail: normalizeEmail_(opts.decidedByEmail || DOCUMENT_REVIEW_EMAIL),
-    reason: normalizedDecision === 'rejected' ? reason : ''
+    reason: normalizedDecision === 'approved' ? '' : reason
   };
 }
 
@@ -3045,7 +5915,7 @@ function persistAccountDocumentDecision_(ctx, definition, decisionEntry, options
   const updates = {
     updatedAt: now,
     notes: notesText,
-    [definition.statusField]: isApproved ? 'approved' : 'rejected',
+    [definition.statusField]: trimString_(decisionEntry && decisionEntry.decision) || (isApproved ? 'approved' : 'rejected'),
     [definition.approvedField]: isApproved,
     [definition.approvedAtField]: isApproved ? now : '',
     [definition.approvedByNameField]: isApproved ? trimString_(decisionEntry.decidedByName) : '',
@@ -3126,8 +5996,8 @@ function persistCreditTermsDecision_(ctx, decisionEntry, options) {
 
 function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
-  const token = trimString_(ctx && ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
-  const portalUrl = token ? buildExternalPortalUrl_(token) : '';
+  const token = resolveAccountDocumentPortalToken_(ctx);
+  const portalUrl = token ? buildDashboardCreditTermsResubmitUrl_(token) : '';
   const recipients = normalizeEmailRecipients_([
     submissionEntry && submissionEntry.submittedByEmail,
     accountSummary.billingContactEmail,
@@ -3176,6 +6046,54 @@ function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
   });
 }
 
+function sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason) {
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const recipients = normalizeEmailRecipients_([
+    submissionEntry && submissionEntry.submittedByEmail,
+    accountSummary.billingContactEmail,
+    accountSummary.primaryEmail,
+    ctx && ctx.identity && ctx.identity.personEmail
+  ]);
+  if (!recipients.length) return { ok: false, skipped: true, reason: 'missing-email' };
+  const submittedByName = trimString_(
+    submissionEntry && submissionEntry.submittedByName ||
+    accountSummary.billingContactName ||
+    accountSummary.primaryContactName ||
+    'there'
+  );
+  const subject = 'Update on your Red Threads credit terms submission';
+  const body = [
+    'Hi ' + submittedByName + ',',
+    '',
+    'Red Threads reviewed your signed credit terms document, and it was denied.',
+    '',
+    'Reason:',
+    reason,
+    '',
+    'Purchase-order ordering will remain unavailable until the Red Threads team reopens this workflow or provides next steps.',
+    '',
+    'This inbox is not monitored. Please do not reply or respond.'
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your credit terms document was denied</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Red Threads reviewed the signed credit terms submission, but it could not be approved.</p>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(reason).replace(/\n/g, '<br>') + '</div>',
+    '    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#35435a;">Purchase-order ordering will remain unavailable until the Red Threads team reopens this workflow or provides next steps.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '  </div>',
+    '</div>'
+  ].join('\n');
+  return sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody
+  });
+}
+
 function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelection) {
   const attachments = getAccountDocumentSubmissionArtifactFiles_(submissionEntry).map(function(item) {
     const file = getDriveFileByIdSafe_(item.fileId);
@@ -3211,6 +6129,7 @@ function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelecti
     '',
     'Congratulations, your credit terms have been approved for purchases within Red Threads LLC.',
     'Approved payment terms: ' + paymentLabel + '.',
+    'You can now place orders with a purchase order inside the Red Threads portal.',
     '',
     'Attached is a copy of the signed credit terms document for your records.',
     '',
@@ -3226,6 +6145,7 @@ function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelecti
     '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Congratulations, your credit terms have been approved for purchases within Red Threads LLC.</p>',
     '    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#35435a;"><strong>Approved payment terms:</strong> ' + escapeHtml_(paymentLabel) + '</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">You can now place orders with a purchase order inside the Red Threads portal.</p>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Attached is a copy of the signed credit terms document for your records.</p>',
     '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
     '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
@@ -3422,17 +6342,35 @@ function getCreditTermsTeamReview_(payload) {
     mimeType: trimString_(submissionEntry.artifactMimeType),
     sizeBytes: Math.max(0, parseInt(String(submissionEntry.artifactSizeBytes || 0), 10) || 0)
   };
+  const primaryArtifactFileId = trimString_(primaryArtifact.fileId) || artifactFileId;
   const mimeType = trimString_(primaryArtifact.mimeType) || 'application/pdf';
   const isImage = /^image\//i.test(mimeType);
+  const inlineAsset = primaryArtifactFileId
+    ? buildDriveBinaryDataPayload_(
+        primaryArtifactFileId,
+        trimString_(primaryArtifact.fileName) || 'Credit-Terms-Submission.pdf',
+        mimeType
+      )
+    : null;
   const imageAssets = artifactFiles
     .filter(function(item) { return /^image\//i.test(trimString_(item.mimeType)); })
     .map(function(item, index) {
+      let inlineImage = null;
+      try {
+        inlineImage = buildDriveBinaryDataPayload_(
+          trimString_(item.fileId),
+          trimString_(item.fileName) || ('Credit-Terms-Image-' + (index + 1) + '.png'),
+          trimString_(item.mimeType) || 'image/png'
+        );
+      } catch (_) {}
       return {
         fileId: trimString_(item.fileId),
         fileName: trimString_(item.fileName) || ('Credit-Terms-Image-' + (index + 1) + '.png'),
         fileUrl: trimString_(item.fileUrl) || buildDriveFileViewUrl_(item.fileId),
         downloadUrl: buildDriveFileDownloadUrl_(item.fileId),
-        imageCandidates: buildDriveFilePublicImageCandidates_(item.fileId)
+        imageCandidates: buildDriveFilePublicImageCandidates_(item.fileId),
+        mimeType: trimString_(item.mimeType) || 'image/png',
+        base64Data: inlineImage ? trimString_(inlineImage.base64Data) : ''
       };
     });
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
@@ -3442,15 +6380,16 @@ function getCreditTermsTeamReview_(payload) {
     'Credit terms review artifact ready.',
     {
       reviewArtifact: {
-        fileId: artifactFileId,
+        fileId: primaryArtifactFileId,
         fileName: trimString_(primaryArtifact.fileName) || 'Credit-Terms-Submission.pdf',
         mimeType: mimeType,
-        fileUrl: trimString_(primaryArtifact.fileUrl) || buildDriveFileViewUrl_(artifactFileId),
-        previewUrl: buildDriveFilePreviewUrl_(artifactFileId),
-        imageUrl: isImage ? buildDriveFilePublicViewAssetUrl_(artifactFileId) : '',
-        imageCandidates: isImage ? buildDriveFilePublicImageCandidates_(artifactFileId) : [],
+        fileUrl: trimString_(primaryArtifact.fileUrl) || buildDriveFileViewUrl_(primaryArtifactFileId),
+        previewUrl: buildDriveFilePreviewUrl_(primaryArtifactFileId),
+        imageUrl: isImage ? buildDriveFilePublicViewAssetUrl_(primaryArtifactFileId) : '',
+        imageCandidates: isImage ? buildDriveFilePublicImageCandidates_(primaryArtifactFileId) : [],
+        base64Data: inlineAsset ? trimString_(inlineAsset.base64Data) : '',
         imageAssets: imageAssets,
-        downloadUrl: buildDriveFileDownloadUrl_(artifactFileId),
+        downloadUrl: buildDriveFileDownloadUrl_(primaryArtifactFileId),
         submittedAt: trimString_(submissionEntry.submittedAt),
         submittedByName: trimString_(submissionEntry.submittedByName),
         submittedByEmail: normalizeEmail_(submissionEntry.submittedByEmail),
@@ -3543,6 +6482,37 @@ function denyCreditTermsSubmission(payload) {
   }
 }
 
+function hardDenyCreditTermsSubmission_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const reason = trimString_(payload && payload.reason);
+  if (!reason) return { ok: false, error: 'Enter a reason before denying the credit terms document.' };
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.credit_terms);
+  if (!submissionEntry) return { ok: false, error: 'No submitted credit terms document is available to deny.' };
+  const decisionEntry = buildCreditTermsDecisionEntry_('denied', ctx, payload);
+  persistCreditTermsDecision_(ctx, decisionEntry);
+  try {
+    sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason);
+  } catch (_) {}
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Credit terms denied.',
+    {
+      decision: 'denied'
+    }
+  );
+}
+
+function hardDenyCreditTermsSubmission(payload) {
+  try {
+    return hardDenyCreditTermsSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function requestTermsEnrollment_(payload) {
   const ctx = buildAccountDocumentContext_(payload);
   if (!ctx || ctx.ok === false) return ctx;
@@ -3597,6 +6567,170 @@ function getTaxExemptWorkspace_(payload) {
 function getTaxExemptWorkspace(payload) {
   try {
     return getTaxExemptWorkspace_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getTaxExemptClientViewer_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const summary = ctx.accountInfo && ctx.accountInfo.summary
+    ? ctx.accountInfo.summary
+    : buildEphemeralAccountSummary_(ctx.identity, ctx.cfg);
+  const workflow = getAccountDocumentWorkflowFromSummary_(summary, ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx.cfg);
+  const status = normalizeAccountDocumentStatus_(workflow && workflow.status);
+  const canViewSubmittedArtifact = ['submitted', 'under_review', 'pending_submission', 'rejected', 'denied'].indexOf(status) >= 0;
+  const canViewApprovedArtifact = !!workflow && (workflow.approved === true || workflow.active === true);
+  if (!workflow || (!canViewApprovedArtifact && !canViewSubmittedArtifact)) {
+    return { ok: false, error: 'A completed tax exemption document is not available for this account.' };
+  }
+  const approvedArtifact = canViewApprovedArtifact
+    ? buildApprovedTaxViewerArtifactFromSummary_(summary)
+    : null;
+  if (approvedArtifact && (trimString_(approvedArtifact.fileUrl) || trimString_(approvedArtifact.previewUrl))) {
+    return buildAccountDocumentWorkflowResponse_(
+      ctx,
+      ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+      'Tax exemption document ready.',
+      {
+        viewerArtifact: approvedArtifact,
+        decision: status || 'approved',
+        viewerMessage: trimString_(workflow && workflow.clientMeta && workflow.clientMeta.lastDecision && workflow.clientMeta.lastDecision.reason)
+      }
+    );
+  }
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.tax_exempt);
+  if (!submissionEntry) {
+    return { ok: false, error: 'No completed tax exemption document is available to view.' };
+  }
+  const artifactFiles = getAccountDocumentSubmissionArtifactFiles_(submissionEntry);
+  const primaryArtifact = artifactFiles[0] || {
+    fileId: trimString_(submissionEntry.artifactFileId),
+    fileUrl: trimString_(submissionEntry.artifactUrl),
+    fileName: trimString_(submissionEntry.artifactName),
+    mimeType: trimString_(submissionEntry.artifactMimeType),
+    sizeBytes: Math.max(0, parseInt(String(submissionEntry.artifactSizeBytes || 0), 10) || 0)
+  };
+  const artifactFileId = trimString_(primaryArtifact.fileId);
+  if (!artifactFileId) {
+    return { ok: false, error: 'The approved tax exemption document is unavailable.' };
+  }
+  const fileName = trimString_(primaryArtifact.fileName) || trimString_(submissionEntry.artifactName) || 'Michigan-Tax-Exemption-Submission';
+  const mimeType = trimString_(primaryArtifact.mimeType) || trimString_(submissionEntry.artifactMimeType) || MimeType.PDF;
+  const isImage = /^image\//i.test(mimeType);
+  const inlineAsset = artifactFileId
+    ? buildDriveBinaryDataPayload_(artifactFileId, fileName, mimeType)
+    : null;
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Tax exemption document ready.',
+    {
+      viewerArtifact: {
+        fileId: artifactFileId,
+        fileName: fileName,
+        mimeType: mimeType,
+        fileUrl: trimString_(primaryArtifact.fileUrl) || buildDriveFileViewUrl_(artifactFileId),
+        previewUrl: buildDriveFilePreviewUrl_(artifactFileId),
+        imageUrl: isImage ? buildDriveFilePublicViewAssetUrl_(artifactFileId) : '',
+        imageCandidates: isImage ? buildDriveFilePublicImageCandidates_(artifactFileId) : [],
+        base64Data: inlineAsset ? trimString_(inlineAsset.base64Data) : '',
+        submittedAt: trimString_(submissionEntry.submittedAt),
+        submittedByName: trimString_(submissionEntry.submittedByName),
+        submittedByEmail: normalizeEmail_(submissionEntry.submittedByEmail)
+      },
+      decision: status || (canViewApprovedArtifact ? 'approved' : 'submitted'),
+      viewerMessage: trimString_(workflow && workflow.clientMeta && workflow.clientMeta.lastDecision && workflow.clientMeta.lastDecision.reason)
+    }
+  );
+}
+
+function getTaxExemptClientViewer(payload) {
+  try {
+    return getTaxExemptClientViewer_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getApprovedCreditTermsViewer_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const summary = ctx.accountInfo && ctx.accountInfo.summary
+    ? ctx.accountInfo.summary
+    : buildEphemeralAccountSummary_(ctx.identity, ctx.cfg);
+  const workflow = getAccountDocumentWorkflowFromSummary_(summary, ACCOUNT_DOCUMENT_TYPES.credit_terms, ctx.cfg);
+  const status = normalizeAccountDocumentStatus_(workflow && workflow.status);
+  const canViewSubmittedArtifact = ['submitted', 'under_review', 'pending_submission', 'rejected', 'denied'].indexOf(status) >= 0;
+  const canViewApprovedArtifact = status === 'approved';
+  if (!canViewApprovedArtifact && !canViewSubmittedArtifact) {
+    return { ok: false, error: 'A completed credit terms document is not available for this account.' };
+  }
+  const preferredArtifact = canViewApprovedArtifact
+    ? buildApprovedCreditTermsViewerArtifactFromSummary_(summary)
+    : null;
+  if (preferredArtifact && (trimString_(preferredArtifact.fileUrl) || trimString_(preferredArtifact.previewUrl))) {
+    return buildAccountDocumentWorkflowResponse_(
+      ctx,
+      ACCOUNT_DOCUMENT_TYPES.credit_terms,
+      'Credit terms document ready.',
+      {
+        viewerArtifact: preferredArtifact,
+        decision: status,
+        viewerMessage: trimString_(workflow && workflow.clientMeta && workflow.clientMeta.lastDecision && workflow.clientMeta.lastDecision.reason)
+      }
+    );
+  }
+  const submissionEntry = getLatestAccountDocumentSubmission_(ctx, ACCOUNT_DOCUMENT_TYPES.credit_terms);
+  if (!submissionEntry) {
+    return { ok: false, error: 'No completed credit terms document is available to view.' };
+  }
+  const artifactFiles = getAccountDocumentSubmissionArtifactFiles_(submissionEntry);
+  const primaryArtifact = artifactFiles[0] || {
+    fileId: trimString_(submissionEntry.artifactFileId),
+    fileUrl: trimString_(submissionEntry.artifactUrl),
+    fileName: trimString_(submissionEntry.artifactName),
+    mimeType: trimString_(submissionEntry.artifactMimeType),
+    sizeBytes: Math.max(0, parseInt(String(submissionEntry.artifactSizeBytes || 0), 10) || 0)
+  };
+  const artifactFileId = trimString_(primaryArtifact.fileId);
+  if (!artifactFileId) {
+    return { ok: false, error: 'The completed credit terms document is unavailable.' };
+  }
+  const fileName = trimString_(primaryArtifact.fileName) || trimString_(submissionEntry.artifactName) || 'Credit-Terms-Submission';
+  const mimeType = trimString_(primaryArtifact.mimeType) || trimString_(submissionEntry.artifactMimeType) || MimeType.PDF;
+  const isImage = /^image\//i.test(mimeType);
+  const inlineAsset = artifactFileId
+    ? buildDriveBinaryDataPayload_(artifactFileId, fileName, mimeType)
+    : null;
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Credit terms document ready.',
+    {
+      viewerArtifact: {
+        fileId: artifactFileId,
+        fileName: fileName,
+        mimeType: mimeType,
+        fileUrl: trimString_(primaryArtifact.fileUrl) || buildDriveFileViewUrl_(artifactFileId),
+        previewUrl: buildDriveFilePreviewUrl_(artifactFileId),
+        imageUrl: isImage ? buildDriveFilePublicViewAssetUrl_(artifactFileId) : '',
+        imageCandidates: isImage ? buildDriveFilePublicImageCandidates_(artifactFileId) : [],
+        base64Data: inlineAsset ? trimString_(inlineAsset.base64Data) : '',
+        submittedAt: trimString_(submissionEntry.submittedAt),
+        submittedByName: trimString_(submissionEntry.submittedByName),
+        submittedByEmail: normalizeEmail_(submissionEntry.submittedByEmail)
+      },
+      decision: status,
+      viewerMessage: trimString_(workflow && workflow.clientMeta && workflow.clientMeta.lastDecision && workflow.clientMeta.lastDecision.reason)
+    }
+  );
+}
+
+function getApprovedCreditTermsViewer(payload) {
+  try {
+    return getApprovedCreditTermsViewer_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -3970,16 +7104,551 @@ function generateInvoice(payload) {
 
 /* ---------------- Order Finalization + Admin Transition Helpers ---------------- */
 
-function adminMarkManualPaymentReceived_(payload) {
-  const p = (payload && typeof payload === 'object') ? payload : {};
-  const token = trimString_(p.token);
+function buildTeamOrderAdminContext_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok !== true) throw new Error(String((ctx && ctx.error) || 'Unable to load the project context.'));
+  assertTeamModeAuthorized_(ctx, payload);
+  const token = resolveAccountDocumentPortalToken_(ctx);
   if (!token) throw new Error('Missing token.');
-  const cfg = getConfig_();
-  const ss = SpreadsheetApp.openById(cfg.sheetId);
-  const infra = ensurePortalInfrastructure_(ss, cfg);
-  const rowInfo = findRowByToken_(infra.exportSheet, token);
+  const rowInfo = ctx.exportRowInfo || findRowByToken_(ctx.infra.exportSheet, token);
+  const latestOrder = getLatestPortalOrderByToken_(token, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    ordersSheet: ctx.infra.ordersSheet
+  });
+  const latestOrderSummary = latestOrder ? buildPortalOrderSummary_(latestOrder.rowObjNormalized) : null;
+  const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(
+    rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {},
+    ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {},
+    latestOrderSummary
+  );
+  const workflowContext = buildTeamWorkflowContext_({
+    row: rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {},
+    latestOrderSummary: latestOrderSummary,
+    currentStateSummary: currentStateSummary,
+    accountSummary: ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {}
+  });
+  return Object.assign(ctx, {
+    token: token,
+    rowInfo: rowInfo,
+    latestOrderInfo: latestOrder,
+    latestOrderSummary: latestOrderSummary,
+    currentStateSummary: currentStateSummary,
+    workflowContext: workflowContext,
+    actorName: trimString_(payload && (payload.actorName || payload.actorEmail)) || 'Team'
+  });
+}
+
+function appendTeamAuditMessageToPortalRow_(sheet, rowInfo, messageText, locked, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (!sheet || !rowInfo) return rowInfo;
+  const state = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {}) || { printJobs: {} };
+  const chatLog = appendUniqueChatMessage_(
+    readChatLogForRow_(sheet, rowInfo),
+    createChatMessage_('system', trimString_(messageText), trimString_(opts.tsOverride) || nowIso_(), {
+      authorName: trimString_(opts.actorName)
+    })
+  );
+  const persisted = persistPortalStateForRow_(sheet, rowInfo, state, {
+    token: trimString_(opts.token || rowInfo.rowObjNormalized.token),
+    locked: locked === true,
+    chatLog: chatLog,
+    clearSubmittedAt: locked !== true
+  });
+  if (!persisted || persisted.ok !== true) {
+    throw new Error(String((persisted && persisted.error) || 'Unable to persist portal state.'));
+  }
+  return buildRowInfoFromSheet_(sheet, rowInfo.row);
+}
+
+function getLatestOrderDraftForAdmin_(orderInfo) {
+  return safeJsonParse_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
+}
+
+function isOrderPastEditableReopenPoint_(summary) {
+  const safeSummary = (summary && typeof summary === 'object') ? summary : {};
+  const orderState = trimString_(safeSummary.orderState).toLowerCase();
+  const paymentState = trimString_(safeSummary.paymentState).toLowerCase();
+  const productionState = trimString_(safeSummary.productionAuthorizationState).toLowerCase();
+  return !!trimString_(safeSummary.paidAt)
+    || paymentState === PAYMENT_STATES.paid
+    || paymentState === PAYMENT_STATES.manual_received
+    || productionState === PRODUCTION_AUTHORIZATION_STATES.authorized
+    || orderState === ORDER_STATES.ready_for_production
+    || orderState === ORDER_STATES.in_production
+    || orderState === ORDER_STATES.closed;
+}
+
+function buildUnlockedRevisionDraft_(draft) {
+  const nextDraft = Object.assign({}, (draft && typeof draft === 'object') ? draft : {});
+  nextDraft.fulfillmentMethod = '';
+  nextDraft.shippingChargeCents = 0;
+  nextDraft.shippingModeLabel = '';
+  nextDraft.paymentMethodSelected = '';
+  nextDraft.paymentState = PAYMENT_STATES.not_started;
+  nextDraft.orderState = ORDER_STATES.draft;
+  nextDraft.productionAuthorizationState = PRODUCTION_AUTHORIZATION_STATES.not_authorized;
+  nextDraft.portalLockState = PORTAL_LOCK_STATES.editable;
+  return writeTeamWorkflowMetaIntoDraft_(nextDraft, {
+    workflowMode: TEAM_WORKFLOW_MODES.none
+  });
+}
+
+function buildLockedWorkflowResetDraft_(draft, workflowMode) {
+  const nextDraft = Object.assign({}, (draft && typeof draft === 'object') ? draft : {});
+  nextDraft.fulfillmentMethod = '';
+  nextDraft.shippingChargeCents = 0;
+  nextDraft.shippingModeLabel = '';
+  nextDraft.paymentMethodSelected = '';
+  nextDraft.paymentState = PAYMENT_STATES.not_started;
+  nextDraft.orderState = ORDER_STATES.draft;
+  nextDraft.productionAuthorizationState = PRODUCTION_AUTHORIZATION_STATES.not_authorized;
+  nextDraft.portalLockState = PORTAL_LOCK_STATES.locked;
+  if (workflowMode === 'clear') {
+    return writeTeamWorkflowMetaIntoDraft_(nextDraft, {
+      workflowMode: TEAM_WORKFLOW_MODES.none
+    });
+  }
+  return writeTeamWorkflowMetaIntoDraft_(nextDraft, {
+    workflowMode: workflowMode
+  });
+}
+
+function buildJobCompletionTimestampFromDateInput_(value) {
+  const raw = trimString_(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    throw new Error('Completion date must use YYYY-MM-DD format.');
+  }
+  return raw + 'T12:00:00.000Z';
+}
+
+function buildTeamOrderAdminResponse_(ctx, orderSummary, rowInfo, message) {
+  const refreshedRowInfo = rowInfo || ctx.rowInfo || findRowByToken_(ctx.infra.exportSheet, ctx.token);
+  const refreshedRow = refreshedRowInfo && refreshedRowInfo.rowObjNormalized ? refreshedRowInfo.rowObjNormalized : {};
+  const rawOrderSummary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : null;
+  const refreshedCurrentStateSummary = buildCurrentOrderStateSummaryFromRow_(
+    refreshedRow,
+    ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {},
+    rawOrderSummary
+  );
+  const refreshedWorkflowContext = buildTeamWorkflowContext_({
+    row: refreshedRow,
+    latestOrderSummary: rawOrderSummary,
+    currentStateSummary: refreshedCurrentStateSummary,
+    accountSummary: ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {}
+  });
+  return {
+    ok: true,
+    accountSummary: ctx.accountInfo.summary,
+    orderSummary: rawOrderSummary ? attachTeamWorkflowMetaToOrderSummary_(rawOrderSummary, refreshedWorkflowContext) : null,
+    portalPayload: refreshPortalPayloadForToken_(ctx.token, {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      rowInfo: refreshedRowInfo,
+      mode: 'team'
+    }),
+    message: trimString_(message)
+  };
+}
+
+function adminUnlockProjectSnapshot_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  if (!ctx.latestOrderInfo || !ctx.latestOrderSummary) {
+    throw new Error('No locked order was found to unlock.');
+  }
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'unlock_project');
+  if (isOrderPastEditableReopenPoint_(ctx.latestOrderSummary)) {
+    throw new Error('This project cannot be reopened after payment has been received or production has been authorized.');
+  }
+  const next = appendPortalOrderRevision_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    existingOrderRowInfo: ctx.latestOrderInfo,
+    token: ctx.token,
+    orderDraft: buildUnlockedRevisionDraft_(getLatestOrderDraftForAdmin_(ctx.latestOrderInfo)),
+    checkoutAttemptId: '',
+    portalLockState: PORTAL_LOCK_STATES.editable,
+    orderState: ORDER_STATES.draft,
+    paymentMethodSelected: '',
+    paymentState: PAYMENT_STATES.not_started,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    stripeSessionId: '',
+    stripePaymentIntentId: '',
+    invoiceNumber: '',
+    invoicePdfUrl: '',
+    invoiceSentToEmail: '',
+    invoiceSentAt: '',
+    poNumber: '',
+    poDocumentUrl: '',
+    poSubmittedBy: '',
+    poSubmittedAt: '',
+    paidAt: '',
+    authorizedToProduceAt: '',
+    lockedAt: '',
+    paymentReceivedManuallyBy: '',
+    paymentReceivedManuallyAt: '',
+    clientReapprovalRequired: true,
+    revisionReason: 'Team unlocked project snapshot'
+  });
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: next.summary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  const auditedRow = appendTeamAuditMessageToPortalRow_(
+    ctx.infra.exportSheet,
+    refreshedRow,
+    'Project unlocked by ' + ctx.actorName + ' on ' + nowIso_() + '. Review and place the order again after changes are made.',
+    false,
+    { token: ctx.token, actorName: ctx.actorName }
+  );
+  return buildTeamOrderAdminResponse_(ctx, next.summary, auditedRow, 'Project unlocked successfully.');
+}
+
+function adminResetCheckoutSelection_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  if (!ctx.latestOrderInfo || !ctx.latestOrderSummary) throw new Error('Order not found.');
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'reset_checkout');
+  if (isOrderPastEditableReopenPoint_(ctx.latestOrderSummary)) {
+    throw new Error('Checkout selection cannot be reset after payment has been received or production has been authorized.');
+  }
+  const updatedOrder = updatePortalOrderState_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    orderRowInfo: ctx.latestOrderInfo,
+    checkoutAttemptId: '',
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    orderState: ORDER_STATES.draft,
+    paymentMethodSelected: '',
+    paymentState: PAYMENT_STATES.not_started,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    stripeSessionId: '',
+    stripePaymentIntentId: '',
+    invoiceNumber: '',
+    invoicePdfUrl: '',
+    invoiceSentToEmail: '',
+    invoiceSentAt: '',
+    poNumber: '',
+    poDocumentUrl: '',
+    poSubmittedBy: '',
+    poSubmittedAt: '',
+    paidAt: '',
+    authorizedToProduceAt: '',
+    lockedAt: trimString_(ctx.latestOrderInfo.rowObjNormalized.lockedat) || nowIso_(),
+    paymentReceivedManuallyBy: '',
+    paymentReceivedManuallyAt: '',
+    orderDraft: buildLockedWorkflowResetDraft_(getLatestOrderDraftForAdmin_(ctx.latestOrderInfo), TEAM_WORKFLOW_MODES.checkout_reset),
+    notes: 'Team reset checkout selection.'
+  });
+  const updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: updatedSummary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  const auditedRow = appendTeamAuditMessageToPortalRow_(
+    ctx.infra.exportSheet,
+    refreshedRow,
+    'Checkout selection was reset by ' + ctx.actorName + ' on ' + nowIso_() + '. Re-enter checkout selections to continue.',
+    true,
+    { token: ctx.token, actorName: ctx.actorName }
+  );
+  return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, 'Checkout selection reset successfully.');
+}
+
+function adminReopenPoSubmission_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  if (!ctx.latestOrderInfo || !ctx.latestOrderSummary) throw new Error('Order not found.');
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'reopen_po');
+  const paymentState = trimString_(ctx.latestOrderSummary.paymentState).toLowerCase();
+  if (paymentState === PAYMENT_STATES.paid || paymentState === PAYMENT_STATES.manual_received || trimString_(ctx.latestOrderSummary.paidAt)) {
+    throw new Error('Purchase-order submission cannot be reopened after payment has been received.');
+  }
+  const currentDraft = writeTeamWorkflowMetaIntoDraft_(getLatestOrderDraftForAdmin_(ctx.latestOrderInfo), {
+    workflowMode: TEAM_WORKFLOW_MODES.none
+  });
+  const updatedOrder = updatePortalOrderState_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    orderRowInfo: ctx.latestOrderInfo,
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    orderState: ORDER_STATES.awaiting_po_submission,
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order,
+    paymentState: PAYMENT_STATES.not_started,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
+    poNumber: '',
+    poDocumentUrl: '',
+    poSubmittedBy: '',
+    poSubmittedAt: '',
+    paidAt: '',
+    authorizedToProduceAt: '',
+    paymentReceivedManuallyBy: '',
+    paymentReceivedManuallyAt: '',
+    orderDraft: currentDraft,
+    notes: 'Team reopened PO submission.'
+  });
+  const updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: updatedSummary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  const auditedRow = appendTeamAuditMessageToPortalRow_(
+    ctx.infra.exportSheet,
+    refreshedRow,
+    'Purchase-order submission was reopened by ' + ctx.actorName + ' on ' + nowIso_() + '.',
+    true,
+    { token: ctx.token, actorName: ctx.actorName }
+  );
+  return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, 'Purchase-order submission reopened successfully.');
+}
+
+function adminLockProjectWithoutOrdering_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'lock_project');
+  let orderInfo = ctx.latestOrderInfo;
+  let orderSummary = ctx.latestOrderSummary;
+  if (orderSummary) {
+    const existingOrderState = trimString_(orderSummary.orderState).toLowerCase();
+    const existingPaymentState = trimString_(orderSummary.paymentState).toLowerCase();
+    if (
+      existingOrderState !== ORDER_STATES.draft ||
+      existingPaymentState !== PAYMENT_STATES.not_started ||
+      !!trimString_(orderSummary.poSubmittedAt) ||
+      !!trimString_(orderSummary.paidAt)
+    ) {
+      throw new Error('Use unlock, checkout reset, or PO reopen on projects that have already entered the ordering flow.');
+    }
+  }
+  if (!orderInfo || !orderSummary) {
+    const actionCtx = buildPreparedOrderActionContext_(payload);
+    const created = createPortalOrder_(Object.assign({}, actionCtx, {
+      orderDraft: buildLockedWorkflowResetDraft_(actionCtx.orderDraft, TEAM_WORKFLOW_MODES.team_hold),
+      portalLockState: PORTAL_LOCK_STATES.locked,
+      orderState: ORDER_STATES.draft,
+      paymentMethodSelected: '',
+      paymentState: PAYMENT_STATES.not_started,
+      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+      lockedAt: nowIso_(),
+      revisionReason: 'Team hold created'
+    }));
+    orderInfo = created.rowInfo;
+    orderSummary = created.summary;
+  } else {
+    const updatedOrder = updatePortalOrderState_({
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      orderRowInfo: orderInfo,
+      portalLockState: PORTAL_LOCK_STATES.locked,
+      orderState: ORDER_STATES.draft,
+      paymentMethodSelected: '',
+      paymentState: PAYMENT_STATES.not_started,
+      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+      checkoutAttemptId: '',
+      stripeSessionId: '',
+      stripePaymentIntentId: '',
+      orderDraft: buildLockedWorkflowResetDraft_(getLatestOrderDraftForAdmin_(orderInfo), TEAM_WORKFLOW_MODES.team_hold),
+      lockedAt: trimString_(orderInfo.rowObjNormalized.lockedat) || nowIso_(),
+      notes: 'Team hold applied.'
+    });
+    orderInfo = updatedOrder;
+    orderSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  }
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: orderSummary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  const auditedRow = appendTeamAuditMessageToPortalRow_(
+    ctx.infra.exportSheet,
+    refreshedRow,
+    'Project was temporarily locked by ' + ctx.actorName + ' on ' + nowIso_() + ' while the team resolves an issue.',
+    true,
+    { token: ctx.token, actorName: ctx.actorName }
+  );
+  return buildTeamOrderAdminResponse_(ctx, orderSummary, auditedRow, 'Project locked successfully.');
+}
+
+function adminResendLockedOrderLink_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  if (!ctx.latestOrderInfo || !ctx.latestOrderSummary) throw new Error('Locked order not found.');
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'resend_link');
+  const recipients = normalizeEmailRecipients_(payload && (payload.recipients || payload.to || payload.toList));
+  if (!recipients.length) throw new Error('Enter at least one valid email address.');
+  let updatedSummary = ctx.latestOrderSummary;
+  if (trimString_(ctx.latestOrderSummary.orderState).toLowerCase() === ORDER_STATES.awaiting_po_submission) {
+    const poResp = sendPurchaseOrderInvoiceEmail_(Object.assign({}, payload, {
+      token: ctx.token,
+      recipients: recipients
+    }));
+    if (!poResp || poResp.ok !== true) {
+      throw new Error(String((poResp && poResp.error) || 'Unable to resend the purchase-order link.'));
+    }
+    updatedSummary = poResp.orderSummary || updatedSummary;
+  } else {
+    const orderActionCtx = buildOrderActionContext_({ token: ctx.token });
+    const paymentEmail = buildLockedOrderPaymentEmailContent_(orderActionCtx, ctx.latestOrderSummary, {
+      intro: 'Your Red Threads invoice and locked order payment links are attached.'
+    });
+    const attachment = buildFinalInvoiceAttachment_(ctx.latestOrderSummary, '');
+    sendNotificationEmail_({
+      toList: recipients,
+      subject: trimString_(ctx.latestOrderSummary.invoiceNumber)
+        ? ('Red Threads order confirmation · ' + trimString_(ctx.latestOrderSummary.invoiceNumber))
+        : 'Red Threads order confirmation',
+      body: paymentEmail.body,
+      htmlBody: paymentEmail.htmlBody,
+      attachments: attachment ? [attachment] : [],
+      fromAlias: NOTIFICATION_FROM_ALIAS,
+      replyTo: NOTIFICATION_FROM_ALIAS
+    });
+    const updatedOrder = updatePortalOrderState_({
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      orderRowInfo: ctx.latestOrderInfo,
+      invoiceSentToEmail: recipients.join(', '),
+      invoiceSentAt: nowIso_()
+    });
+    updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+    writeCurrentOrderPointersToExportLog_({
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      rowInfo: ctx.rowInfo,
+      orderSummary: updatedSummary,
+      accountSummary: ctx.accountInfo.summary
+    });
+  }
+  return buildTeamOrderAdminResponse_(ctx, updatedSummary, ctx.rowInfo, 'Invoice / return link sent successfully.');
+}
+
+function adminMarkJobsCompleted_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  if (!ctx.latestOrderInfo || !ctx.latestOrderSummary) throw new Error('Order not found.');
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'mark_jobs_completed');
+  const jobs = Array.isArray(payload && payload.jobs) ? payload.jobs : [];
+  if (!jobs.length) throw new Error('Select at least one job to mark as completed.');
+  const currentDraft = getLatestOrderDraftForAdmin_(ctx.latestOrderInfo);
+  const teamMeta = readTeamWorkflowMetaFromDraft_(currentDraft);
+  const nextCompleted = Object.assign({}, teamMeta.completedJobsByJobId);
+  jobs.forEach(function(job) {
+    const item = (job && typeof job === 'object') ? job : {};
+    const printJobId = trimString_(item.printJobId);
+    const completionDate = buildJobCompletionTimestampFromDateInput_(item.completionDate);
+    if (!printJobId) throw new Error('Each completed job must include a printJobId.');
+    nextCompleted[printJobId] = {
+      completionDate: completionDate,
+      actorName: ctx.actorName,
+      recordedAt: nowIso_()
+    };
+  });
+  const updatedDraft = writeTeamWorkflowMetaIntoDraft_(currentDraft, {
+    completedJobsByJobId: nextCompleted
+  });
+  const updatedOrder = updatePortalOrderState_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    orderRowInfo: ctx.latestOrderInfo,
+    orderDraft: updatedDraft,
+    notes: 'Team updated job completion dates.'
+  });
+  const updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: updatedSummary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  const auditedRow = appendTeamAuditMessageToPortalRow_(
+    ctx.infra.exportSheet,
+    refreshedRow,
+    'Job completion dates were updated by ' + ctx.actorName + ' on ' + nowIso_() + '.',
+    trimString_(updatedSummary.portalLockState).toLowerCase() === PORTAL_LOCK_STATES.locked,
+    { token: ctx.token, actorName: ctx.actorName }
+  );
+  return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, 'Job completion dates saved successfully.');
+}
+
+function adminUnlockProjectSnapshot(payload) {
+  try {
+    return adminUnlockProjectSnapshot_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminResetCheckoutSelection(payload) {
+  try {
+    return adminResetCheckoutSelection_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminReopenPoSubmission(payload) {
+  try {
+    return adminReopenPoSubmission_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminLockProjectWithoutOrdering(payload) {
+  try {
+    return adminLockProjectWithoutOrdering_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminResendLockedOrderLink(payload) {
+  try {
+    return adminResendLockedOrderLink_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminMarkJobsCompleted(payload) {
+  try {
+    return adminMarkJobsCompleted_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminMarkManualPaymentReceived_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'manual_payment');
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const token = ctx.token;
+  const cfg = ctx.cfg;
+  const ss = ctx.ss;
+  const infra = ctx.infra;
+  const rowInfo = ctx.rowInfo || findRowByToken_(infra.exportSheet, token);
   if (!rowInfo) throw new Error('Token not found.');
-  const orderInfo = getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  const orderInfo = ctx.latestOrderInfo || getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
   if (!orderInfo) throw new Error('Order not found.');
   const now = nowIso_();
   const updatedOrder = updatePortalOrderState_({
@@ -3998,14 +7667,13 @@ function adminMarkManualPaymentReceived_(payload) {
     paymentReceivedManuallyAt: now
   });
   const updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
-  writeCurrentOrderPointersToExportLog_({
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
     cfg: cfg,
     ss: ss,
     infra: infra,
     rowInfo: rowInfo,
     orderSummary: updatedSummary,
-    accountSummary: getAccountStatus({ token: token }).accountSummary,
-    status: 'submitted'
+    accountSummary: getAccountStatus({ token: token }).accountSummary
   });
   finalizePortalAfterPayment({
     token: token,
@@ -4013,11 +7681,7 @@ function adminMarkManualPaymentReceived_(payload) {
     submittedAt: now,
     systemMessage: 'Manual payment received. Order authorized for production on ' + now + '.'
   });
-  return {
-    ok: true,
-    orderSummary: updatedSummary,
-    portalPayload: refreshPortalPayloadForToken_(token, { cfg: cfg, ss: ss, infra: infra })
-  };
+  return buildTeamOrderAdminResponse_(ctx, updatedSummary, refreshedRow, 'Manual payment recorded successfully.');
 }
 
 function adminMarkManualPaymentReceived(payload) {
@@ -4029,15 +7693,16 @@ function adminMarkManualPaymentReceived(payload) {
 }
 
 function adminMarkPurchaseOrderReceived_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'po_payment');
   const p = (payload && typeof payload === 'object') ? payload : {};
-  const token = trimString_(p.token);
-  if (!token) throw new Error('Missing token.');
-  const cfg = getConfig_();
-  const ss = SpreadsheetApp.openById(cfg.sheetId);
-  const infra = ensurePortalInfrastructure_(ss, cfg);
-  const rowInfo = findRowByToken_(infra.exportSheet, token);
+  const token = ctx.token;
+  const cfg = ctx.cfg;
+  const ss = ctx.ss;
+  const infra = ctx.infra;
+  const rowInfo = ctx.rowInfo || findRowByToken_(infra.exportSheet, token);
   if (!rowInfo) throw new Error('Token not found.');
-  const orderInfo = getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  const orderInfo = ctx.latestOrderInfo || getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
   if (!orderInfo) throw new Error('Order not found.');
   const now = nowIso_();
   const updatedOrder = updatePortalOrderState_({
@@ -4047,34 +7712,33 @@ function adminMarkPurchaseOrderReceived_(payload) {
     orderRowInfo: orderInfo,
     portalLockState: PORTAL_LOCK_STATES.locked,
     orderState: ORDER_STATES.ready_for_production,
-    paymentState: trimString_(orderInfo.rowObjNormalized.paymentstate) || PAYMENT_STATES.not_started,
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order,
+    paymentState: PAYMENT_STATES.manual_received,
     productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized,
-    authorizedToProduceAt: now,
+    paidAt: now,
+    authorizedToProduceAt: trimString_(orderInfo.rowObjNormalized.authorizedtoproduceat) || now,
     lockedAt: trimString_(orderInfo.rowObjNormalized.lockedat) || now,
-    poSubmittedBy: trimString_(p.actorName || p.actorEmail || 'Team'),
-    poSubmittedAt: now
+    poSubmittedBy: trimString_(orderInfo.rowObjNormalized.posubmittedby) || trimString_(p.actorName || p.actorEmail || 'Team'),
+    poSubmittedAt: trimString_(orderInfo.rowObjNormalized.posubmittedat) || now,
+    paymentReceivedManuallyBy: trimString_(p.actorName || p.actorEmail || 'Team'),
+    paymentReceivedManuallyAt: now
   });
   const updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
-  writeCurrentOrderPointersToExportLog_({
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
     cfg: cfg,
     ss: ss,
     infra: infra,
     rowInfo: rowInfo,
     orderSummary: updatedSummary,
-    accountSummary: getAccountStatus({ token: token }).accountSummary,
-    status: 'submitted'
+    accountSummary: getAccountStatus({ token: token }).accountSummary
   });
   finalizePortalAfterPayment({
     token: token,
     portalState: safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {}) || { printJobs: {} },
     submittedAt: now,
-    systemMessage: 'Purchase order received. Order authorized for production on ' + now + '.'
+    systemMessage: 'Purchase order payment received. Order confirmed on ' + now + '.'
   });
-  return {
-    ok: true,
-    orderSummary: updatedSummary,
-    portalPayload: refreshPortalPayloadForToken_(token, { cfg: cfg, ss: ss, infra: infra })
-  };
+  return buildTeamOrderAdminResponse_(ctx, updatedSummary, refreshedRow, 'Purchase order payment recorded successfully.');
 }
 
 function adminMarkPoReceived(payload) {
@@ -4085,35 +7749,124 @@ function adminMarkPoReceived(payload) {
   }
 }
 
-function beginInternalOrderAdjustment_(payload) {
-  const p = (payload && typeof payload === 'object') ? payload : {};
-  const token = trimString_(p.token);
-  if (!token) throw new Error('Missing token.');
-  const cfg = getConfig_();
-  const ss = SpreadsheetApp.openById(cfg.sheetId);
-  const infra = ensurePortalInfrastructure_(ss, cfg);
-  const latestOrder = getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
-  if (!latestOrder) throw new Error('Order not found.');
-  const next = appendPortalOrderRevision_({
-    cfg: cfg,
-    ss: ss,
-    infra: infra,
-    existingOrderRowInfo: latestOrder,
-    token: token,
-    orderDraft: safeJsonParse_(latestOrder.rowObjNormalized.orderdraftjson, {}),
-    portalLockState: trimString_(latestOrder.rowObjNormalized.portallockstate) || PORTAL_LOCK_STATES.locked,
-    orderState: ORDER_STATES.draft,
-    paymentState: trimString_(latestOrder.rowObjNormalized.paymentstate) || PAYMENT_STATES.not_started,
-    productionAuthorizationState: trimString_(latestOrder.rowObjNormalized.productionauthorizationstate) || PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-    clientReapprovalRequired: true,
-    revisionReason: trimString_(p.revisionReason || 'Internal adjustment initiated'),
-    notes: trimString_(p.notes)
+function moveDriveFileToTrashSafe_(fileId) {
+  const file = getDriveFileByIdSafe_(fileId);
+  if (!file) return false;
+  try {
+    file.setTrashed(true);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function collectAccountDocumentResetArtifactFileIds_(definition, accountRow, workflowNotes) {
+  const row = (accountRow && typeof accountRow === 'object') ? accountRow : {};
+  const notes = (workflowNotes && typeof workflowNotes === 'object') ? workflowNotes : {};
+  const fileIds = {};
+  const storedUrl = definition && definition.artifactUrlField
+    ? trimString_(row[normalizeHeaderKey_(definition.artifactUrlField)] || row[definition.artifactUrlField])
+    : '';
+  const storedId = extractDriveFileIdFromUrl_(storedUrl);
+  if (storedId) fileIds[storedId] = true;
+  const submissions = Array.isArray(notes.submissions) ? notes.submissions : [];
+  submissions.forEach(function(entry) {
+    getAccountDocumentSubmissionArtifactFiles_(entry).forEach(function(item) {
+      const fileId = trimString_(item && item.fileId);
+      if (fileId) fileIds[fileId] = true;
+    });
   });
+  const lastSubmission = notes.lastSubmission && typeof notes.lastSubmission === 'object'
+    ? notes.lastSubmission
+    : null;
+  if (lastSubmission) {
+    getAccountDocumentSubmissionArtifactFiles_(lastSubmission).forEach(function(item) {
+      const fileId = trimString_(item && item.fileId);
+      if (fileId) fileIds[fileId] = true;
+    });
+  }
+  return Object.keys(fileIds);
+}
+
+function buildAccountDocumentResetRowUpdates_(definition) {
+  const updates = {};
+  if (!definition) return updates;
+  if (definition.statusField) updates[definition.statusField] = 'not_started';
+  if (definition.approvedField) updates[definition.approvedField] = false;
+  if (definition.approvedAtField) updates[definition.approvedAtField] = '';
+  if (definition.approvedByNameField) updates[definition.approvedByNameField] = '';
+  if (definition.approvedByEmailField) updates[definition.approvedByEmailField] = '';
+  if (definition.artifactUrlField) updates[definition.artifactUrlField] = '';
+  if (definition.submittedAtField) updates[definition.submittedAtField] = '';
+  if (definition.certificateNumberField) updates[definition.certificateNumberField] = '';
+  if (definition.expiresAtField) updates[definition.expiresAtField] = '';
+  if (definition.sourceUrlField) updates[definition.sourceUrlField] = trimString_(definition.sourceDocumentUrl);
+  if (definition.paymentTermsCodeField) updates[definition.paymentTermsCodeField] = '';
+  if (definition.paymentTermsLabelField) updates[definition.paymentTermsLabelField] = '';
+  if (definition.paymentTermsDaysField) updates[definition.paymentTermsDaysField] = 0;
+  if (definition.paymentTermsNotesField) updates[definition.paymentTermsNotesField] = '';
+  if (definition.paymentTermsSetAtField) updates[definition.paymentTermsSetAtField] = '';
+  if (definition.paymentTermsSetByNameField) updates[definition.paymentTermsSetByNameField] = '';
+  if (definition.paymentTermsSetByEmailField) updates[definition.paymentTermsSetByEmailField] = '';
+  return updates;
+}
+
+function resetAccountDocumentWorkflow_(payload, documentType) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok !== true) return ctx;
+  assertTeamModeAuthorized_(ctx, payload);
+  const definition = getRequiredAccountDocumentDefinition_(documentType, ctx.cfg);
+  const accountRow = ctx.accountInfo && ctx.accountInfo.rowInfo && ctx.accountInfo.rowInfo.rowObjNormalized
+    ? ctx.accountInfo.rowInfo.rowObjNormalized
+    : {};
+  const workflowNotes = getPortalAccountDocumentNotes_(accountRow, definition.type);
+  collectAccountDocumentResetArtifactFileIds_(definition, accountRow, workflowNotes).forEach(function(fileId) {
+    moveDriveFileToTrashSafe_(fileId);
+  });
+  const updates = buildAccountDocumentResetRowUpdates_(definition);
+  updates.notes = updatePortalAccountDocumentNotes_(accountRow, definition.type, function() {
+    return {};
+  });
+  updates.updatedAt = nowIso_();
+  setRowValuesByHeaderMap_(
+    ctx.infra.accountsSheet,
+    ctx.accountInfo.rowInfo.row,
+    ctx.accountInfo.rowInfo.colMap,
+    updates
+  );
+  refreshAccountDocumentContextAccount_(ctx);
+  const token = resolveAccountDocumentPortalToken_(ctx);
   return {
     ok: true,
-    orderSummary: next.summary,
-    message: 'Internal adjustment foundation record created. Team-mode editing hooks can build on this revision path next.'
+    accountSummary: ctx.accountInfo.summary,
+    portalPayload: token ? refreshPortalPayloadForToken_(token, {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      mode: 'team'
+    }) : null,
+    message: definition.shortLabel + ' workflow reset successfully.'
   };
+}
+
+function adminResetCreditTermsAccountWorkflow(payload) {
+  try {
+    return resetAccountDocumentWorkflow_(payload, ACCOUNT_DOCUMENT_TYPES.credit_terms);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminResetTaxExemptAccountWorkflow(payload) {
+  try {
+    return resetAccountDocumentWorkflow_(payload, ACCOUNT_DOCUMENT_TYPES.tax_exempt);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function beginInternalOrderAdjustment_(payload) {
+  return adminUnlockProjectSnapshot_(payload);
 }
 
 function beginInternalOrderAdjustment(payload) {
@@ -4171,8 +7924,7 @@ function handleCheckoutSessionCompleted_(sessionObj) {
       infra: infra,
       rowInfo: rowInfo,
       orderSummary: orderSummary,
-      accountSummary: accountSummary,
-      status: delayed ? 'locked' : 'submitted'
+      accountSummary: accountSummary
     });
     setPortalClientLockForRow_(infra.exportSheet, rowInfo, true, {
       token: trimString_(rowInfo.rowObjNormalized.token)
@@ -4225,8 +7977,7 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj) {
       infra: infra,
       rowInfo: rowInfo,
       orderSummary: buildPortalOrderSummary_(updatedOrder.rowObjNormalized),
-      accountSummary: getAccountStatus({ token: trimString_(rowInfo.rowObjNormalized.token) }).accountSummary,
-      status: 'submitted'
+      accountSummary: getAccountStatus({ token: trimString_(rowInfo.rowObjNormalized.token) }).accountSummary
     });
     finalizePortalAfterPayment({
       token: trimString_(rowInfo.rowObjNormalized.token),
@@ -4265,8 +8016,7 @@ function handleCheckoutAsyncPaymentFailed_(sessionObj) {
       infra: infra,
       rowInfo: rowInfo,
       orderSummary: buildPortalOrderSummary_(updatedOrder.rowObjNormalized),
-      accountSummary: getAccountStatus({ token: token }).accountSummary,
-      status: 'locked'
+      accountSummary: getAccountStatus({ token: token }).accountSummary
     });
   }
   return { ok: true };
@@ -4300,8 +8050,7 @@ function handlePaymentIntentFailed_(paymentIntentObj) {
       infra: infra,
       rowInfo: rowInfo,
       orderSummary: buildPortalOrderSummary_(updatedOrder.rowObjNormalized),
-      accountSummary: getAccountStatus({ token: token }).accountSummary,
-      status: 'locked'
+      accountSummary: getAccountStatus({ token: token }).accountSummary
     });
   }
   return { ok: true };
@@ -4683,11 +8432,12 @@ function buildAuthShellVm_() {
 }
 
 function buildPortalVmForRow_(rowInfo, token, mode) {
-  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : null;
+  let effectiveRowInfo = (rowInfo && typeof rowInfo === 'object') ? rowInfo : null;
+  let row = effectiveRowInfo && effectiveRowInfo.rowObjNormalized ? effectiveRowInfo.rowObjNormalized : null;
   if (!row) return { ok: false, error: 'Link not found.' };
 
-  const status = String(row.status || '').toLowerCase();
-  if (status === 'replaced') {
+  const rawStatus = String(row.status || '').trim();
+  if (rawStatus.toLowerCase() === 'replaced') {
     return { ok: false, error: 'This estimate link has been replaced.' };
   }
 
@@ -4698,6 +8448,10 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
   if (!snapshot || typeof snapshot !== 'object') {
     return { ok: false, error: 'Snapshot data is malformed.' };
   }
+  const artworkOverrides = applyArtworkOverridesRuntimeLayerToSnapshot_(
+    snapshot,
+    row.artworkoverridesjson
+  );
 
   const rawPrintJobs = Array.isArray(snapshot.printJobs)
     ? snapshot.printJobs
@@ -4726,13 +8480,14 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
   const cfg = getConfig_();
   const ss = SpreadsheetApp.openById(cfg.sheetId);
   const infra = ensurePortalInfrastructure_(ss, cfg);
-  const accountInfo = getPortalAccountByOrgOrEmail_(Object.assign({}, deriveOrgContextFromRow_(row), {
+  const accountInfo = createPortalAccountIfMissing_(Object.assign({}, deriveOrgContextFromRow_(row), {
     cfg: cfg,
     ss: ss,
-    infra: infra,
-    createIfMissing: false
+    infra: infra
   }));
   const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(deriveOrgContextFromRow_(row), cfg);
+  effectiveRowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, effectiveRowInfo, accountSummary) || effectiveRowInfo;
+  row = effectiveRowInfo && effectiveRowInfo.rowObjNormalized ? effectiveRowInfo.rowObjNormalized : row;
   const latestOrderInfo = getLatestPortalOrderByToken_(token, {
     cfg: cfg,
     ss: ss,
@@ -4740,25 +8495,40 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
   });
   const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
   const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderSummary);
+  const workflowContext = buildTeamWorkflowContext_({
+    row: row,
+    latestOrderSummary: latestOrderSummary,
+    currentStateSummary: currentStateSummary,
+    accountSummary: accountSummary
+  });
+  const decoratedLatestOrderSummary = latestOrderSummary
+    ? attachTeamWorkflowMetaToOrderSummary_(latestOrderSummary, workflowContext)
+    : null;
+  const decoratedCurrentStateSummary = attachTeamWorkflowMetaToCurrentStateSummary_(currentStateSummary, workflowContext);
+  const displayStatus = derivePortalDisplayOrderStatus_(
+    Object.assign({}, row, decoratedCurrentStateSummary, decoratedLatestOrderSummary),
+    rawStatus
+  );
 
   return {
     ok: true,
     vm: {
       token: token,
       mode: normalizeMode_(mode || 'client'),
-      status: status,
+      status: displayStatus,
       readOnly: readOnly,
       row: row,
       snapshot: snapshot,
+      artworkOverrides: artworkOverrides,
       portalState: portalState,
       chatLog: chatLog,
       accountSummary: accountSummary,
-      latestOrderSummary: latestOrderSummary,
-      currentStateSummary: currentStateSummary,
+      latestOrderSummary: decoratedLatestOrderSummary,
+      currentStateSummary: decoratedCurrentStateSummary,
       postUrl: getWebAppUrl_(),
       diagnostics: {
         token: token,
-        status: status,
+        status: displayStatus,
         contractVersion: contractVersion,
         snapshotId: String(row.snapshotid || '').trim(),
         exportedAt: String(row.exportedat || '').trim(),
@@ -4796,12 +8566,22 @@ function persistPortalStateForRow_(sheet, rowInfo, portalState, options) {
   stateToStore.version = String(stateToStore.version || '1');
   stateToStore.savedAt = nowIso;
   stateToStore.isReadOnly = opts.locked === true;
+  const derivedStatus = derivePortalDisplayOrderStatus_(Object.assign({}, rowInfo.rowObjNormalized || {}, {
+    portalLockState: opts.locked === true ? PORTAL_LOCK_STATES.locked : PORTAL_LOCK_STATES.editable,
+    currentOrderState: opts.currentOrderState,
+    currentPaymentState: opts.currentPaymentState,
+    currentProductionAuthorizationState: opts.currentProductionAuthorizationState,
+    currentPaymentMethod: opts.currentPaymentMethod,
+    paidAt: opts.paidAt,
+    authorizedToProduceAt: opts.authorizedToProduceAt,
+    status: opts.status || (rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.status)
+  }), opts.status);
   if (Array.isArray(opts.chatLog)) {
     writeChatLogIntoPortalState_(stateToStore, normalizeChatLog_(opts.chatLog));
   }
 
   sheet.getRange(row, portalStateCol).setValue(JSON.stringify(stateToStore));
-  sheet.getRange(row, statusCol).setValue(String(opts.status || 'Editable'));
+  sheet.getRange(row, statusCol).setValue(derivedStatus);
   if (Array.isArray(opts.chatLog) && chatCol) {
     sheet.getRange(row, chatCol).setValue(JSON.stringify(normalizeChatLog_(opts.chatLog)));
   }
@@ -4820,11 +8600,14 @@ function persistPortalStateForRow_(sheet, rowInfo, portalState, options) {
     }
   }
   SpreadsheetApp.flush();
+  try {
+    invalidateDashboardProjectsCacheForRow_(buildRowInfoFromSheet_(sheet, row));
+  } catch (_) {}
 
   return {
     ok: true,
     token: String(opts.token || ''),
-    status: String(opts.status || 'Editable'),
+    status: derivedStatus,
     savedAt: nowIso,
     submittedAt: opts.submittedAt ? nowIso : ''
   };
@@ -4839,6 +8622,10 @@ function normalizeMode_(value) {
 
 function getConfig_() {
   const props = PropertiesService.getScriptProperties();
+  const driveFolderDefaults = {};
+  driveFolderDefaults[CONFIG_KEYS.INVOICE_DRIVE_FOLDER_ID] = DEFAULT_INVOICE_DRIVE_FOLDER_ID;
+  driveFolderDefaults[CONFIG_KEYS.TERMS_DRIVE_FOLDER_ID] = DEFAULT_TERMS_DRIVE_FOLDER_ID;
+  driveFolderDefaults[CONFIG_KEYS.TAX_EXEMPT_DRIVE_FOLDER_ID] = DEFAULT_TAX_EXEMPT_DRIVE_FOLDER_ID;
 
   // Keep script property aligned to the required bound sheet.
   if (props.getProperty(CONFIG_KEYS.SHEET_ID) !== REQUIRED_SHEET_ID) {
@@ -4849,12 +8636,20 @@ function getConfig_() {
     }
   }
 
+  Object.keys(driveFolderDefaults).forEach(key => {
+    if (props.getProperty(key) !== driveFolderDefaults[key]) {
+      try {
+        props.setProperty(key, driveFolderDefaults[key]);
+      } catch (_) {
+        // Continue using the checked-in folder IDs even if property write is unavailable.
+      }
+    }
+  });
+
   const sheetId = REQUIRED_SHEET_ID;
   const exportLogSheetName = props.getProperty(CONFIG_KEYS.EXPORT_LOG_SHEET) || 'EXPORT_LOG';
   const portalOrdersSheetName = props.getProperty(CONFIG_KEYS.PORTAL_ORDERS_SHEET) || DEFAULT_PORTAL_ORDERS_SHEET;
   const portalAccountsSheetName = props.getProperty(CONFIG_KEYS.PORTAL_ACCOUNTS_SHEET) || DEFAULT_PORTAL_ACCOUNTS_SHEET;
-  const makeWebhookUrl = props.getProperty(CONFIG_KEYS.MAKE_WEBHOOK_URL);
-  const makeWebhookSecret = props.getProperty(CONFIG_KEYS.MAKE_WEBHOOK_SECRET) || '';
   const teamModePassword = props.getProperty(CONFIG_KEYS.TEAM_MODE_PASSWORD) || DEFAULT_TEAM_MODE_PASSWORD;
   const stripePublishableKey = String(props.getProperty(CONFIG_KEYS.STRIPE_PUBLISHABLE_KEY) || '').trim();
   const stripeSecretKey = String(props.getProperty(CONFIG_KEYS.STRIPE_SECRET_KEY) || '').trim();
@@ -4863,9 +8658,9 @@ function getConfig_() {
   const termsDocumentUrl = String(props.getProperty(CONFIG_KEYS.TERMS_DOCUMENT_URL) || DEFAULT_TERMS_DOCUMENT_URL).trim();
   const creditTermsFormFileId = String(props.getProperty(CONFIG_KEYS.CREDIT_TERMS_FORM_FILE_ID) || DEFAULT_CREDIT_TERMS_FORM_FILE_ID).trim();
   const taxExemptFormFileId = String(props.getProperty(CONFIG_KEYS.TAX_EXEMPT_FORM_FILE_ID) || DEFAULT_TAX_EXEMPT_FORM_FILE_ID).trim();
-  const invoiceDriveFolderId = String(props.getProperty(CONFIG_KEYS.INVOICE_DRIVE_FOLDER_ID) || DEFAULT_INVOICE_DRIVE_FOLDER_ID).trim();
-  const termsDriveFolderId = String(props.getProperty(CONFIG_KEYS.TERMS_DRIVE_FOLDER_ID) || DEFAULT_TERMS_DRIVE_FOLDER_ID).trim();
-  const taxExemptDriveFolderId = String(props.getProperty(CONFIG_KEYS.TAX_EXEMPT_DRIVE_FOLDER_ID) || DEFAULT_TAX_EXEMPT_DRIVE_FOLDER_ID).trim();
+  const invoiceDriveFolderId = DEFAULT_INVOICE_DRIVE_FOLDER_ID;
+  const termsDriveFolderId = DEFAULT_TERMS_DRIVE_FOLDER_ID;
+  const taxExemptDriveFolderId = DEFAULT_TAX_EXEMPT_DRIVE_FOLDER_ID;
   const stripePriceCurrency = String(props.getProperty(CONFIG_KEYS.STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY).trim().toUpperCase() || DEFAULT_STRIPE_PRICE_CURRENCY;
   const stripeMode = String(props.getProperty(CONFIG_KEYS.STRIPE_MODE) || DEFAULT_STRIPE_MODE).trim().toLowerCase() || DEFAULT_STRIPE_MODE;
   const stripeReturnUrl = String(props.getProperty(CONFIG_KEYS.STRIPE_RETURN_URL) || props.getProperty(CONFIG_KEYS.SUCCESS_REDIRECT_URL) || '').trim();
@@ -4876,8 +8671,6 @@ function getConfig_() {
     exportLogSheetName: exportLogSheetName,
     portalOrdersSheetName: portalOrdersSheetName,
     portalAccountsSheetName: portalAccountsSheetName,
-    makeWebhookUrl: makeWebhookUrl || DEFAULT_MAKE_WEBHOOK_URL,
-    makeWebhookSecret: makeWebhookSecret,
     teamModePassword: String(teamModePassword || DEFAULT_TEAM_MODE_PASSWORD),
     stripePublishableKey: stripePublishableKey,
     stripeSecretKey: stripeSecretKey,
@@ -5113,7 +8906,7 @@ function normalizeAccountDocumentStatus_(value) {
   const raw = trimString_(value).toLowerCase();
   if (!raw) return 'not_started';
   if (raw === 'pending_submission') return 'submitted';
-  if (raw === 'submitted' || raw === 'under_review' || raw === 'approved' || raw === 'rejected' || raw === 'not_started') {
+  if (raw === 'submitted' || raw === 'under_review' || raw === 'approved' || raw === 'rejected' || raw === 'denied' || raw === 'not_started') {
     return raw;
   }
   return raw;
@@ -5132,6 +8925,76 @@ function buildDriveFilePreviewUrl_(fileId) {
 function buildDriveFileDownloadUrl_(fileId) {
   const id = trimString_(fileId);
   return id ? ('https://drive.google.com/uc?export=download&id=' + encodeURIComponent(id)) : '';
+}
+
+function extractDriveFileIdFromUrl_(value) {
+  const text = trimString_(value);
+  if (!text) return '';
+  let match = text.match(/\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  if (match && match[1]) return trimString_(match[1]);
+  match = text.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+  if (match && match[1]) return trimString_(match[1]);
+  match = text.match(/\/d\/([a-zA-Z0-9_-]+)/i);
+  if (match && match[1]) return trimString_(match[1]);
+  return '';
+}
+
+function buildApprovedTaxViewerArtifactFromSummary_(summary) {
+  const data = (summary && typeof summary === 'object') ? summary : {};
+  const storedUrl = trimString_(data.taxExemptCertificateUrl);
+  const fileId = extractDriveFileIdFromUrl_(storedUrl);
+  if (!storedUrl && !fileId) return null;
+  const sourceFile = fileId ? getDriveFileByIdSafe_(fileId) : null;
+  const fileName = sourceFile
+    ? sanitizeUploadedDocumentName_(sourceFile.getName(), 'Michigan-Tax-Exemption-Certificate')
+    : 'Michigan-Tax-Exemption-Certificate';
+  const mimeType = trimString_(sourceFile ? sourceFile.getMimeType() : '') || MimeType.PDF;
+  const isImage = /^image\//i.test(mimeType);
+  const inlineAsset = fileId
+    ? buildDriveBinaryDataPayload_(fileId, fileName, mimeType)
+    : null;
+  return {
+    fileId: fileId,
+    fileName: fileName,
+    mimeType: mimeType,
+    fileUrl: storedUrl || buildDriveFileViewUrl_(fileId),
+    previewUrl: fileId ? buildDriveFilePreviewUrl_(fileId) : storedUrl,
+    imageUrl: (isImage && fileId) ? buildDriveFilePublicViewAssetUrl_(fileId) : '',
+    imageCandidates: (isImage && fileId) ? buildDriveFilePublicImageCandidates_(fileId) : [],
+    base64Data: inlineAsset ? trimString_(inlineAsset.base64Data) : '',
+    submittedAt: trimString_(data.taxExemptSubmittedAt),
+    submittedByName: trimString_(data.primaryContactName),
+    submittedByEmail: normalizeEmail_(data.primaryEmail)
+  };
+}
+
+function buildApprovedCreditTermsViewerArtifactFromSummary_(summary) {
+  const data = (summary && typeof summary === 'object') ? summary : {};
+  const storedUrl = trimString_(data.signedTermsFileUrl);
+  const fileId = extractDriveFileIdFromUrl_(storedUrl);
+  if (!storedUrl && !fileId) return null;
+  const sourceFile = fileId ? getDriveFileByIdSafe_(fileId) : null;
+  const fileName = sourceFile
+    ? sanitizeUploadedDocumentName_(sourceFile.getName(), 'Red-Threads-Credit-Terms')
+    : 'Red-Threads-Credit-Terms';
+  const mimeType = trimString_(sourceFile ? sourceFile.getMimeType() : '') || MimeType.PDF;
+  const isImage = /^image\//i.test(mimeType);
+  const inlineAsset = fileId
+    ? buildDriveBinaryDataPayload_(fileId, fileName, mimeType)
+    : null;
+  return {
+    fileId: fileId,
+    fileName: fileName,
+    mimeType: mimeType,
+    fileUrl: storedUrl || buildDriveFileViewUrl_(fileId),
+    previewUrl: fileId ? buildDriveFilePreviewUrl_(fileId) : storedUrl,
+    imageUrl: (isImage && fileId) ? buildDriveFilePublicViewAssetUrl_(fileId) : '',
+    imageCandidates: (isImage && fileId) ? buildDriveFilePublicImageCandidates_(fileId) : [],
+    base64Data: inlineAsset ? trimString_(inlineAsset.base64Data) : '',
+    submittedAt: trimString_(data.signedTermsSubmittedAt),
+    submittedByName: trimString_(data.primaryContactName),
+    submittedByEmail: normalizeEmail_(data.primaryEmail)
+  };
 }
 
 function getApprovedPaymentTermsOptions_() {
@@ -5342,6 +9205,48 @@ function getAccountDocumentWorkflowFromSummary_(summary, documentType, cfg) {
   return workflows[definition.workflowKey] || null;
 }
 
+function findMostRecentExportRowForAccountDocument_(ctx) {
+  const source = (ctx && typeof ctx === 'object') ? ctx : {};
+  if (source.exportRowInfo && source.exportRowInfo.rowObjNormalized) return source.exportRowInfo;
+  const exportSheet = source.infra && source.infra.exportSheet;
+  if (!exportSheet) return null;
+  const accountSummary = source.accountInfo && source.accountInfo.summary ? source.accountInfo.summary : {};
+  const identity = source.identity && typeof source.identity === 'object' ? source.identity : {};
+  const orgId = trimString_(accountSummary.orgId || identity.orgId);
+  const orgName = trimString_(accountSummary.orgName || identity.orgName).toLowerCase();
+  const emails = normalizeEmailRecipients_([
+    accountSummary.primaryEmail,
+    accountSummary.billingContactEmail,
+    identity.personEmail
+  ]);
+  const matches = listSheetRowInfos_(exportSheet).filter(function(info) {
+    const row = (info && info.rowObjNormalized && typeof info.rowObjNormalized === 'object') ? info.rowObjNormalized : {};
+    const token = trimString_(row.token);
+    if (!token) return false;
+    if (orgId && trimString_(row.orgid) === orgId) return true;
+    if (orgName && trimString_(row.orgname).toLowerCase() === orgName) return true;
+    const rowEmail = normalizeEmail_(row.personemail || row.primaryemail);
+    return !!(rowEmail && emails.indexOf(rowEmail) >= 0);
+  });
+  if (!matches.length) return null;
+  matches.sort(function(a, b) {
+    const rowA = (a && a.rowObjNormalized) ? a.rowObjNormalized : {};
+    const rowB = (b && b.rowObjNormalized) ? b.rowObjNormalized : {};
+    const dateA = Date.parse(trimString_(rowA.exportedat || rowA.createdat || ''));
+    const dateB = Date.parse(trimString_(rowB.exportedat || rowB.createdat || ''));
+    if (!isNaN(dateA) && !isNaN(dateB) && dateA !== dateB) return dateB - dateA;
+    return Number((b && b.row) || 0) - Number((a && a.row) || 0);
+  });
+  return matches[0] || null;
+}
+
+function resolveAccountDocumentPortalToken_(ctx) {
+  const directToken = trimString_(ctx && ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token);
+  if (directToken) return directToken;
+  const fallbackRow = findMostRecentExportRowForAccountDocument_(ctx);
+  return trimString_(fallbackRow && fallbackRow.rowObjNormalized && fallbackRow.rowObjNormalized.token);
+}
+
 function buildAccountDocumentTeamReviewUrl_(documentType, token, cfg) {
   const id = trimString_(token);
   if (!id) return '';
@@ -5521,6 +9426,66 @@ function isTaxExemptActive_(account) {
   return expiresMs >= Date.now();
 }
 
+function hasValidPortalAccountIdentityForCreate_(identity) {
+  const source = (identity && typeof identity === 'object') ? identity : {};
+  return !!(
+    trimString_(source.orgId) &&
+    normalizeEmail_(source.personEmail)
+  );
+}
+
+function maybeBackfillPortalAccountIdentity_(accountInfo, identity, opts) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : null;
+  const rowInfo = info && info.rowInfo ? info.rowInfo : null;
+  const source = buildAccountIdentityFromInputs_(identity);
+  const options = (opts && typeof opts === 'object') ? opts : {};
+  if (!rowInfo || !rowInfo.colMap || !rowInfo.rowObjNormalized) return info;
+
+  const updates = {};
+  const current = rowInfo.rowObjNormalized;
+
+  if (!trimString_(current.orgid) && source.orgId) updates.orgId = source.orgId;
+  if (!trimString_(current.orgname) && source.orgName) updates.orgName = source.orgName;
+  if (!normalizeEmail_(current.primaryemail) && source.personEmail) updates.primaryEmail = source.personEmail;
+  if (!trimString_(current.primarycontactname) && source.personName) updates.primaryContactName = source.personName;
+  if (!normalizeEmail_(current.billingcontactemail) && source.billingContactEmail) updates.billingContactEmail = source.billingContactEmail;
+  if (!trimString_(current.billingcontactname) && source.billingContactName) updates.billingContactName = source.billingContactName;
+
+  if (!Object.keys(updates).length) return info;
+
+  updates.updatedAt = nowIso_();
+  setRowValuesByHeaderMap_(options.accountsSheet || rowInfo.sheet || (options.infra && options.infra.accountsSheet), rowInfo.row, rowInfo.colMap, updates);
+  const refreshed = buildRowInfoFromSheet_(
+    options.accountsSheet || (options.infra && options.infra.accountsSheet),
+    rowInfo.row,
+    options.header || null
+  );
+  return {
+    rowInfo: refreshed,
+    summary: buildPortalAccountSummary_(refreshed.rowObjNormalized, options.cfg || getConfig_())
+  };
+}
+
+function maybeBackfillExportRowOrgContextFromAccount_(exportSheet, rowInfo, accountSummary) {
+  const sheet = exportSheet || null;
+  const info = (rowInfo && typeof rowInfo === 'object') ? rowInfo : null;
+  const summary = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  if (!sheet || !info || !info.colMap || !info.rowObjNormalized) return info;
+
+  const current = info.rowObjNormalized;
+  const updates = {};
+  const resolvedOrgId = trimString_(summary.orgId);
+  const resolvedOrgName = trimString_(summary.orgName);
+
+  if (!trimString_(current.orgid) && resolvedOrgId) updates.orgId = resolvedOrgId;
+  if (!trimString_(current.orgname) && resolvedOrgName) updates.orgName = resolvedOrgName;
+
+  if (!Object.keys(updates).length) return info;
+
+  setRowValuesByHeaderMap_(sheet, info.row, info.colMap, updates);
+  return buildRowInfoFromSheet_(sheet, info.row);
+}
+
 function getPortalAccountByOrgOrEmail_(opts) {
   const options = (opts && typeof opts === 'object') ? opts : {};
   const cfg = options.cfg || getConfig_();
@@ -5529,12 +9494,16 @@ function getPortalAccountByOrgOrEmail_(opts) {
   const accountsSheet = infra.accountsSheet;
   const identity = buildAccountIdentityFromInputs_(options);
   const orgId = identity.orgId;
+  const orgName = trimString_(identity.orgName).toLowerCase();
   const email = identity.personEmail;
   const rows = listSheetRowInfos_(accountsSheet);
 
   let match = null;
   if (orgId) {
     match = rows.find(info => trimString_(info.rowObjNormalized.orgid) === orgId) || null;
+  }
+  if (!match && orgName) {
+    match = rows.find(info => trimString_(info.rowObjNormalized.orgname).toLowerCase() === orgName) || null;
   }
   if (!match && email) {
     match = rows.find(info => normalizeEmail_(info.rowObjNormalized.primaryemail) === email) || null;
@@ -5544,10 +9513,14 @@ function getPortalAccountByOrgOrEmail_(opts) {
   }
 
   if (!match) return null;
-  return {
+  return maybeBackfillPortalAccountIdentity_({
     rowInfo: match,
     summary: buildPortalAccountSummary_(match.rowObjNormalized, cfg)
-  };
+  }, identity, {
+    cfg: cfg,
+    infra: infra,
+    accountsSheet: accountsSheet
+  });
 }
 
 function createPortalAccountIfMissing_(opts) {
@@ -5567,6 +9540,7 @@ function createPortalAccountIfMissing_(opts) {
   const header = accountsSheet.getRange(1, 1, 1, accountsSheet.getLastColumn()).getValues()[0];
   const colMap = buildColumnMap_(header);
   const identity = buildAccountIdentityFromInputs_(options);
+  if (!hasValidPortalAccountIdentityForCreate_(identity)) return null;
   const creditTermsDefinition = getAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, cfg);
   const now = nowIso_();
   const rowVals = new Array(accountsSheet.getLastColumn()).fill('');
@@ -5611,6 +9585,45 @@ function buildExternalPortalUrl_(token) {
   const tokenValue = String(token || '').trim();
   if (!tokenValue) return '';
   return 'https://www.redthreads.com/portal?t=' + encodeURIComponent(tokenValue);
+}
+
+function buildTeamSnapshotPortalUrl_(token) {
+  const tokenValue = trimString_(token);
+  if (!tokenValue) return '';
+  return appendQueryParamsToUrl_(buildPortalDirectUrl_(tokenValue), {
+    mode: 'team'
+  });
+}
+
+function buildDashboardCreditTermsResubmitUrl_(token) {
+  return appendQueryParamsToUrl_(buildExternalPortalUrl_(token), {
+    dashboard: '1',
+    accountDoc: 'credit_terms',
+    accountDocAction: 'resubmit'
+  });
+}
+
+function buildPortalSummaryUrl_(token, extraParams) {
+  const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
+  return appendQueryParamsToUrl_(buildExternalPortalUrl_(token), Object.assign({
+    summary: '1'
+  }, extra));
+}
+
+function buildPurchaseOrderResumePortalUrl_(token, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  return buildPortalSummaryUrl_(token, {
+    resumePo: '1',
+    poStage: trimString_(opts.stage) || 'submit'
+  });
+}
+
+function buildLockedOrderPaymentPortalUrl_(token, paymentMethodSelected) {
+  const method = trimString_(paymentMethodSelected).toLowerCase();
+  if (method !== PAYMENT_METHODS.card && method !== PAYMENT_METHODS.ach) return '';
+  return buildPortalSummaryUrl_(token, {
+    payNow: method
+  });
 }
 
 function appendQueryParamsToUrl_(baseUrl, params) {
@@ -5736,6 +9749,9 @@ function normalizePrintJobsForOrder_(rawPrintJobs) {
         addOns: Array.isArray(rawJob.addOns) ? rawJob.addOns.map((item, addOnIdx) => Object.assign({ __idx: addOnIdx }, item || {})) : [],
         skus: skus,
         mockups: (rawJob.mockups && typeof rawJob.mockups === 'object') ? rawJob.mockups : {},
+        artworkOverridesBySlot: (rawJob.artworkOverridesBySlot && typeof rawJob.artworkOverridesBySlot === 'object')
+          ? rawJob.artworkOverridesBySlot
+          : {},
         priceTiers: normalizeTierListForOrder_(rawJob.priceTiers, skus)
       };
     })
@@ -5799,6 +9815,10 @@ function normalizePortalStateForOrder_(rawState, printJobs) {
     });
     out.printJobs[job.printJobId] = jobState;
   });
+  const purchaseOrderDraft = normalizePurchaseOrderDraftState_(source.purchaseOrderDraft);
+  if (purchaseOrderDraft) {
+    out.purchaseOrderDraft = purchaseOrderDraft;
+  }
   return out;
 }
 
@@ -6075,6 +10095,160 @@ function extractStripeShippingDetails_(sessionObj) {
   return result;
 }
 
+function normalizeOrderDraftShippingDetailsInput_(rawDetails, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const raw = (rawDetails && typeof rawDetails === 'object') ? rawDetails : {};
+  const rawAddress = (raw.address && typeof raw.address === 'object') ? raw.address : {};
+  const details = {
+    name: trimString_(raw.name),
+    phone: trimString_(raw.phone),
+    company: trimString_(raw.company),
+    address: {
+      line1: trimString_(rawAddress.line1 || raw.line1),
+      line2: trimString_(rawAddress.line2 || raw.line2),
+      city: trimString_(rawAddress.city || raw.city),
+      state: trimString_(rawAddress.state || raw.state),
+      postal_code: trimString_(rawAddress.postal_code || raw.postal_code || raw.zip),
+      country: 'United States'
+    }
+  };
+  const hasAnyValue = Boolean(
+    details.name
+    || details.phone
+    || details.company
+    || details.address.line1
+    || details.address.line2
+    || details.address.city
+    || details.address.state
+    || details.address.postal_code
+  );
+  if (!hasAnyValue && opts.preserveEmpty !== true) return null;
+  return details;
+}
+
+function validateRequiredOrderDraftShippingDetails_(shippingDetails) {
+  const details = normalizeOrderDraftShippingDetailsInput_(shippingDetails);
+  if (!details || !details.name) return 'Enter the shipping full name before continuing.';
+  if (!details.phone) return 'Enter the shipping phone number before continuing.';
+  if (!details.address.line1) return 'Enter shipping address line 1 before continuing.';
+  if (!details.address.city) return 'Enter the shipping city before continuing.';
+  if (!details.address.state) return 'Select the shipping state before continuing.';
+  if (!details.address.postal_code) return 'Enter the shipping ZIP code before continuing.';
+  return '';
+}
+
+function normalizePurchaseOrderDraftStatus_(value) {
+  const normalized = trimString_(value).toLowerCase();
+  return normalized === PURCHASE_ORDER_DRAFT_STATUSES.email_sent
+    ? PURCHASE_ORDER_DRAFT_STATUSES.email_sent
+    : (normalized === PURCHASE_ORDER_DRAFT_STATUSES.draft_ready ? PURCHASE_ORDER_DRAFT_STATUSES.draft_ready : '');
+}
+
+function normalizePurchaseOrderDraftResumeStage_(value) {
+  return trimString_(value).toLowerCase() === 'review' ? 'review' : 'submit';
+}
+
+function buildPurchaseOrderDraftFingerprint_(orderDraft) {
+  const draft = (orderDraft && typeof orderDraft === 'object') ? orderDraft : {};
+  const fingerprintSource = {
+    token: trimString_(draft.token),
+    snapshotId: trimString_(draft.snapshotId),
+    fulfillmentMethod: normalizeFulfillmentMethod_(draft.fulfillmentMethod),
+    shippingChargeCents: Math.max(0, parseInt(String(draft.shippingChargeCents || 0), 10) || 0),
+    shippingModeLabel: trimString_(draft.shippingModeLabel),
+    shippingDetails: normalizeOrderDraftShippingDetailsInput_(draft.shippingDetails, { preserveEmpty: true }),
+    amountGrandTotal: roundMoney_(draft.amountGrandTotal),
+    selectedJobs: buildPortalOrderSelectedJobsSummary_(draft.selectedJobs)
+  };
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    JSON.stringify(fingerprintSource)
+  );
+  return Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
+}
+
+function normalizePurchaseOrderDraftState_(rawDraft) {
+  const parsed = safeJsonParse_(rawDraft, {});
+  const source = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  const hasMeaningfulValue = Boolean(
+    source.status != null
+    || source.invoiceNumber != null
+    || source.invoicePdfUrl != null
+    || source.invoiceFileName != null
+    || source.invoiceSentToEmail != null
+    || source.invoiceSentAt != null
+    || source.lastPreparedAt != null
+    || source.draftFingerprint != null
+    || source.fulfillmentMethod != null
+    || source.resumeStage != null
+    || source.shippingDetails != null
+  );
+  if (!hasMeaningfulValue) return null;
+  const invoiceSentToEmail = normalizeEmailRecipients_(source.invoiceSentToEmail).join(', ');
+  const status = normalizePurchaseOrderDraftStatus_(source.status)
+    || (invoiceSentToEmail || trimString_(source.invoiceSentAt)
+      ? PURCHASE_ORDER_DRAFT_STATUSES.email_sent
+      : PURCHASE_ORDER_DRAFT_STATUSES.draft_ready);
+  return {
+    status: status,
+    invoiceNumber: trimString_(source.invoiceNumber),
+    invoicePdfUrl: trimString_(source.invoicePdfUrl),
+    invoiceFileName: trimString_(source.invoiceFileName),
+    invoiceSentToEmail: invoiceSentToEmail,
+    invoiceSentAt: trimString_(source.invoiceSentAt),
+    lastPreparedAt: trimString_(source.lastPreparedAt),
+    draftFingerprint: trimString_(source.draftFingerprint),
+    fulfillmentMethod: normalizeFulfillmentMethod_(source.fulfillmentMethod),
+    shippingDetails: normalizeOrderDraftShippingDetailsInput_(source.shippingDetails, { preserveEmpty: true }),
+    resumeStage: normalizePurchaseOrderDraftResumeStage_(source.resumeStage)
+  };
+}
+
+function readPurchaseOrderDraftFromPortalState_(portalState) {
+  return normalizePurchaseOrderDraftState_(
+    portalState && typeof portalState === 'object'
+      ? portalState.purchaseOrderDraft
+      : null
+  );
+}
+
+function writePurchaseOrderDraftIntoPortalState_(portalState, draftState) {
+  const nextState = JSON.parse(JSON.stringify(
+    (portalState && typeof portalState === 'object' && !Array.isArray(portalState))
+      ? portalState
+      : { printJobs: {} }
+  ));
+  const normalizedDraft = normalizePurchaseOrderDraftState_(draftState);
+  if (normalizedDraft) {
+    nextState.purchaseOrderDraft = normalizedDraft;
+  } else {
+    delete nextState.purchaseOrderDraft;
+  }
+  return nextState;
+}
+
+function clearPurchaseOrderDraftFromPortalState_(portalState) {
+  return writePurchaseOrderDraftIntoPortalState_(portalState, null);
+}
+
+function buildPurchaseOrderDraftStateFromInvoice_(ctx, invoiceInfo, options) {
+  const safeInvoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  return normalizePurchaseOrderDraftState_({
+    status: opts.status,
+    invoiceNumber: trimString_(safeInvoice.invoiceNumber),
+    invoicePdfUrl: trimString_(safeInvoice.invoicePdfUrl),
+    invoiceFileName: trimString_(safeInvoice.fileName),
+    invoiceSentToEmail: opts.invoiceSentToEmail,
+    invoiceSentAt: trimString_(opts.invoiceSentAt),
+    lastPreparedAt: trimString_(opts.lastPreparedAt) || nowIso_(),
+    draftFingerprint: trimString_(opts.draftFingerprint) || buildPurchaseOrderDraftFingerprint_(ctx && ctx.orderDraft),
+    fulfillmentMethod: normalizeFulfillmentMethod_(ctx && ctx.orderDraft && ctx.orderDraft.fulfillmentMethod),
+    shippingDetails: ctx && ctx.orderDraft ? ctx.orderDraft.shippingDetails : null,
+    resumeStage: opts.resumeStage
+  });
+}
+
 function mergeOrderDraftShippingDetails_(orderDraft, sessionObj) {
   const draft = (orderDraft && typeof orderDraft === 'object')
     ? JSON.parse(JSON.stringify(orderDraft))
@@ -6092,23 +10266,31 @@ function computeRushAddOnAmount_(addOn, orderBasis) {
   return roundMoney_(Math.max(minAmount, orderBasis * pct));
 }
 
-function deriveTaxAmountForOrderDraft_(row, snapshot, totalsBeforeTax, accountSummary) {
-  if (accountSummary && accountSummary.taxExemptActive) return 0;
-  const normalizedRow = (row && typeof row === 'object') ? row : {};
-  const meta = snapshot && snapshot.meta && typeof snapshot.meta === 'object' ? snapshot.meta : {};
-  const candidates = [
-    normalizedRow.amounttax,
-    normalizedRow.salestax,
-    normalizedRow.tax,
-    meta.amountTax,
-    meta.salesTax,
-    meta.tax
-  ];
-  for (let i = 0; i < candidates.length; i += 1) {
-    const num = Number(candidates[i]);
-    if (Number.isFinite(num) && num >= 0) return roundMoney_(num);
-  }
-  return 0;
+function normalizeSummaryOptionsForOrderDraft_(summaryOptions) {
+  const source = (summaryOptions && typeof summaryOptions === 'object') ? summaryOptions : {};
+  const hiddenZeroQtyJobIds = Array.isArray(source.hiddenZeroQtyJobIds)
+    ? Array.from(new Set(source.hiddenZeroQtyJobIds
+        .map(function(id) { return trimString_(id); })
+        .filter(Boolean)))
+    : [];
+  return {
+    creditCardFeeEnabled: source.creditCardFeeEnabled === true,
+    salesTaxEnabled: source.salesTaxEnabled !== false,
+    hiddenZeroQtyJobIds: hiddenZeroQtyJobIds
+  };
+}
+
+function shouldApplySalesTaxToOrderDraft_(accountSummary, summaryOptions) {
+  if (accountSummary && accountSummary.taxExemptActive) return false;
+  const taxToggleAllowed = !!(accountSummary && (accountSummary.taxExemptActive || accountSummary.taxExemptApproved));
+  const normalizedSummaryOptions = normalizeSummaryOptionsForOrderDraft_(summaryOptions);
+  return taxToggleAllowed ? normalizedSummaryOptions.salesTaxEnabled !== false : true;
+}
+
+function deriveTaxAmountForOrderDraft_(totalsBeforeTax, accountSummary, summaryOptions) {
+  if (!shouldApplySalesTaxToOrderDraft_(accountSummary, summaryOptions)) return 0;
+  const taxableBasis = Math.max(0, roundMoney_(toFiniteNumber_(totalsBeforeTax, 0)));
+  return roundMoney_(taxableBasis * 0.06);
 }
 
 function buildOrderDraftFromSnapshotAndPortalState_(opts) {
@@ -6119,9 +10301,11 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   const printJobs = normalizePrintJobsForOrder_(snapshot && snapshot.printJobs);
   const portalStateSource = safeJsonParse_(options.portalState || row.portalstatejson || {}, {});
   const portalState = normalizePortalStateForOrder_(portalStateSource, printJobs);
+  const summaryOptions = normalizeSummaryOptionsForOrderDraft_(portalStateSource && portalStateSource.summaryOptions);
   portalState.fulfillmentMethod = normalizeFulfillmentMethod_(portalStateSource && portalStateSource.fulfillmentMethod);
   portalState.shippingChargeCents = Math.max(0, parseInt(String(portalStateSource && portalStateSource.shippingChargeCents || 0), 10) || 0);
   portalState.shippingModeLabel = trimString_(portalStateSource && portalStateSource.shippingModeLabel);
+  portalState.shippingDetails = normalizeOrderDraftShippingDetailsInput_(portalStateSource && portalStateSource.shippingDetails);
   const accountSummary = options.accountSummary || null;
   const dealNumber = trimString_(row.dealnumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber));
   const includedJobSelectionStates = getIncludedOrderJobSelectionStates_(printJobs, portalState);
@@ -6290,7 +10474,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   amountSubtotal = roundMoney_(amountSubtotal);
   amountShipping = roundMoney_(amountShipping);
   amountRush = roundMoney_(amountRush);
-  const amountTax = roundMoney_(deriveTaxAmountForOrderDraft_(row, snapshot, amountSubtotal + amountShipping + amountRush, accountSummary));
+  const amountTax = roundMoney_(deriveTaxAmountForOrderDraft_(amountSubtotal + amountShipping + amountRush, accountSummary, summaryOptions));
   const amountGrandTotal = roundMoney_(amountSubtotal + amountShipping + amountRush + amountTax);
   const fulfillment = computeFulfillmentContextForOrderDraft_(portalState, amountGrandTotal);
   const orgContext = deriveOrgContextFromRow_(row);
@@ -6318,6 +10502,8 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
     shippingCharge: roundMoney_(fulfillment.shippingChargeCents / 100),
     shippingModeLabel: fulfillment.shippingModeLabel,
     qualifiesForFreeShipping: fulfillment.qualifiesForFreeShipping,
+    shippingDetails: normalizeOrderDraftShippingDetailsInput_(portalState.shippingDetails),
+    shippingDetailsCaptured: !!normalizeOrderDraftShippingDetailsInput_(portalState.shippingDetails),
     currency: currency || DEFAULT_STRIPE_PRICE_CURRENCY,
     taxStatusApplied: taxExemptApplied ? 'tax_exempt_active' : 'standard',
     taxExemptApplied: taxExemptApplied,
@@ -6339,9 +10525,81 @@ function getPortalAccountSheet_(ss, cfg) {
   return ensureNamedSheetWithHeaders_(ss, cfg.portalAccountsSheetName, PORTAL_ACCOUNT_HEADERS);
 }
 
+function normalizeTeamWorkflowMode_(value) {
+  const mode = trimString_(value).toLowerCase();
+  if (mode === TEAM_WORKFLOW_MODES.team_hold) return TEAM_WORKFLOW_MODES.team_hold;
+  if (mode === TEAM_WORKFLOW_MODES.checkout_reset) return TEAM_WORKFLOW_MODES.checkout_reset;
+  return TEAM_WORKFLOW_MODES.none;
+}
+
+function normalizeTeamJobCompletionMap_(value) {
+  const source = (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+  const out = {};
+  Object.keys(source).forEach(function(jobId) {
+    const cleanJobId = trimString_(jobId);
+    if (!cleanJobId) return;
+    const entry = source[jobId];
+    if (!entry || typeof entry !== 'object') return;
+    const completionDate = trimString_(entry.completionDate || entry.completedOn || entry.date);
+    if (!completionDate) return;
+    out[cleanJobId] = {
+      completionDate: completionDate,
+      actorName: trimString_(entry.actorName || entry.completedBy || entry.authorName),
+      recordedAt: trimString_(entry.recordedAt || entry.completedAt || entry.ts)
+    };
+  });
+  return out;
+}
+
+function readTeamWorkflowMetaFromDraft_(draft) {
+  const safeDraft = (draft && typeof draft === 'object') ? draft : {};
+  const raw = (safeDraft.teamModeMeta && typeof safeDraft.teamModeMeta === 'object' && !Array.isArray(safeDraft.teamModeMeta))
+    ? safeDraft.teamModeMeta
+    : {};
+  return {
+    workflowMode: normalizeTeamWorkflowMode_(raw.workflowMode),
+    completedJobsByJobId: normalizeTeamJobCompletionMap_(raw.completedJobsByJobId)
+  };
+}
+
+function writeTeamWorkflowMetaIntoDraft_(draft, meta) {
+  const safeDraft = Object.assign({}, (draft && typeof draft === 'object') ? draft : {});
+  const current = readTeamWorkflowMetaFromDraft_(safeDraft);
+  const nextMeta = (meta && typeof meta === 'object') ? meta : {};
+  const workflowMode = Object.prototype.hasOwnProperty.call(nextMeta, 'workflowMode')
+    ? normalizeTeamWorkflowMode_(nextMeta.workflowMode)
+    : current.workflowMode;
+  const completedJobsByJobId = Object.prototype.hasOwnProperty.call(nextMeta, 'completedJobsByJobId')
+    ? normalizeTeamJobCompletionMap_(nextMeta.completedJobsByJobId)
+    : current.completedJobsByJobId;
+  safeDraft.teamModeMeta = {
+    workflowMode: workflowMode,
+    completedJobsByJobId: completedJobsByJobId
+  };
+  return safeDraft;
+}
+
+function buildPortalOrderSelectedJobsSummary_(selectedJobs) {
+  return (Array.isArray(selectedJobs) ? selectedJobs : []).map(function(job) {
+    const item = (job && typeof job === 'object') ? job : {};
+    return {
+      printJobId: trimString_(item.printJobId),
+      printJobNumber: trimString_(item.printJobNumber),
+      printJobName: trimString_(item.printJobName),
+      turnaroundTime: trimString_(item.turnaroundTime),
+      deliveryEstimate: trimString_(item.deliveryEstimate),
+      units: Math.max(0, parseInt(String(item.units || 0), 10) || 0)
+    };
+  }).filter(function(job) {
+    return !!job.printJobId;
+  });
+}
+
 function buildPortalOrderSummary_(row) {
   const order = (row && typeof row === 'object') ? row : {};
-  return {
+  const draft = safeJsonParse_(order.orderdraftjson || order.orderDraftJson, {}) || {};
+  const teamMeta = readTeamWorkflowMetaFromDraft_(draft);
+  const summary = {
     orderId: trimString_(order.orderid || order.orderId),
     checkoutAttemptId: trimString_(order.checkoutattemptid || order.checkoutAttemptId),
     orderRevision: Math.max(1, parseInt(String(order.orderrevision || order.orderRevision || 1), 10) || 1),
@@ -6352,16 +10610,31 @@ function buildPortalOrderSummary_(row) {
     productionAuthorizationState: trimString_(order.productionauthorizationstate || order.productionAuthorizationState) || PRODUCTION_AUTHORIZATION_STATES.not_authorized,
     invoiceNumber: trimString_(order.invoicenumber || order.invoiceNumber),
     invoicePdfUrl: trimString_(order.invoicepdfurl || order.invoicePdfUrl),
+    invoiceSentToEmail: trimString_(order.invoicesenttoemail || order.invoiceSentToEmail),
+    poNumber: trimString_(order.ponumber || order.poNumber),
+    poDocumentUrl: trimString_(order.podocumenturl || order.poDocumentUrl),
+    poSubmittedBy: trimString_(order.posubmittedby || order.poSubmittedBy),
+    poSubmittedAt: trimString_(order.posubmittedat || order.poSubmittedAt),
     amountGrandTotal: roundMoney_(order.amountgrandtotal || order.amountGrandTotal || 0),
     amountTax: roundMoney_(order.amounttax || order.amountTax || 0),
     currency: trimString_(order.currency || DEFAULT_STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY,
+    fulfillmentMethod: normalizeFulfillmentMethod_(draft.fulfillmentMethod),
+    shippingChargeCents: Math.max(0, parseInt(String(draft.shippingChargeCents || 0), 10) || 0),
+    shippingModeLabel: trimString_(draft.shippingModeLabel),
+    shippingDetailsCaptured: draft.shippingDetailsCaptured === true,
+    shippingDetails: normalizeOrderDraftShippingDetailsInput_(draft.shippingDetails),
     paidAt: trimString_(order.paidat || order.paidAt),
     authorizedToProduceAt: trimString_(order.authorizedtoproduceat || order.authorizedToProduceAt),
     lockedAt: trimString_(order.lockedat || order.lockedAt),
     stripeSessionId: trimString_(order.stripesessionid || order.stripeSessionId),
     stripePaymentIntentId: trimString_(order.stripepaymentintentid || order.stripePaymentIntentId),
-    lastUpdatedAt: trimString_(order.lastupdatedat || order.lastUpdatedAt)
+    lastUpdatedAt: trimString_(order.lastupdatedat || order.lastUpdatedAt),
+    teamWorkflowMode: teamMeta.workflowMode,
+    teamJobCompletionByJobId: teamMeta.completedJobsByJobId,
+    selectedJobs: buildPortalOrderSelectedJobsSummary_(draft.selectedJobs)
   };
+  summary.displayStatus = derivePortalDisplayOrderStatus_(summary, order.status);
+  return summary;
 }
 
 function getLatestPortalOrderByToken_(token, options) {
@@ -6371,9 +10644,101 @@ function getLatestPortalOrderByToken_(token, options) {
   const cfg = opts.cfg || getConfig_();
   const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
   const ordersSheet = opts.ordersSheet || getOrderSheet_(ss, cfg);
-  const rows = listSheetRowInfos_(ordersSheet).filter((info) => trimString_(info.rowObjNormalized.token) === cleanToken);
+  const rows = findOrderRowsByToken_(ordersSheet, cleanToken);
   if (!rows.length) return null;
-  rows.sort((a, b) => {
+  rows.sort(comparePortalOrderInfosDesc_);
+  return rows[0];
+}
+
+function comparePortalOrderInfosDesc_(a, b) {
+  const rowA = a && a.rowObjNormalized ? a.rowObjNormalized : {};
+  const rowB = b && b.rowObjNormalized ? b.rowObjNormalized : {};
+  const revA = Math.max(1, parseInt(String(rowA.orderrevision || 1), 10) || 1);
+  const revB = Math.max(1, parseInt(String(rowB.orderrevision || 1), 10) || 1);
+  if (revA !== revB) return revB - revA;
+  const tsA = parseIsoDateMs_(rowA.lastupdatedat || rowA.createdat);
+  const tsB = parseIsoDateMs_(rowB.lastupdatedat || rowB.createdat);
+  return tsB - tsA;
+}
+
+function buildLatestPortalOrderInfoMapByToken_(tokens, options) {
+  const cleanTokens = uniqueTrimmedStrings_(tokens);
+  if (!cleanTokens.length) return {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const ordersSheet = opts.ordersSheet || getOrderSheet_(ss, cfg);
+  const tokenSet = cleanTokens.reduce(function(map, token) {
+    map[token] = true;
+    return map;
+  }, {});
+  const latestByToken = {};
+  listSheetRowInfos_(ordersSheet).forEach(function(info) {
+    const token = trimString_(info && info.rowObjNormalized && info.rowObjNormalized.token);
+    if (!token || !tokenSet[token]) return;
+    const current = latestByToken[token] || null;
+    if (!current || comparePortalOrderInfosDesc_(info, current) < 0) {
+      latestByToken[token] = info;
+    }
+  });
+  return latestByToken;
+}
+
+function listPortalOrdersByToken_(token, options) {
+  const cleanToken = trimString_(token);
+  if (!cleanToken) return [];
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const ordersSheet = opts.ordersSheet || getOrderSheet_(ss, cfg);
+  return findOrderRowsByToken_(ordersSheet, cleanToken)
+    .sort((a, b) => {
+      const revA = Math.max(1, parseInt(String(a.rowObjNormalized.orderrevision || 1), 10) || 1);
+      const revB = Math.max(1, parseInt(String(b.rowObjNormalized.orderrevision || 1), 10) || 1);
+      if (revA !== revB) return revB - revA;
+      const tsA = parseIsoDateMs_(a.rowObjNormalized.lastupdatedat || a.rowObjNormalized.createdat);
+      const tsB = parseIsoDateMs_(b.rowObjNormalized.lastupdatedat || b.rowObjNormalized.createdat);
+      return tsB - tsA;
+    });
+}
+
+function findOrderRowsByToken_(ordersSheet, token) {
+  const cleanToken = trimString_(token);
+  if (!ordersSheet || !cleanToken) return [];
+  const lastCol = ordersSheet.getLastColumn();
+  const lastRow = ordersSheet.getLastRow();
+  if (lastCol < 1 || lastRow < 2) return [];
+  const header = ordersSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const colMap = buildColumnMap_(header);
+  const tokenCol = colMap.token;
+  if (!tokenCol) return [];
+  const tokenRange = ordersSheet.getRange(2, tokenCol, lastRow - 1, 1);
+  const matches = tokenRange.createTextFinder(cleanToken).matchEntireCell(true).findAll() || [];
+  if (!matches.length) return [];
+  return matches.map(function(cell) {
+    const rowNumber = cell.getRow();
+    const rowVals = ordersSheet.getRange(rowNumber, 1, 1, lastCol).getValues()[0];
+    return buildRowInfoFromSheet_(ordersSheet, rowNumber, header, rowVals);
+  });
+}
+
+function findReusablePurchaseOrderOrderByToken_(token, options) {
+  const rows = listPortalOrdersByToken_(token, options);
+  if (!rows.length) return null;
+  const priority = {};
+  priority[ORDER_STATES.awaiting_po_submission] = 3;
+  priority[ORDER_STATES.ready_for_production] = 2;
+  priority[ORDER_STATES.awaiting_payment_confirmation] = 1;
+  const poRows = rows.filter(function(info) {
+    return trimString_(info.rowObjNormalized.paymentmethodselected) === PAYMENT_METHODS.purchase_order;
+  });
+  if (!poRows.length) return null;
+  poRows.sort(function(a, b) {
+    const stateA = trimString_(a.rowObjNormalized.orderstate);
+    const stateB = trimString_(b.rowObjNormalized.orderstate);
+    const scoreA = priority[stateA] || 0;
+    const scoreB = priority[stateB] || 0;
+    if (scoreA !== scoreB) return scoreB - scoreA;
     const revA = Math.max(1, parseInt(String(a.rowObjNormalized.orderrevision || 1), 10) || 1);
     const revB = Math.max(1, parseInt(String(b.rowObjNormalized.orderrevision || 1), 10) || 1);
     if (revA !== revB) return revB - revA;
@@ -6381,7 +10746,7 @@ function getLatestPortalOrderByToken_(token, options) {
     const tsB = parseIsoDateMs_(b.rowObjNormalized.lastupdatedat || b.rowObjNormalized.createdat);
     return tsB - tsA;
   });
-  return rows[0];
+  return poRows[0];
 }
 
 function getPortalOrderByCheckoutAttemptId_(checkoutAttemptId, options) {
@@ -6598,37 +10963,445 @@ function writeCurrentOrderPointersToExportLog_(opts) {
     currentPaymentState: trimString_(orderSummary.paymentState || options.currentPaymentState),
     currentProductionAuthorizationState: trimString_(orderSummary.productionAuthorizationState || options.currentProductionAuthorizationState),
     currentPaymentMethod: trimString_(orderSummary.paymentMethodSelected || options.currentPaymentMethod),
+    teamWorkflowMode: normalizeTeamWorkflowMode_(orderSummary.teamWorkflowMode || options.teamWorkflowMode),
+    teamJobCompletionJson: JSON.stringify(normalizeTeamJobCompletionMap_(orderSummary.teamJobCompletionByJobId || options.teamJobCompletionByJobId)),
     termsApproved: Boolean(accountSummary.termsApproved === true || options.termsApproved === true),
     taxExemptApproved: Boolean(accountSummary.taxExemptApproved === true || options.taxExemptApproved === true),
     latestInvoiceNumber: trimString_(orderSummary.invoiceNumber || options.latestInvoiceNumber),
     lastOrderUpdatedAt: trimString_(orderSummary.lastUpdatedAt || options.lastOrderUpdatedAt || nowIso_())
   };
-  if (Object.prototype.hasOwnProperty.call(options, 'status')) {
-    updates.status = options.status;
-  }
+  updates.status = derivePortalDisplayOrderStatus_(Object.assign({}, rowInfo.rowObjNormalized || {}, updates, {
+    paymentState: trimString_(orderSummary.paymentState || options.currentPaymentState),
+    productionAuthorizationState: trimString_(orderSummary.productionAuthorizationState || options.currentProductionAuthorizationState),
+    paidAt: trimString_(orderSummary.paidAt || options.paidAt),
+    authorizedToProduceAt: trimString_(orderSummary.authorizedToProduceAt || options.authorizedToProduceAt),
+    status: options.status || (rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.status)
+  }), options.status);
   setRowValuesByHeaderMap_(exportSheet, rowInfo.row, rowInfo.colMap, updates);
   SpreadsheetApp.flush();
-  return buildRowInfoFromSheet_(exportSheet, rowInfo.row);
+  const refreshedRowInfo = buildRowInfoFromSheet_(exportSheet, rowInfo.row);
+  invalidateDashboardProjectsCacheForRow_(refreshedRowInfo);
+  return refreshedRowInfo;
+}
+
+function invalidateDashboardProjectsCacheForEmail_(email) {
+  const normalizedEmail = normalizeEmail_(email);
+  if (!normalizedEmail) return;
+  try {
+    CacheService.getScriptCache().remove(buildProjectsCacheKey_(normalizedEmail));
+  } catch (_) {}
+}
+
+function invalidateDashboardProjectsCacheForRow_(rowInfo) {
+  const normalizedRow = rowInfo && rowInfo.rowObjNormalized && typeof rowInfo.rowObjNormalized === 'object'
+    ? rowInfo.rowObjNormalized
+    : ((rowInfo && typeof rowInfo === 'object') ? rowInfo : {});
+  invalidateDashboardProjectsCacheForEmail_(normalizedRow.personemail || normalizedRow.personEmail);
 }
 
 function buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderSummary) {
   const normalizedRow = (row && typeof row === 'object') ? row : {};
   const latest = latestOrderSummary || {};
   const account = accountSummary || {};
-  return {
-    activeOrderId: trimString_(normalizedRow.activeorderid || latest.orderId),
-    latestCheckoutAttemptId: trimString_(normalizedRow.latestcheckoutattemptid || latest.checkoutAttemptId),
-    currentAccountId: trimString_(normalizedRow.currentaccountid || account.accountId),
-    portalLockState: trimString_(normalizedRow.portallockstate || latest.portalLockState || PORTAL_LOCK_STATES.editable),
-    currentOrderState: trimString_(normalizedRow.currentorderstate || latest.orderState || ORDER_STATES.draft),
-    currentPaymentState: trimString_(normalizedRow.currentpaymentstate || latest.paymentState || PAYMENT_STATES.not_started),
-    currentProductionAuthorizationState: trimString_(normalizedRow.currentproductionauthorizationstate || latest.productionAuthorizationState || PRODUCTION_AUTHORIZATION_STATES.not_authorized),
-    currentPaymentMethod: trimString_(normalizedRow.currentpaymentmethod || latest.paymentMethodSelected),
+  const portalState = safeJsonParse_(normalizedRow.portalstatejson, {}) || {};
+  const purchaseOrderDraft = readPurchaseOrderDraftFromPortalState_(portalState);
+  const hasCurrentPointers = Boolean(
+    trimString_(normalizedRow.activeorderid)
+    || trimString_(normalizedRow.latestcheckoutattemptid)
+    || trimString_(normalizedRow.currentaccountid)
+    || trimString_(normalizedRow.portallockstate)
+    || trimString_(normalizedRow.currentorderstate)
+    || trimString_(normalizedRow.currentpaymentstate)
+    || trimString_(normalizedRow.currentproductionauthorizationstate)
+    || trimString_(normalizedRow.currentpaymentmethod)
+    || trimString_(normalizedRow.latestinvoicenumber)
+    || trimString_(normalizedRow.lastorderupdatedat)
+    || !!purchaseOrderDraft
+  );
+  const pointerSource = hasCurrentPointers ? normalizedRow : latest;
+  const summary = {
+    activeOrderId: trimString_(pointerSource.activeorderid || pointerSource.orderId),
+    latestCheckoutAttemptId: trimString_(pointerSource.latestcheckoutattemptid || pointerSource.checkoutAttemptId),
+    currentAccountId: trimString_(pointerSource.currentaccountid || account.accountId),
+    portalLockState: trimString_(pointerSource.portallockstate || pointerSource.portalLockState || PORTAL_LOCK_STATES.editable),
+    currentOrderState: trimString_(pointerSource.currentorderstate || pointerSource.orderState || ORDER_STATES.draft),
+    currentPaymentState: trimString_(pointerSource.currentpaymentstate || pointerSource.paymentState || PAYMENT_STATES.not_started),
+    currentProductionAuthorizationState: trimString_(pointerSource.currentproductionauthorizationstate || pointerSource.productionAuthorizationState || PRODUCTION_AUTHORIZATION_STATES.not_authorized),
+    currentPaymentMethod: trimString_(pointerSource.currentpaymentmethod || pointerSource.paymentMethodSelected),
+    teamWorkflowMode: normalizeTeamWorkflowMode_(pointerSource.teamworkflowmode || pointerSource.teamWorkflowMode),
+    teamJobCompletionByJobId: normalizeTeamJobCompletionMap_(
+      trimString_(normalizedRow.teamjobcompletionjson)
+        ? safeJsonParse_(normalizedRow.teamjobcompletionjson, {})
+        : (latest.teamJobCompletionByJobId || {})
+    ),
     termsApproved: boolFromCell_(normalizedRow.termsapproved || account.termsApproved),
     taxExemptApproved: boolFromCell_(normalizedRow.taxexemptapproved || account.taxExemptApproved),
-    latestInvoiceNumber: trimString_(normalizedRow.latestinvoicenumber || latest.invoiceNumber),
-    lastOrderUpdatedAt: trimString_(normalizedRow.lastorderupdatedat || latest.lastUpdatedAt)
+    latestInvoiceNumber: trimString_(pointerSource.latestinvoicenumber || pointerSource.invoiceNumber),
+    lastOrderUpdatedAt: trimString_(pointerSource.lastorderupdatedat || pointerSource.lastUpdatedAt),
+    purchaseOrderDraft: purchaseOrderDraft
   };
+  summary.displayStatus = derivePortalDisplayOrderStatus_(summary, normalizedRow.status || latest.displayStatus || latest.status);
+  return summary;
+}
+
+function buildTeamWorkflowContext_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = (opts.row && typeof opts.row === 'object') ? opts.row : {};
+  const latest = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object') ? opts.latestOrderSummary : {};
+  const current = (opts.currentStateSummary && typeof opts.currentStateSummary === 'object') ? opts.currentStateSummary : {};
+  const account = (opts.accountSummary && typeof opts.accountSummary === 'object') ? opts.accountSummary : {};
+  const paymentMethodSelected = trimString_(
+    current.currentPaymentMethod ||
+    latest.paymentMethodSelected ||
+    row.currentpaymentmethod ||
+    row.paymentmethodselected
+  ).toLowerCase();
+  const portalLockState = trimString_(
+    current.portalLockState ||
+    latest.portalLockState ||
+    row.currentportallockstate ||
+    row.portallockstate
+  ).toLowerCase();
+  const orderState = trimString_(
+    current.currentOrderState ||
+    latest.orderState ||
+    row.currentorderstate ||
+    row.orderstate
+  ).toLowerCase();
+  const paymentState = trimString_(
+    current.currentPaymentState ||
+    latest.paymentState ||
+    row.currentpaymentstate ||
+    row.paymentstate
+  ).toLowerCase();
+  const productionAuthorizationState = trimString_(
+    current.currentProductionAuthorizationState ||
+    latest.productionAuthorizationState ||
+    row.currentproductionauthorizationstate ||
+    row.productionauthorizationstate
+  ).toLowerCase();
+  const teamWorkflowMode = normalizeTeamWorkflowMode_(
+    current.teamWorkflowMode ||
+    latest.teamWorkflowMode ||
+    row.teamworkflowmode
+  );
+  const activeOrderId = trimString_(
+    current.activeOrderId ||
+    latest.orderId ||
+    row.activeorderid
+  );
+  const purchaseOrderDraft = normalizePurchaseOrderDraftState_(
+    current.purchaseOrderDraft
+    || readPurchaseOrderDraftFromPortalState_(safeJsonParse_(row.portalstatejson, {}))
+  );
+  const invoiceNumber = trimString_(current.latestInvoiceNumber || latest.invoiceNumber || row.latestinvoicenumber);
+  const lockedAt = trimString_(latest.lockedAt || row.lockedat);
+  const paidAt = trimString_(latest.paidAt || row.paidat);
+  const authorizedToProduceAt = trimString_(latest.authorizedToProduceAt || row.authorizedtoproduceat);
+  const poSubmittedAt = trimString_(latest.poSubmittedAt || row.posubmittedat);
+  const poNumber = trimString_(latest.poNumber || row.ponumber);
+  const completionMap = normalizeTeamJobCompletionMap_(
+    latest.teamJobCompletionByJobId ||
+    current.teamJobCompletionByJobId ||
+    (trimString_(row.teamjobcompletionjson) ? safeJsonParse_(row.teamjobcompletionjson, {}) : {})
+  );
+  const selectedJobs = Array.isArray(latest.selectedJobs) ? latest.selectedJobs : [];
+  const actualCompletionMeta = deriveDashboardActualCompletionMeta_(selectedJobs, completionMap);
+  const isPoFlow = deriveDashboardWorkflowVariant_(row, latest, current) === 'purchase_order';
+  const isLocked = portalLockState === PORTAL_LOCK_STATES.locked;
+  const isEditable = portalLockState === PORTAL_LOCK_STATES.editable;
+  const isTeamHold = teamWorkflowMode === TEAM_WORKFLOW_MODES.team_hold;
+  const isCheckoutReset = teamWorkflowMode === TEAM_WORKFLOW_MODES.checkout_reset;
+  const isStripeMethod = paymentMethodSelected === PAYMENT_METHODS.card || paymentMethodSelected === PAYMENT_METHODS.ach;
+  const isManualMethod = paymentMethodSelected === PAYMENT_METHODS.check || paymentMethodSelected === PAYMENT_METHODS.cash;
+  const isPaymentReceived = !!paidAt
+    || paymentState === PAYMENT_STATES.paid
+    || paymentState === PAYMENT_STATES.manual_received;
+  const isProductionAuthorized = !!authorizedToProduceAt
+    || productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized
+    || orderState === ORDER_STATES.ready_for_production
+    || orderState === ORDER_STATES.in_production
+    || orderState === ORDER_STATES.closed;
+  const hasProductionCompletion = actualCompletionMeta.hasAnyActualCompletion === true
+    || orderState === ORDER_STATES.in_production
+    || orderState === ORDER_STATES.closed;
+  const isPoSubmitted = isPoFlow && (
+    !!poSubmittedAt ||
+    !!poNumber ||
+    isProductionAuthorized
+  );
+  const isAwaitingPoSubmission = isPoFlow
+    && !isPoSubmitted
+    && (
+      !!purchaseOrderDraft ||
+      orderState === ORDER_STATES.awaiting_po_submission ||
+      productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.po_pending ||
+      paymentMethodSelected === PAYMENT_METHODS.purchase_order
+    );
+  const isCheckoutStarted = !isPoFlow
+    && !isPaymentReceived
+    && !isProductionAuthorized
+    && (
+      orderState === ORDER_STATES.payment_in_progress ||
+      paymentState === PAYMENT_STATES.checkout_created ||
+      paymentState === PAYMENT_STATES.submitted ||
+      paymentState === PAYMENT_STATES.pending ||
+      (isStripeMethod && (!!activeOrderId || !!trimString_(lockedAt)))
+    );
+  const isManualPendingLocked = !isPoFlow
+    && isLocked
+    && !isPaymentReceived
+    && !isProductionAuthorized
+    && (
+      orderState === ORDER_STATES.awaiting_manual_payment ||
+      paymentState === PAYMENT_STATES.manual_pending ||
+      isManualMethod
+    );
+  const isLockedPoSubmittedUnpaid = isLocked
+    && isPoFlow
+    && isPoSubmitted
+    && !isPaymentReceived;
+  let lifecycleStage = PORTAL_LIFECYCLE_STAGES.editable;
+  if (isTeamHold || isCheckoutReset) {
+    lifecycleStage = PORTAL_LIFECYCLE_STAGES.editable;
+  } else if (hasProductionCompletion) {
+    lifecycleStage = PORTAL_LIFECYCLE_STAGES.in_production_or_complete;
+  } else if (isLockedPoSubmittedUnpaid) {
+    lifecycleStage = PORTAL_LIFECYCLE_STAGES.po_submitted_unpaid;
+  } else if (isPaymentReceived || isProductionAuthorized) {
+    lifecycleStage = PORTAL_LIFECYCLE_STAGES.paid_or_authorized;
+  } else if (isAwaitingPoSubmission && isLocked) {
+    lifecycleStage = PORTAL_LIFECYCLE_STAGES.po_draft_locked;
+  } else if (isManualPendingLocked) {
+    lifecycleStage = PORTAL_LIFECYCLE_STAGES.manual_pending_locked;
+  } else if (isCheckoutStarted) {
+    lifecycleStage = PORTAL_LIFECYCLE_STAGES.checkout_started;
+  }
+  const summaryDocumentMode = lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+    ? SUMMARY_DOCUMENT_MODES.po_draft_invoice
+    : (lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
+      ? SUMMARY_DOCUMENT_MODES.manual_pending_invoice
+      : ((lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_submitted_unpaid
+          || lifecycleStage === PORTAL_LIFECYCLE_STAGES.paid_or_authorized
+          || lifecycleStage === PORTAL_LIFECYCLE_STAGES.in_production_or_complete)
+        ? SUMMARY_DOCUMENT_MODES.locked_invoice
+        : SUMMARY_DOCUMENT_MODES.estimate));
+  const hasPlacedOrder = !isTeamHold && !isCheckoutReset && (
+    lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_submitted_unpaid
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.paid_or_authorized
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.in_production_or_complete
+  );
+  const hasLockedInvoice = summaryDocumentMode !== SUMMARY_DOCUMENT_MODES.estimate;
+  const hasSelectedJobs = selectedJobs.length > 0;
+  const hasAnyActualJobCompletion = actualCompletionMeta.hasAnyActualCompletion === true;
+  const allSelectedJobsCompleted = actualCompletionMeta.allJobsCompleted === true;
+  const canManageJobCompletion = hasSelectedJobs
+    && (isProductionAuthorized || isPaymentReceived || hasAnyActualJobCompletion);
+  const canUnlock = isTeamHold
+    || isCheckoutReset
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked;
+  const canResetCheckout = lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked;
+  const canReopenPo = isLockedPoSubmittedUnpaid;
+  const canMarkManualPayment = lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked;
+  const canMarkPoPayment = isLockedPoSubmittedUnpaid;
+  const canResendLink = hasLockedInvoice && !isTeamHold && !isCheckoutReset;
+  const canLockWithoutOrdering = !isLocked
+    && lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable
+    && !isPaymentReceived
+    && !isPoSubmitted
+    && !trimString_(activeOrderId);
+  const isPaymentPending = lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_submitted_unpaid;
+  const canCancelPendingClientFlow = lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked;
+  const cancelFlowKind = lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+    ? PAYMENT_METHODS.purchase_order
+    : (lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked ? 'manual_payment' : '');
+
+  return {
+    variant: isPoFlow ? 'purchase_order' : 'standard',
+    lifecycleStage: lifecycleStage,
+    summaryDocumentMode: summaryDocumentMode,
+    isPoFlow: isPoFlow,
+    hasPurchaseOrderDraft: !!purchaseOrderDraft,
+    purchaseOrderDraftStatus: trimString_(purchaseOrderDraft && purchaseOrderDraft.status),
+    isLocked: isLocked,
+    isEditable: isEditable,
+    isCheckoutStarted: lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started,
+    isPoDraftLocked: lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked,
+    isManualPendingLocked: lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked,
+    isTeamHold: isTeamHold,
+    isCheckoutReset: isCheckoutReset,
+    isAwaitingPoSubmission: isAwaitingPoSubmission,
+    isPoSubmitted: isPoSubmitted,
+    isPoSubmittedUnpaid: isLockedPoSubmittedUnpaid,
+    isPaymentReceived: isPaymentReceived,
+    isPaymentPending: isPaymentPending,
+    isProductionAuthorized: isProductionAuthorized,
+    hasPlacedOrder: hasPlacedOrder,
+    hasLockedInvoice: hasLockedInvoice,
+    hasSelectedJobs: hasSelectedJobs,
+    hasAnyActualJobCompletion: hasAnyActualJobCompletion,
+    allSelectedJobsCompleted: allSelectedJobsCompleted,
+    teamWorkflowMode: teamWorkflowMode,
+    paymentMethodSelected: paymentMethodSelected,
+    orderState: orderState,
+    paymentState: paymentState,
+    productionAuthorizationState: productionAuthorizationState,
+    activeOrderId: activeOrderId,
+    paidAt: paidAt,
+    poSubmittedAt: poSubmittedAt,
+    poNumber: poNumber,
+    approvedPaymentTermsDays: Math.max(0, parseInt(String(account.approvedPaymentTermsDays || 0), 10) || 0),
+    canCancelPendingClientFlow: canCancelPendingClientFlow,
+    cancelFlowKind: cancelFlowKind,
+    canUnlock: canUnlock,
+    canResetCheckout: canResetCheckout,
+    canReopenPo: canReopenPo,
+    canMarkManualPayment: canMarkManualPayment,
+    canMarkPoPayment: canMarkPoPayment,
+    canResendLink: canResendLink,
+    canLockWithoutOrdering: canLockWithoutOrdering,
+    canManageJobCompletion: canManageJobCompletion
+  };
+}
+
+function buildTeamWorkflowActionMeta_(workflowContext) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  return {
+    reset_terms: {
+      visible: true,
+      label: 'Reset Credit Terms'
+    },
+    reset_tax: {
+      visible: true,
+      label: 'Reset Tax Exemption'
+    },
+    manual_payment: {
+      visible: ctx.canMarkManualPayment === true,
+      label: 'Mark Manual Payment Received'
+    },
+    po_payment: {
+      visible: ctx.canMarkPoPayment === true,
+      label: 'Mark PO Payment Received'
+    },
+    unlock_project: {
+      visible: ctx.canUnlock === true,
+      label: 'Unlock Project Snapshot'
+    },
+    reset_checkout: {
+      visible: ctx.canResetCheckout === true,
+      label: 'Reset Checkout Selection'
+    },
+    reopen_po: {
+      visible: ctx.canReopenPo === true,
+      label: 'Reopen PO Submission'
+    },
+    resend_link: {
+      visible: ctx.canResendLink === true,
+      label: ctx.isPoFlow ? 'Resend PO Return Link' : 'Resend Invoice Link'
+    },
+    lock_project: {
+      visible: ctx.canLockWithoutOrdering === true,
+      label: 'Lock Project Without Ordering'
+    },
+    mark_jobs_completed: {
+      visible: ctx.canManageJobCompletion === true,
+      label: ctx.hasAnyActualJobCompletion ? 'Manage Job Completion Dates' : 'Mark Jobs as Completed'
+    }
+  };
+}
+
+function attachTeamWorkflowMetaToOrderSummary_(orderSummary, workflowContext) {
+  const summary = Object.assign({}, (orderSummary && typeof orderSummary === 'object') ? orderSummary : {});
+  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  summary.workflowContext = {
+    variant: trimString_(context.variant),
+    lifecycleStage: trimString_(context.lifecycleStage),
+    summaryDocumentMode: trimString_(context.summaryDocumentMode),
+    isPoFlow: context.isPoFlow === true,
+    hasPurchaseOrderDraft: context.hasPurchaseOrderDraft === true,
+    purchaseOrderDraftStatus: trimString_(context.purchaseOrderDraftStatus),
+    isLocked: context.isLocked === true,
+    isEditable: context.isEditable === true,
+    isCheckoutStarted: context.isCheckoutStarted === true,
+    isPoDraftLocked: context.isPoDraftLocked === true,
+    isManualPendingLocked: context.isManualPendingLocked === true,
+    isAwaitingPoSubmission: context.isAwaitingPoSubmission === true,
+    isPoSubmitted: context.isPoSubmitted === true,
+    isPoSubmittedUnpaid: context.isPoSubmittedUnpaid === true,
+    isPaymentReceived: context.isPaymentReceived === true,
+    isPaymentPending: context.isPaymentPending === true,
+    isProductionAuthorized: context.isProductionAuthorized === true,
+    hasPlacedOrder: context.hasPlacedOrder === true,
+    hasLockedInvoice: context.hasLockedInvoice === true,
+    hasSelectedJobs: context.hasSelectedJobs === true,
+    hasAnyActualJobCompletion: context.hasAnyActualJobCompletion === true,
+    allSelectedJobsCompleted: context.allSelectedJobsCompleted === true,
+    teamWorkflowMode: normalizeTeamWorkflowMode_(context.teamWorkflowMode),
+    canCancelPendingClientFlow: context.canCancelPendingClientFlow === true,
+    cancelFlowKind: trimString_(context.cancelFlowKind)
+  };
+  summary.teamControls = {
+    actions: buildTeamWorkflowActionMeta_(context)
+  };
+  return summary;
+}
+
+function attachTeamWorkflowMetaToCurrentStateSummary_(currentStateSummary, workflowContext) {
+  const summary = Object.assign({}, (currentStateSummary && typeof currentStateSummary === 'object') ? currentStateSummary : {});
+  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  summary.workflowContext = {
+    variant: trimString_(context.variant),
+    lifecycleStage: trimString_(context.lifecycleStage),
+    summaryDocumentMode: trimString_(context.summaryDocumentMode),
+    isPoFlow: context.isPoFlow === true,
+    hasPurchaseOrderDraft: context.hasPurchaseOrderDraft === true,
+    purchaseOrderDraftStatus: trimString_(context.purchaseOrderDraftStatus),
+    isLocked: context.isLocked === true,
+    isEditable: context.isEditable === true,
+    isCheckoutStarted: context.isCheckoutStarted === true,
+    isPoDraftLocked: context.isPoDraftLocked === true,
+    isManualPendingLocked: context.isManualPendingLocked === true,
+    isAwaitingPoSubmission: context.isAwaitingPoSubmission === true,
+    isPoSubmitted: context.isPoSubmitted === true,
+    isPoSubmittedUnpaid: context.isPoSubmittedUnpaid === true,
+    isPaymentReceived: context.isPaymentReceived === true,
+    isPaymentPending: context.isPaymentPending === true,
+    isProductionAuthorized: context.isProductionAuthorized === true,
+    hasPlacedOrder: context.hasPlacedOrder === true,
+    hasLockedInvoice: context.hasLockedInvoice === true,
+    hasSelectedJobs: context.hasSelectedJobs === true,
+    hasAnyActualJobCompletion: context.hasAnyActualJobCompletion === true,
+    allSelectedJobsCompleted: context.allSelectedJobsCompleted === true,
+    teamWorkflowMode: normalizeTeamWorkflowMode_(context.teamWorkflowMode),
+    canCancelPendingClientFlow: context.canCancelPendingClientFlow === true,
+    cancelFlowKind: trimString_(context.cancelFlowKind)
+  };
+  return summary;
+}
+
+function assertTeamWorkflowActionAllowed_(workflowContext, actionName) {
+  const actions = buildTeamWorkflowActionMeta_(workflowContext);
+  const actionKey = trimString_(actionName);
+  const action = actions[actionKey];
+  if (action && action.visible === true) return;
+  const messages = {
+    manual_payment: 'Manual payment can only be marked on standard unpaid locked orders.',
+    po_payment: 'PO payment can only be marked after purchase-order submission on an unpaid PO order.',
+    unlock_project: 'This project cannot be unlocked in its current state.',
+    reset_checkout: 'Checkout selection can only be reset while the order is awaiting checkout or PO upload.',
+    reopen_po: 'PO submission can only be reopened on an unpaid submitted PO order.',
+    resend_link: 'A resend link is not available for the current project state.',
+    lock_project: 'Only editable pre-order projects can be locked without ordering.',
+    mark_jobs_completed: 'Job completion dates are only available once the order has entered production or already has completion data.'
+  };
+  throw new Error(messages[actionKey] || 'That team action is not available for the current project state.');
 }
 
 function nextInvoiceNumber_() {
@@ -6643,6 +11416,687 @@ function getDriveFolderByIdSafe_(folderId) {
     return DriveApp.getFolderById(id);
   } catch (_) {
     return null;
+  }
+}
+
+function storePortalPdfBlobInInvoiceFolder_(opts) {
+  const options = (opts && typeof opts === 'object') ? opts : {};
+  const cfg = options.cfg || getConfig_();
+  const folder = getDriveFolderByIdSafe_(cfg.invoiceDriveFolderId);
+  if (!folder) {
+    throw new Error('Invoice folder is not configured.');
+  }
+  const base64Data = trimString_(options.base64Data || options.fileBase64 || options.fileDataBase64);
+  if (!base64Data) {
+    throw new Error('Invoice PDF payload is missing.');
+  }
+  const bytes = Utilities.base64Decode(base64Data);
+  if (!bytes || !bytes.length) {
+    throw new Error('Unable to read the invoice PDF.');
+  }
+  const defaultName = trimString_(options.defaultFileName || options.fileName || 'Red-Threads-Invoice.pdf');
+  const fileName = sanitizeUploadedDocumentName_(options.fileName, defaultName);
+  const blob = Utilities.newBlob(bytes, trimString_(options.mimeType) || MimeType.PDF, fileName);
+  const file = folder.createFile(blob);
+  return {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    mimeType: file.getMimeType(),
+    fileUrl: buildDriveFileViewUrl_(file.getId()),
+    previewUrl: buildDriveFilePreviewUrl_(file.getId()),
+    downloadUrl: buildDriveFileDownloadUrl_(file.getId())
+  };
+}
+
+function storePortalUploadBlobInInvoiceFolder_(opts) {
+  const options = (opts && typeof opts === 'object') ? opts : {};
+  const cfg = options.cfg || getConfig_();
+  const folder = getDriveFolderByIdSafe_(cfg.invoiceDriveFolderId);
+  if (!folder) {
+    throw new Error('Invoice folder is not configured.');
+  }
+  const base64Data = trimString_(options.base64Data || options.fileBase64 || options.fileDataBase64);
+  if (!base64Data) return null;
+  const bytes = Utilities.base64Decode(base64Data);
+  if (!bytes || !bytes.length) {
+    throw new Error('Unable to read the uploaded purchase order document.');
+  }
+  const defaultName = trimString_(options.defaultFileName || options.fileName || 'Purchase-Order-Document');
+  const fileName = sanitizeUploadedDocumentName_(options.fileName, defaultName);
+  const blob = Utilities.newBlob(bytes, trimString_(options.mimeType) || 'application/octet-stream', fileName);
+  const file = folder.createFile(blob);
+  return {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    mimeType: file.getMimeType(),
+    fileUrl: buildDriveFileViewUrl_(file.getId()),
+    previewUrl: buildDriveFilePreviewUrl_(file.getId()),
+    downloadUrl: buildDriveFileDownloadUrl_(file.getId())
+  };
+}
+
+function buildPurchaseOrderInvoiceFileName_(ctx) {
+  const draft = (ctx && ctx.orderDraft && typeof ctx.orderDraft === 'object') ? ctx.orderDraft : {};
+  const dealNumber = trimString_(draft.dealNumber);
+  const projectName = trimString_(draft.projectName);
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd');
+  const baseName = dealNumber
+    ? ('Red Threads Project-' + dealNumber + '-Invoice-' + stamp + '.pdf')
+    : ('Red Threads Project-Invoice-' + stamp + '.pdf');
+  return sanitizeUploadedDocumentName_(projectName ? baseName : baseName, baseName);
+}
+
+function preparePurchaseOrderDraftInvoiceArtifact_(ctx, payload, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const existingDraft = normalizePurchaseOrderDraftState_(opts.existingDraft);
+  const base64Data = trimString_(payload && payload.base64Data);
+  const invoiceNumber = trimString_(opts.invoiceNumber || (existingDraft && existingDraft.invoiceNumber)) || nextInvoiceNumber_();
+  if (!base64Data) {
+    if (!existingDraft || !trimString_(existingDraft.invoicePdfUrl)) {
+      throw new Error('Invoice PDF payload is missing.');
+    }
+    return {
+      invoiceNumber: invoiceNumber,
+      invoicePdfUrl: trimString_(existingDraft.invoicePdfUrl),
+      fileName: trimString_(opts.fileName || existingDraft.invoiceFileName || buildPurchaseOrderInvoiceFileName_(ctx))
+    };
+  }
+  const invoiceFile = storePortalPdfBlobInInvoiceFolder_({
+    cfg: ctx.cfg,
+    base64Data: base64Data,
+    mimeType: payload && payload.mimeType,
+    fileName: payload && payload.fileName,
+    defaultFileName: buildPurchaseOrderInvoiceFileName_(ctx)
+  });
+  return {
+    invoiceNumber: invoiceNumber,
+    invoicePdfUrl: trimString_(invoiceFile.fileUrl),
+    fileName: trimString_(invoiceFile.fileName)
+  };
+}
+
+function buildPurchaseOrderDraftResponse_(ctx, invoiceInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  return {
+    ok: true,
+    accountSummary: ctx.accountInfo.summary,
+    invoice: {
+      invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber),
+      invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
+      fileName: trimString_(opts.fileName || (invoiceInfo && invoiceInfo.fileName))
+    },
+    portalPayload: buildOrderActionPortalPayload_(ctx, ctx.rowInfo)
+  };
+}
+
+function buildLockedOrderPaymentLinkBundle_(token) {
+  const cleanToken = trimString_(token);
+  return {
+    summaryUrl: buildPortalSummaryUrl_(cleanToken),
+    cardUrl: buildLockedOrderPaymentPortalUrl_(cleanToken, PAYMENT_METHODS.card),
+    achUrl: buildLockedOrderPaymentPortalUrl_(cleanToken, PAYMENT_METHODS.ach)
+  };
+}
+
+function formatUsdAmount_(value) {
+  return '$' + roundMoney_(Number(value) || 0).toFixed(2);
+}
+
+function buildCheckPaymentInstructionsText_(orderSummary) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  return [
+    'If paying by check, mail the check for ' + formatUsdAmount_(summary.amountGrandTotal) + ' to:',
+    'Red Threads',
+    '505 South Saginaw Road',
+    'Midland, Michigan 48640'
+  ].join('\n');
+}
+
+function buildCheckPaymentInstructionsHtml_(orderSummary) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  return [
+    '<div style="margin:16px 0 0;padding:14px 16px;border-radius:14px;border:1px solid #fde68a;background:#fffbea;color:#3f2f08;">',
+    '  <div style="font-weight:800;margin-bottom:6px;">Paying by check</div>',
+    '  <div style="font-size:14px;line-height:1.7;">Mail the check for <strong>' + escapeHtml_(formatUsdAmount_(summary.amountGrandTotal)) + '</strong> to:<br>Red Threads<br>505 South Saginaw Road<br>Midland, Michigan 48640</div>',
+    '</div>'
+  ].join('\n');
+}
+
+function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
+  const links = buildLockedOrderPaymentLinkBundle_(token);
+  const invoiceNumber = trimString_(summary.invoiceNumber);
+  const projectName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.projectName);
+  const amountDue = formatUsdAmount_(summary.amountGrandTotal);
+  const intro = trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.';
+  const lines = [
+    intro,
+    '',
+    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+    projectName ? ('Project: ' + projectName) : '',
+    'Amount due: ' + amountDue,
+    '',
+    links.summaryUrl ? ('View your order summary: ' + links.summaryUrl) : '',
+    links.cardUrl ? ('Pay by credit card (3% card fee applies): ' + links.cardUrl) : '',
+    links.achUrl ? ('Pay by ACH bank transfer: ' + links.achUrl) : '',
+    '',
+    buildCheckPaymentInstructionsText_(summary),
+    '',
+    NOTIFICATION_REPLY_NOTICE
+  ].filter(Boolean);
+  const html = [
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
+    '  <p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>',
+    invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
+    projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
+    '  <p style="margin:0 0 16px;"><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</p>',
+    links.summaryUrl
+      ? ('  <p style="margin:0 0 12px;"><a href="' + escapeHtml_(links.summaryUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">View your order summary</a></p>')
+      : '',
+    links.cardUrl
+      ? ('  <p style="margin:0 0 8px;"><a href="' + escapeHtml_(links.cardUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Pay by credit card</a> <span style="color:#64748b;">(3% card fee applies)</span></p>')
+      : '',
+    links.achUrl
+      ? ('  <p style="margin:0 0 8px;"><a href="' + escapeHtml_(links.achUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Pay by ACH bank transfer</a></p>')
+      : '',
+    buildCheckPaymentInstructionsHtml_(summary),
+    '  <p style="margin:16px 0 0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+  return {
+    body: lines.join('\n'),
+    htmlBody: html,
+    links: links
+  };
+}
+
+function buildFinalInvoiceAttachment_(orderSummary, fileNameOverride) {
+  const invoiceUrl = trimString_(orderSummary && orderSummary.invoicePdfUrl);
+  const invoiceFileId = extractDriveFileIdFromUrl_(invoiceUrl);
+  const invoiceFile = invoiceFileId ? getDriveFileByIdSafe_(invoiceFileId) : null;
+  if (!invoiceFile) return null;
+  return invoiceFile.getBlob().setName(
+    sanitizeUploadedDocumentName_(fileNameOverride, invoiceFile.getName())
+  );
+}
+
+function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const invoiceNumber = trimString_(summary.invoiceNumber);
+  const paymentEmail = buildLockedOrderPaymentEmailContent_(ctx, summary, {
+    intro: trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.'
+  });
+  const attachment = buildFinalInvoiceAttachment_(summary, trimString_(opts.fileName));
+  const attachments = attachment ? [attachment] : [];
+  const subject = invoiceNumber
+    ? ('Red Threads order confirmation · ' + invoiceNumber)
+    : 'Red Threads order confirmation';
+  const clientRecipients = normalizeEmailRecipients_([
+    ctx && ctx.orderDraft && ctx.orderDraft.personEmail,
+    ctx && ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.primaryEmail,
+    ctx && ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.billingContactEmail
+  ]);
+  if (clientRecipients.length) {
+    sendNotificationEmail_({
+      toList: clientRecipients,
+      subject: subject,
+      body: paymentEmail.body,
+      htmlBody: paymentEmail.htmlBody,
+      attachments: attachments,
+      fromAlias: NOTIFICATION_FROM_ALIAS,
+      replyTo: NOTIFICATION_FROM_ALIAS
+    });
+  }
+  sendNotificationEmail_({
+    toList: [DOCUMENT_REVIEW_EMAIL],
+    subject: subject,
+    body: paymentEmail.body,
+    htmlBody: paymentEmail.htmlBody,
+    attachments: attachments,
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+  return {
+    ok: true,
+    summaryUrl: paymentEmail.links.summaryUrl,
+    cardUrl: paymentEmail.links.cardUrl,
+    achUrl: paymentEmail.links.achUrl
+  };
+}
+
+function ensurePurchaseOrderInvoice_(payload) {
+  const ctx = buildPreparedOrderActionContext_(payload);
+  const validationError = validateOrderPlacementForAction_(ctx);
+  if (validationError) return validationError;
+  if (normalizeFulfillmentMethod_(ctx.orderDraft && ctx.orderDraft.fulfillmentMethod) === FULFILLMENT_METHODS.shipping) {
+    const shippingError = validateRequiredOrderDraftShippingDetails_(ctx.orderDraft && ctx.orderDraft.shippingDetails);
+    if (shippingError) return { ok: false, error: shippingError };
+  }
+  if (!ctx.accountInfo.summary.termsApproved) {
+    return {
+      ok: true,
+      gated: true,
+      termsRequired: true,
+      accountSummary: ctx.accountInfo.summary,
+      termsDocumentUrl: ctx.accountInfo.summary.termsDocumentUrl || ctx.cfg.termsDocumentUrl,
+      message: 'Terms approval is required before you can submit a purchase order.'
+    };
+  }
+  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    ordersSheet: ctx.infra.ordersSheet
+  });
+  if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
+    const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
+    return {
+      ok: false,
+      error: trimString_(latestSummary.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.purchase_order
+        ? 'This purchase order has already been submitted.'
+        : 'This order has already moved past the editable checkout stage.'
+    };
+  }
+  const existingDraft = readPurchaseOrderDraftFromPortalState_(ctx.portalState);
+  const invoiceInfo = preparePurchaseOrderDraftInvoiceArtifact_(ctx, payload, {
+    existingDraft: existingDraft,
+    invoiceNumber: existingDraft && existingDraft.invoiceNumber
+  });
+  supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
+    revisionReason: 'payment_method_superseded_to_purchase_order',
+    notes: 'Superseded by purchase-order draft preparation.'
+  });
+  const nextDraftState = buildPurchaseOrderDraftStateFromInvoice_(ctx, invoiceInfo, {
+    status: existingDraft && existingDraft.status === PURCHASE_ORDER_DRAFT_STATUSES.email_sent
+      ? PURCHASE_ORDER_DRAFT_STATUSES.email_sent
+      : PURCHASE_ORDER_DRAFT_STATUSES.draft_ready,
+    invoiceSentToEmail: existingDraft && existingDraft.invoiceSentToEmail,
+    invoiceSentAt: existingDraft && existingDraft.invoiceSentAt,
+    lastPreparedAt: nowIso_(),
+    resumeStage: 'submit'
+  });
+  lockCurrentOrderPointersToPurchaseOrderDraftState_(
+    ctx,
+    ctx.portalState,
+    nextDraftState
+  );
+  return buildPurchaseOrderDraftResponse_(ctx, invoiceInfo, {
+    fileName: invoiceInfo.fileName
+  });
+}
+
+function ensurePurchaseOrderInvoice(payload) {
+  try {
+    return ensurePurchaseOrderInvoice_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function sendPurchaseOrderInvoiceEmail_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const recipients = normalizeEmailRecipients_(p.recipients || p.to || p.toList);
+  if (!recipients.length) {
+    throw new Error('Enter at least one valid email address.');
+  }
+  const ensured = ensurePurchaseOrderInvoice_(payload);
+  if (!ensured || ensured.ok !== true) return ensured;
+  if (ensured.gated) return ensured;
+  const invoiceUrl = trimString_(ensured.invoice && ensured.invoice.invoicePdfUrl)
+    || trimString_(ensured.orderSummary && ensured.orderSummary.invoicePdfUrl);
+  const invoiceFileId = extractDriveFileIdFromUrl_(invoiceUrl);
+  const invoiceFile = invoiceFileId ? getDriveFileByIdSafe_(invoiceFileId) : null;
+  if (!invoiceFile) {
+    throw new Error('The purchase order invoice PDF could not be found.');
+  }
+  const attachment = invoiceFile.getBlob().setName(
+    sanitizeUploadedDocumentName_(
+      ensured.invoice && ensured.invoice.fileName,
+      invoiceFile.getName()
+    )
+  );
+  const dealNumber = trimString_(ensured && ensured.orderSummary && ensured.orderSummary.orderId)
+    ? trimString_(ensured && ensured.accountSummary && ensured.accountSummary.orgName)
+    : '';
+  const draftProjectName = trimString_(p.projectName || (payload && payload.projectName));
+  const invoiceNumber = trimString_(ensured.invoice && ensured.invoice.invoiceNumber)
+    || trimString_(ensured.orderSummary && ensured.orderSummary.invoiceNumber);
+  const portalToken = trimString_(p.token);
+  const resumeUrl = buildPurchaseOrderResumePortalUrl_(portalToken, { stage: 'submit' });
+  const subject = invoiceNumber
+    ? ('Red Threads Invoice ' + invoiceNumber)
+    : 'Red Threads Invoice';
+  const body = [
+    'Your Red Threads invoice is attached.',
+    '',
+    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+    draftProjectName ? ('Project: ' + draftProjectName) : '',
+    '',
+    'Next steps:',
+    '1. Email this invoice to your purchasing or accounts payable team so they can issue the company purchase order.',
+    '2. Use this return link to reopen the portal directly in the purchase-order upload step: ' + resumeUrl,
+    '3. Upload the approved purchase order, enter the PO number and approver name, and submit to complete the order.',
+    '',
+    NOTIFICATION_REPLY_NOTICE
+  ].filter(Boolean).join('\n');
+  const htmlBody = [
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1f2937;">',
+    '  <p style="margin:0 0 14px;">Your Red Threads invoice is attached.</p>',
+    invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
+    draftProjectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(draftProjectName) + '</p>') : '',
+    '  <ol style="margin:0 0 16px 20px;padding:0;">',
+    '    <li style="margin:0 0 8px;">Email this invoice to your purchasing or accounts payable team so they can issue the company purchase order.</li>',
+    '    <li style="margin:0 0 8px;">Use the return link below to reopen the portal directly in the purchase-order upload step.</li>',
+    '    <li style="margin:0;">Upload the approved purchase order, enter the PO number and approver name, and submit to complete the order.</li>',
+    '  </ol>',
+    resumeUrl
+      ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(resumeUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Return to the purchase-order upload step</a></p>')
+      : '',
+    '  <p style="margin:0;color:#5f6f86;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+  sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: [attachment],
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+  const emailCtx = buildOrderActionContext_({
+    token: trimString_(p.token),
+    personEmail: trimString_(p.personEmail),
+    personName: trimString_(p.personName),
+    orgId: trimString_(p.orgId),
+    orgName: trimString_(p.orgName)
+  });
+  const currentDraft = readPurchaseOrderDraftFromPortalState_(emailCtx.portalState)
+    || buildPurchaseOrderDraftStateFromInvoice_(emailCtx, ensured.invoice, { resumeStage: 'submit' });
+  const emailedDraftState = Object.assign({}, currentDraft, {
+    status: PURCHASE_ORDER_DRAFT_STATUSES.email_sent,
+    invoiceSentToEmail: recipients.join(', '),
+    invoiceSentAt: nowIso_(),
+    resumeStage: 'submit'
+  });
+  lockCurrentOrderPointersToPurchaseOrderDraftState_(
+    emailCtx,
+    emailCtx.portalState,
+    emailedDraftState
+  );
+  return {
+    ok: true,
+    accountSummary: emailCtx.accountInfo.summary,
+    invoice: ensured.invoice,
+    portalPayload: buildOrderActionPortalPayload_(emailCtx, emailCtx.rowInfo)
+  };
+}
+
+function sendPurchaseOrderInvoiceEmail(payload) {
+  try {
+    return sendPurchaseOrderInvoiceEmail_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function createLockedOrderPaymentCheckout_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const method = trimString_(p.paymentMethodSelected).toLowerCase();
+  if (method !== PAYMENT_METHODS.card && method !== PAYMENT_METHODS.ach) {
+    return { ok: false, error: 'Unsupported payment method.' };
+  }
+  const ctx = buildOrderActionContext_(payload);
+  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    ordersSheet: ctx.infra.ordersSheet
+  });
+  if (!latestOrder) {
+    return { ok: false, error: 'Locked order not found.' };
+  }
+  const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
+  if (trimString_(latestSummary.portalLockState).toLowerCase() !== PORTAL_LOCK_STATES.locked) {
+    return { ok: false, error: 'This order is not locked yet.' };
+  }
+  if (trimString_(latestSummary.paidAt)) {
+    return { ok: false, error: 'This order is already marked paid.' };
+  }
+  const checkoutAttemptId = newPortalId_('chk');
+  const orderDraft = Object.assign(
+    {},
+    safeJsonParse_(latestOrder.rowObjNormalized.orderdraftjson, {}) || {},
+    {
+      token: trimString_(ctx.orderDraft.token),
+      paymentMethodSelected: method
+    }
+  );
+  const stripe = createStripeCheckoutSession_(orderDraft, {
+    cfg: ctx.cfg,
+    paymentMethodSelected: method,
+    checkoutAttemptId: checkoutAttemptId,
+    orderId: trimString_(latestOrder.rowObjNormalized.orderid),
+    returnUrl: buildPortalSummaryUrl_(ctx.orderDraft.token),
+    suppressShippingAddressCollection: true
+  });
+  if (!hasUsableCheckoutSession_(stripe)) {
+    return buildCheckoutAttemptFailureResponse_(stripe);
+  }
+  const updatedOrder = updatePortalOrderState_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    orderRowInfo: latestOrder,
+    checkoutAttemptId: checkoutAttemptId,
+    stripeSessionId: trimString_(stripe.sessionId),
+    paymentState: PAYMENT_STATES.checkout_created
+  });
+  const orderSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  const exportRowInfo = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: orderSummary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  return {
+    ok: true,
+    checkoutReady: true,
+    checkoutUrl: trimString_(stripe.checkoutUrl || stripe.url),
+    stripe: stripe,
+    accountSummary: ctx.accountInfo.summary,
+    orderSummary: orderSummary,
+    portalPayload: buildOrderActionPortalPayload_(ctx, exportRowInfo)
+  };
+}
+
+function createLockedOrderPaymentCheckout(payload) {
+  try {
+    return createLockedOrderPaymentCheckout_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function submitPurchaseOrder_(payload) {
+  const ctx = buildPreparedOrderActionContext_(payload);
+  if (!ctx.accountInfo.summary.termsApproved) {
+    return {
+      ok: false,
+      error: 'Approved credit terms are required before you can submit a purchase order.'
+    };
+  }
+  const poNumber = trimString_(payload && payload.poNumber);
+  const approvedByName = trimString_(payload && (payload.approvedByName || payload.poApprovedBy));
+  if (!poNumber) return { ok: false, error: 'Enter the purchase order number before submitting.' };
+  if (!approvedByName) return { ok: false, error: 'Enter the approver name before submitting.' };
+  if (normalizeFulfillmentMethod_(ctx.orderDraft && ctx.orderDraft.fulfillmentMethod) === FULFILLMENT_METHODS.shipping) {
+    const shippingError = validateRequiredOrderDraftShippingDetails_(ctx.orderDraft && ctx.orderDraft.shippingDetails);
+    if (shippingError) return { ok: false, error: shippingError };
+  }
+  const purchaseOrderDraft = readPurchaseOrderDraftFromPortalState_(ctx.portalState);
+  if (!purchaseOrderDraft || !trimString_(purchaseOrderDraft.invoicePdfUrl)) {
+    return { ok: false, error: 'No purchase-order invoice is ready yet. Email or download the invoice first.' };
+  }
+  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    ordersSheet: ctx.infra.ordersSheet
+  });
+  if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
+    const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
+    return {
+      ok: false,
+      error: trimString_(latestSummary.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.purchase_order
+        ? 'This purchase order has already been submitted.'
+        : 'This order has already moved past the editable checkout stage.'
+    };
+  }
+  const poDoc = trimString_(payload && payload.poDocumentBase64)
+    ? storePortalUploadBlobInInvoiceFolder_({
+        cfg: ctx.cfg,
+        base64Data: payload && payload.poDocumentBase64,
+        mimeType: payload && payload.poDocumentMimeType,
+        fileName: payload && payload.poDocumentFileName,
+        defaultFileName: 'Company-Purchase-Order'
+      })
+    : null;
+  const invoiceInfo = trimString_(payload && payload.base64Data)
+    ? preparePurchaseOrderDraftInvoiceArtifact_(ctx, payload, {
+        existingDraft: purchaseOrderDraft,
+        invoiceNumber: purchaseOrderDraft.invoiceNumber,
+        fileName: purchaseOrderDraft.invoiceFileName
+      })
+    : {
+        invoiceNumber: trimString_(purchaseOrderDraft.invoiceNumber),
+        invoicePdfUrl: trimString_(purchaseOrderDraft.invoicePdfUrl),
+        fileName: trimString_(purchaseOrderDraft.invoiceFileName) || buildPurchaseOrderInvoiceFileName_(ctx)
+      };
+  supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
+    revisionReason: 'payment_method_superseded_to_purchase_order_submission',
+    notes: 'Superseded by final purchase-order submission.'
+  });
+  const nextDraft = Object.assign({}, ctx.orderDraft, {
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order,
+    paymentState: PAYMENT_STATES.not_started,
+    orderState: ORDER_STATES.ready_for_production,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    portalLockState: PORTAL_LOCK_STATES.locked
+  });
+  const now = nowIso_();
+  const created = createPortalOrder_(Object.assign({}, ctx, {
+    orderDraft: nextDraft,
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    orderState: ORDER_STATES.ready_for_production,
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order,
+    paymentState: PAYMENT_STATES.not_started,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    lockedAt: now,
+    invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
+    invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl),
+    invoiceSentToEmail: trimString_(purchaseOrderDraft.invoiceSentToEmail),
+    invoiceSentAt: trimString_(purchaseOrderDraft.invoiceSentAt),
+    poNumber: poNumber,
+    poDocumentUrl: trimString_(poDoc && poDoc.fileUrl),
+    poSubmittedBy: approvedByName,
+    poSubmittedAt: now,
+    authorizedToProduceAt: now,
+    revisionReason: 'Purchase order submitted'
+  }));
+  const finalOrderSummary = created.summary || buildPortalOrderSummary_(created.rowInfo && created.rowInfo.rowObjNormalized);
+  const exportRowInfo = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: finalOrderSummary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  const finalizedPortalState = clearPurchaseOrderDraftFromPortalState_(ctx.portalState);
+  ctx.portalState = finalizedPortalState;
+  const finalizeResult = finalizePortalAfterPayment({
+    token: ctx.orderDraft.token,
+    portalState: finalizedPortalState,
+    submittedAt: now,
+    systemMessage: 'Purchase order submitted and accepted on ' + now + '. Order authorized for production.'
+  });
+  if (!finalizeResult || finalizeResult.ok !== true) {
+    return { ok: false, error: String((finalizeResult && finalizeResult.error) || 'Unable to finalize the purchase-order submission.') };
+  }
+  ctx.rowInfo = findRowByToken_(ctx.infra.exportSheet, ctx.orderDraft.token) || buildRowInfoFromSheet_(ctx.infra.exportSheet, exportRowInfo.row);
+  ctx.row = ctx.rowInfo.rowObjNormalized;
+  const confirmation = sendLockedOrderConfirmationEmails_(ctx, finalOrderSummary, {
+    intro: 'Congratulations. Your purchase order was submitted successfully and your final invoice is attached.'
+  });
+  return {
+    ok: true,
+    accountSummary: ctx.accountInfo.summary,
+    orderSummary: finalOrderSummary,
+    portalPayload: buildOrderActionPortalPayload_(ctx, ctx.rowInfo),
+    message: 'Purchase order submitted successfully.',
+    paymentLinks: confirmation && confirmation.ok === true ? {
+      summaryUrl: trimString_(confirmation.summaryUrl),
+      cardUrl: trimString_(confirmation.cardUrl),
+      achUrl: trimString_(confirmation.achUrl)
+    } : null
+  };
+}
+
+function submitPurchaseOrder(payload) {
+  try {
+    return submitPurchaseOrder_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function cancelPendingClientOrderFlow_(payload) {
+  const ctx = buildPreparedOrderActionContext_(payload);
+  const lifecycle = buildLatestClientWorkflowContextForAction_(ctx);
+  const workflowContext = lifecycle.workflowContext || {};
+  if (workflowContext.canCancelPendingClientFlow !== true) {
+    throw new Error('This client flow can no longer be canceled.');
+  }
+  const requestedKind = trimString_(payload && payload.flowKind).toLowerCase();
+  const cancelFlowKind = trimString_(workflowContext.cancelFlowKind).toLowerCase();
+  if (requestedKind && cancelFlowKind && requestedKind !== cancelFlowKind) {
+    throw new Error('The requested cancel action is no longer available.');
+  }
+  const isPurchaseOrderCancel = cancelFlowKind === PAYMENT_METHODS.purchase_order;
+  supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
+    revisionReason: isPurchaseOrderCancel
+      ? 'purchase_order_draft_canceled_by_client'
+      : 'manual_payment_canceled_by_client',
+    notes: isPurchaseOrderCancel
+      ? 'Canceled by client before purchase-order submission.'
+      : 'Canceled by client before manual payment was received.'
+  });
+  const clearedPortalState = appendClientLifecycleAuditMessageToPortalState_(
+    clearPurchaseOrderDraftFromPortalState_(ctx.portalState),
+    isPurchaseOrderCancel
+      ? 'Purchase-order workflow canceled. Project returned to editable estimate mode.'
+      : 'Manual payment order canceled. Project returned to editable estimate mode.',
+    trimString_(ctx.orderDraft && ctx.orderDraft.personName)
+  );
+  clearCurrentOrderPointersToEditableState_(ctx, clearedPortalState);
+  return {
+    ok: true,
+    accountSummary: ctx.accountInfo.summary,
+    portalPayload: buildOrderActionPortalPayload_(ctx, ctx.rowInfo),
+    message: isPurchaseOrderCancel
+      ? 'Purchase-order flow canceled. The project is editable again.'
+      : 'Manual-payment order canceled. The project is editable again.'
+  };
+}
+
+function cancelPendingClientOrderFlow(payload) {
+  try {
+    return cancelPendingClientOrderFlow_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
   }
 }
 
@@ -6764,7 +12218,13 @@ function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
   const firstName = trimString_(clientName.split(/\s+/)[0]) || 'there';
   const portalUrl = buildExternalPortalUrl_(trimString_(opts.token || row.token));
   const projectName = trimString_(opts.projectName || deriveProjectNameForNotification_(row, safeJsonParse_(row.snapshotjson, null), opts));
-  const subject = '🚩 ' + senderName + ' has responded to your message';
+  const sentAt = new Date();
+  const subjectTimeLabel = Utilities.formatDate(sentAt, Session.getScriptTimeZone(), 'M/d/yyyy h:mm:ss a');
+  const subject = [
+    '🚩 ' + senderName + ' has responded to your message',
+    projectName || '',
+    subjectTimeLabel
+  ].filter(Boolean).join(' — ');
   const body = [
     'Hi ' + firstName + ',',
     '',
@@ -6795,6 +12255,72 @@ function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
 
   return sendNotificationEmail_({
     to: recipientEmail,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+}
+
+function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const teamInboxEmail = normalizeEmail_(opts.teamInboxEmail || DOCUMENT_REVIEW_EMAIL);
+  if (!teamInboxEmail) return { ok: false, skipped: true, reason: 'missing-team-email' };
+  const teamModePassword = trimString_(getConfig_().teamModePassword || DEFAULT_TEAM_MODE_PASSWORD);
+
+  const senderName = trimString_(opts.senderName || deriveSenderNameForNotification_(row, 'client', opts) || 'Client');
+  const projectName = trimString_(opts.projectName || deriveProjectNameForNotification_(row, safeJsonParse_(row.snapshotjson, null), opts));
+  const portalUrl = buildTeamSnapshotPortalUrl_(trimString_(opts.token || row.token));
+  const messageText = String(opts.messageText || (message && message.text) || '').trim();
+  const clientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+  const subject = '🚩 New client portal message' + (projectName ? (' — ' + projectName) : '');
+  const body = [
+    'A client sent a new portal message.',
+    '',
+    'From: ' + (senderName || 'Client'),
+    clientEmail ? ('Email: ' + clientEmail) : '',
+    projectName ? ('Project: ' + projectName) : '',
+    '',
+    'Message:',
+    messageText || '--',
+    '',
+    teamModePassword ? ('Team password: ' + teamModePassword) : '',
+    '',
+    portalUrl ? ('Open portal: ' + portalUrl) : ''
+  ].filter(Boolean).join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads Client Message</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">A client sent a new portal message</h1>',
+    '    <div style="margin:0 0 18px;padding:18px 20px;border-radius:14px;background:#f7f9fc;border:1px solid #e6ebf3;font-size:14px;line-height:1.8;color:#35435a;">',
+    '      <div><strong>From:</strong> ' + escapeHtml_(senderName || 'Client') + '</div>',
+    clientEmail ? ('      <div><strong>Email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '',
+    projectName ? ('      <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
+    '    </div>',
+    '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;">',
+    '      <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#9f1239;font-weight:800;margin-bottom:10px;">Message</div>',
+    '      <div style="font-size:16px;line-height:1.7;color:#35435a;white-space:pre-wrap;">' + escapeHtml_(messageText || '--') + '</div>',
+    '    </div>',
+    teamModePassword
+      ? ('    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:linear-gradient(135deg,#ecfeff 0%, #cffafe 100%);border:1px solid #67e8f9;box-shadow:0 10px 22px rgba(34,211,238,.16);">'
+        + '<div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#0f766e;font-weight:800;margin-bottom:10px;">Team Password</div>'
+        + '<div style="display:inline-block;padding:10px 14px;border-radius:12px;background:#042f2e;color:#99f6e4;font-size:22px;line-height:1.2;font-weight:900;letter-spacing:0.04em;">'
+        + escapeHtml_(teamModePassword)
+        + '</div></div>')
+      : '',
+    portalUrl
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">Open Team Snapshot</a></p>')
+      : '',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated notification from the Red Threads portal.</p>',
+    '  </div>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+
+  return sendNotificationEmail_({
+    to: teamInboxEmail,
     subject: subject,
     body: body,
     htmlBody: htmlBody,
@@ -6858,6 +12384,114 @@ function sendNotificationEmail_(options) {
     noReply: true,
     senderName: NOTIFICATION_SENDER_NAME
   };
+}
+
+function fetchSummaryExportImageData(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const urls = Array.isArray(p.urls) ? p.urls : [];
+  const assets = [];
+  const seen = {};
+  urls.forEach(function(item) {
+    const sourceUrl = trimString_(item);
+    if (!/^https?:\/\//i.test(sourceUrl) || seen[sourceUrl]) return;
+    seen[sourceUrl] = true;
+    try {
+      const driveFileId = extractDriveFileIdFromUrl_(sourceUrl);
+      if (driveFileId) {
+        const driveAsset = buildDriveBinaryDataPayload_(driveFileId, 'summary-export-image', 'image/png');
+        if (driveAsset && trimString_(driveAsset.base64Data)) {
+          assets.push({
+            url: sourceUrl,
+            mimeType: trimString_(driveAsset.mimeType) || 'image/png',
+            dataUrl: 'data:' + (trimString_(driveAsset.mimeType) || 'image/png') + ';base64,' + trimString_(driveAsset.base64Data)
+          });
+          return;
+        }
+      }
+      const response = UrlFetchApp.fetch(sourceUrl, {
+        followRedirects: true,
+        muteHttpExceptions: true
+      });
+      const statusCode = Number(response && response.getResponseCode && response.getResponseCode()) || 0;
+      if (statusCode < 200 || statusCode >= 300) return;
+      const blob = response.getBlob();
+      const bytes = blob && typeof blob.getBytes === 'function' ? blob.getBytes() : [];
+      if (!bytes || !bytes.length) return;
+      const mimeType = trimString_(blob.getContentType()) || 'image/png';
+      assets.push({
+        url: sourceUrl,
+        mimeType: mimeType,
+        dataUrl: 'data:' + mimeType + ';base64,' + Utilities.base64Encode(bytes)
+      });
+    } catch (_) {}
+  });
+  return {
+    ok: true,
+    assets: assets
+  };
+}
+
+function sendSummaryEstimatePdfEmail(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const recipients = normalizeEmailRecipients_(p.recipients || p.to || p.toList);
+  if (!recipients.length) {
+    throw new Error('Enter at least one valid email address.');
+  }
+  const base64Data = trimString_(p.base64Data || p.fileDataBase64 || p.fileBase64);
+  if (!base64Data) {
+    throw new Error('Summary PDF payload is missing.');
+  }
+  const bytes = Utilities.base64Decode(base64Data);
+  if (!bytes || !bytes.length) {
+    throw new Error('Unable to read the Summary PDF.');
+  }
+  if (bytes.length > MAX_SUMMARY_EXPORT_PDF_BYTES) {
+    throw new Error('Summary PDF must be 20 MB or smaller.');
+  }
+
+  const dealNumber = trimString_(p.dealNumber);
+  const projectName = trimString_(p.projectName);
+  const documentKind = trimString_(p.documentKind).toLowerCase() === 'invoice' ? 'invoice' : 'summary';
+  const fileName = sanitizeUploadedDocumentName_(
+    p.fileName,
+    documentKind === 'invoice'
+      ? (dealNumber ? ('Red Threads Project-' + dealNumber + '-Invoice.pdf') : 'Red Threads Project-Invoice.pdf')
+      : (dealNumber ? ('Red Threads Project-' + dealNumber + '-Summary.pdf') : 'Red Threads Project-Summary.pdf')
+  );
+  const blob = Utilities.newBlob(bytes, trimString_(p.mimeType) || MimeType.PDF, fileName);
+  const subject = documentKind === 'invoice'
+    ? (dealNumber ? ('Red Threads Project ' + dealNumber + ' Invoice') : 'Red Threads Project Invoice')
+    : (dealNumber ? ('Red Threads Project ' + dealNumber + ' Summary') : 'Red Threads Project Summary');
+  const body = [
+    documentKind === 'invoice'
+      ? 'Your Red Threads invoice document is attached.'
+      : 'Your Red Threads Summary document is attached.',
+    '',
+    dealNumber ? ('Project #: ' + dealNumber) : '',
+    projectName ? ('Project Name: ' + projectName) : '',
+    '',
+    NOTIFICATION_REPLY_NOTICE
+  ].filter(Boolean).join('\n');
+  const htmlBody = [
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1f2937;">',
+    '  <p style="margin:0 0 14px;">' + escapeHtml_(documentKind === 'invoice'
+      ? 'Your Red Threads invoice document is attached.'
+      : 'Your Red Threads Summary document is attached.') + '</p>',
+    dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
+    projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
+    '  <p style="margin:0;color:#5f6f86;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+
+  return sendNotificationEmail_({
+    toList: recipients,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    attachments: [blob],
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
 }
 
 /* ---------------- Hosted Stripe Checkout Builders + Transport ---------------- */
@@ -7555,6 +13189,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const paymentMethodSelected = trimString_(opts.paymentMethodSelected).toLowerCase();
   const paymentMethodType = paymentMethodSelected === PAYMENT_METHODS.ach ? 'us_bank_account' : 'card';
+  const suppressShippingAddressCollection = opts.suppressShippingAddressCollection === true;
   const returnBaseUrl = buildStripeReturnBaseUrl_(orderDraft.token, { returnUrl: opts.returnUrl });
   const successUrl = buildStripeCheckoutReturnUrl_(orderDraft.token, {
     returnUrl: returnBaseUrl,
@@ -7601,7 +13236,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     payload['metadata[' + key + ']'] = metadata[key];
     payload['payment_intent_data[metadata][' + key + ']'] = metadata[key];
   });
-  if (fulfillmentMethod === FULFILLMENT_METHODS.shipping) {
+  if (fulfillmentMethod === FULFILLMENT_METHODS.shipping && !suppressShippingAddressCollection) {
     STRIPE_FULFILLMENT_ALLOWED_COUNTRIES.forEach(function (countryCode, idx) {
       payload['shipping_address_collection[allowed_countries][' + idx + ']'] = trimString_(countryCode).toUpperCase();
     });
@@ -7784,7 +13419,6 @@ function setPortalClientLockForRow_(sheet, rowInfo, locked, options) {
   return persistPortalStateForRow_(sheet, rowInfo, currentPortalState, {
     token: trimString_(opts.token || rowInfo.rowObjNormalized.token),
     locked: locked === true,
-    status: locked ? 'locked' : 'Editable',
     chatLog: currentChatLog,
     clearSubmittedAt: locked !== true
   });
@@ -7881,77 +13515,12 @@ function buildChatNotificationPayload_(rowInfo, message, options) {
   };
 }
 
-function logChatNotificationIssue_(message, meta) {
-  const payload = (meta && typeof meta === 'object') ? meta : {};
-  try {
-    console.warn('[CHAT_NOTIFY]', message, JSON.stringify(payload));
-  } catch (_) {
-    Logger.log('[CHAT_NOTIFY] ' + message + ' ' + JSON.stringify(payload));
-  }
-}
-
-function sendChatNotificationToMake_(eventPayload) {
-  const payload = (eventPayload && typeof eventPayload === 'object') ? eventPayload : {};
-  const token = String(payload.token || '').trim();
-  const messageText = String(payload.messageText || '').trim();
-  const senderType = String(payload.senderType || '').trim().toLowerCase();
-  if (!token || !messageText || (senderType !== 'client' && senderType !== 'team')) {
-    return { ok: false, skipped: true, reason: 'invalid-payload' };
-  }
-
-  try {
-    const cfg = getConfig_();
-    const url = String(cfg.makeWebhookUrl || '').trim();
-    if (!url) {
-      logChatNotificationIssue_('Missing Make webhook URL.', {
-        token: token,
-        senderType: senderType
-      });
-      return { ok: false, skipped: true, reason: 'missing-webhook-url' };
-    }
-
-    const headers = {};
-    if (cfg.makeWebhookSecret) {
-      headers['X-RT-Webhook-Secret'] = String(cfg.makeWebhookSecret);
-    }
-
-    const response = UrlFetchApp.fetch(url, {
-      method: 'post',
-      contentType: 'application/json',
-      muteHttpExceptions: true,
-      payload: JSON.stringify(payload),
-      headers: headers
-    });
-
-    const statusCode = Number(response.getResponseCode() || 0);
-    const responseText = String(response.getContentText() || '');
-    if (statusCode < 200 || statusCode >= 300) {
-      logChatNotificationIssue_('Make webhook responded with non-2xx status.', {
-        token: token,
-        senderType: senderType,
-        statusCode: statusCode,
-        responseText: responseText.slice(0, 500)
-      });
-      return { ok: false, statusCode: statusCode };
-    }
-
-    return { ok: true, statusCode: statusCode };
-  } catch (err) {
-    logChatNotificationIssue_('Make webhook request failed.', {
-      token: token,
-      senderType: senderType,
-      error: String((err && err.message) || err)
-    });
-    return { ok: false, error: String((err && err.message) || err) };
-  }
-}
-
 function normalizeEmail_(value) {
   return String(value || '').trim().toLowerCase();
 }
 
 function buildProjectsCacheKey_(email) {
-  return 'rt:projects:' + normalizeEmail_(email);
+  return 'rt:projects:v12:' + normalizeEmail_(email);
 }
 
 function parseIsoDateMs_(value) {
@@ -8419,17 +13988,99 @@ function isFinalPortalStatus_(status) {
   return FINAL_LOCK_STATUSES[String(status || '').trim().toLowerCase()] === true;
 }
 
+function derivePortalDisplayOrderStatus_(stateInput, fallbackStatus) {
+  const state = (stateInput && typeof stateInput === 'object') ? stateInput : {};
+  const teamWorkflowMode = normalizeTeamWorkflowMode_(state.teamWorkflowMode);
+  const portalLockState = trimString_(
+    state.portalLockState ||
+    state.portallockstate ||
+    state.currentPortalLockState ||
+    state.currentportallockstate
+  ).toLowerCase();
+  const orderState = trimString_(
+    state.orderState ||
+    state.orderstate ||
+    state.currentOrderState ||
+    state.currentorderstate
+  ).toLowerCase();
+  const paymentState = trimString_(
+    state.paymentState ||
+    state.paymentstate ||
+    state.currentPaymentState ||
+    state.currentpaymentstate
+  ).toLowerCase();
+  const productionAuthorizationState = trimString_(
+    state.productionAuthorizationState ||
+    state.productionauthorizationstate ||
+    state.currentProductionAuthorizationState ||
+    state.currentproductionauthorizationstate
+  ).toLowerCase();
+  const paidAt = trimString_(state.paidAt || state.paidat);
+  const authorizedToProduceAt = trimString_(state.authorizedToProduceAt || state.authorizedtoproduceat);
+  const fallback = trimString_(fallbackStatus || state.status).toLowerCase();
+
+  const isOperationallyAccepted =
+    !!paidAt ||
+    !!authorizedToProduceAt ||
+    paymentState === PAYMENT_STATES.paid ||
+    paymentState === PAYMENT_STATES.manual_received ||
+    productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized ||
+    orderState === ORDER_STATES.ready_for_production ||
+    orderState === ORDER_STATES.in_production ||
+    orderState === ORDER_STATES.closed;
+
+  const isPendingLockedOrder =
+    orderState === ORDER_STATES.awaiting_manual_payment ||
+    orderState === ORDER_STATES.awaiting_po_submission ||
+    orderState === ORDER_STATES.awaiting_payment_confirmation ||
+    paymentState === PAYMENT_STATES.checkout_created ||
+    paymentState === PAYMENT_STATES.submitted ||
+    paymentState === PAYMENT_STATES.pending ||
+    paymentState === PAYMENT_STATES.manual_pending ||
+    productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.po_pending;
+
+  if (teamWorkflowMode === TEAM_WORKFLOW_MODES.team_hold || teamWorkflowMode === TEAM_WORKFLOW_MODES.checkout_reset) {
+    return PORTAL_DISPLAY_ORDER_STATUSES.editable;
+  }
+
+  if (portalLockState === PORTAL_LOCK_STATES.editable) {
+    return PORTAL_DISPLAY_ORDER_STATUSES.editable;
+  }
+  if (portalLockState === PORTAL_LOCK_STATES.locked) {
+    return isOperationallyAccepted
+      ? PORTAL_DISPLAY_ORDER_STATUSES.processing
+      : PORTAL_DISPLAY_ORDER_STATUSES.locked;
+  }
+  if (isOperationallyAccepted) {
+    return PORTAL_DISPLAY_ORDER_STATUSES.processing;
+  }
+  if (fallback === PORTAL_DISPLAY_ORDER_STATUSES.processing.toLowerCase()) {
+    return PORTAL_DISPLAY_ORDER_STATUSES.processing;
+  }
+  if (isPendingLockedOrder || isFinalPortalStatus_(fallback)) {
+    return PORTAL_DISPLAY_ORDER_STATUSES.locked;
+  }
+  if (!fallback || fallback === 'sent' || fallback === 'estimate' || fallback === 'editable' || fallback === 'saved') {
+    return PORTAL_DISPLAY_ORDER_STATUSES.editable;
+  }
+  return PORTAL_DISPLAY_ORDER_STATUSES.editable;
+}
+
 function getFinalStatusForRow_(row) {
-  const current = String((row && row.status) || '').trim();
-  return isFinalPortalStatus_(current) ? current : 'submitted';
+  return derivePortalDisplayOrderStatus_(row, row && row.status);
 }
 
 function isLockedPortalRow_(row, portalState) {
   const status = String((row && row.status) || '').trim().toLowerCase();
-  if (status === 'saved' || status === 'editable') return false;
+  const portalLockState = trimString_(
+    row && (row.portallockstate || row.portalLockState || row.currentportallockstate || row.currentPortalLockState)
+  ).toLowerCase();
+  if (portalLockState === PORTAL_LOCK_STATES.editable) return false;
+  if (portalLockState === PORTAL_LOCK_STATES.locked) return true;
+  if (status === 'saved' || status === 'editable' || status === 'editable / estimate') return false;
   if (hasNonBlankJsonSignal_(row && row.submittedstatejson)) return true;
   if (isFinalPortalStatus_(status)) return true;
-  return Boolean(portalState && portalState.isReadOnly === true && isFinalPortalStatus_(status));
+  return Boolean(portalState && portalState.isReadOnly === true);
 }
 
 function parsePortalStateInput_(portalStateInput) {
