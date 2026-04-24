@@ -30885,20 +30885,12 @@
     }
     setOrderFlowPoBusyAction_('submit_po');
     try {
-      const pdfResult = await buildOrderFlowSummaryViewerPdf_();
-      const base64Data = await readBlobAsBase64_(pdfResult.blob);
-      if (!base64Data) {
-        throw new Error('Unable to package the invoice PDF.');
-      }
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const payload = {
         token: CURRENT_TOKEN,
         poNumber: ORDER_FLOW_PO_NUMBER,
         approvedByName: ORDER_FLOW_PO_APPROVED_BY,
-        portalState: JSON.stringify(clickedPortalState),
-        fileName: pdfResult.fileName,
-        mimeType: 'application/pdf',
-        base64Data: base64Data
+        portalState: JSON.stringify(clickedPortalState)
       };
       if (ORDER_FLOW_PO_UPLOAD_FILE instanceof File) {
         payload.poDocumentFileName = ORDER_FLOW_PO_UPLOAD_FILE.name;
@@ -35567,18 +35559,12 @@
     }
     setOrderFlowPoBusyAction_('submit_po');
     try {
-      const pdfResult = await buildSummaryExportPdf_();
-      const base64Data = await readBlobAsBase64_(pdfResult.blob);
-      if (!base64Data) throw new Error('Unable to package the invoice PDF.');
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const payload = {
         token: CURRENT_TOKEN,
         poNumber: ORDER_FLOW_PO_NUMBER,
         approvedByName: ORDER_FLOW_PO_APPROVED_BY,
-        portalState: JSON.stringify(clickedPortalState),
-        fileName: pdfResult.fileName,
-        mimeType: 'application/pdf',
-        base64Data: base64Data
+        portalState: JSON.stringify(clickedPortalState)
       };
       if (ORDER_FLOW_PO_UPLOAD_FILE instanceof File) {
         payload.poDocumentFileName = ORDER_FLOW_PO_UPLOAD_FILE.name;
