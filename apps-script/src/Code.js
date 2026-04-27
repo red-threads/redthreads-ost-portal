@@ -1962,7 +1962,7 @@ function buildDashboardPeekLightweightAccountSummaryFromRow_(row) {
 }
 
 function getDashboardProjectPeekPayloadVersion_() {
-  return 'v7';
+  return 'v8';
 }
 
 function buildDashboardProjectPreviewMeta_(rowState, runtimeMeta) {
@@ -2403,6 +2403,9 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
   const productionStarted = productionComplete === true
     || productionCurrent === true
     || (productionAuthorized === true && !!productionStartDate);
+  const canShowEstimatedCompletion = orderPlaced === true
+    || productionCurrent === true
+    || productionComplete === true;
   let paymentMethodLabel = trimString_(safeTimeline.paymentMethodLabel);
   if (!paymentMethodLabel) {
     if (paymentMethod === PAYMENT_METHODS.card) paymentMethodLabel = 'Credit Card';
@@ -2417,7 +2420,10 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
     || trimString_(context.summaryDocumentMode).toLowerCase() === SUMMARY_DOCUMENT_MODES.po_draft_invoice
     || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
     || lifecycleState === 'po_draft_invoice_prepared';
-  const estimatedCompletionDateLabel = trimString_(safeTimeline.completionDateLabel);
+  const estimatedCompletionDateLabel = canShowEstimatedCompletion ? trimString_(safeTimeline.completionDateLabel) : '';
+  const targetCompleteDateLabel = productionTargetCompleteDate
+    ? formatDashboardShortDate_(productionTargetCompleteDate)
+    : (canShowEstimatedCompletion ? estimatedCompletionDateLabel : '');
 
   return {
     lifecycleState: lifecycleState,
@@ -2439,7 +2445,7 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
     productionStartDate: productionStartDate,
     productionStartDateLabel: productionStartDate ? formatDashboardShortDate_(productionStartDate) : trimString_(safeTimeline.printStartDateLabel),
     targetCompleteDateValue: productionTargetCompleteDate ? productionTargetCompleteDate.getTime() : null,
-    targetCompleteDateLabel: productionTargetCompleteDate ? formatDashboardShortDate_(productionTargetCompleteDate) : estimatedCompletionDateLabel,
+    targetCompleteDateLabel: targetCompleteDateLabel,
     completionDateValue: productionCompletionDate
       ? productionCompletionDate.getTime()
       : (productionComplete === true && productionTargetCompleteDate ? productionTargetCompleteDate.getTime() : null),
@@ -2527,6 +2533,9 @@ function buildDashboardPeekTimelineFacts_(workflowContext, timeline, row) {
 function buildDashboardPeekSummaryMeta_(workflowContext, timeline, totals) {
   const peek = buildDashboardPeekLifecycleMeta_(workflowContext, timeline);
   const safeTotals = (totals && typeof totals === 'object') ? totals : {};
+  const canShowCompletionDate = peek.orderPlaced === true
+    || peek.productionCurrent === true
+    || peek.productionComplete === true;
   return {
     totalUnits: Math.max(0, parseInt(String(safeTotals.totalUnits || 0), 10) || 0),
     priceLabel: peek.productionStarted === true ? 'Final Cost' : 'Estimated Price',
@@ -2539,7 +2548,7 @@ function buildDashboardPeekSummaryMeta_(workflowContext, timeline, totals) {
       ? (peek.completionDateLabel || peek.targetCompleteDateLabel || '--')
       : (peek.productionStarted === true
         ? (peek.targetCompleteDateLabel || '--')
-        : (peek.estimatedCompletionDateLabel || '--')),
+        : (canShowCompletionDate ? (peek.estimatedCompletionDateLabel || '--') : '--')),
     completionHelperText: peek.productionStarted === true ? '' : 'Date production is finished for all jobs'
   };
 }
@@ -4839,6 +4848,28 @@ function buildOrderActionPortalPayload_(ctx, exportRowInfo) {
   }
 }
 
+function finalizeOrderActionResponse_(response, ctx, exportRowInfo) {
+  const base = (response && typeof response === 'object') ? Object.assign({}, response) : {};
+  const payload = base.portalPayload || buildOrderActionPortalPayload_(ctx, exportRowInfo || ctx.rowInfo);
+  if (!payload || typeof payload !== 'object') return base;
+  base.portalPayload = payload;
+  if (!base.accountSummary && payload.accountSummary) {
+    base.accountSummary = payload.accountSummary;
+  }
+  if (!base.orderSummary && payload.latestOrderSummary) {
+    base.orderSummary = payload.latestOrderSummary;
+  }
+  if (!base.currentStateSummary && payload.currentStateSummary) {
+    base.currentStateSummary = payload.currentStateSummary;
+  }
+  if (!base.workflowContext) {
+    const currentWorkflow = base.currentStateSummary && base.currentStateSummary.workflowContext;
+    const orderWorkflow = base.orderSummary && base.orderSummary.workflowContext;
+    base.workflowContext = currentWorkflow || orderWorkflow || {};
+  }
+  return base;
+}
+
 function buildCheckoutAttemptIdentity_() {
   return {
     orderId: newPortalId_('ord'),
@@ -4921,7 +4952,7 @@ function writeCheckoutAttemptPointers_(ctx, orderSummary, paymentMethodSelected,
 }
 
 function buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutAttemptId, stripe, portalPayload) {
-  return {
+  return finalizeOrderActionResponse_({
     ok: true,
     checkoutReady: stripe.ok === true && !!trimString_(stripe.checkoutUrl || stripe.url),
     accountSummary: ctx.accountInfo.summary,
@@ -4931,7 +4962,7 @@ function buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutAttemptId, str
     stripe: stripe,
     portalPayload: portalPayload,
     warnings: stripe.ok ? [] : [String(stripe.error || 'Stripe checkout is not configured.')]
-  };
+  }, ctx);
 }
 
 function buildCheckoutAttemptFailureResponse_(stripe, options) {
@@ -5048,13 +5079,13 @@ function finalizeLockedOrderTransition_(ctx, created) {
 }
 
 function buildLockedOrderTransitionResponse_(ctx, created, invoiceInfo, portalPayload) {
-  return {
+  return finalizeOrderActionResponse_({
     ok: true,
     accountSummary: ctx.accountInfo.summary,
     orderSummary: created.summary,
     invoice: invoiceInfo,
     portalPayload: portalPayload
-  };
+  }, ctx);
 }
 
 function buildCheckoutAttemptRollbackOrderDraft_(ctx) {
@@ -13018,12 +13049,12 @@ function ensurePurchaseOrderInvoice_(payload) {
   });
   if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
     const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
-    return {
+    return finalizeOrderActionResponse_({
       ok: false,
       error: trimString_(latestSummary.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.purchase_order
         ? 'This purchase order has already been submitted.'
         : 'This order has already moved past the editable checkout stage.'
-    };
+    }, ctx);
   }
   const existingDraft = readPurchaseOrderDraftFromPortalState_(ctx.portalState);
   const invoiceInfo = preparePurchaseOrderDraftInvoiceArtifact_(ctx, payload, {
@@ -13048,9 +13079,9 @@ function ensurePurchaseOrderInvoice_(payload) {
     ctx.portalState,
     nextDraftState
   );
-  return buildPurchaseOrderDraftResponse_(ctx, invoiceInfo, {
+  return finalizeOrderActionResponse_(buildPurchaseOrderDraftResponse_(ctx, invoiceInfo, {
     fileName: invoiceInfo.fileName
-  });
+  }), ctx);
 }
 
 function ensurePurchaseOrderInvoice(payload) {
@@ -13152,12 +13183,12 @@ function sendPurchaseOrderInvoiceEmail_(payload) {
     emailCtx.portalState,
     emailedDraftState
   );
-  return {
+  return finalizeOrderActionResponse_({
     ok: true,
     accountSummary: emailCtx.accountInfo.summary,
     invoice: ensured.invoice,
     portalPayload: buildOrderActionPortalPayload_(emailCtx, emailCtx.rowInfo)
-  };
+  }, emailCtx);
 }
 
 function sendPurchaseOrderInvoiceEmail(payload) {
@@ -13228,7 +13259,7 @@ function createLockedOrderPaymentCheckout_(payload) {
     orderSummary: orderSummary,
     accountSummary: ctx.accountInfo.summary
   });
-  return {
+  return finalizeOrderActionResponse_({
     ok: true,
     checkoutReady: true,
     checkoutUrl: trimString_(stripe.checkoutUrl || stripe.url),
@@ -13236,7 +13267,7 @@ function createLockedOrderPaymentCheckout_(payload) {
     accountSummary: ctx.accountInfo.summary,
     orderSummary: orderSummary,
     portalPayload: buildOrderActionPortalPayload_(ctx, exportRowInfo)
-  };
+  }, ctx, exportRowInfo);
 }
 
 function createLockedOrderPaymentCheckout(payload) {
@@ -13274,12 +13305,12 @@ function submitPurchaseOrder_(payload) {
   });
   if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
     const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
-    return {
+    return finalizeOrderActionResponse_({
       ok: false,
       error: trimString_(latestSummary.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.purchase_order
         ? 'This purchase order has already been submitted.'
         : 'This order has already moved past the editable checkout stage.'
-    };
+    }, ctx);
   }
   const poDoc = trimString_(payload && payload.poDocumentBase64)
     ? storePortalUploadBlobInInvoiceFolder_({
@@ -13357,7 +13388,7 @@ function submitPurchaseOrder_(payload) {
   const confirmation = sendLockedOrderConfirmationEmails_(ctx, finalOrderSummary, {
     intro: 'Congratulations. Your purchase order was submitted successfully and your final invoice is attached.'
   });
-  return {
+  return finalizeOrderActionResponse_({
     ok: true,
     accountSummary: ctx.accountInfo.summary,
     orderSummary: finalOrderSummary,
@@ -13368,7 +13399,7 @@ function submitPurchaseOrder_(payload) {
       cardUrl: trimString_(confirmation.cardUrl),
       achUrl: trimString_(confirmation.achUrl)
     } : null
-  };
+  }, ctx);
 }
 
 function submitPurchaseOrder(payload) {
@@ -13408,14 +13439,14 @@ function cancelPendingClientOrderFlow_(payload) {
     trimString_(ctx.orderDraft && ctx.orderDraft.personName)
   );
   clearCurrentOrderPointersToEditableState_(ctx, clearedPortalState);
-  return {
+  return finalizeOrderActionResponse_({
     ok: true,
     accountSummary: ctx.accountInfo.summary,
     portalPayload: buildOrderActionPortalPayload_(ctx, ctx.rowInfo),
     message: isPurchaseOrderCancel
       ? 'Purchase-order flow canceled. The project is editable again.'
       : 'Manual-payment order canceled. The project is editable again.'
-  };
+  }, ctx);
 }
 
 function cancelPendingClientOrderFlow(payload) {

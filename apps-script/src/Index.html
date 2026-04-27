@@ -29974,16 +29974,62 @@
     return ORDER_FLOW_SUMMARY_VIEWER_MODE === 'purchase_order';
   }
 
+  function isCanonicalPurchaseOrderDraftWorkflow_(workflowContext){
+    const workflow = normalizeWorkflowContextObject_(workflowContext);
+    const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
+    const lifecycleStage = String(workflow.lifecycleStage || '').trim().toLowerCase();
+    const documentMode = String(workflow.summaryDocumentMode || '').trim().toLowerCase();
+    const controlsMode = String(workflow.summaryControlsMode || '').trim().toLowerCase();
+    return controlsMode === 'po_submission'
+      || documentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
+      || lifecycleState === 'po_draft_invoice_prepared'
+      || lifecycleState === 'awaiting_po_submission'
+      || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked;
+  }
+
+  function buildWorkflowContextFromActionResponse_(resp){
+    const response = (resp && typeof resp === 'object') ? resp : {};
+    const current = normalizeCurrentStateSummary(
+      response.currentStateSummary
+      || (response.portalPayload && response.portalPayload.currentStateSummary)
+    );
+    const order = normalizeOrderSummary(
+      response.orderSummary
+      || response.latestOrderSummary
+      || (response.portalPayload && response.portalPayload.latestOrderSummary)
+    );
+    return Object.assign(
+      {},
+      normalizeWorkflowContextObject_(order.workflowContext),
+      normalizeWorkflowContextObject_(current.workflowContext)
+    );
+  }
+
+  function syncOrderFlowLifecycleFromResponse_(resp, options){
+    const response = (resp && typeof resp === 'object') ? resp : null;
+    if (!response) return false;
+    const hasLifecyclePayload = !!(
+      response.portalPayload
+      || response.currentStateSummary
+      || response.orderSummary
+      || response.latestOrderSummary
+      || response.accountSummary
+    );
+    if (!hasLifecyclePayload) return false;
+    applyOrderFlowPortalPayload(response, options);
+    updateOrderStateFromResponse(response);
+    return true;
+  }
+
   function getOrderFlowPurchaseOrderStage_(){
+    const workflow = getPortalWorkflowContext_();
+    if (!isCanonicalPurchaseOrderDraftWorkflow_(workflow)) return 'review';
     const purchaseOrderDraft = getCurrentPurchaseOrderDraft_();
-    if (purchaseOrderDraft) {
-      return purchaseOrderDraft.resumeStage === 'review' ? 'review' : 'submit';
-    }
-    const currentOrderState = String((CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.currentOrderState) || (LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.orderState) || '').trim().toLowerCase();
-    return currentOrderState === 'awaiting_po_submission' ? 'submit' : 'review';
+    return purchaseOrderDraft && purchaseOrderDraft.resumeStage === 'review' ? 'review' : 'submit';
   }
 
   function getPreparedPurchaseOrderDraftArtifact_(){
+    if (!isCanonicalPurchaseOrderDraftWorkflow_(getPortalWorkflowContext_())) return null;
     const purchaseOrderDraft = getCurrentPurchaseOrderDraft_();
     if (!purchaseOrderDraft || !String(purchaseOrderDraft.invoicePdfUrl || '').trim()) return null;
     return {
@@ -29999,8 +30045,15 @@
   function applyOrderFlowOptimisticPurchaseOrderWorkflow_(){
     ORDER_FLOW_OPTIMISTIC_WORKFLOW_CONTEXT = {
       variant: 'purchase_order',
+      lifecycleState: 'po_draft_invoice_prepared',
       lifecycleStage: 'po_draft_locked',
       summaryDocumentMode: SUMMARY_DOCUMENT_MODES.po_draft_invoice,
+      summaryControlsMode: 'po_submission',
+      nextClientAction: 'submit_purchase_order',
+      nextTeamAction: '',
+      editorMode: 'locked',
+      saveAllowed: false,
+      orderAllowed: false,
       isPoFlow: true,
       hasPurchaseOrderDraft: true,
       purchaseOrderDraftStatus: 'draft_ready',
@@ -30024,6 +30077,23 @@
       canCancelPendingClientFlow: true,
       cancelFlowKind: 'purchase_order'
     };
+  }
+
+  function returnToPreparedPurchaseOrderInvoice_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    applyOrderFlowOptimisticPurchaseOrderWorkflow_();
+    SUPPRESS_NEXT_AUTO_INTRO = true;
+    if (opts.closeBackdrop === true) {
+      closePurchaseOrderEmailSuccessBackdrop_();
+    }
+    if (opts.closeViewer === true) {
+      closeOrderFlowSummaryViewer({ immediate: true });
+      closeOrderFlowModal({ immediate: true });
+    }
+    setActiveSummaryPanel({ render: true });
+    if (summaryRoot && !summaryRoot.hidden) {
+      rerenderSummaryEstimateControls_();
+    }
   }
 
   function buildOrderFlowPurchaseOrderDraftPrepKey_(portalState){
@@ -30110,17 +30180,24 @@
         if (resp && resp.gated) {
           ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
         }
+        syncOrderFlowLifecycleFromResponse_(resp, {
+          expectedPortalState: clickedPortalState
+        });
         throw new Error(String((resp && (resp.message || resp.error)) || 'Unable to create the purchase-order invoice.'));
       }
       if (resp.gated) {
         ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
         throw new Error(String(resp.message || 'Approved terms are required before the purchase-order flow can continue.'));
       }
-      applyOrderFlowPortalPayload(resp, {
+      syncOrderFlowLifecycleFromResponse_(resp, {
         expectedPortalState: buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })
       });
-      updateOrderStateFromResponse(resp);
       clearOrderFlowOptimisticPurchaseOrderWorkflow_();
+      if (isCanonicalPurchaseOrderDraftWorkflow_(buildWorkflowContextFromActionResponse_(resp))) {
+        returnToPreparedPurchaseOrderInvoice_({
+          closeViewer: source === 'viewer'
+        });
+      }
       ORDER_FLOW_PO_DRAFT_READY_KEY = prepKey;
       return {
         preparedDraft: getPreparedPurchaseOrderDraftArtifact_() || {
@@ -30204,6 +30281,9 @@
           ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
           renderOrderFlowPoSection();
         }
+        syncOrderFlowLifecycleFromResponse_(resp, {
+          expectedPortalState: clickedPortalState
+        });
         throw new Error(normalizeUiErrorMessage_(resp && (resp.message || resp.error), 'Unable to email the invoice.'));
       }
       if (resp.gated) {
@@ -30211,10 +30291,9 @@
         renderOrderFlowPoSection();
         throw new Error(String(resp.message || 'Approved terms are required before the purchase-order flow can continue.'));
       }
-      applyOrderFlowPortalPayload(resp, {
+      syncOrderFlowLifecycleFromResponse_(resp, {
         expectedPortalState: buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })
       });
-      updateOrderStateFromResponse(resp);
       clearOrderFlowOptimisticPurchaseOrderWorkflow_();
       ORDER_FLOW_PO_EMAIL_RECIPIENTS = '';
       ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
@@ -31653,7 +31732,11 @@
       ? clonePlainObject(expectedPortalState)
       : null;
     const payloadState = normalizePortalState(payload && payload.portalState ? payload.portalState : {});
+    const responseWorkflow = buildWorkflowContextFromActionResponse_(payload);
+    const shouldRetainPoDraft = isCanonicalPurchaseOrderDraftWorkflow_(responseWorkflow);
     if (!expectedState) {
+      if (!shouldRetainPoDraft) delete payloadState.purchaseOrderDraft;
+      if (shouldRetainPoDraft) payloadState.activePanel = 'summary';
       payload.portalState = payloadState;
       return payload;
     }
@@ -31669,9 +31752,12 @@
     } catch (_) {
       // Fall through and use the clicked portal state.
     }
-    const mergedState = clonePlainObject(expectedState);
-    if (payloadState && payloadState.purchaseOrderDraft) {
-      mergedState.purchaseOrderDraft = clonePlainObject(payloadState.purchaseOrderDraft);
+    const mergedState = Object.assign({}, clonePlainObject(expectedState), clonePlainObject(payloadState));
+    if (shouldRetainPoDraft) {
+      if (!mergedState.purchaseOrderDraft && expectedState.purchaseOrderDraft) {
+        mergedState.purchaseOrderDraft = clonePlainObject(expectedState.purchaseOrderDraft);
+      }
+      mergedState.activePanel = 'summary';
     } else {
       delete mergedState.purchaseOrderDraft;
     }
@@ -31711,6 +31797,15 @@
       || (resp && resp.portalPayload && resp.portalPayload.latestOrderSummary)
       || LATEST_ORDER_SUMMARY
     );
+    const responseWorkflow = buildWorkflowContextFromActionResponse_(resp);
+    const nextWorkflowContext = Object.keys(currentStateFromResp.workflowContext || {}).length
+      ? currentStateFromResp.workflowContext
+      : (Object.keys(nextOrderSummary.workflowContext || {}).length
+        ? nextOrderSummary.workflowContext
+        : (Object.keys(responseWorkflow || {}).length
+          ? responseWorkflow
+          : priorCurrentState.workflowContext));
+    const shouldRetainPoDraft = isCanonicalPurchaseOrderDraftWorkflow_(nextWorkflowContext);
     if (resp && (resp.orderSummary || (resp.portalPayload && resp.portalPayload.latestOrderSummary))) {
       LATEST_ORDER_SUMMARY = nextOrderSummary;
       ORDER_FLOW_PO_SHIPPING_DETAILS = cloneOrderFlowShippingDetails_(
@@ -31729,14 +31824,13 @@
       currentProductionAuthorizationState: nextOrderSummary.productionAuthorizationState || currentStateFromResp.currentProductionAuthorizationState || priorCurrentState.currentProductionAuthorizationState,
       currentPaymentMethod: nextOrderSummary.paymentMethodSelected || currentStateFromResp.currentPaymentMethod || priorCurrentState.currentPaymentMethod,
       teamWorkflowMode: nextOrderSummary.teamWorkflowMode || currentStateFromResp.teamWorkflowMode || priorCurrentState.teamWorkflowMode,
-      workflowContext: Object.keys(currentStateFromResp.workflowContext || {}).length
-        ? currentStateFromResp.workflowContext
-        : (Object.keys(priorCurrentState.workflowContext || {}).length
-          ? priorCurrentState.workflowContext
-          : nextOrderSummary.workflowContext),
-      purchaseOrderDraft: hasCurrentStateFromResp
-        ? currentStateFromResp.purchaseOrderDraft
-        : priorCurrentState.purchaseOrderDraft,
+      workflowContext: nextWorkflowContext,
+      purchaseOrderDraft: shouldRetainPoDraft
+        ? (
+            currentStateFromResp.purchaseOrderDraft
+            || (hasCurrentStateFromResp ? null : priorCurrentState.purchaseOrderDraft)
+          )
+        : null,
       termsApproved: ACCOUNT_SUMMARY.termsApproved,
       taxExemptApproved: ACCOUNT_SUMMARY.taxExemptApproved,
       latestInvoiceNumber: nextOrderSummary.invoiceNumber || currentStateFromResp.latestInvoiceNumber || priorCurrentState.latestInvoiceNumber,
@@ -31763,8 +31857,15 @@
       ORDER_FLOW_SHIPPING_CHARGE_CENTS = 0;
       ORDER_FLOW_SHIPPING_MODE_LABEL = '';
       ORDER_FLOW_SELECTED_METHOD = '';
-    } else if (isAwaitingPurchaseOrderPortal_() && ORDER_FLOW_SELECTED_METHOD !== 'purchase_order') {
-      ORDER_FLOW_SELECTED_METHOD = '';
+    } else {
+      const editorLifecycle = getPortalEditorLifecycleUiState_();
+      if (editorLifecycle.isPoDraftResume) {
+        if (ORDER_FLOW_SELECTED_METHOD !== 'purchase_order') {
+          ORDER_FLOW_SELECTED_METHOD = '';
+        }
+      } else if (editorLifecycle.canAccessOrderFlow !== true) {
+        ORDER_FLOW_SELECTED_METHOD = '';
+      }
     }
     ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
     ORDER_FLOW_RESULT_KIND = 'info';
@@ -31894,6 +31995,7 @@
         portalState: JSON.stringify(clickedPortalState)
       });
       if (!resp || resp.ok !== true) {
+        syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         if (handleOrderFlowActionError(resp, {
           surface: 'manual',
           fallbackMessage: 'Unable to start manual payment order.'
@@ -31901,8 +32003,7 @@
         throw new Error(String((resp && resp.error) || 'Unable to start manual payment order.'));
       }
       SUPPRESS_NEXT_AUTO_INTRO = true;
-      applyOrderFlowPortalPayload(resp, { expectedPortalState: clickedPortalState });
-      updateOrderStateFromResponse(resp);
+      syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
       const invoiceLine = resp && resp.invoice && resp.invoice.invoiceNumber
         ? ('Invoice ' + resp.invoice.invoiceNumber + (resp.invoice.invoicePdfUrl ? '\n' + resp.invoice.invoicePdfUrl : ''))
         : '';
@@ -31974,14 +32075,14 @@
         if (pendingWindow && !pendingWindow.closed) {
           try { pendingWindow.close(); } catch (_) {}
         }
+        syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         if (handleOrderFlowActionError(resp, {
           surface: 'checkout',
           fallbackMessage: 'Unable to create checkout attempt.'
         })) return;
         throw new Error(String((resp && resp.error) || 'Unable to create checkout attempt.'));
       }
-      applyOrderFlowPortalPayload(resp, { expectedPortalState: clickedPortalState });
-      updateOrderStateFromResponse(resp);
+      syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
       const checkoutUrl = String((resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '').trim();
       if (!resp.checkoutReady || !checkoutUrl) {
         console.warn('Stripe checkout URL missing from createCheckoutAttempt response.', resp);
@@ -35222,15 +35323,10 @@
         paymentMethodSelected: paymentMethodSelected
       });
       if (!resp || resp.ok !== true || !String(resp.checkoutUrl || '').trim()) {
+        syncOrderFlowLifecycleFromResponse_(resp);
         throw new Error(String((resp && resp.error) || 'Unable to prepare payment.'));
       }
-      if (resp.portalPayload && typeof resp.portalPayload === 'object') {
-        applyPortalPayloadInPlace(resp.portalPayload, {
-          source: 'locked-summary-payment',
-          fromAuthShell: OPENED_FROM_AUTH_SHELL,
-          reason: 'locked-summary-payment'
-        });
-      }
+      syncOrderFlowLifecycleFromResponse_(resp);
       const checkoutUrl = String((resp.checkoutUrl || (resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '')).trim();
       let launched = false;
       if (pendingWindow && !pendingWindow.closed) {
@@ -35897,6 +35993,20 @@
       }
       const resp = await callServer('submitPurchaseOrder', payload);
       if (!resp || resp.ok !== true) {
+        const refreshed = syncOrderFlowLifecycleFromResponse_(resp, {
+          expectedPortalState: clickedPortalState
+        });
+        if (
+          refreshed
+          && isAwaitingPurchaseOrderPortal_() !== true
+          && /already been submitted|moved past the editable checkout stage/i.test(String((resp && (resp.message || resp.error)) || ''))
+        ) {
+          ORDER_FLOW_PO_UPLOAD_FILE = null;
+          ORDER_FLOW_PO_STATUS = { tone: '', message: '' };
+          setActiveSummaryPanel({ render: true });
+          showNotice('Project state refreshed to the latest purchase-order status.', 'ok', { persist: true });
+          return;
+        }
         if (handleOrderFlowActionError(resp, {
           surface: 'po',
           fallbackMessage: 'Unable to submit the purchase order.'
@@ -35907,8 +36017,7 @@
       ORDER_FLOW_PO_EMAIL_OPEN = false;
       ORDER_FLOW_PO_STATUS = { tone: '', message: '' };
       SUPPRESS_NEXT_AUTO_INTRO = true;
-      applyOrderFlowPortalPayload(resp);
-      updateOrderStateFromResponse(resp);
+      syncOrderFlowLifecycleFromResponse_(resp);
       setActiveSummaryPanel({ render: true });
       showNotice(String(resp.message || 'Purchase order submitted successfully.'), 'ok', { persist: true });
     } catch (err) {
@@ -36025,13 +36134,13 @@
         portalState: JSON.stringify(clickedPortalState)
       });
       if (!resp || resp.ok !== true) {
+        syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         throw new Error(String((resp && resp.error) || 'Unable to cancel the pending flow.'));
       }
       closeSummaryPendingFlowCancelModal_();
       closeOrderFlowSummaryViewer({ immediate: true });
       closeOrderFlowModal({ immediate: true });
-      applyOrderFlowPortalPayload(resp, { expectedPortalState: clickedPortalState });
-      if (resp.accountSummary) ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary);
+      syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
       setActiveSummaryPanel({ render: true });
       showNotice(String(resp.message || getSummaryPendingFlowCancelMeta_(SUMMARY_PENDING_FLOW_CANCEL_KIND).successMessage), 'ok', { persist: true });
     } catch (err) {
@@ -38668,7 +38777,7 @@
     }
     if (poEmailSuccessDoneBtn) {
       poEmailSuccessDoneBtn.addEventListener('click', () => {
-        closePurchaseOrderEmailSuccessBackdrop_();
+        returnToPreparedPurchaseOrderInvoice_({ closeBackdrop: true });
       });
     }
     if (poEmailSuccessBackdrop) {
