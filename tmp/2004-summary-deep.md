@@ -1,0 +1,179 @@
+- table [ref=e2]:
+  - rowgroup [ref=e3]:
+    - row "This application was created by a Google Apps Script user" [ref=e4]:
+      - cell "This application was created by a Google Apps Script user" [ref=e5]:
+        - banner "This application was created by a Google Apps Script user" [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e8]:
+              - img [ref=e10]
+              - alert [ref=e12]: This application was created by a Google Apps Script user
+            - generic [ref=e13]:
+              - link "Report abuse" [ref=e14] [cursor=pointer]:
+                - /url: https://drive.google.com/abuse?id=AKkXjozMBK4kFUVQR6rCuOcJsaD0fqmETHbXm3k_qzlirCpt1rvTHSBE2l3kjAUFmA81QF46uQzy_y7u6v-jZ0wsqluQXOPeD5eZH7Ui%3A0&docurl=https%3A%2F%2Fscript.google.com%2Fa%2Fmacros%2Fredthreads.com%2Fs%2FAKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw%2Fexec%3Ft%3D70bf3b62-9999-4939-aa00-228bbf546814
+              - link "Learn more" [ref=e15] [cursor=pointer]:
+                - /url: https://developers.google.com/apps-script
+          - button "Dismiss" [ref=e16]:
+            - img [ref=e17]
+    - row [ref=e19]:
+      - cell [ref=e20]:
+        - iframe [ref=e21]:
+          - iframe [ref=f19e2]:
+            - generic [ref=f20e2]:
+              - generic [ref=f20e4]:
+                - generic [ref=f20e6]:
+                  - button "Open message" [ref=f20e8] [cursor=pointer]:
+                    - img "Sender" [ref=f20e10]
+                  - button "Message Caleb" [ref=f20e11] [cursor=pointer]
+                  - button "Dashboard" [ref=f20e12] [cursor=pointer]
+                - img "Red Threads logo" [ref=f20e15]
+                - generic [ref=f20e17]:
+                  - button "Save" [disabled] [ref=f20e18]
+                  - button "Place Order" [disabled] [ref=f20e19]
+              - main [ref=f20e20]:
+                - tablist "Print Jobs" [ref=f20e22]:
+                  - 'tab "Job 1: dual deco job 1 100 Units | $1,783.10 Artwork: Approved" [ref=f20e23] [cursor=pointer]':
+                    - generic [ref=f20e24]:
+                      - generic [ref=f20e26]: "Job 1: dual deco job 1"
+                      - generic [ref=f20e27]: 100 Units | $1,783.10
+                      - generic [ref=f20e28]:
+                        - generic [ref=f20e29]: "Artwork:"
+                        - generic [ref=f20e30]: Approved
+                  - 'tab "Job 2: dual deco job 2 0 Units | $0.00 Artwork: Not Approved Removed" [disabled] [ref=f20e31] [cursor=pointer]':
+                    - generic [ref=f20e32]:
+                      - generic [ref=f20e34]: "Job 2: dual deco job 2"
+                      - generic [ref=f20e35]: 0 Units | $0.00
+                      - generic [ref=f20e36]:
+                        - generic [ref=f20e37]: "Artwork:"
+                        - generic [ref=f20e38]: Not Approved
+                    - generic [ref=f20e40]: Removed
+                  - 'tab "Project 2004 Invoice 100 Units | $1,783.10 View: Invoice" [selected] [ref=f20e41] [cursor=pointer]':
+                    - generic [ref=f20e42]:
+                      - generic [ref=f20e44]: Project 2004 Invoice
+                      - generic [ref=f20e45]:
+                        - generic [ref=f20e46]: 100 Units
+                        - generic [ref=f20e47]: "|"
+                        - generic [ref=f20e48]: $1,783.10
+                      - generic [ref=f20e49]: "View: Invoice"
+                - 'tabpanel "Project 2004 Invoice 100 Units | $1,783.10 View: Invoice" [ref=f20e52]':
+                  - generic [ref=f20e53]:
+                    - article [ref=f20e182]:
+                      - generic [ref=f20e183]:
+                        - generic [ref=f20e184]:
+                          - generic [ref=f20e185]:
+                            - generic [ref=f20e186]:
+                              - generic [ref=f20e187]:
+                                - generic [ref=f20e188]:
+                                  - generic [ref=f20e189]: "Completed:"
+                                  - generic [ref=f20e190]: 4/24/2026
+                                - generic [ref=f20e191]:
+                                  - generic [ref=f20e192]: "Payment Date: 4/24/2026"
+                                  - generic [ref=f20e193]: "Payment Type: Purchase Order"
+                              - img "Red Threads logo" [ref=f20e195]
+                              - generic [ref=f20e196]:
+                                - generic [ref=f20e197]: "Invoice # 2004"
+                                - generic [ref=f20e198]: "P.O. #: 2004"
+                            - generic [ref=f20e199]:
+                              - generic [ref=f20e200]:
+                                - generic [ref=f20e201]: Active Jobs
+                                - generic [ref=f20e202]: "1"
+                              - generic [ref=f20e203]:
+                                - generic [ref=f20e204]: Total Units
+                                - generic [ref=f20e205]: "100"
+                              - generic [ref=f20e206]:
+                                - generic [ref=f20e207]: FINAL COST
+                                - generic [ref=f20e208]: $1,783.10
+                              - generic [ref=f20e209]:
+                                - generic [ref=f20e210]: Ready By
+                                - generic [ref=f20e211]: 4/24/2026
+                            - generic [ref=f20e212]:
+                              - generic [ref=f20e213]:
+                                - generic [ref=f20e214]: Project completed
+                                - generic [ref=f20e215]: on 4/24/2026.
+                                - generic [ref=f20e216]: "Ready dates assume: 4/24/2026"
+                              - generic [ref=f20e217]:
+                                - generic [ref=f20e218]: "Project: dual deco job"
+                                - generic [ref=f20e219]: "Client: Josiah Blackmore"
+                                - generic [ref=f20e220]: "Org: Bloo Threadz"
+                              - generic [ref=f20e221]:
+                                - generic [ref=f20e222]: "Project Subtotal: $1,783.10"
+                                - generic [ref=f20e223]: "Sales Tax: $0.00"
+                                - generic [ref=f20e224]: "Total Cost: $1,783.10"
+                          - generic [ref=f20e225]:
+                            - generic [ref=f20e227]:
+                              - img "Print Job 1 preview mockup" [ref=f20e229]
+                              - generic [ref=f20e231]:
+                                - generic [ref=f20e232]:
+                                  - generic [ref=f20e233]: "Job 1: dual deco job 1"
+                                  - generic [ref=f20e234]: "Decoration 1: Screen Print 1 Color, Full Front"
+                                  - generic [ref=f20e235]: "Decoration 2: Embroidery Up to 6500 Stitches, Left Sleeve / Left Side"
+                                  - generic [ref=f20e236]:
+                                    - generic [ref=f20e237]: "Added Services:"
+                                    - generic [ref=f20e238]: PMS Color Matching (1 Color) x1 $25.00
+                                    - generic [ref=f20e239]: 9-7 Business Day Rush x1 $162.10
+                                    - generic [ref=f20e240]: $100.00 or 10% of order - whichever is greater
+                                - generic [ref=f20e241]:
+                                  - generic [ref=f20e242]:
+                                    - generic [ref=f20e243]: "Units in this Job: 100"
+                                    - generic [ref=f20e244]: "Job Cost: $1,783.10"
+                                  - generic [ref=f20e245]:
+                                    - generic [ref=f20e246]: Turnaround Time
+                                    - generic [ref=f20e247]: 7 business days (rush)
+                                    - generic [ref=f20e248]: Ready by 4/24/2026
+                            - generic [ref=f20e251]:
+                              - generic [ref=f20e252]:
+                                - link "BELLA_3001CVC Bella + Canvas Unisex Heather CVC Tee" [ref=f20e253] [cursor=pointer]:
+                                  - /url: https://www.ssactivewear.com/p/bella/3001cvc
+                                  - generic [ref=f20e254]:
+                                    - generic [ref=f20e255]: BELLA_3001CVC
+                                    - generic [ref=f20e256]: Bella + Canvas Unisex Heather CVC Tee
+                                - generic [ref=f20e257]:
+                                  - generic [ref=f20e258]: L
+                                  - generic [ref=f20e259]: 15.96 ea
+                                - generic [ref=f20e260]: QTY
+                                - generic [ref=f20e261]: TOTAL
+                              - generic [ref=f20e262]:
+                                - generic [ref=f20e265]: black
+                                - generic [ref=f20e266]: "100"
+                                - generic [ref=f20e267]: "100"
+                                - generic [ref=f20e268]: $1,596.00
+                          - generic [ref=f20e269]:
+                            - generic [ref=f20e270]: "Job 2: dual deco job 2 removed from estimate"
+                            - button "Restore Job 2" [ref=f20e272]
+                        - generic [ref=f20e273]:
+                          - generic [ref=f20e274]:
+                            - generic [ref=f20e275]: WWW.
+                            - generic [ref=f20e276]: RED
+                            - generic [ref=f20e277]: THREADS.COM
+                            - generic [ref=f20e278]: "|"
+                            - generic [ref=f20e279]: 505 S. SAGINAW RD
+                            - generic [ref=f20e280]: "|"
+                            - generic [ref=f20e281]: MIDLAND, MI 48640
+                            - generic [ref=f20e282]: "|"
+                            - generic [ref=f20e283]: "PHONE: 989-600-8540"
+                          - generic [ref=f20e284]: PAGE 1 OF 1
+                    - complementary [ref=f20e160]:
+                      - button "Share / Download Invoice" [ref=f20e161] [cursor=pointer]
+              - complementary [ref=f20e162]:
+                - generic [ref=f20e163]:
+                  - generic [ref=f20e164]:
+                    - img [ref=f20e165]
+                    - generic [ref=f20e166]:
+                      - heading [level=2] [ref=f20e167]: Send me a message!
+                      - generic [ref=f20e168]: I will respond within 1 business day, or as soon as I'm able.
+                  - button [ref=f20e169] [cursor=pointer]: X
+                - generic [ref=f20e171]:
+                  - generic [ref=f20e173]: "Josiah's comment - Apr 24, 2026 10:10 PM Artwork approved for Print Job 1: dual deco job 1."
+                  - generic [ref=f20e175]: System update - Apr 24, 2026 10:10 PM Purchase order payment received. Order confirmed on 2026-04-25T02:12:46.358Z.
+                  - generic [ref=f20e177]: System update - Apr 24, 2026 10:13 PM Job completion dates were updated by Josiah on 2026-04-25T02:13:24.284Z.
+                - generic [ref=f20e179]:
+                  - textbox [ref=f20e180]:
+                    - /placeholder: Type a message...
+                  - button [disabled] [ref=f20e181]: Send
+              - generic:
+                - dialog "Warning; unsaved changes.":
+                  - generic: Warning; unsaved changes.
+                  - generic: You have unsaved changes. If you leave, they will be lost.
+                  - generic:
+                    - button "Stay Here"
+                    - button "Leave Without Saving"
+                    - button "Save & Go to Dashboard"

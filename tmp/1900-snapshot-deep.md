@@ -1,0 +1,37 @@
+- table [ref=e2]:
+  - rowgroup [ref=e3]:
+    - row "This application was created by a Google Apps Script user" [ref=e4]:
+      - cell "This application was created by a Google Apps Script user" [ref=e5]:
+        - banner "This application was created by a Google Apps Script user" [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e8]:
+              - img [ref=e10]
+              - alert [ref=e12]: This application was created by a Google Apps Script user
+            - generic [ref=e13]:
+              - link "Report abuse" [ref=e14] [cursor=pointer]:
+                - /url: https://drive.google.com/abuse?id=AKkXjozMBK4kFUVQR6rCuOcJsaD0fqmETHbXm3k_qzlirCpt1rvTHSBE2l3kjAUFmA81QF46uQzy_y7u6v-jZ0wsqluQXOPeD5eZH7Ui%3A0&docurl=https%3A%2F%2Fscript.google.com%2Fa%2Fmacros%2Fredthreads.com%2Fs%2FAKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw%2Fexec%3Ft%3Dd29f8ea7-4a86-4814-88e7-209108b01062
+              - link "Learn more" [ref=e15] [cursor=pointer]:
+                - /url: https://developers.google.com/apps-script
+          - button "Dismiss" [ref=e16]:
+            - img [ref=e17]
+    - row [ref=e19]:
+      - cell [ref=e20]:
+        - iframe [ref=e21]:
+          - iframe [ref=f1e2]:
+            - generic [ref=f2e2]:
+              - generic [ref=f2e4]:
+                - generic [ref=f2e6]
+                - img "Red Threads logo" [ref=f2e15]
+                - generic [ref=f2e17]
+              - generic [ref=f2e21]:
+                - button "Close welcome message" [ref=f2e22] [cursor=pointer]: X
+                - generic [ref=f2e23]
+              - main [ref=f2e28]:
+                - tablist "Print Jobs" [ref=f2e30]
+                - 'tabpanel "X Job 1: PRINT JOB 1 NAME 0 Units | $0.00 Artwork: Not Approved" [ref=f2e79]'
+              - complementary [ref=f2e874]:
+                - generic [ref=f2e875]
+                - generic [ref=f2e883]: No messages yet. Start the conversation.
+                - generic [ref=f2e885]
+              - generic:
+                - dialog "Warning; unsaved changes."

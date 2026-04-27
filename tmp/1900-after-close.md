@@ -1,0 +1,80 @@
+- table [ref=e2]:
+  - rowgroup [ref=e3]:
+    - row "This application was created by a Google Apps Script user" [ref=e4]:
+      - cell "This application was created by a Google Apps Script user" [ref=e5]:
+        - banner "This application was created by a Google Apps Script user" [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e8]:
+              - img [ref=e10]
+              - alert [ref=e12]: This application was created by a Google Apps Script user
+            - generic [ref=e13]:
+              - link "Report abuse" [ref=e14] [cursor=pointer]:
+                - /url: https://drive.google.com/abuse?id=AKkXjozMBK4kFUVQR6rCuOcJsaD0fqmETHbXm3k_qzlirCpt1rvTHSBE2l3kjAUFmA81QF46uQzy_y7u6v-jZ0wsqluQXOPeD5eZH7Ui%3A0&docurl=https%3A%2F%2Fscript.google.com%2Fa%2Fmacros%2Fredthreads.com%2Fs%2FAKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw%2Fexec%3Ft%3Dd29f8ea7-4a86-4814-88e7-209108b01062
+              - link "Learn more" [ref=e15] [cursor=pointer]:
+                - /url: https://developers.google.com/apps-script
+          - button "Dismiss" [ref=e16]:
+            - img [ref=e17]
+    - row [ref=e19]:
+      - cell [ref=e20]:
+        - iframe [ref=e21]:
+          - iframe [ref=f1e2]:
+            - generic [ref=f2e2]:
+              - generic [ref=f2e4]:
+                - generic [ref=f2e6]:
+                  - button "Open message" [ref=f2e8] [cursor=pointer]:
+                    - img "Sender" [ref=f2e10]
+                  - button "Message Caleb" [ref=f2e11] [cursor=pointer]
+                  - button "Dashboard" [ref=f2e12] [cursor=pointer]
+                - img "Red Threads logo" [ref=f2e15]
+                - generic [ref=f2e17]:
+                  - button "Save" [ref=f2e18] [cursor=pointer]
+                  - button "Place Order" [ref=f2e19] [cursor=pointer]
+              - main [ref=f2e28]:
+                - tablist "Print Jobs" [ref=f2e30]:
+                  - 'tab "X Job 1: PRINT JOB 1 NAME 0 Units | $0.00 Artwork: Not Approved" [selected] [ref=f2e31] [cursor=pointer]':
+                    - button "X" [ref=f2e32]
+                    - generic [ref=f2e33]
+                  - 'tab "X Job 2: PRINT-JOB-2-NAME 0 Units | $0.00 Artwork: Not Approved" [ref=f2e40] [cursor=pointer]':
+                    - button "X" [ref=f2e41]
+                    - generic [ref=f2e42]
+                  - 'tab "X Job 3: PRINT-JOB-3-NAME 0 Units | $0.00 Artwork: Not Approved" [ref=f2e49] [cursor=pointer]':
+                    - button "X" [ref=f2e50]
+                    - generic [ref=f2e51]
+                  - 'tab "X Job 4: PRINT-JOB-4-NAME 0 Units | $0.00 Artwork: Not Approved" [ref=f2e58] [cursor=pointer]':
+                    - button "X" [ref=f2e59]
+                    - generic [ref=f2e60]
+                  - 'tab "Project 1900 Estimate 0 Units | $0.00 View: Estimate" [ref=f2e67] [cursor=pointer]':
+                    - generic [ref=f2e68]
+                - 'tabpanel "X Job 1: PRINT JOB 1 NAME 0 Units | $0.00 Artwork: Not Approved" [ref=f2e79]':
+                  - generic [ref=f2e80]:
+                    - generic [ref=f2e82]
+                    - generic [ref=f2e96]
+                  - table [ref=f2e161]:
+                    - rowgroup [ref=f2e162]
+                    - rowgroup [ref=f2e178]
+                  - generic [ref=f2e281]:
+                    - generic [ref=f2e282]
+                    - generic [ref=f2e468]
+                    - generic [ref=f2e608]
+                    - generic [ref=f2e680]
+                    - generic [ref=f2e740]
+                    - generic [ref=f2e796]
+              - complementary [ref=f2e874]:
+                - generic [ref=f2e875]:
+                  - generic [ref=f2e876]:
+                    - img [ref=f2e877]
+                    - generic [ref=f2e878]
+                  - button [ref=f2e881] [cursor=pointer]: X
+                - generic [ref=f2e883]: No messages yet. Start the conversation.
+                - generic [ref=f2e885]:
+                  - textbox [ref=f2e886]:
+                    - /placeholder: Type a message...
+                  - button [disabled] [ref=f2e887]: Send
+              - generic:
+                - dialog "Warning; unsaved changes.":
+                  - generic: Warning; unsaved changes.
+                  - generic: You have unsaved changes. If you leave, they will be lost.
+                  - generic:
+                    - button "Stay Here"
+                    - button "Leave Without Saving"
+                    - button "Save & Go to Dashboard"

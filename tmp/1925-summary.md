@@ -1,0 +1,96 @@
+- table [ref=e2]:
+  - rowgroup [ref=e3]:
+    - row "This application was created by a Google Apps Script user" [ref=e4]:
+      - cell "This application was created by a Google Apps Script user" [ref=e5]:
+        - banner "This application was created by a Google Apps Script user" [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e8]:
+              - img [ref=e10]
+              - alert [ref=e12]: This application was created by a Google Apps Script user
+            - generic [ref=e13]:
+              - link "Report abuse" [ref=e14] [cursor=pointer]:
+                - /url: https://drive.google.com/abuse?id=AKkXjozMBK4kFUVQR6rCuOcJsaD0fqmETHbXm3k_qzlirCpt1rvTHSBE2l3kjAUFmA81QF46uQzy_y7u6v-jZ0wsqluQXOPeD5eZH7Ui%3A0&docurl=https%3A%2F%2Fscript.google.com%2Fa%2Fmacros%2Fredthreads.com%2Fs%2FAKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw%2Fexec%3Ft%3Dfa49c61c-fe2e-4d82-8ddc-0dfef1329023
+              - link "Learn more" [ref=e15] [cursor=pointer]:
+                - /url: https://developers.google.com/apps-script
+          - button "Dismiss" [ref=e16]:
+            - img [ref=e17]
+    - row [ref=e19]:
+      - cell [ref=e20]:
+        - iframe [ref=e21]:
+          - iframe [ref=f7e2]:
+            - generic [ref=f8e2]:
+              - generic [ref=f8e4]:
+                - generic [ref=f8e6]:
+                  - button "Open message" [ref=f8e8] [cursor=pointer]:
+                    - img "Sender" [ref=f8e10]
+                  - button "Message Caleb" [ref=f8e11] [cursor=pointer]
+                  - button "Dashboard" [ref=f8e12] [cursor=pointer]
+                - img "Red Threads logo" [ref=f8e15]
+                - generic [ref=f8e17]:
+                  - button "Save" [disabled] [ref=f8e18]
+                  - button "Place Order" [disabled] [ref=f8e19]
+              - main [ref=f8e20]:
+                - tablist "Print Jobs" [ref=f8e22]:
+                  - 'tab "Job 1: Test Order 100 Units | $1,333.20 Artwork: Approved" [ref=f8e23] [cursor=pointer]':
+                    - generic [ref=f8e24]:
+                      - generic [ref=f8e26]: "Job 1: Test Order"
+                      - generic [ref=f8e27]: 100 Units | $1,333.20
+                      - generic [ref=f8e28]:
+                        - generic [ref=f8e29]: "Artwork:"
+                        - generic [ref=f8e30]: Approved
+                  - 'tab "Job 2: New Job 0 Units | $0.00 Artwork: Not Approved" [ref=f8e31] [cursor=pointer]':
+                    - generic [ref=f8e32]:
+                      - generic [ref=f8e34]: "Job 2: New Job"
+                      - generic [ref=f8e35]: 0 Units | $0.00
+                      - generic [ref=f8e36]:
+                        - generic [ref=f8e37]: "Artwork:"
+                        - generic [ref=f8e38]: Not Approved
+                  - 'tab "Job 3: Hat Order 0 Units | $0.00 Artwork: Not Approved" [ref=f8e39] [cursor=pointer]':
+                    - generic [ref=f8e40]:
+                      - generic [ref=f8e42]: "Job 3: Hat Order"
+                      - generic [ref=f8e43]: 0 Units | $0.00
+                      - generic [ref=f8e44]:
+                        - generic [ref=f8e45]: "Artwork:"
+                        - generic [ref=f8e46]: Not Approved
+                  - 'tab "Project 1925 Invoice 100 Units | $1,333.20 View: Invoice" [selected] [ref=f8e47] [cursor=pointer]':
+                    - generic [ref=f8e48]:
+                      - generic [ref=f8e50]: Project 1925 Invoice
+                      - generic [ref=f8e51]:
+                        - generic [ref=f8e52]: 100 Units
+                        - generic [ref=f8e53]: "|"
+                        - generic [ref=f8e54]: $1,333.20
+                      - generic [ref=f8e55]: "View: Invoice"
+                - 'tabpanel "Project 1925 Invoice 100 Units | $1,333.20 View: Invoice" [ref=f8e58]':
+                  - generic [ref=f8e59]:
+                    - article [ref=f8e191]:
+                      - generic [ref=f8e192]:
+                        - generic [ref=f8e193]
+                        - generic [ref=f8e277]
+                    - complementary [ref=f8e161]:
+                      - button "Share / Download Invoice" [ref=f8e162] [cursor=pointer]
+                      - generic [ref=f8e163]:
+                        - generic [ref=f8e164]: Pay for Your Order
+                        - button "Pay by Credit Card" [ref=f8e165] [cursor=pointer]
+                        - button "Pay by ACH" [ref=f8e166] [cursor=pointer]
+                        - generic [ref=f8e167]
+              - complementary [ref=f8e175]:
+                - generic [ref=f8e176]:
+                  - generic [ref=f8e177]:
+                    - img [ref=f8e178]
+                    - generic [ref=f8e179]:
+                      - heading [level=2] [ref=f8e180]: Send me a message!
+                      - generic [ref=f8e181]: I will respond within 1 business day, or as soon as I'm able.
+                  - button [ref=f8e182] [cursor=pointer]: X
+                - generic [ref=f8e186]: "Josiah's comment - Apr 24, 2026 9:59 PM Artwork approved for Print Job 1: Test Order."
+                - generic [ref=f8e188]:
+                  - textbox [ref=f8e189]:
+                    - /placeholder: Type a message...
+                  - button [disabled] [ref=f8e190]: Send
+              - generic:
+                - dialog "Warning; unsaved changes.":
+                  - generic: Warning; unsaved changes.
+                  - generic: You have unsaved changes. If you leave, they will be lost.
+                  - generic:
+                    - button "Stay Here"
+                    - button "Leave Without Saving"
+                    - button "Save & Go to Dashboard"

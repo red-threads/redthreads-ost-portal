@@ -34793,10 +34793,11 @@
 
   function getLockedSummaryPresentationState_(){
     const base = getSummaryPresentationState_();
-    const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
-    const paymentMethod = String(order.paymentMethodSelected || (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.currentPaymentMethod) || '').trim().toLowerCase();
+    const lifecycle = getSummaryLifecycleUiState_();
+    const order = lifecycle.order;
+    const paymentMethod = lifecycle.paymentMethodSelected;
     const hasSalesTax = Number(order.amountTax) > 0;
-    const hasSuccessfulPayment = !!String(order.paidAt || '').trim();
+    const hasSuccessfulPayment = lifecycle.paymentReceived === true;
     return normalizeSummaryOptions(Object.assign({}, base, {
       creditCardFeeEnabled: hasSuccessfulPayment && paymentMethod === 'card',
       salesTaxEnabled: hasSalesTax
@@ -34814,20 +34815,115 @@
     return getSummaryPresentationState_();
   }
 
+  function getSummaryLifecycleUiState_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const order = normalizeOrderSummary(opts.orderSummary || LATEST_ORDER_SUMMARY);
+    const current = normalizeCurrentStateSummary(opts.currentStateSummary || CURRENT_STATE_SUMMARY);
+    const workflow = getPortalWorkflowContext_({
+      orderSummary: order,
+      currentStateSummary: current
+    });
+    const documentMode = String(
+      opts.documentMode
+      || workflow.summaryDocumentMode
+      || getSummaryDocumentMode_({
+        orderSummary: order,
+        currentStateSummary: current
+      })
+    ).trim().toLowerCase();
+    let controlsMode = String(workflow.summaryControlsMode || '').trim().toLowerCase();
+    const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
+    const lifecycleStage = String(workflow.lifecycleStage || '').trim().toLowerCase();
+    const paymentMethodSelected = String(
+      workflow.paymentMethod
+      || workflow.paymentMethodSelected
+      || order.paymentMethodSelected
+      || current.currentPaymentMethod
+      || ''
+    ).trim().toLowerCase();
+    const paymentPath = String(workflow.paymentPath || '').trim().toLowerCase();
+    const paymentReceivedAt = String(order.paymentReceivedManuallyAt || order.paidAt || '').trim();
+    const paymentReceived = workflow.paymentReceived === true
+      || workflow.isPaymentReceived === true
+      || !!paymentReceivedAt;
+    const paymentDue = workflow.paymentDue === true && !paymentReceived;
+    if (!controlsMode) {
+      if (documentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice) controlsMode = 'po_submission';
+      else if (documentMode === SUMMARY_DOCUMENT_MODES.manual_pending_invoice) controlsMode = 'manual_pending';
+      else if (documentMode === SUMMARY_DOCUMENT_MODES.locked_invoice) controlsMode = paymentDue ? 'invoice_payment_due' : 'invoice_final';
+      else controlsMode = 'estimate';
+    }
+    const isPoDraft = controlsMode === 'po_submission'
+      || documentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
+      || workflow.isPoDraftLocked === true
+      || workflow.isAwaitingPoSubmission === true
+      || workflow.hasPurchaseOrderDraft === true
+      || lifecycleState === 'po_draft_invoice_prepared'
+      || lifecycleState === 'awaiting_po_submission';
+    const isManualPending = controlsMode === 'manual_pending'
+      || documentMode === SUMMARY_DOCUMENT_MODES.manual_pending_invoice
+      || workflow.manualPaymentPending === true
+      || workflow.isManualPendingLocked === true
+      || lifecycleState === 'manual_payment_pending';
+    const paymentMethodLabel = (
+      paymentMethodSelected === PAYMENT_METHODS.card ? 'Credit Card'
+        : (paymentMethodSelected === PAYMENT_METHODS.ach ? 'ACH'
+          : (paymentMethodSelected === PAYMENT_METHODS.purchase_order ? 'Purchase Order'
+            : (paymentMethodSelected === PAYMENT_METHODS.check ? 'Check'
+              : (paymentMethodSelected === PAYMENT_METHODS.cash ? 'Cash' : ''))))
+    );
+    return {
+      workflow: workflow,
+      order: order,
+      current: current,
+      documentMode: documentMode,
+      controlsMode: controlsMode,
+      lifecycleState: lifecycleState,
+      lifecycleStage: lifecycleStage,
+      paymentPath: paymentPath,
+      paymentMethodSelected: paymentMethodSelected,
+      paymentMethodLabel: paymentMethodLabel,
+      paymentDue: paymentDue,
+      paymentReceived: paymentReceived,
+      paymentReceivedAt: paymentReceivedAt,
+      productionCurrent: workflow.productionCurrent === true,
+      productionComplete: workflow.productionComplete === true,
+      productionStartAt: String(workflow.productionStartAt || '').trim(),
+      productionTargetCompleteAt: String(workflow.productionTargetCompleteAt || '').trim(),
+      productionCompletionAt: String(workflow.productionCompletionAt || '').trim(),
+      productionCompletionSource: String(workflow.productionCompletionSource || '').trim().toLowerCase(),
+      nextClientAction: String(workflow.nextClientAction || '').trim().toLowerCase(),
+      nextTeamAction: String(workflow.nextTeamAction || '').trim().toLowerCase(),
+      editorMode: String(workflow.editorMode || '').trim().toLowerCase(),
+      saveAllowed: workflow.saveAllowed === true,
+      orderAllowed: workflow.orderAllowed === true,
+      isInvoiceMode: isInvoiceSummaryDocumentMode_(documentMode),
+      isLockedInvoice: documentMode === SUMMARY_DOCUMENT_MODES.locked_invoice,
+      isPoDraftInvoice: documentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice,
+      isManualPendingInvoice: documentMode === SUMMARY_DOCUMENT_MODES.manual_pending_invoice,
+      isPoDraft: isPoDraft,
+      isManualPending: isManualPending,
+      showPoSubmissionControls: controlsMode === 'po_submission',
+      showManualPendingControls: controlsMode === 'manual_pending',
+      showPaymentDueControls: controlsMode === 'invoice_payment_due' && paymentDue,
+      showFinalInvoiceControls: controlsMode === 'invoice_final' || (documentMode === SUMMARY_DOCUMENT_MODES.locked_invoice && !paymentDue),
+      poNumber: String(order.poNumber || '').trim(),
+      poSubmittedAt: String(order.poSubmittedAt || '').trim(),
+      paidAt: String(order.paidAt || '').trim()
+    };
+  }
+
   function getLockedSummarySuccessfulPaymentTypeLabel_(orderSummary){
-    const order = normalizeOrderSummary(orderSummary || LATEST_ORDER_SUMMARY);
-    if (!String(order.paidAt || '').trim()) return '';
-    const method = String(order.paymentMethodSelected || '').trim().toLowerCase();
-    if (method === 'card') return 'Credit Card';
-    if (method === 'ach') return 'ACH';
-    if (method === 'purchase_order') return 'Purchase Order';
-    return '';
+    const lifecycle = getSummaryLifecycleUiState_({
+      orderSummary: orderSummary || LATEST_ORDER_SUMMARY
+    });
+    if (!lifecycle.paymentReceived) return '';
+    return lifecycle.paymentMethodLabel || '';
   }
 
   function isLockedSummaryPaymentPending_(){
-    if (!isLockedSummaryInvoiceMode_()) return false;
-    const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
-    return !String(order.paidAt || '').trim();
+    const lifecycle = getSummaryLifecycleUiState_();
+    return lifecycle.isLockedInvoice && lifecycle.paymentDue === true && lifecycle.paymentReceived !== true;
   }
 
   function isLockedSummaryAwaitingPurchaseOrderSubmission_(){
@@ -34842,6 +34938,11 @@
       orderSummary: order,
       currentStateSummary: current
     });
+    const lifecycle = getSummaryLifecycleUiState_({
+      documentMode: workflow.summaryDocumentMode,
+      orderSummary: order,
+      currentStateSummary: current
+    });
     const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
     const lifecycleStage = String(workflow.lifecycleStage || '').trim().toLowerCase();
     const summaryDocumentMode = String(workflow.summaryDocumentMode || '').trim().toLowerCase();
@@ -34853,17 +34954,23 @@
       || ''
     ).trim().toLowerCase();
     const productionStartAt = String(
-      workflow.productionStartAt
+      lifecycle.productionStartAt
+      || workflow.productionStartAt
       || poSubmittedAt
       || order.paymentReceivedManuallyAt
       || paidAt
       || order.authorizedToProduceAt
       || ''
     ).trim();
-    const productionTargetCompleteAt = String(workflow.productionTargetCompleteAt || '').trim();
-    const productionCompletionAt = String(workflow.productionCompletionAt || '').trim();
-    const completionSource = String(workflow.productionCompletionSource || '').trim().toLowerCase();
-    const productionComplete = workflow.productionComplete === true;
+    const productionTargetCompleteAt = String(lifecycle.productionTargetCompleteAt || workflow.productionTargetCompleteAt || '').trim();
+    const productionCompletionAt = String(lifecycle.productionCompletionAt || workflow.productionCompletionAt || '').trim();
+    const completionSource = String(lifecycle.productionCompletionSource || workflow.productionCompletionSource || '').trim().toLowerCase();
+    const productionComplete = lifecycle.productionComplete === true || workflow.productionComplete === true;
+    const productionCurrent = lifecycle.productionCurrent === true;
+    const paymentDue = lifecycle.paymentDue === true;
+    const paymentReceived = lifecycle.paymentReceived === true;
+    const controlsMode = String(lifecycle.controlsMode || '').trim().toLowerCase();
+    const paymentMethodSelected = String(lifecycle.paymentMethodSelected || order.paymentMethodSelected || '').trim().toLowerCase();
     const submittedAt = String(
       poSubmittedAt
       || order.lockedAt
@@ -34890,17 +34997,16 @@
         targetCompleteAt: productionTargetCompleteAt,
         productionComplete: true,
         completionSource: completionSource,
-        paymentDue: workflow.paymentDue === true
+        paymentDue: paymentDue
       };
     }
-    if (paidAt) {
-      const paymentMethod = String(order.paymentMethodSelected || '').trim().toLowerCase();
+    if (paymentReceived && paidAt) {
       return {
         isLocked: true,
         freeze: true,
         noteTone: 'info',
         noteText: (
-          paymentMethod === 'purchase_order'
+          paymentMethodSelected === 'purchase_order'
             ? 'Purchase order payment was received on ' + formatSummaryDateOnly_(paidAt) + '.'
             : 'Payment/approval was received on ' + formatSummaryDateOnly_(paidAt) + '.'
         ),
@@ -34913,16 +35019,43 @@
         targetCompleteAt: productionTargetCompleteAt,
         productionComplete: false,
         completionSource: '',
-        paymentDue: workflow.paymentDue === true
+        paymentDue: paymentDue
+      };
+    }
+    if (poSubmittedAt && paymentMethodSelected === PAYMENT_METHODS.purchase_order && paymentDue) {
+      const submittedDateLabel = formatSummaryDateOnly_(poSubmittedAt);
+      return {
+        isLocked: true,
+        freeze: true,
+        noteTone: 'alert',
+        noteText: productionCurrent
+          ? ('Purchase order was submitted on ' + submittedDateLabel + '. Production is in progress while payment is still due.')
+          : ('Purchase order was submitted on ' + submittedDateLabel + '. Payment is still due.'),
+        referenceDate: productionStartAt || poSubmittedAt,
+        submittedAt: submittedAt,
+        paidAt: '',
+        completionDate: '',
+        completionDateValue: null,
+        completionDateLabel: '',
+        targetCompleteAt: productionTargetCompleteAt,
+        productionComplete: false,
+        completionSource: '',
+        paymentDue: paymentDue
       };
     }
     if (
-      summaryDocumentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
+      controlsMode === 'po_submission'
+      || summaryDocumentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
       || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
       || lifecycleState === 'po_draft_invoice_prepared'
       || lifecycleState === 'awaiting_po_submission'
-      || !!purchaseOrderDraft
-      || orderState === 'awaiting_po_submission'
+      || (
+        !!purchaseOrderDraft
+        && !paymentDue
+        && !productionCurrent
+        && !poSubmittedAt
+        && orderState === 'awaiting_po_submission'
+      )
     ) {
       return {
         isLocked: true,
@@ -34940,7 +35073,7 @@
         targetCompleteAt: '',
         productionComplete: false,
         completionSource: '',
-        paymentDue: workflow.paymentDue === true
+        paymentDue: paymentDue
       };
     }
     if (poSubmittedAt) {
@@ -34958,7 +35091,7 @@
         targetCompleteAt: productionTargetCompleteAt,
         productionComplete: false,
         completionSource: '',
-        paymentDue: workflow.paymentDue === true
+        paymentDue: paymentDue
       };
     }
     return {
@@ -34977,7 +35110,7 @@
       targetCompleteAt: productionTargetCompleteAt,
       productionComplete: false,
       completionSource: '',
-      paymentDue: workflow.paymentDue === true
+      paymentDue: paymentDue
     };
   }
 
@@ -35265,23 +35398,22 @@
   function buildSummaryEstimateHeaderData_(rollup, presentation, totals, options){
     const safeRollup = (rollup && typeof rollup === 'object') ? rollup : buildSummaryRollupData_();
     const opts = (options && typeof options === 'object') ? options : {};
-    const order = normalizeOrderSummary(opts.orderSummary || LATEST_ORDER_SUMMARY);
-    const workflow = getPortalWorkflowContext_({
-      orderSummary: order,
+    const lifecycle = getSummaryLifecycleUiState_({
+      documentMode: opts.mode,
+      orderSummary: opts.orderSummary || LATEST_ORDER_SUMMARY,
       currentStateSummary: CURRENT_STATE_SUMMARY
     });
+    const order = lifecycle.order;
     const projectName = metaField('projectName') || metaField('dealTitle') || rowField('projectname') || '--';
     const dealNumber = getDealNumber();
-    const mode = String(opts.mode || '').trim().toLowerCase();
-    const poSubmittedAt = String(order.poSubmittedAt || '').trim();
-    const poNumber = String(order.poNumber || '').trim();
-    const paidAt = String(order.paidAt || '').trim();
-    const productionComplete = workflow.productionComplete === true;
-    const completedAt = String(workflow.productionCompletionAt || workflow.productionTargetCompleteAt || '').trim();
+    const poSubmittedAt = lifecycle.poSubmittedAt;
+    const poNumber = lifecycle.poNumber;
+    const paidAt = lifecycle.paymentReceivedAt;
+    const productionComplete = lifecycle.productionComplete === true;
+    const completedAt = String(lifecycle.productionCompletionAt || lifecycle.productionTargetCompleteAt || '').trim();
     const successfulPaymentType = getLockedSummarySuccessfulPaymentTypeLabel_(order);
-    const isLockedPoInvoice = mode === 'locked_invoice' && !!poSubmittedAt;
-    const showLockedPoPaymentMeta = isLockedPoInvoice
-      && !!paidAt
+    const isLockedPoInvoice = lifecycle.isLockedInvoice && lifecycle.paymentPath === PAYMENT_METHODS.purchase_order && !!poSubmittedAt;
+    const showPaymentMeta = lifecycle.paymentReceived
       && !!successfulPaymentType;
     const displayDate = productionComplete && completedAt
       ? formatSummaryDateOnly_(completedAt)
@@ -35292,11 +35424,14 @@
       logoUrl: 'https://logos.redthreads.work/CALC_PORTAL/LONG_HEADER_LOGO.png',
       savedDate: displayDate,
       dateLabel: productionComplete ? 'Completed:' : (isLockedPoInvoice ? 'PO Placed:' : 'Date:'),
-      paymentDate: showLockedPoPaymentMeta ? formatSummaryDateOnly_(paidAt) : '',
-      paymentType: showLockedPoPaymentMeta ? successfulPaymentType : '',
-      paymentPendingLabel: (!paidAt && (workflow.paymentDue === true || (isLockedPoInvoice && !paidAt))) ? 'Payment still required' : '',
+      paymentDate: showPaymentMeta ? formatSummaryDateOnly_(paidAt) : '',
+      paymentType: showPaymentMeta ? successfulPaymentType : '',
+      paymentPendingLabel: lifecycle.paymentDue === true ? 'Payment still required' : '',
       poNumber: poNumber,
-      projectStatus: productionComplete ? 'Complete' : getDisplayOrderStatusLabel_(),
+      projectStatus: productionComplete ? 'Complete' : getDisplayOrderStatusLabel_({
+        orderSummary: order,
+        currentStateSummary: lifecycle.current
+      }),
       preparedBy: getSenderName(),
       preparedFor: getClientName(),
       organization: metaField('orgName') || rowField('orgname') || String((ACCOUNT_SUMMARY && ACCOUNT_SUMMARY.orgName) || '').trim() || '--',
@@ -35820,10 +35955,14 @@
     }
   }
 
-  function buildSummaryManualPendingControlCard_(){
+  function buildSummaryManualPendingControlCard_(data){
+    const lifecycle = (data && data.lifecycleUiState && typeof data.lifecycleUiState === 'object')
+      ? data.lifecycleUiState
+      : getSummaryLifecycleUiState_({ documentMode: SUMMARY_DOCUMENT_MODES.manual_pending_invoice });
+    const paymentLabel = String(lifecycle.paymentMethodLabel || '').trim().toLowerCase() || 'manual';
     const card = createEl('section', 'summaryEstimatePoSection');
     card.appendChild(createEl('div', 'summaryEstimatePoSectionTitle', 'Awaiting Payment'));
-    card.appendChild(createEl('div', 'summaryEstimatePoSectionSub', 'This project is locked to the final invoice while we wait for your manual payment. If you need to reopen the estimate and choose a different payment path, cancel this order first.'));
+    card.appendChild(createEl('div', 'summaryEstimatePoSectionSub', 'This project is locked to the final invoice while we wait for your ' + paymentLabel + ' payment. If you need to reopen the estimate and choose a different payment path, cancel this order first.'));
     const cancelBtn = createEl(
       'button',
       'summaryEstimateControlSecondary',
@@ -35839,6 +35978,9 @@
   }
 
   function buildSummaryPurchaseOrderControlCard_(data){
+    const lifecycle = (data && data.lifecycleUiState && typeof data.lifecycleUiState === 'object')
+      ? data.lifecycleUiState
+      : getSummaryLifecycleUiState_({ documentMode: SUMMARY_DOCUMENT_MODES.po_draft_invoice });
     const card = createEl('aside', 'summaryEstimateControlsCard summaryEstimatePoCard');
     const busy = Boolean(ORDER_FLOW_PO_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
     const emailBusy = busy || ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT;
@@ -35854,7 +35996,9 @@
 
     const intro = createEl('div', 'summaryEstimatePoIntro');
     intro.appendChild(createEl('div', 'summaryEstimatePoTitle', 'Submit Purchase Order'));
-    intro.appendChild(createEl('div', '', 'Your invoice is ready. Email it to procurement if needed, then upload the approved purchase order, enter the PO number, and submit to authorize production.'));
+    intro.appendChild(createEl('div', '', lifecycle.showPoSubmissionControls
+      ? 'Your invoice is ready. Email it to procurement if needed, then upload the approved purchase order, enter the PO number, and submit to authorize production.'
+      : 'This invoice is waiting on final purchase order submission before production can begin.'));
     card.appendChild(intro);
 
     if (ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT && !ORDER_FLOW_PO_EMAIL_ASYNC_ERROR) {
@@ -36122,28 +36266,22 @@
 
   function buildSummaryEstimateControlCard_(data){
     const presentation = (data && data.presentation) ? data.presentation : getSummaryPresentationState_();
-    const documentMode = String((data && data.mode) || getSummaryDocumentMode_()).trim().toLowerCase();
-    const isLockedInvoice = documentMode === SUMMARY_DOCUMENT_MODES.locked_invoice;
-    const isPoDraftInvoice = documentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice;
-    const isManualPendingInvoice = documentMode === SUMMARY_DOCUMENT_MODES.manual_pending_invoice;
-    const isInvoiceMode = isInvoiceSummaryDocumentMode_(documentMode);
-    const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
-    const workflow = getPortalWorkflowContext_();
-    const paymentMethodSelected = String(
-      workflow.paymentMethodSelected
-      || order.paymentMethodSelected
-      || (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.currentPaymentMethod)
-      || ''
-    ).trim().toLowerCase();
+    const lifecycle = getSummaryLifecycleUiState_({
+      documentMode: (data && data.mode) || getSummaryDocumentMode_()
+    });
+    const documentMode = lifecycle.documentMode;
+    const isLockedInvoice = lifecycle.isLockedInvoice;
+    const isInvoiceMode = lifecycle.isInvoiceMode;
+    const order = lifecycle.order;
+    const paymentMethodSelected = lifecycle.paymentMethodSelected;
     const canToggleSalesTax = ACCOUNT_SUMMARY.taxExemptActive || ACCOUNT_SUMMARY.taxExemptApproved;
-    if (isPoDraftInvoice) {
-      return buildSummaryPurchaseOrderControlCard_(data);
+    if (lifecycle.showPoSubmissionControls) {
+      return buildSummaryPurchaseOrderControlCard_(Object.assign({}, data, { lifecycleUiState: lifecycle }));
     }
     const card = createEl('aside', 'summaryEstimateControlsCard');
     const isBusy = Boolean(SUMMARY_SHARE_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
     const emailActionLabel = isInvoiceMode ? 'Share / Download Invoice' : 'Share / Download Estimate';
-    const canShowLockedStripePaymentActions = isLockedInvoice
-      && !String(order.paidAt || '').trim()
+    const canShowLockedStripePaymentActions = lifecycle.showPaymentDueControls
       && paymentMethodSelected !== PAYMENT_METHODS.check
       && paymentMethodSelected !== PAYMENT_METHODS.cash;
 
@@ -36231,8 +36369,8 @@
 
       card.appendChild(panel);
     }
-    if (isManualPendingInvoice) {
-      card.appendChild(buildSummaryManualPendingControlCard_());
+    if (lifecycle.showManualPendingControls) {
+      card.appendChild(buildSummaryManualPendingControlCard_(Object.assign({}, data, { lifecycleUiState: lifecycle })));
       return card;
     }
     if (isLockedInvoice) {

@@ -1,0 +1,189 @@
+- table [ref=e2]:
+  - rowgroup [ref=e3]:
+    - row "This application was created by a Google Apps Script user" [ref=e4]:
+      - cell "This application was created by a Google Apps Script user" [ref=e5]:
+        - banner "This application was created by a Google Apps Script user" [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e8]:
+              - img [ref=e10]
+              - alert [ref=e12]: This application was created by a Google Apps Script user
+            - generic [ref=e13]:
+              - link "Report abuse" [ref=e14] [cursor=pointer]:
+                - /url: https://drive.google.com/abuse?id=AKkXjozMBK4kFUVQR6rCuOcJsaD0fqmETHbXm3k_qzlirCpt1rvTHSBE2l3kjAUFmA81QF46uQzy_y7u6v-jZ0wsqluQXOPeD5eZH7Ui%3A0&docurl=https%3A%2F%2Fscript.google.com%2Fa%2Fmacros%2Fredthreads.com%2Fs%2FAKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw%2Fexec%3Ft%3Dfa49c61c-fe2e-4d82-8ddc-0dfef1329023
+              - link "Learn more" [ref=e15] [cursor=pointer]:
+                - /url: https://developers.google.com/apps-script
+          - button "Dismiss" [ref=e16]:
+            - img [ref=e17]
+    - row [ref=e19]:
+      - cell [ref=e20]:
+        - iframe [ref=e21]:
+          - iframe [ref=f7e2]:
+            - generic [ref=f8e2]:
+              - generic [ref=f8e4]:
+                - generic [ref=f8e6]:
+                  - button "Open message" [ref=f8e8] [cursor=pointer]:
+                    - img "Sender" [ref=f8e10]
+                  - button "Message Caleb" [ref=f8e11] [cursor=pointer]
+                  - button "Dashboard" [ref=f8e12] [cursor=pointer]
+                - img "Red Threads logo" [ref=f8e15]
+                - generic [ref=f8e17]:
+                  - button "Save" [disabled] [ref=f8e18]
+                  - button "Place Order" [disabled] [ref=f8e19]
+              - main [ref=f8e20]:
+                - tablist "Print Jobs" [ref=f8e22]:
+                  - 'tab "Job 1: Test Order 100 Units | $1,333.20 Artwork: Approved" [ref=f8e23] [cursor=pointer]':
+                    - generic [ref=f8e24]:
+                      - generic [ref=f8e26]: "Job 1: Test Order"
+                      - generic [ref=f8e27]: 100 Units | $1,333.20
+                      - generic [ref=f8e28]:
+                        - generic [ref=f8e29]: "Artwork:"
+                        - generic [ref=f8e30]: Approved
+                  - 'tab "Job 2: New Job 0 Units | $0.00 Artwork: Not Approved" [ref=f8e31] [cursor=pointer]':
+                    - generic [ref=f8e32]:
+                      - generic [ref=f8e34]: "Job 2: New Job"
+                      - generic [ref=f8e35]: 0 Units | $0.00
+                      - generic [ref=f8e36]:
+                        - generic [ref=f8e37]: "Artwork:"
+                        - generic [ref=f8e38]: Not Approved
+                  - 'tab "Job 3: Hat Order 0 Units | $0.00 Artwork: Not Approved" [ref=f8e39] [cursor=pointer]':
+                    - generic [ref=f8e40]:
+                      - generic [ref=f8e42]: "Job 3: Hat Order"
+                      - generic [ref=f8e43]: 0 Units | $0.00
+                      - generic [ref=f8e44]:
+                        - generic [ref=f8e45]: "Artwork:"
+                        - generic [ref=f8e46]: Not Approved
+                  - 'tab "Project 1925 Invoice 100 Units | $1,333.20 View: Invoice" [selected] [ref=f8e47] [cursor=pointer]':
+                    - generic [ref=f8e48]:
+                      - generic [ref=f8e50]: Project 1925 Invoice
+                      - generic [ref=f8e51]:
+                        - generic [ref=f8e52]: 100 Units
+                        - generic [ref=f8e53]: "|"
+                        - generic [ref=f8e54]: $1,333.20
+                      - generic [ref=f8e55]: "View: Invoice"
+                - 'tabpanel "Project 1925 Invoice 100 Units | $1,333.20 View: Invoice" [ref=f8e58]':
+                  - generic [ref=f8e59]:
+                    - article [ref=f8e191]:
+                      - generic [ref=f8e192]:
+                        - generic [ref=f8e193]:
+                          - generic [ref=f8e194]:
+                            - generic [ref=f8e195]:
+                              - generic [ref=f8e197]:
+                                - generic [ref=f8e198]: "PO Placed:"
+                                - generic [ref=f8e199]: 4/24/2026
+                              - img "Red Threads logo" [ref=f8e201]
+                              - generic [ref=f8e202]:
+                                - generic [ref=f8e203]: "Invoice # 1925"
+                                - generic [ref=f8e204]: "P.O. #: 1925"
+                                - generic [ref=f8e205]: Payment still required
+                            - generic [ref=f8e206]:
+                              - generic [ref=f8e207]:
+                                - generic [ref=f8e208]: Active Jobs
+                                - generic [ref=f8e209]: "1"
+                              - generic [ref=f8e210]:
+                                - generic [ref=f8e211]: Total Units
+                                - generic [ref=f8e212]: "100"
+                              - generic [ref=f8e213]:
+                                - generic [ref=f8e214]: FINAL COST
+                                - generic [ref=f8e215]: $1,333.20
+                              - generic [ref=f8e216]:
+                                - generic [ref=f8e217]: Ready By
+                                - generic [ref=f8e218]: May 6 (rush)
+                            - generic [ref=f8e219]:
+                              - generic [ref=f8e220]:
+                                - generic [ref=f8e221]: Awaiting purchase order.
+                                - generic [ref=f8e222]: Invoice locked on 4/24/2026. Production begins once the final purchase order is submitted.
+                                - generic [ref=f8e223]: "Ready dates assume: 4/24/2026"
+                              - generic [ref=f8e224]:
+                                - generic [ref=f8e225]: "Project: Getting There 3.0"
+                                - generic [ref=f8e226]: "Client: Josiah Blackmore"
+                                - generic [ref=f8e227]: "Org: Three Rivers Corporation"
+                              - generic [ref=f8e228]:
+                                - generic [ref=f8e229]: "Project Subtotal: $1,333.20"
+                                - generic [ref=f8e230]: "Sales Tax: $0.00"
+                                - generic [ref=f8e231]: "Total Cost: $1,333.20"
+                          - generic [ref=f8e232]:
+                            - generic [ref=f8e234]:
+                              - img "Print Job 1 preview mockup" [ref=f8e236]
+                              - generic [ref=f8e238]:
+                                - generic [ref=f8e239]:
+                                  - generic [ref=f8e240]: "Job 1: Test Order"
+                                  - generic [ref=f8e241]: "Decoration 1: Screen Print 1 Color, Full Front"
+                                  - generic [ref=f8e242]: "Decoration 2: Screen Print 1 Color, Left Sleeve / Left Side"
+                                  - generic [ref=f8e243]:
+                                    - generic [ref=f8e244]: "Added Services:"
+                                    - generic [ref=f8e245]: Vector Ignition (Easy) x1 $35.00
+                                    - generic [ref=f8e246]: PMS Color Matching (1 Color) x1 $25.00
+                                    - generic [ref=f8e247]: 9-7 Business Day Rush x1 $121.20
+                                    - generic [ref=f8e248]: $100.00 or 10% of order - whichever is greater
+                                - generic [ref=f8e249]:
+                                  - generic [ref=f8e250]:
+                                    - generic [ref=f8e251]: "Units in this Job: 100"
+                                    - generic [ref=f8e252]: "Job Cost: $1,333.20"
+                                  - generic [ref=f8e253]:
+                                    - generic [ref=f8e254]: Turnaround Time
+                                    - generic [ref=f8e255]: 7 business days (rush)
+                                    - generic [ref=f8e256]: Ready by May 6 (rush)
+                            - generic [ref=f8e259]:
+                              - generic [ref=f8e260]:
+                                - link "GD_64000 Gildan Unisex Softstyle Tee" [ref=f8e261] [cursor=pointer]:
+                                  - /url: https://www.ssactivewear.com/p/gildan/64000
+                                  - generic [ref=f8e262]:
+                                    - generic [ref=f8e263]: GD_64000
+                                    - generic [ref=f8e264]: Gildan Unisex Softstyle Tee
+                                - generic [ref=f8e265]:
+                                  - generic [ref=f8e266]: XL
+                                  - generic [ref=f8e267]: 11.52 ea
+                                - generic [ref=f8e268]: QTY
+                                - generic [ref=f8e269]: TOTAL
+                              - generic [ref=f8e270]:
+                                - generic [ref=f8e273]: black
+                                - generic [ref=f8e274]: "100"
+                                - generic [ref=f8e275]: "100"
+                                - generic [ref=f8e276]: $1,152.00
+                        - generic [ref=f8e277]:
+                          - generic [ref=f8e278]:
+                            - generic [ref=f8e279]: WWW.
+                            - generic [ref=f8e280]: RED
+                            - generic [ref=f8e281]: THREADS.COM
+                            - generic [ref=f8e282]: "|"
+                            - generic [ref=f8e283]: 505 S. SAGINAW RD
+                            - generic [ref=f8e284]: "|"
+                            - generic [ref=f8e285]: MIDLAND, MI 48640
+                            - generic [ref=f8e286]: "|"
+                            - generic [ref=f8e287]: "PHONE: 989-600-8540"
+                          - generic [ref=f8e288]: PAGE 1 OF 1
+                    - complementary [ref=f8e161]:
+                      - button "Share / Download Invoice" [ref=f8e162] [cursor=pointer]
+                      - generic [ref=f8e163]:
+                        - generic [ref=f8e164]: Pay for Your Order
+                        - button "Pay by Credit Card" [ref=f8e165] [cursor=pointer]
+                        - button "Pay by ACH" [ref=f8e166] [cursor=pointer]
+                        - generic [ref=f8e167]:
+                          - generic [ref=f8e168]: "Credit Card Payment: Item costs & the final cost will increase by 3% ($1,373.20). The final invoice will be updated for your records."
+                          - generic [ref=f8e169]: "ACH Payment: Final amount on the invoice is what you will pay."
+                          - generic [ref=f8e170]: "Physical Check Payment: Mail a check in the amount of $1,333.20 made out to: Red Threads LLC."
+                          - generic [ref=f8e171]: "Mail to:"
+                          - generic [ref=f8e172]: Red Threads
+                          - generic [ref=f8e173]: 505 S. Saginaw Rd.
+                          - generic [ref=f8e174]: Midland, MI 48640
+              - complementary [ref=f8e175]:
+                - generic [ref=f8e176]:
+                  - generic [ref=f8e177]:
+                    - img [ref=f8e178]
+                    - generic [ref=f8e179]:
+                      - heading [level=2] [ref=f8e180]: Send me a message!
+                      - generic [ref=f8e181]: I will respond within 1 business day, or as soon as I'm able.
+                  - button [ref=f8e182] [cursor=pointer]: X
+                - generic [ref=f8e186]: "Josiah's comment - Apr 24, 2026 9:59 PM Artwork approved for Print Job 1: Test Order."
+                - generic [ref=f8e188]:
+                  - textbox [ref=f8e189]:
+                    - /placeholder: Type a message...
+                  - button [disabled] [ref=f8e190]: Send
+              - generic:
+                - dialog "Warning; unsaved changes.":
+                  - generic: Warning; unsaved changes.
+                  - generic: You have unsaved changes. If you leave, they will be lost.
+                  - generic:
+                    - button "Stay Here"
+                    - button "Leave Without Saving"
+                    - button "Save & Go to Dashboard"

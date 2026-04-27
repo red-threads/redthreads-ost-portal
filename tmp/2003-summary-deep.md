@@ -1,0 +1,174 @@
+- table [ref=e2]:
+  - rowgroup [ref=e3]:
+    - row "This application was created by a Google Apps Script user" [ref=e4]:
+      - cell "This application was created by a Google Apps Script user" [ref=e5]:
+        - banner "This application was created by a Google Apps Script user" [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e8]:
+              - img [ref=e10]
+              - alert [ref=e12]: This application was created by a Google Apps Script user
+            - generic [ref=e13]:
+              - link "Report abuse" [ref=e14] [cursor=pointer]:
+                - /url: https://drive.google.com/abuse?id=AKkXjozMBK4kFUVQR6rCuOcJsaD0fqmETHbXm3k_qzlirCpt1rvTHSBE2l3kjAUFmA81QF46uQzy_y7u6v-jZ0wsqluQXOPeD5eZH7Ui%3A0&docurl=https%3A%2F%2Fscript.google.com%2Fa%2Fmacros%2Fredthreads.com%2Fs%2FAKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw%2Fexec%3Ft%3D4e13efcc-82d8-4613-a795-3eaff5929773
+              - link "Learn more" [ref=e15] [cursor=pointer]:
+                - /url: https://developers.google.com/apps-script
+          - button "Dismiss" [ref=e16]:
+            - img [ref=e17]
+    - row [ref=e19]:
+      - cell [ref=e20]:
+        - iframe [ref=e21]:
+          - iframe [ref=f13e2]:
+            - generic [ref=f14e2]:
+              - generic [ref=f14e4]:
+                - generic [ref=f14e6]:
+                  - button "Open message" [ref=f14e8] [cursor=pointer]:
+                    - img "Sender" [ref=f14e10]
+                  - button "Message Caleb" [ref=f14e11] [cursor=pointer]
+                  - button "Dashboard" [ref=f14e12] [cursor=pointer]
+                - img "Red Threads logo" [ref=f14e15]
+                - generic [ref=f14e17]:
+                  - button "Save" [disabled] [ref=f14e18]
+                  - button "Place Order" [disabled] [ref=f14e19]
+              - main [ref=f14e20]:
+                - tablist "Print Jobs" [ref=f14e22]:
+                  - 'tab "Job 1: t shirt order 100 Units | $1,500.40 Artwork: Approved" [ref=f14e23] [cursor=pointer]':
+                    - generic [ref=f14e24]:
+                      - generic [ref=f14e26]: "Job 1: t shirt order"
+                      - generic [ref=f14e27]: 100 Units | $1,500.40
+                      - generic [ref=f14e28]:
+                        - generic [ref=f14e29]: "Artwork:"
+                        - generic [ref=f14e30]: Approved
+                  - 'tab "Job 2: hat order 0 Units | $0.00 Artwork: Not Approved" [ref=f14e31] [cursor=pointer]':
+                    - generic [ref=f14e32]:
+                      - generic [ref=f14e34]: "Job 2: hat order"
+                      - generic [ref=f14e35]: 0 Units | $0.00
+                      - generic [ref=f14e36]:
+                        - generic [ref=f14e37]: "Artwork:"
+                        - generic [ref=f14e38]: Not Approved
+                  - 'tab "Project 2003 Invoice 100 Units | $1,500.40 View: Invoice" [selected] [ref=f14e39] [cursor=pointer]':
+                    - generic [ref=f14e40]:
+                      - generic [ref=f14e42]: Project 2003 Invoice
+                      - generic [ref=f14e43]:
+                        - generic [ref=f14e44]: 100 Units
+                        - generic [ref=f14e45]: "|"
+                        - generic [ref=f14e46]: $1,500.40
+                      - generic [ref=f14e47]: "View: Invoice"
+                - 'tabpanel "Project 2003 Invoice 100 Units | $1,500.40 View: Invoice" [ref=f14e50]':
+                  - generic [ref=f14e51]:
+                    - article [ref=f14e174]:
+                      - generic [ref=f14e175]:
+                        - generic [ref=f14e176]:
+                          - generic [ref=f14e177]:
+                            - generic [ref=f14e178]:
+                              - generic [ref=f14e179]:
+                                - generic [ref=f14e180]:
+                                  - generic [ref=f14e181]: "PO Placed:"
+                                  - generic [ref=f14e182]: 4/24/2026
+                                - generic [ref=f14e183]:
+                                  - generic [ref=f14e184]: "Payment Date: 4/24/2026"
+                                  - generic [ref=f14e185]: "Payment Type: Purchase Order"
+                              - img "Red Threads logo" [ref=f14e187]
+                              - generic [ref=f14e188]:
+                                - generic [ref=f14e189]: "Invoice # 2003"
+                                - generic [ref=f14e190]: "P.O. #: 2003"
+                            - generic [ref=f14e191]:
+                              - generic [ref=f14e192]:
+                                - generic [ref=f14e193]: Active Jobs
+                                - generic [ref=f14e194]: "1"
+                              - generic [ref=f14e195]:
+                                - generic [ref=f14e196]: Total Units
+                                - generic [ref=f14e197]: "100"
+                              - generic [ref=f14e198]:
+                                - generic [ref=f14e199]: FINAL COST
+                                - generic [ref=f14e200]: $1,500.40
+                              - generic [ref=f14e201]:
+                                - generic [ref=f14e202]: Ready By
+                                - generic [ref=f14e203]: May 5 (rush)
+                            - generic [ref=f14e204]:
+                              - generic [ref=f14e205]:
+                                - generic [ref=f14e206]: Purchase order payment was
+                                - generic [ref=f14e207]: received on 4/24/2026.
+                                - generic [ref=f14e208]: "Ready dates assume: 4/24/2026"
+                              - generic [ref=f14e209]:
+                                - generic [ref=f14e210]: "Project: double job x3"
+                                - generic [ref=f14e211]: "Client: Josiah Blackmore"
+                                - generic [ref=f14e212]: "Org: Bloo Threadz"
+                              - generic [ref=f14e213]:
+                                - generic [ref=f14e214]: "Project Subtotal: $1,500.40"
+                                - generic [ref=f14e215]: "Sales Tax: $0.00"
+                                - generic [ref=f14e216]: "Total Cost: $1,500.40"
+                          - generic [ref=f14e217]:
+                            - generic [ref=f14e219]:
+                              - img "Print Job 1 preview mockup" [ref=f14e221]
+                              - generic [ref=f14e223]:
+                                - generic [ref=f14e224]:
+                                  - generic [ref=f14e225]: "Job 1: t shirt order"
+                                  - generic [ref=f14e226]: "Decoration 1: Screen Print 1 Color, Full Front"
+                                  - generic [ref=f14e227]: "Decoration 2: Screen Print 2 Color, Full Back"
+                                  - generic [ref=f14e228]:
+                                    - generic [ref=f14e229]: "Added Services:"
+                                    - generic [ref=f14e230]: PMS Color Matching (1 Color) x1 $25.00
+                                    - generic [ref=f14e231]: 9-7 Business Day Rush x1 $136.40
+                                    - generic [ref=f14e232]: $100.00 or 10% of order - whichever is greater
+                                - generic [ref=f14e233]:
+                                  - generic [ref=f14e234]:
+                                    - generic [ref=f14e235]: "Units in this Job: 100"
+                                    - generic [ref=f14e236]: "Job Cost: $1,500.40"
+                                  - generic [ref=f14e237]:
+                                    - generic [ref=f14e238]: Turnaround Time
+                                    - generic [ref=f14e239]: 7 business days (rush)
+                                    - generic [ref=f14e240]: Ready by May 5 (rush)
+                            - generic [ref=f14e243]:
+                              - generic [ref=f14e244]:
+                                - link "BELLA_3001CVC Bella + Canvas Unisex Heather CVC Tee" [ref=f14e245] [cursor=pointer]:
+                                  - /url: https://www.ssactivewear.com/p/bella/3001cvc
+                                  - generic [ref=f14e246]:
+                                    - generic [ref=f14e247]: BELLA_3001CVC
+                                    - generic [ref=f14e248]: Bella + Canvas Unisex Heather CVC Tee
+                                - generic [ref=f14e249]:
+                                  - generic [ref=f14e250]: L
+                                  - generic [ref=f14e251]: 13.39 ea
+                                - generic [ref=f14e252]: QTY
+                                - generic [ref=f14e253]: TOTAL
+                              - generic [ref=f14e254]:
+                                - generic [ref=f14e257]: black
+                                - generic [ref=f14e258]: "100"
+                                - generic [ref=f14e259]: "100"
+                                - generic [ref=f14e260]: $1,339.00
+                        - generic [ref=f14e261]:
+                          - generic [ref=f14e262]:
+                            - generic [ref=f14e263]: WWW.
+                            - generic [ref=f14e264]: RED
+                            - generic [ref=f14e265]: THREADS.COM
+                            - generic [ref=f14e266]: "|"
+                            - generic [ref=f14e267]: 505 S. SAGINAW RD
+                            - generic [ref=f14e268]: "|"
+                            - generic [ref=f14e269]: MIDLAND, MI 48640
+                            - generic [ref=f14e270]: "|"
+                            - generic [ref=f14e271]: "PHONE: 989-600-8540"
+                          - generic [ref=f14e272]: PAGE 1 OF 1
+                    - complementary [ref=f14e154]:
+                      - button "Share / Download Invoice" [ref=f14e155] [cursor=pointer]
+              - complementary [ref=f14e156]:
+                - generic [ref=f14e157]:
+                  - generic [ref=f14e158]:
+                    - img [ref=f14e159]
+                    - generic [ref=f14e160]:
+                      - heading [level=2] [ref=f14e161]: Send me a message!
+                      - generic [ref=f14e162]: I will respond within 1 business day, or as soon as I'm able.
+                  - button [ref=f14e163] [cursor=pointer]: X
+                - generic [ref=f14e165]:
+                  - generic [ref=f14e167]: "Josiah's comment - Apr 24, 2026 10:05 PM Artwork approved for Print Job 1: t shirt order."
+                  - generic [ref=f14e169]: System update - Apr 24, 2026 10:05 PM Purchase order payment received. Order confirmed on 2026-04-25T02:08:31.222Z.
+                - generic [ref=f14e171]:
+                  - textbox [ref=f14e172]:
+                    - /placeholder: Type a message...
+                  - button [disabled] [ref=f14e173]: Send
+              - generic:
+                - dialog "Warning; unsaved changes.":
+                  - generic: Warning; unsaved changes.
+                  - generic: You have unsaved changes. If you leave, they will be lost.
+                  - generic:
+                    - button "Stay Here"
+                    - button "Leave Without Saving"
+                    - button "Save & Go to Dashboard"
