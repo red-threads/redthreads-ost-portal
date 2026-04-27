@@ -18126,6 +18126,7 @@
       shippingDetailsCaptured: raw.shippingDetailsCaptured === true,
       shippingDetails: normalizeOrderFlowShippingDetails_(raw.shippingDetails),
       paidAt: String(raw.paidAt || '').trim(),
+      paymentReceivedManuallyAt: String(raw.paymentReceivedManuallyAt || '').trim(),
       authorizedToProduceAt: String(raw.authorizedToProduceAt || '').trim(),
       lockedAt: String(raw.lockedAt || '').trim(),
       stripeSessionId: String(raw.stripeSessionId || '').trim(),
@@ -34835,13 +34836,34 @@
 
   function getLockedSummaryTimelineState_(){
     const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
+    const current = normalizeCurrentStateSummary(CURRENT_STATE_SUMMARY);
+    const purchaseOrderDraft = getCurrentPurchaseOrderDraft_();
+    const workflow = getPortalWorkflowContext_({
+      orderSummary: order,
+      currentStateSummary: current
+    });
+    const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
+    const lifecycleStage = String(workflow.lifecycleStage || '').trim().toLowerCase();
+    const summaryDocumentMode = String(workflow.summaryDocumentMode || '').trim().toLowerCase();
     const paidAt = String(order.paidAt || '').trim();
     const poSubmittedAt = String(order.poSubmittedAt || '').trim();
     const orderState = String(
-      order.orderState
-      || (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.currentOrderState)
+      (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.currentOrderState)
+      || order.orderState
       || ''
     ).trim().toLowerCase();
+    const productionStartAt = String(
+      workflow.productionStartAt
+      || poSubmittedAt
+      || order.paymentReceivedManuallyAt
+      || paidAt
+      || order.authorizedToProduceAt
+      || ''
+    ).trim();
+    const productionTargetCompleteAt = String(workflow.productionTargetCompleteAt || '').trim();
+    const productionCompletionAt = String(workflow.productionCompletionAt || '').trim();
+    const completionSource = String(workflow.productionCompletionSource || '').trim().toLowerCase();
+    const productionComplete = workflow.productionComplete === true;
     const submittedAt = String(
       poSubmittedAt
       || order.lockedAt
@@ -34849,6 +34871,28 @@
       || order.lastUpdatedAt
       || ''
     ).trim();
+    if (productionComplete) {
+      const completionDate = productionCompletionAt || productionTargetCompleteAt;
+      const completionDateLabel = completionDate ? formatSummaryDateOnly_(completionDate) : '';
+      return {
+        isLocked: true,
+        freeze: true,
+        noteTone: 'info',
+        noteText: completionDateLabel
+          ? ('Project completed on ' + completionDateLabel + '.')
+          : 'Project completed.',
+        referenceDate: productionStartAt || submittedAt || '',
+        submittedAt: submittedAt,
+        paidAt: paidAt,
+        completionDate: completionDate,
+        completionDateValue: completionDate ? Number(new Date(completionDate).getTime()) : null,
+        completionDateLabel: completionDateLabel,
+        targetCompleteAt: productionTargetCompleteAt,
+        productionComplete: true,
+        completionSource: completionSource,
+        paymentDue: workflow.paymentDue === true
+      };
+    }
     if (paidAt) {
       const paymentMethod = String(order.paymentMethodSelected || '').trim().toLowerCase();
       return {
@@ -34860,12 +34904,26 @@
             ? 'Purchase order payment was received on ' + formatSummaryDateOnly_(paidAt) + '.'
             : 'Payment/approval was received on ' + formatSummaryDateOnly_(paidAt) + '.'
         ),
-        referenceDate: paidAt,
+        referenceDate: productionStartAt || paidAt,
         submittedAt: submittedAt,
-        paidAt: paidAt
+        paidAt: paidAt,
+        completionDate: '',
+        completionDateValue: null,
+        completionDateLabel: '',
+        targetCompleteAt: productionTargetCompleteAt,
+        productionComplete: false,
+        completionSource: '',
+        paymentDue: workflow.paymentDue === true
       };
     }
-    if (orderState === 'awaiting_po_submission') {
+    if (
+      summaryDocumentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
+      || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+      || lifecycleState === 'po_draft_invoice_prepared'
+      || lifecycleState === 'awaiting_po_submission'
+      || !!purchaseOrderDraft
+      || orderState === 'awaiting_po_submission'
+    ) {
       return {
         isLocked: true,
         freeze: false,
@@ -34875,7 +34933,14 @@
           : 'Awaiting purchase order. Production begins once the final purchase order is submitted.',
         referenceDate: null,
         submittedAt: submittedAt,
-        paidAt: ''
+        paidAt: '',
+        completionDate: '',
+        completionDateValue: null,
+        completionDateLabel: '',
+        targetCompleteAt: '',
+        productionComplete: false,
+        completionSource: '',
+        paymentDue: workflow.paymentDue === true
       };
     }
     if (poSubmittedAt) {
@@ -34884,9 +34949,16 @@
         freeze: true,
         noteTone: 'alert',
         noteText: 'Awaiting payment. Purchase order was submitted on ' + formatSummaryDateOnly_(poSubmittedAt) + '.',
-        referenceDate: poSubmittedAt,
+        referenceDate: productionStartAt || poSubmittedAt,
         submittedAt: submittedAt,
-        paidAt: ''
+        paidAt: '',
+        completionDate: '',
+        completionDateValue: null,
+        completionDateLabel: '',
+        targetCompleteAt: productionTargetCompleteAt,
+        productionComplete: false,
+        completionSource: '',
+        paymentDue: workflow.paymentDue === true
       };
     }
     return {
@@ -34896,9 +34968,16 @@
       noteText: submittedAt
         ? ('Awaiting payment. Order submitted on ' + formatSummaryDateOnly_(submittedAt) + '. Turnaround dates will continue updating until payment is marked received.')
         : 'Awaiting payment. Turnaround dates will continue updating until payment is marked received.',
-      referenceDate: null,
+      referenceDate: productionStartAt || null,
       submittedAt: submittedAt,
-      paidAt: ''
+      paidAt: '',
+      completionDate: '',
+      completionDateValue: null,
+      completionDateLabel: '',
+      targetCompleteAt: productionTargetCompleteAt,
+      productionComplete: false,
+      completionSource: '',
+      paymentDue: workflow.paymentDue === true
     };
   }
 
@@ -35187,29 +35266,37 @@
     const safeRollup = (rollup && typeof rollup === 'object') ? rollup : buildSummaryRollupData_();
     const opts = (options && typeof options === 'object') ? options : {};
     const order = normalizeOrderSummary(opts.orderSummary || LATEST_ORDER_SUMMARY);
+    const workflow = getPortalWorkflowContext_({
+      orderSummary: order,
+      currentStateSummary: CURRENT_STATE_SUMMARY
+    });
     const projectName = metaField('projectName') || metaField('dealTitle') || rowField('projectname') || '--';
     const dealNumber = getDealNumber();
     const mode = String(opts.mode || '').trim().toLowerCase();
     const poSubmittedAt = String(order.poSubmittedAt || '').trim();
     const poNumber = String(order.poNumber || '').trim();
     const paidAt = String(order.paidAt || '').trim();
+    const productionComplete = workflow.productionComplete === true;
+    const completedAt = String(workflow.productionCompletionAt || workflow.productionTargetCompleteAt || '').trim();
     const successfulPaymentType = getLockedSummarySuccessfulPaymentTypeLabel_(order);
     const isLockedPoInvoice = mode === 'locked_invoice' && !!poSubmittedAt;
     const showLockedPoPaymentMeta = isLockedPoInvoice
       && !!paidAt
       && !!successfulPaymentType;
-    const displayDate = isLockedPoInvoice
-      ? formatSummaryDateOnly_(poSubmittedAt)
-      : formatSummaryDateOnly_(String((PORTAL_STATE && PORTAL_STATE.savedAt) || metaField('exportedAt') || rowField('exportedat') || ''));
+    const displayDate = productionComplete && completedAt
+      ? formatSummaryDateOnly_(completedAt)
+      : (isLockedPoInvoice
+        ? formatSummaryDateOnly_(poSubmittedAt)
+        : formatSummaryDateOnly_(String((PORTAL_STATE && PORTAL_STATE.savedAt) || metaField('exportedAt') || rowField('exportedat') || '')));
     return {
       logoUrl: 'https://logos.redthreads.work/CALC_PORTAL/LONG_HEADER_LOGO.png',
       savedDate: displayDate,
-      dateLabel: isLockedPoInvoice ? 'PO Placed:' : 'Date:',
+      dateLabel: productionComplete ? 'Completed:' : (isLockedPoInvoice ? 'PO Placed:' : 'Date:'),
       paymentDate: showLockedPoPaymentMeta ? formatSummaryDateOnly_(paidAt) : '',
       paymentType: showLockedPoPaymentMeta ? successfulPaymentType : '',
-      paymentPendingLabel: isLockedPoInvoice && !paidAt ? 'Payment still required' : '',
+      paymentPendingLabel: (!paidAt && (workflow.paymentDue === true || (isLockedPoInvoice && !paidAt))) ? 'Payment still required' : '',
       poNumber: poNumber,
-      projectStatus: getDisplayOrderStatusLabel_(),
+      projectStatus: productionComplete ? 'Complete' : getDisplayOrderStatusLabel_(),
       preparedBy: getSenderName(),
       preparedFor: getClientName(),
       organization: metaField('orgName') || rowField('orgname') || String((ACCOUNT_SUMMARY && ACCOUNT_SUMMARY.orgName) || '').trim() || '--',
@@ -35334,13 +35421,29 @@
       : {};
     const derivedReadyBy = String(getHeaderEtaText(job, { turnaround: turnaround }, etaOptions) || '').replace(/^By\s+/i, '').trim() || '--';
     const derivedReadyByValue = getHeaderEtaDateValue(job, { turnaround: turnaround }, etaOptions);
+    const completionReadyByValue = timelineState && timelineState.productionComplete === true
+      && Number.isFinite(Number(timelineState.completionDateValue))
+      ? Number(timelineState.completionDateValue)
+      : null;
+    const completionReadyByLabel = timelineState && timelineState.productionComplete === true
+      ? String(
+          timelineState.completionDateLabel
+          || (completionReadyByValue != null
+            ? new Date(completionReadyByValue).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: 'numeric' })
+            : '')
+        ).trim()
+      : '';
     const readyBy = opts.lockedInvoice === true
-      ? derivedReadyBy
+      ? ((timelineState && timelineState.productionComplete === true)
+        ? (completionReadyByLabel || derivedReadyBy)
+        : derivedReadyBy)
       : (included
         ? (String(summary.readyDateLabel || '').trim() || derivedReadyBy)
         : derivedReadyBy);
     const readyByValue = opts.lockedInvoice === true
-      ? derivedReadyByValue
+      ? ((timelineState && timelineState.productionComplete === true)
+        ? (completionReadyByValue != null ? completionReadyByValue : derivedReadyByValue)
+        : derivedReadyByValue)
       : (included
         ? (Number.isFinite(Number(summary.readyDateValue)) ? Number(summary.readyDateValue) : derivedReadyByValue)
         : derivedReadyByValue);

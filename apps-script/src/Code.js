@@ -290,6 +290,25 @@ const PORTAL_LIFECYCLE_STAGES = {
   in_production_or_complete: 'in_production_or_complete'
 };
 
+const PORTAL_LIFECYCLE_STATES = {
+  estimate_empty: 'estimate_empty',
+  estimate_quantities_incomplete: 'estimate_quantities_incomplete',
+  estimate_artwork_pending: 'estimate_artwork_pending',
+  estimate_ready_to_order: 'estimate_ready_to_order',
+  checkout_started_unpaid: 'checkout_started_unpaid',
+  checkout_abandoned_or_reset: 'checkout_abandoned_or_reset',
+  card_ach_paid: 'card_ach_paid',
+  po_draft_invoice_prepared: 'po_draft_invoice_prepared',
+  po_submitted_unpaid: 'po_submitted_unpaid',
+  po_submitted_paid: 'po_submitted_paid',
+  manual_payment_pending: 'manual_payment_pending',
+  manual_payment_received: 'manual_payment_received',
+  production_authorized: 'production_authorized',
+  production_in_progress: 'production_in_progress',
+  production_complete: 'production_complete',
+  canceled_or_reset: 'canceled_or_reset'
+};
+
 const SUMMARY_DOCUMENT_MODES = {
   estimate: 'estimate',
   po_draft_invoice: 'po_draft_invoice',
@@ -1018,7 +1037,16 @@ function savePortalState(token, portalStateInput) {
     }
 
     const existingPortalState = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, null);
-    if (isLockedPortalRow_(rowInfo.rowObjNormalized, existingPortalState)) {
+    const saveFinalized = isPortalSaveFinalized_(rowInfo, existingPortalState, {
+      cfg: cfg,
+      ss: ss
+    });
+    console.log('[RT-SAVE-GATE] ' + JSON.stringify({
+      token: tokenValue,
+      finalized: saveFinalized.finalized === true,
+      reason: trimString_(saveFinalized.reason)
+    }));
+    if (saveFinalized.finalized === true) {
       return { ok: false, error: 'Portal is finalized.' };
     }
 
@@ -1030,6 +1058,106 @@ function savePortalState(token, portalStateInput) {
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
+}
+
+function isPortalSaveFinalized_(rowInfo, existingPortalState, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfo && rowInfo.rowObjNormalized && typeof rowInfo.rowObjNormalized === 'object'
+    ? rowInfo.rowObjNormalized
+    : {};
+  const cfg = opts.cfg || null;
+  const ss = opts.ss || null;
+  const token = trimString_(row.token);
+  const portalLockState = trimString_(row.portallockstate || row.portalLockState).toLowerCase();
+  const currentPortalLockState = trimString_(row.currentportallockstate || row.currentPortalLockState).toLowerCase();
+  const submittedStatePresent = hasNonBlankJsonSignal_(row.submittedstatejson);
+  const finalStatusPresent = isFinalPortalStatus_(row.status);
+  let infra = (opts.infra && typeof opts.infra === 'object') ? opts.infra : null;
+  let latestOrderSummary = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object')
+    ? opts.latestOrderSummary
+    : null;
+  if (!latestOrderSummary && cfg && ss && token) {
+    try {
+      infra = infra || ensurePortalInfrastructure_(ss, cfg);
+      const latestOrderInfo = getLatestPortalOrderByToken_(token, {
+        cfg: cfg,
+        ss: ss,
+        ordersSheet: infra && infra.ordersSheet
+      });
+      latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
+    } catch (_) {}
+  }
+
+  const accountSummary = (opts.accountSummary && typeof opts.accountSummary === 'object') ? opts.accountSummary : {};
+  const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderSummary);
+  const lifecycle = derivePortalLifecycle_({
+    row: row,
+    latestOrderSummary: latestOrderSummary,
+    currentStateSummary: currentStateSummary,
+    accountSummary: accountSummary
+  });
+
+  const lifecycleAllowsEditableSave =
+    (lifecycle.lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable
+      || lifecycle.lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started)
+    && lifecycle.isLocked !== true
+    && lifecycle.hasPlacedOrder !== true
+    && lifecycle.isPaymentReceived !== true
+    && lifecycle.isProductionAuthorized !== true
+    && lifecycle.isPoSubmittedUnpaid !== true
+    && lifecycle.isManualPendingLocked !== true
+    && lifecycle.hasAnyActualJobCompletion !== true
+    && lifecycle.allSelectedJobsCompleted !== true;
+
+  if (portalLockState === PORTAL_LOCK_STATES.locked) {
+    return { finalized: true, reason: 'explicit_portal_lock' };
+  }
+  if (lifecycle.isPaymentReceived === true) {
+    return { finalized: true, reason: 'lifecycle_payment_received' };
+  }
+  if (lifecycle.isProductionAuthorized === true
+      || lifecycle.hasAnyActualJobCompletion === true
+      || lifecycle.allSelectedJobsCompleted === true
+      || lifecycle.lifecycleStage === PORTAL_LIFECYCLE_STAGES.in_production_or_complete) {
+    return { finalized: true, reason: 'lifecycle_production_authorized' };
+  }
+  if (lifecycle.isPoSubmittedUnpaid === true) {
+    return { finalized: true, reason: 'lifecycle_po_submitted_unpaid' };
+  }
+  if (lifecycle.isManualPendingLocked === true) {
+    return { finalized: true, reason: 'lifecycle_manual_pending_locked' };
+  }
+  if (lifecycle.isLocked === true && lifecycle.isCheckoutStarted === true) {
+    return { finalized: true, reason: 'lifecycle_locked_checkout_pending' };
+  }
+  if (lifecycle.hasPlacedOrder === true) {
+    return { finalized: true, reason: 'lifecycle_order_placed' };
+  }
+  if (currentPortalLockState === PORTAL_LOCK_STATES.locked) {
+    if (lifecycleAllowsEditableSave) {
+      return { finalized: false, reason: 'stale_current_portal_lock_ignored' };
+    }
+    return { finalized: true, reason: 'explicit_current_portal_lock' };
+  }
+  if (submittedStatePresent) {
+    if (lifecycleAllowsEditableSave) {
+      return { finalized: false, reason: 'stale_submitted_state_ignored' };
+    }
+    return { finalized: true, reason: 'submitted_state_present' };
+  }
+  if (finalStatusPresent) {
+    if (lifecycleAllowsEditableSave) {
+      return { finalized: false, reason: 'stale_final_status_ignored' };
+    }
+    return { finalized: true, reason: 'final_status' };
+  }
+
+  // Legacy lock-like row fields and portalState.isReadOnly can remain after checkout/order
+  // resets; they should not finalize an otherwise editable estimate without hard lifecycle signals.
+  if (existingPortalState && existingPortalState.isReadOnly === true) {
+    return { finalized: false, reason: 'stale_readonly_ignored' };
+  }
+  return { finalized: false, reason: 'editable_lifecycle' };
 }
 
 function finalizePortalAfterPayment(payload) {
@@ -1630,7 +1758,7 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
   const lockedStateSource = safeJsonParse_(row.submittedstatejson || row.portalstatejson, {}) || {};
   const lockedPortalState = normalizePortalStateForOrder_(lockedStateSource, printJobs);
   const isLocked = workflowContext.isLocked === true;
-  const flags = deriveDashboardProjectStepFlags_(
+  const legacyDashboardFlags = deriveDashboardProjectStepFlags_(
     info || { rowObjNormalized: row },
     snapshot,
     portalState,
@@ -1642,6 +1770,7 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
       workflowContext: workflowContext
     }
   );
+  const flags = buildDashboardProjectStepFlagsFromLifecycle_(legacyDashboardFlags, workflowContext);
   const timeline = deriveDashboardTimelineMeta_({
     row: row,
     flags: flags,
@@ -1659,7 +1788,8 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
   const presentation = buildDashboardStatusPresentationMeta_({
     flags: flags,
     variant: variant,
-    timeline: timeline
+    timeline: timeline,
+    workflowContext: workflowContext
   });
   const displayStatus = derivePortalDisplayOrderStatus_(
     Object.assign({}, row || {}, currentStateSummary || {}, latestOrderSummary || {}),
@@ -1687,6 +1817,7 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
     lockedPortalState: lockedPortalState,
     isLocked: isLocked,
     flags: flags,
+    legacyDashboardFlags: legacyDashboardFlags,
     timeline: timeline,
     presentation: presentation,
     displayStatus: displayStatus,
@@ -1716,7 +1847,10 @@ function buildDashboardProjectStatusMetaFromProjectionContext_(context) {
     variant: variant,
     steps: steps,
     flags: flags,
-    production: buildDashboardProductionMeta_(flags, variant, { dateValue: null, dateLabel: '' }),
+    production: buildDashboardProductionMeta_(flags, variant, {
+      dateValue: timeline.completionDateValue,
+      dateLabel: timeline.completionDateLabel
+    }),
     copy: copy,
     helperText: trimString_(copy && copy.helperPlainText),
     helperTone: trimString_(copy && copy.tone) || 'current',
@@ -1828,7 +1962,7 @@ function buildDashboardPeekLightweightAccountSummaryFromRow_(row) {
 }
 
 function getDashboardProjectPeekPayloadVersion_() {
-  return 'v6';
+  return 'v7';
 }
 
 function buildDashboardProjectPreviewMeta_(rowState, runtimeMeta) {
@@ -2150,64 +2284,178 @@ function buildDashboardPeekJobTypeLabel_(job) {
 }
 
 function buildDashboardPeekHeaderMeta_(workflowContext, timeline) {
-  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
-  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
-  if (context.hasPlacedOrder !== true) {
+  const peek = buildDashboardPeekLifecycleMeta_(workflowContext, timeline);
+  if (peek.isPoDraft === true) {
     return {
-      mode: 'not_placed',
-      primaryLabel: 'Not placed',
+      mode: 'awaiting_po_submission',
+      primaryLabel: 'Awaiting purchase order',
       primaryDateLabel: '',
       poNumber: '',
-      displayText: 'Not placed, production has not started.'
+      displayText: 'Awaiting purchase order submission.'
     };
   }
-  if (context.isPoSubmitted === true) {
-    const poNumber = trimString_(safeTimeline.poNumber || context.poNumber);
-    const submittedLabel = trimString_(safeTimeline.poSubmittedDateLabel);
-    const primaryLabel = poNumber ? ('Purchase Order #' + poNumber) : 'Purchase Order';
+  if (peek.productionComplete === true) {
+    return {
+      mode: 'complete',
+      primaryLabel: 'Project complete',
+      primaryDateLabel: peek.completionDateLabel,
+      poNumber: peek.poNumber,
+      displayText: peek.completionDateLabel
+        ? ('Project completed on ' + peek.completionDateLabel + '.')
+        : 'Project completed.'
+    };
+  }
+  if (peek.productionStarted === true) {
+    return {
+      mode: 'production_active',
+      primaryLabel: 'Production active',
+      primaryDateLabel: peek.productionStartDateLabel,
+      poNumber: peek.poNumber,
+      displayText: peek.paymentDue === true
+        ? 'Production is active and payment is still due.'
+        : 'Production is active.'
+    };
+  }
+  if (peek.poSubmitted === true) {
+    const primaryLabel = peek.poNumber ? ('Purchase Order #' + peek.poNumber) : 'Purchase Order';
     return {
       mode: 'po_submitted',
       primaryLabel: primaryLabel,
-      primaryDateLabel: submittedLabel,
-      poNumber: poNumber,
-      displayText: submittedLabel
-        ? (primaryLabel + ' received on ' + submittedLabel)
-        : (primaryLabel + ' received.')
+      primaryDateLabel: peek.poSubmittedDateLabel,
+      poNumber: peek.poNumber,
+      displayText: peek.poSubmittedDateLabel
+        ? (primaryLabel + ' submitted on ' + peek.poSubmittedDateLabel + '.')
+        : (primaryLabel + ' submitted.')
     };
   }
-  if (context.isPaymentReceived === true) {
-    const paidLabel = trimString_(safeTimeline.paidDateLabel);
+  if (peek.paymentReceived === true) {
     return {
       mode: 'paid_standard',
       primaryLabel: 'Payment received',
-      primaryDateLabel: paidLabel,
+      primaryDateLabel: peek.paidDateLabel,
       poNumber: '',
-      displayText: paidLabel ? ('Payment received: ' + paidLabel) : 'Payment received.'
+      displayText: peek.paidDateLabel ? ('Payment received: ' + peek.paidDateLabel) : 'Payment received.'
     };
   }
-  if (context.isPoFlow === true) {
+  if (peek.orderPlaced === true) {
     return {
-      mode: 'awaiting_po_submission',
+      mode: 'placed_standard',
       primaryLabel: 'Order placed',
+      primaryDateLabel: peek.orderPlacedDateLabel,
+      poNumber: '',
+      displayText: peek.paymentDue === true
+        ? 'Order placed, awaiting payment.'
+        : 'Order placed.'
+    };
+  }
+  if (peek.nextClientAction === 'place_order') {
+    return {
+      mode: 'ready_to_order',
+      primaryLabel: 'Ready to order',
       primaryDateLabel: '',
       poNumber: '',
-      displayText: 'Order placed, awaiting purchase order submission.'
+      displayText: 'Ready to place order.'
+    };
+  }
+  if (peek.nextClientAction === 'approve_artwork') {
+    return {
+      mode: 'artwork_pending',
+      primaryLabel: 'Artwork pending',
+      primaryDateLabel: '',
+      poNumber: '',
+      displayText: 'Artwork approval is still needed.'
     };
   }
   return {
-    mode: 'placed_standard',
-    primaryLabel: 'Order placed',
+    mode: 'not_placed',
+    primaryLabel: 'Not placed',
     primaryDateLabel: '',
     poNumber: '',
-    displayText: 'Order placed, awaiting payment.'
+    displayText: 'Not placed, production has not started.'
+  };
+}
+
+function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
+  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  const safeRow = (row && typeof row === 'object') ? row : {};
+  const lifecycleState = trimString_(context.lifecycleState).toLowerCase();
+  const lifecycleStage = trimString_(context.lifecycleStage).toLowerCase();
+  const peekState = (context.peekState && typeof context.peekState === 'object') ? context.peekState : {};
+  const peekMode = trimString_(peekState.mode).toLowerCase();
+  const paymentDue = context.paymentDue === true;
+  const paymentReceived = context.paymentReceived === true || context.isPaymentReceived === true;
+  const productionComplete = context.productionComplete === true;
+  const productionCurrent = context.productionCurrent === true;
+  const productionAuthorized = context.productionAuthorized === true || context.isProductionAuthorized === true;
+  const orderPlaced = context.orderPlaced === true || context.hasPlacedOrder === true;
+  const productionStartAt = trimString_(context.productionStartAt);
+  const productionTargetCompleteAt = trimString_(context.productionTargetCompleteAt);
+  const productionCompletionAt = trimString_(context.productionCompletionAt);
+  const paymentMethod = trimString_(context.paymentMethod || context.paymentMethodSelected).toLowerCase();
+  const poNumber = trimString_(safeTimeline.poNumber || context.poNumber);
+  const poSubmittedDate = normalizeDashboardCalendarDate_(trimString_(context.poSubmittedAt) || safeTimeline.poSubmittedDateValue);
+  const paidDate = normalizeDashboardCalendarDate_(trimString_(context.paymentReceivedAt) || safeTimeline.paidDateValue);
+  const orderPlacedDate = normalizeDashboardCalendarDate_(trimString_(context.orderPlacedAt) || safeTimeline.orderPlacedDateValue);
+  const productionStartDate = normalizeDashboardCalendarDate_(productionStartAt || safeTimeline.printStartDateValue);
+  const productionTargetCompleteDate = normalizeDashboardCalendarDate_(productionTargetCompleteAt || safeTimeline.completionDateValue);
+  const productionCompletionDate = normalizeDashboardCalendarDate_(productionCompletionAt);
+  const productionStarted = productionComplete === true
+    || productionCurrent === true
+    || (productionAuthorized === true && !!productionStartDate);
+  let paymentMethodLabel = trimString_(safeTimeline.paymentMethodLabel);
+  if (!paymentMethodLabel) {
+    if (paymentMethod === PAYMENT_METHODS.card) paymentMethodLabel = 'Credit Card';
+    else if (paymentMethod === PAYMENT_METHODS.ach) paymentMethodLabel = 'ACH';
+    else if (paymentMethod === PAYMENT_METHODS.purchase_order) paymentMethodLabel = 'Purchase Order';
+    else if (paymentMethod === PAYMENT_METHODS.check) paymentMethodLabel = 'Check';
+    else if (paymentMethod === PAYMENT_METHODS.cash) paymentMethodLabel = 'Cash';
+  }
+  const isPoDraft = context.hasPurchaseOrderDraft === true
+    || context.isPoDraftLocked === true
+    || context.isAwaitingPoSubmission === true
+    || trimString_(context.summaryDocumentMode).toLowerCase() === SUMMARY_DOCUMENT_MODES.po_draft_invoice
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+    || lifecycleState === 'po_draft_invoice_prepared';
+  const estimatedCompletionDateLabel = trimString_(safeTimeline.completionDateLabel);
+
+  return {
+    lifecycleState: lifecycleState,
+    lifecycleStage: lifecycleStage,
+    peekMode: peekMode,
+    nextClientAction: trimString_(context.nextClientAction).toLowerCase(),
+    isPoFlow: context.isPoFlow === true,
+    isPoDraft: isPoDraft,
+    poSubmitted: context.poSubmitted === true || context.isPoSubmitted === true,
+    poNumber: poNumber,
+    orderPlaced: orderPlaced,
+    paymentDue: paymentDue,
+    paymentReceived: paymentReceived,
+    paymentMethodLabel: paymentMethodLabel,
+    productionStarted: productionStarted,
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete,
+    productionStartAt: productionStartAt,
+    productionStartDate: productionStartDate,
+    productionStartDateLabel: productionStartDate ? formatDashboardShortDate_(productionStartDate) : trimString_(safeTimeline.printStartDateLabel),
+    targetCompleteDateValue: productionTargetCompleteDate ? productionTargetCompleteDate.getTime() : null,
+    targetCompleteDateLabel: productionTargetCompleteDate ? formatDashboardShortDate_(productionTargetCompleteDate) : estimatedCompletionDateLabel,
+    completionDateValue: productionCompletionDate
+      ? productionCompletionDate.getTime()
+      : (productionComplete === true && productionTargetCompleteDate ? productionTargetCompleteDate.getTime() : null),
+    completionDateLabel: productionCompletionDate
+      ? formatDashboardShortDate_(productionCompletionDate)
+      : (productionComplete === true && productionTargetCompleteDate ? formatDashboardShortDate_(productionTargetCompleteDate) : ''),
+    estimatedCompletionDateLabel: estimatedCompletionDateLabel,
+    poSubmittedDateLabel: poSubmittedDate ? formatDashboardShortDate_(poSubmittedDate) : trimString_(safeTimeline.poSubmittedDateLabel),
+    paidDateLabel: paidDate ? formatDashboardShortDate_(paidDate) : trimString_(safeTimeline.paidDateLabel),
+    orderPlacedDateLabel: orderPlacedDate ? formatDashboardShortDate_(orderPlacedDate) : trimString_(safeTimeline.orderPlacedDateLabel),
+    startedOnDateLabel: trimString_(safeRow.exportedat || safeRow.createdat || safeRow.exportedAt || safeRow.createdAt)
   };
 }
 
 function hasDashboardPeekProductionStarted_(workflowContext) {
-  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
-  return context.isPoFlow === true
-    ? context.isPoSubmitted === true
-    : context.isPaymentReceived === true;
+  return buildDashboardPeekLifecycleMeta_(workflowContext).productionStarted === true;
 }
 
 function formatDashboardPeekProjectName_(dealNumber, dealTitle) {
@@ -2244,34 +2492,20 @@ function buildDashboardPeekTimelineFact_(label, value) {
 }
 
 function buildDashboardPeekTimelineFacts_(workflowContext, timeline, row) {
-  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
-  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  const peek = buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row);
   const safeRow = (row && typeof row === 'object') ? row : {};
-  const productionStarted = hasDashboardPeekProductionStarted_(context);
-  const completionReached = safeTimeline.allJobsCompleted === true
-    || (
-      safeTimeline.hasAnyActualJobCompletion !== true
-      && hasDashboardDateReached_(safeTimeline.completionDateValue)
-    );
   const startedOnDate = normalizeDashboardCalendarDate_(safeRow.exportedat || safeRow.createdat || safeRow.exportedAt || safeRow.createdAt);
   const startedOnLabel = startedOnDate ? formatDashboardShortDate_(startedOnDate) : '--';
-  const poNumber = trimString_(safeTimeline.poNumber || context.poNumber);
-  const hasPoPlaced = context.isPoSubmitted === true || !!poNumber;
-  const orderPlacedFact = context.isPoFlow === true
+  const orderPlacedFact = peek.isPoFlow === true
     ? buildDashboardPeekTimelineFact_(
-        hasPoPlaced
-          ? (poNumber ? ('Purchase Order #' + poNumber + ' placed') : 'Purchase Order placed')
-          : 'Order placed',
-        hasPoPlaced
-          ? trimString_(safeTimeline.poSubmittedDateLabel)
-          : trimString_(safeTimeline.orderPlacedDateLabel)
+        peek.poSubmitted === true
+          ? (peek.poNumber ? ('Purchase Order #' + peek.poNumber + ' submitted') : 'Purchase order submitted')
+          : 'Purchase order submitted',
+        peek.poSubmitted === true ? peek.poSubmittedDateLabel : ''
       )
-    : buildDashboardPeekTimelineFact_('Order placed', trimString_(safeTimeline.orderPlacedDateLabel));
-  const paymentTypeLabel = context.isPaymentReceived === true
-    ? (
-        trimString_(safeTimeline.paymentMethodLabel)
-        || (context.isPoFlow === true ? 'Purchase Order' : '')
-      )
+    : buildDashboardPeekTimelineFact_('Order placed', peek.orderPlaced === true ? peek.orderPlacedDateLabel : '');
+  const paymentTypeLabel = peek.paymentReceived === true
+    ? (peek.paymentMethodLabel || (peek.isPoFlow === true ? 'Purchase Order' : ''))
     : '';
   const paymentFactLabel = paymentTypeLabel
     ? ('(' + paymentTypeLabel + ') Payment made')
@@ -2281,33 +2515,32 @@ function buildDashboardPeekTimelineFacts_(workflowContext, timeline, row) {
     orderPlaced: orderPlacedFact,
     paymentMade: buildDashboardPeekTimelineFact_(
       paymentFactLabel,
-      context.isPaymentReceived === true ? trimString_(safeTimeline.paidDateLabel) : ''
+      peek.paymentReceived === true ? peek.paidDateLabel : ''
     ),
     projectCompletedOn: buildDashboardPeekTimelineFact_(
       'Project Completed on',
-      productionStarted && context.isPaymentReceived === true && completionReached
-        ? trimString_(safeTimeline.completionDateLabel)
-        : ''
+      peek.productionComplete === true ? peek.completionDateLabel : ''
     )
   };
 }
 
 function buildDashboardPeekSummaryMeta_(workflowContext, timeline, totals) {
-  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
-  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  const peek = buildDashboardPeekLifecycleMeta_(workflowContext, timeline);
   const safeTotals = (totals && typeof totals === 'object') ? totals : {};
-  const productionStarted = hasDashboardPeekProductionStarted_(context);
-  const allJobsCompleted = safeTimeline.allJobsCompleted === true;
   return {
     totalUnits: Math.max(0, parseInt(String(safeTotals.totalUnits || 0), 10) || 0),
-    priceLabel: productionStarted ? 'Final Cost' : 'Estimated Price',
+    priceLabel: peek.productionStarted === true ? 'Final Cost' : 'Estimated Price',
     priceValue: Number.isFinite(Number(safeTotals.totalPrice)) ? Number(safeTotals.totalPrice) : null,
-    priceHelperText: productionStarted ? '' : 'Price excludes taxes, shipping, CC fees',
-    completionLabel: productionStarted
-      ? (allJobsCompleted ? 'Production Completed' : 'Production Will Finish')
+    priceHelperText: peek.productionStarted === true ? '' : 'Price excludes taxes, shipping, CC fees',
+    completionLabel: peek.productionStarted === true
+      ? (peek.productionComplete === true ? 'Production Completed' : 'Production Will Finish')
       : 'Estimated Completion',
-    completionValue: trimString_(safeTimeline.completionDateLabel) || '--',
-    completionHelperText: productionStarted ? '' : 'Date production is finished for all jobs'
+    completionValue: peek.productionComplete === true
+      ? (peek.completionDateLabel || peek.targetCompleteDateLabel || '--')
+      : (peek.productionStarted === true
+        ? (peek.targetCompleteDateLabel || '--')
+        : (peek.estimatedCompletionDateLabel || '--')),
+    completionHelperText: peek.productionStarted === true ? '' : 'Date production is finished for all jobs'
   };
 }
 
@@ -2316,47 +2549,49 @@ function buildDashboardPeekJobMeta_(job, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const context = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
   const timeline = (opts.timeline && typeof opts.timeline === 'object') ? opts.timeline : {};
+  const safeRow = (opts.row && typeof opts.row === 'object') ? opts.row : {};
+  const latestOrderSummary = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object') ? opts.latestOrderSummary : {};
   const completionMap = normalizeTeamJobCompletionMap_(opts.teamJobCompletionByJobId);
   const jobIsOrdered = opts.jobIsOrdered !== false;
-  const printJobId = trimString_(safeJob.printJobId);
-  const completionEntry = printJobId ? completionMap[printJobId] : null;
-  const completionDate = normalizeDashboardCalendarDate_(completionEntry && completionEntry.completionDate);
   const turnaroundLabel = formatTurnaroundTextForDashboard_(pickBaseTurnaroundForDashboard_(safeJob)) || '--';
-  const productionStarted = hasDashboardPeekProductionStarted_(context);
+  const peek = buildDashboardPeekLifecycleMeta_(context, timeline, safeRow);
+  const validatedCompletionMeta = derivePortalValidatedCompletionMeta_([safeJob], completionMap, {
+    productionStartAt: peek.productionStartAt,
+    lastOrderUpdatedAt: trimString_(latestOrderSummary.lastUpdatedAt || safeRow.lastupdatedat || safeRow.lastUpdatedAt)
+  });
+  const validatedCompletionValue = Number.isFinite(Number(validatedCompletionMeta.dateValue))
+    ? Number(validatedCompletionMeta.dateValue)
+    : (peek.productionComplete === true ? peek.completionDateValue : null);
+  const validatedCompletionLabel = trimString_(validatedCompletionMeta.dateLabel || (validatedCompletionValue != null ? peek.completionDateLabel : ''));
 
-  if (completionDate) {
+  if (validatedCompletionMeta.allJobsCompleted === true || (peek.productionComplete === true && validatedCompletionLabel)) {
     return {
       typeLabel: buildDashboardPeekJobTypeLabel_(safeJob),
       turnaroundLabel: turnaroundLabel,
-      finishedOnDateLabel: formatDashboardShortDate_(completionDate),
-      finishedOnDateValue: completionDate.getTime(),
-      finishedOnSource: 'team_completion'
+      finishedOnDateLabel: validatedCompletionLabel,
+      finishedOnDateValue: validatedCompletionValue,
+      finishedOnSource: validatedCompletionMeta.allJobsCompleted === true ? 'team_completion' : 'project_completion'
     };
   }
 
-  if (context.hasPlacedOrder !== true || !jobIsOrdered || !productionStarted) {
+  if (peek.orderPlaced !== true || !jobIsOrdered || peek.productionStarted !== true) {
     return {
       typeLabel: buildDashboardPeekJobTypeLabel_(safeJob),
       turnaroundLabel: turnaroundLabel,
       finishedOnDateLabel: '',
       finishedOnDateValue: null,
       finishedOnSource: 'none'
-    };
+      };
   }
 
-  const referenceDateValue = context.isPoFlow === true
-    ? timeline.printStartDateValue
-    : timeline.paidDateValue || timeline.printStartDateValue;
-  const referenceDate = Number.isFinite(Number(referenceDateValue)) ? new Date(Number(referenceDateValue)) : null;
+  const referenceDate = peek.productionStartDate;
   const readyCandidate = referenceDate ? deriveDashboardReadyCandidateForJob_(safeJob, referenceDate) : null;
   return {
     typeLabel: buildDashboardPeekJobTypeLabel_(safeJob),
     turnaroundLabel: turnaroundLabel,
     finishedOnDateLabel: trimString_(readyCandidate && readyCandidate.dateLabel),
     finishedOnDateValue: Number.isFinite(Number(readyCandidate && readyCandidate.dateValue)) ? Number(readyCandidate.dateValue) : null,
-    finishedOnSource: readyCandidate
-      ? (context.isPoFlow === true ? 'projected_po' : 'projected_payment')
-      : 'none'
+    finishedOnSource: readyCandidate ? 'projected_production' : 'none'
   };
 }
 
@@ -2454,7 +2689,9 @@ function buildDashboardProjectPeekMetaFromProjectionContext_(context) {
     jobs = buildDashboardPeekJobsFromLockedDraft_(lockedDraft, printJobs, {
       workflowContext: workflowContext,
       timeline: timeline,
-      teamJobCompletionByJobId: latestOrderSummary && latestOrderSummary.teamJobCompletionByJobId
+      teamJobCompletionByJobId: latestOrderSummary && latestOrderSummary.teamJobCompletionByJobId,
+      latestOrderSummary: latestOrderSummary,
+      row: row
     });
     totals = buildDashboardPeekTotalsFromLockedDraft_(
       lockedDraft,
@@ -2468,7 +2705,9 @@ function buildDashboardProjectPeekMetaFromProjectionContext_(context) {
       summaryOptions: normalizeSummaryOptionsForOrderDraft_(safeContext.portalStateSource && safeContext.portalStateSource.summaryOptions),
       workflowContext: workflowContext,
       timeline: timeline,
-      teamJobCompletionByJobId: latestOrderSummary && latestOrderSummary.teamJobCompletionByJobId
+      teamJobCompletionByJobId: latestOrderSummary && latestOrderSummary.teamJobCompletionByJobId,
+      latestOrderSummary: latestOrderSummary,
+      row: row
     });
     try {
       const editableDraft = buildOrderDraftFromSnapshotAndPortalState_({
@@ -2525,7 +2764,7 @@ function buildDashboardPeekTotalsFromEditableDraft_(draft, options) {
   const normalizedDraft = (draft && typeof draft === 'object') ? draft : {};
   const opts = (options && typeof options === 'object') ? options : {};
   const context = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
-  const productionStarted = hasDashboardPeekProductionStarted_(context);
+  const productionStarted = buildDashboardPeekLifecycleMeta_(context).productionStarted === true;
   return {
     totalUnits: Math.max(0, parseInt(String(normalizedDraft.totalUnits || 0), 10) || 0),
     totalPrice: roundMoney_(normalizedDraft.amountGrandTotal || 0),
@@ -2540,7 +2779,7 @@ function buildDashboardPeekTotalsFromLockedDraft_(draft, latestOrderSummary, opt
   const latest = (latestOrderSummary && typeof latestOrderSummary === 'object') ? latestOrderSummary : {};
   const opts = (options && typeof options === 'object') ? options : {};
   const context = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
-  const productionStarted = hasDashboardPeekProductionStarted_(context);
+  const productionStarted = buildDashboardPeekLifecycleMeta_(context).productionStarted === true;
   return {
     totalUnits: Math.max(0, parseInt(String(normalizedDraft.totalUnits || 0), 10) || 0),
     totalPrice: roundMoney_(latest.amountGrandTotal || normalizedDraft.amountGrandTotal || 0),
@@ -3133,6 +3372,51 @@ function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latest
   };
 }
 
+function buildDashboardProjectStepFlagsFromLifecycle_(legacyFlags, workflowContext) {
+  const legacy = (legacyFlags && typeof legacyFlags === 'object') ? legacyFlags : {};
+  const lifecycle = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const dashboardState = (lifecycle.dashboardState && typeof lifecycle.dashboardState === 'object') ? lifecycle.dashboardState : {};
+  const orderPlaced = lifecycle.orderPlaced === true || lifecycle.hasPlacedOrder === true;
+  const paymentReceived = lifecycle.paymentReceived === true || lifecycle.isPaymentReceived === true;
+  const paymentDue = lifecycle.paymentDue === true || trimString_(dashboardState.paymentStep) === 'due';
+  const paymentPending = !paymentReceived && (
+    lifecycle.isPaymentPending === true ||
+    lifecycle.paymentRequired === true ||
+    paymentDue === true
+  );
+  const poSubmitted = lifecycle.poSubmitted === true || lifecycle.isPoSubmitted === true;
+  const poInitiated = lifecycle.isAwaitingPoSubmission === true
+    || lifecycle.hasPurchaseOrderDraft === true
+    || lifecycle.poDraft === true
+    || poSubmitted === true;
+  const productionComplete = lifecycle.productionComplete === true
+    || trimString_(dashboardState.productionStep) === 'complete';
+  const productionBegun = productionComplete
+    || lifecycle.productionCurrent === true
+    || lifecycle.productionAuthorized === true
+    || lifecycle.isProductionAuthorized === true
+    || trimString_(dashboardState.productionStep) === 'current';
+
+  return {
+    hasIncludedJobs: legacy.hasIncludedJobs === true,
+    minimumsMet: legacy.minimumsMet === true,
+    qtySizesComplete: legacy.qtySizesComplete === true,
+    artworkApprovalComplete: legacy.artworkApprovalComplete === true,
+    hasPurchaseOrderDraft: lifecycle.hasPurchaseOrderDraft === true || lifecycle.poDraft === true || legacy.hasPurchaseOrderDraft === true,
+    orderPlaced: orderPlaced,
+    paymentReceived: paymentReceived,
+    paymentPending: paymentPending,
+    paymentDue: paymentDue,
+    poInitiated: poInitiated,
+    poSubmitted: poSubmitted,
+    productionBegun: productionBegun,
+    productionComplete: productionComplete,
+    isLocked: lifecycle.isLocked === true,
+    teamWorkflowMode: normalizeTeamWorkflowMode_(lifecycle.teamWorkflowMode || legacy.teamWorkflowMode),
+    includedJobCount: Math.max(0, parseInt(String(legacy.includedJobCount || 0), 10) || 0)
+  };
+}
+
 function isDashboardArtworkApprovedForJobSelectionState_(row, printJobs, selectionState) {
   const normalizedRow = (row && typeof row === 'object') ? row : {};
   const item = (selectionState && typeof selectionState === 'object') ? selectionState : {};
@@ -3173,6 +3457,19 @@ function buildDashboardStatusBarModel_(flags, variant, presentation) {
     });
   }
 
+  const stepStates = (ui.stepStates && typeof ui.stepStates === 'object') ? ui.stepStates : null;
+  if (stepStates) {
+    return flow.map(function(step) {
+      const key = trimString_(step && step.key).toLowerCase();
+      const state = trimString_(stepStates[key]).toLowerCase();
+      return {
+        key: step.key,
+        label: step.label,
+        state: state === 'complete' || state === 'current' || state === 'future' ? state : 'future'
+      };
+    });
+  }
+
   const currentKey = trimString_(ui.currentStepKey).toLowerCase() || flow[0].key;
   const currentIndex = Math.max(0, flow.findIndex(function(step) {
     return trimString_(step && step.key).toLowerCase() === currentKey;
@@ -3190,38 +3487,147 @@ function buildDashboardStatusBarModel_(flags, variant, presentation) {
   });
 }
 
+function buildDashboardLifecycleStepStateMap_(flags, variant, presentation) {
+  const safeFlags = (flags && typeof flags === 'object') ? flags : {};
+  const ui = (presentation && typeof presentation === 'object') ? presentation : {};
+  const currentStepKey = trimString_(ui.currentStepKey).toLowerCase();
+  const isPo = variant === 'purchase_order';
+  const stateMap = {
+    qty_sizes: 'future',
+    artwork: 'future',
+    place_order: 'future',
+    payment: 'future',
+    production: 'future'
+  };
+
+  if (safeFlags.qtySizesComplete !== true) {
+    stateMap.qty_sizes = 'current';
+    return stateMap;
+  }
+  stateMap.qty_sizes = 'complete';
+
+  if (safeFlags.artworkApprovalComplete !== true) {
+    stateMap.artwork = 'current';
+    return stateMap;
+  }
+  stateMap.artwork = 'complete';
+
+  if (isPo && safeFlags.poInitiated === true && safeFlags.poSubmitted !== true) {
+    stateMap.place_order = 'current';
+    return stateMap;
+  }
+
+  if (safeFlags.orderPlaced === true) {
+    stateMap.place_order = 'complete';
+  } else {
+    stateMap.place_order = currentStepKey === 'place_order' ? 'current' : 'future';
+    return stateMap;
+  }
+
+  if (safeFlags.paymentReceived === true) {
+    stateMap.payment = 'complete';
+  } else if (safeFlags.paymentDue === true || currentStepKey === 'payment') {
+    stateMap.payment = 'current';
+  }
+
+  if (safeFlags.productionComplete === true) {
+    stateMap.production = 'complete';
+  } else if (safeFlags.productionBegun === true || currentStepKey === 'production') {
+    stateMap.production = 'current';
+  }
+
+  return stateMap;
+}
+
 function buildDashboardStatusPresentationMeta_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
   const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
   const timeline = (opts.timeline && typeof opts.timeline === 'object') ? opts.timeline : {};
-  const completionReached = !!timeline.allJobsCompleted
-    || (!timeline.hasAnyActualJobCompletion && hasDashboardDateReached_(timeline.completionDateValue));
+  const workflowContext = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
+  const dashboardState = (workflowContext.dashboardState && typeof workflowContext.dashboardState === 'object')
+    ? workflowContext.dashboardState
+    : {};
+  const productionComplete = flags.productionComplete === true
+    || workflowContext.productionComplete === true
+    || trimString_(dashboardState.productionStep) === 'complete';
+  const paymentDue = flags.paymentDue === true
+    || workflowContext.paymentDue === true
+    || trimString_(dashboardState.paymentStep) === 'due';
 
   if (!flags.qtySizesComplete) return { stateMode: 'tracker', currentStepKey: 'qty_sizes' };
   if (!flags.artworkApprovalComplete) return { stateMode: 'tracker', currentStepKey: 'artwork' };
 
   if (variant === 'purchase_order') {
     if (flags.poInitiated && !flags.poSubmitted) {
-      return { stateMode: 'tracker', currentStepKey: 'place_order', poStageMode: 'upload_pending' };
+      return {
+        stateMode: 'tracker',
+        currentStepKey: 'place_order',
+        poStageMode: 'upload_pending',
+        stepStates: buildDashboardLifecycleStepStateMap_(flags, variant, {
+          currentStepKey: 'place_order'
+        })
+      };
     }
-    if (!flags.orderPlaced) return { stateMode: 'tracker', currentStepKey: 'place_order', poStageMode: 'pre_initiation' };
-    if (flags.paymentReceived && completionReached) {
+    if (!flags.orderPlaced) {
+      return {
+        stateMode: 'tracker',
+        currentStepKey: 'place_order',
+        poStageMode: 'pre_initiation',
+        stepStates: buildDashboardLifecycleStepStateMap_(flags, variant, {
+          currentStepKey: 'place_order'
+        })
+      };
+    }
+    if (productionComplete && !paymentDue) {
       return { stateMode: 'complete', currentStepKey: 'complete' };
     }
-    if (!flags.poSubmitted || !flags.productionBegun) {
-      return { stateMode: 'tracker', currentStepKey: 'production', poStageMode: 'print' };
+    if (paymentDue || !flags.paymentReceived) {
+      return {
+        stateMode: 'tracker',
+        currentStepKey: 'payment',
+        poStageMode: 'payment_due',
+        stepStates: buildDashboardLifecycleStepStateMap_(flags, variant, {
+          currentStepKey: 'payment'
+        })
+      };
     }
-    if (!flags.paymentReceived) {
-      return { stateMode: 'tracker', currentStepKey: 'payment', poStageMode: 'payment_due' };
-    }
-    return { stateMode: 'tracker', currentStepKey: 'production', poStageMode: 'print' };
+    return {
+      stateMode: 'tracker',
+      currentStepKey: 'production',
+      poStageMode: 'print',
+      stepStates: buildDashboardLifecycleStepStateMap_(flags, variant, {
+        currentStepKey: 'production'
+      })
+    };
   }
 
-  if (!flags.orderPlaced) return { stateMode: 'tracker', currentStepKey: 'place_order' };
-  if (!flags.paymentReceived) return { stateMode: 'tracker', currentStepKey: 'payment' };
-  if (completionReached) return { stateMode: 'complete', currentStepKey: 'complete' };
-  return { stateMode: 'tracker', currentStepKey: 'production' };
+  if (!flags.orderPlaced) {
+    return {
+      stateMode: 'tracker',
+      currentStepKey: 'place_order',
+      stepStates: buildDashboardLifecycleStepStateMap_(flags, variant, {
+        currentStepKey: 'place_order'
+      })
+    };
+  }
+  if (paymentDue || !flags.paymentReceived) {
+    return {
+      stateMode: 'tracker',
+      currentStepKey: 'payment',
+      stepStates: buildDashboardLifecycleStepStateMap_(flags, variant, {
+        currentStepKey: 'payment'
+      })
+    };
+  }
+  if (productionComplete && !paymentDue) return { stateMode: 'complete', currentStepKey: 'complete' };
+  return {
+    stateMode: 'tracker',
+    currentStepKey: 'production',
+    stepStates: buildDashboardLifecycleStepStateMap_(flags, variant, {
+      currentStepKey: 'production'
+    })
+  };
 }
 
 function buildDashboardStatusCopyMeta_(options) {
@@ -3457,6 +3863,14 @@ function buildDashboardStatusHelperPayloadFromRuns_(runs) {
 function buildDashboardProductionMeta_(flags, variant, readyMeta) {
   const safeFlags = (flags && typeof flags === 'object') ? flags : {};
   const safeReadyMeta = (readyMeta && typeof readyMeta === 'object') ? readyMeta : {};
+  if (safeFlags.productionComplete) {
+    return {
+      mode: 'date',
+      label: trimString_(safeReadyMeta.dateLabel) || 'Production complete',
+      dateLabel: trimString_(safeReadyMeta.dateLabel),
+      dateValue: Number.isFinite(Number(safeReadyMeta.dateValue)) ? Number(safeReadyMeta.dateValue) : null
+    };
+  }
   if (safeFlags.productionBegun) {
     return {
       mode: 'date',
@@ -3530,6 +3944,133 @@ function deriveDashboardActualCompletionMeta_(selectedJobs, completedJobsByJobId
     allJobsCompleted: allJobsCompleted,
     dateValue: latestValue,
     dateLabel: latestValue != null ? formatDashboardShortDate_(new Date(latestValue)) : ''
+  };
+}
+
+function buildPortalLifecycleIsoDateString_(value) {
+  const date = normalizeDashboardCalendarDate_(value);
+  return date ? date.toISOString() : '';
+}
+
+function derivePortalProductionStartAt_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const paymentPath = trimString_(opts.paymentPath).toLowerCase();
+  const poSubmittedAt = trimString_(opts.poSubmittedAt);
+  const paymentReceivedManuallyAt = trimString_(opts.paymentReceivedManuallyAt);
+  const paidAt = trimString_(opts.paidAt);
+  const authorizedToProduceAt = trimString_(opts.authorizedToProduceAt);
+  const lockedAt = trimString_(opts.lockedAt);
+  if (paymentPath === PAYMENT_METHODS.purchase_order) {
+    return poSubmittedAt || authorizedToProduceAt || '';
+  }
+  if (paymentPath === 'manual') {
+    return paymentReceivedManuallyAt || paidAt || authorizedToProduceAt || '';
+  }
+  if (paymentPath === 'stripe') {
+    return paidAt || authorizedToProduceAt || lockedAt || '';
+  }
+  return '';
+}
+
+function derivePortalProductionTargetMeta_(selectedJobs, productionStartAt) {
+  const jobs = Array.isArray(selectedJobs) ? selectedJobs : [];
+  const referenceDate = normalizeDashboardProductionStartDate_(productionStartAt);
+  if (!jobs.length || !referenceDate) {
+    return {
+      dateValue: null,
+      dateLabel: '',
+      iso: ''
+    };
+  }
+  let furthestValue = null;
+  let furthestLabel = '';
+  jobs.forEach(function(job) {
+    const candidate = deriveDashboardReadyCandidateForJob_(job, referenceDate);
+    if (!candidate || !Number.isFinite(Number(candidate.dateValue))) return;
+    if (furthestValue == null || Number(candidate.dateValue) > furthestValue) {
+      furthestValue = Number(candidate.dateValue);
+      furthestLabel = trimString_(candidate.dateLabel);
+    }
+  });
+  return {
+    dateValue: furthestValue,
+    dateLabel: furthestLabel,
+    iso: buildPortalLifecycleIsoDateString_(furthestValue)
+  };
+}
+
+function isTrustworthyPortalLifecycleCompletionDate_(value, options) {
+  const date = normalizeDashboardCalendarDate_(value);
+  if (!date) return false;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const lowerBound = normalizeDashboardCalendarDate_(opts.lowerBound);
+  if (lowerBound && date.getTime() < lowerBound.getTime()) return false;
+  const recordedAt = normalizeDashboardCalendarDate_(opts.recordedAt);
+  const anchorDate = recordedAt
+    || normalizeDashboardCalendarDate_(opts.anchorDate)
+    || normalizeDashboardCalendarDate_(new Date());
+  if (!anchorDate) return true;
+  const maxDistanceDays = Math.max(30, parseInt(String(opts.maxDistanceDays || 400), 10) || 400);
+  const maxDistanceMs = maxDistanceDays * 24 * 60 * 60 * 1000;
+  return Math.abs(date.getTime() - anchorDate.getTime()) <= maxDistanceMs;
+}
+
+function derivePortalValidatedCompletionMeta_(selectedJobs, completedJobsByJobId, options) {
+  const jobs = Array.isArray(selectedJobs) ? selectedJobs : [];
+  const completionMap = normalizeTeamJobCompletionMap_(completedJobsByJobId);
+  if (!jobs.length || !Object.keys(completionMap).length) {
+    return {
+      hasAnyCompletionSignal: false,
+      allJobsCompleted: false,
+      dateValue: null,
+      dateLabel: '',
+      iso: ''
+    };
+  }
+  const opts = (options && typeof options === 'object') ? options : {};
+  const lowerBound = normalizeDashboardCalendarDate_(trimString_(opts.productionStartAt));
+  const lastUpdatedDate = normalizeDashboardCalendarDate_(trimString_(opts.lastOrderUpdatedAt));
+  let latestValue = null;
+  let completionSignalCount = 0;
+  jobs.forEach(function(job) {
+    const printJobId = trimString_(job && job.printJobId);
+    const entry = printJobId ? completionMap[printJobId] : null;
+    if (!entry) return;
+    const completionDate = trimString_(entry.completionDate);
+    if (!completionDate) return;
+    completionSignalCount += 1;
+    let displayDate = null;
+    if (isTrustworthyPortalLifecycleCompletionDate_(completionDate, {
+      lowerBound: lowerBound,
+      recordedAt: entry.recordedAt,
+      anchorDate: lastUpdatedDate
+    })) {
+      displayDate = normalizeDashboardCalendarDate_(completionDate);
+    }
+    if (!displayDate) {
+      const recordedAt = normalizeDashboardCalendarDate_(entry.recordedAt);
+      if (recordedAt && (!lowerBound || recordedAt.getTime() >= lowerBound.getTime())) {
+        displayDate = recordedAt;
+      }
+    }
+    if (!displayDate && lastUpdatedDate && (!lowerBound || lastUpdatedDate.getTime() >= lowerBound.getTime())) {
+      displayDate = lastUpdatedDate;
+    }
+    if (!displayDate) return;
+    const ms = displayDate.getTime();
+    if (latestValue == null || ms > latestValue) latestValue = ms;
+  });
+  const allJobsCompleted = jobs.length > 0 && jobs.every(function(job) {
+    const printJobId = trimString_(job && job.printJobId);
+    const entry = printJobId ? completionMap[printJobId] : null;
+    return !!trimString_(entry && entry.completionDate);
+  });
+  return {
+    hasAnyCompletionSignal: completionSignalCount > 0,
+    allJobsCompleted: allJobsCompleted,
+    dateValue: latestValue,
+    dateLabel: latestValue != null ? formatDashboardShortDate_(new Date(latestValue)) : '',
+    iso: buildPortalLifecycleIsoDateString_(latestValue)
   };
 }
 
@@ -3788,6 +4329,7 @@ function addCalendarDaysForDashboard_(dayCount, referenceDate) {
 }
 
 function hasDashboardDateReached_(dateValue) {
+  if (dateValue == null || dateValue === '') return false;
   if (!Number.isFinite(Number(dateValue))) return false;
   const target = new Date(Number(dateValue));
   if (Number.isNaN(target.getTime())) return false;
@@ -10624,6 +11166,7 @@ function buildPortalOrderSummary_(row) {
     shippingDetailsCaptured: draft.shippingDetailsCaptured === true,
     shippingDetails: normalizeOrderDraftShippingDetailsInput_(draft.shippingDetails),
     paidAt: trimString_(order.paidat || order.paidAt),
+    paymentReceivedManuallyAt: trimString_(order.paymentreceivedmanuallyat || order.paymentReceivedManuallyAt),
     authorizedToProduceAt: trimString_(order.authorizedtoproduceat || order.authorizedToProduceAt),
     lockedAt: trimString_(order.lockedat || order.lockedAt),
     stripeSessionId: trimString_(order.stripesessionid || order.stripeSessionId),
@@ -11044,7 +11587,8 @@ function buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderS
   return summary;
 }
 
-function buildTeamWorkflowContext_(options) {
+function derivePortalLifecycle_(context) {
+  const options = context;
   const opts = (options && typeof options === 'object') ? options : {};
   const row = (opts.row && typeof opts.row === 'object') ? opts.row : {};
   const latest = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object') ? opts.latestOrderSummary : {};
@@ -11097,9 +11641,11 @@ function buildTeamWorkflowContext_(options) {
   const invoiceNumber = trimString_(current.latestInvoiceNumber || latest.invoiceNumber || row.latestinvoicenumber);
   const lockedAt = trimString_(latest.lockedAt || row.lockedat);
   const paidAt = trimString_(latest.paidAt || row.paidat);
+  const paymentReceivedManuallyAt = trimString_(latest.paymentReceivedManuallyAt || row.paymentreceivedmanuallyat);
   const authorizedToProduceAt = trimString_(latest.authorizedToProduceAt || row.authorizedtoproduceat);
   const poSubmittedAt = trimString_(latest.poSubmittedAt || row.posubmittedat);
   const poNumber = trimString_(latest.poNumber || row.ponumber);
+  const lastOrderUpdatedAt = trimString_(latest.lastUpdatedAt || current.lastOrderUpdatedAt || row.lastorderupdatedat);
   const completionMap = normalizeTeamJobCompletionMap_(
     latest.teamJobCompletionByJobId ||
     current.teamJobCompletionByJobId ||
@@ -11114,6 +11660,9 @@ function buildTeamWorkflowContext_(options) {
   const isCheckoutReset = teamWorkflowMode === TEAM_WORKFLOW_MODES.checkout_reset;
   const isStripeMethod = paymentMethodSelected === PAYMENT_METHODS.card || paymentMethodSelected === PAYMENT_METHODS.ach;
   const isManualMethod = paymentMethodSelected === PAYMENT_METHODS.check || paymentMethodSelected === PAYMENT_METHODS.cash;
+  const paymentPath = isPoFlow
+    ? PAYMENT_METHODS.purchase_order
+    : (isManualMethod ? 'manual' : (isStripeMethod ? 'stripe' : 'none'));
   const isPaymentReceived = !!paidAt
     || paymentState === PAYMENT_STATES.paid
     || paymentState === PAYMENT_STATES.manual_received;
@@ -11122,9 +11671,37 @@ function buildTeamWorkflowContext_(options) {
     || orderState === ORDER_STATES.ready_for_production
     || orderState === ORDER_STATES.in_production
     || orderState === ORDER_STATES.closed;
-  const hasProductionCompletion = actualCompletionMeta.hasAnyActualCompletion === true
+  const productionStartAt = derivePortalProductionStartAt_({
+    paymentPath: paymentPath,
+    poSubmittedAt: poSubmittedAt,
+    paymentReceivedManuallyAt: paymentReceivedManuallyAt,
+    paidAt: paidAt,
+    authorizedToProduceAt: authorizedToProduceAt,
+    lockedAt: lockedAt
+  });
+  const productionTargetMeta = derivePortalProductionTargetMeta_(selectedJobs, productionStartAt);
+  const validatedCompletionMeta = derivePortalValidatedCompletionMeta_(selectedJobs, completionMap, {
+    productionStartAt: productionStartAt,
+    lastOrderUpdatedAt: lastOrderUpdatedAt
+  });
+  const hasAnyCompletionSignal = validatedCompletionMeta.hasAnyCompletionSignal === true;
+  const allSelectedJobsCompleted = validatedCompletionMeta.allJobsCompleted === true;
+  const deadlineCompletionReached = hasDashboardDateReached_(productionTargetMeta.dateValue);
+  let productionCompletionSource = '';
+  if (allSelectedJobsCompleted) productionCompletionSource = 'team_jobs';
+  else if (deadlineCompletionReached) productionCompletionSource = 'deadline_reached';
+  else if (orderState === ORDER_STATES.closed) productionCompletionSource = 'order_closed';
+  const productionComplete = productionCompletionSource !== '';
+  const productionCompletionAt = productionCompletionSource === 'team_jobs'
+    ? trimString_(validatedCompletionMeta.iso)
+    : (productionCompletionSource === 'deadline_reached'
+      ? trimString_(productionTargetMeta.iso)
+      : (productionCompletionSource === 'order_closed'
+        ? (buildPortalLifecycleIsoDateString_(lastOrderUpdatedAt) || trimString_(productionTargetMeta.iso))
+        : ''));
+  const hasProductionCompletion = productionComplete
     || orderState === ORDER_STATES.in_production
-    || orderState === ORDER_STATES.closed;
+    || hasAnyCompletionSignal;
   const isPoSubmitted = isPoFlow && (
     !!poSubmittedAt ||
     !!poNumber ||
@@ -11195,9 +11772,8 @@ function buildTeamWorkflowContext_(options) {
   const hasLockedInvoice = summaryDocumentMode !== SUMMARY_DOCUMENT_MODES.estimate;
   const hasSelectedJobs = selectedJobs.length > 0;
   const hasAnyActualJobCompletion = actualCompletionMeta.hasAnyActualCompletion === true;
-  const allSelectedJobsCompleted = actualCompletionMeta.allJobsCompleted === true;
   const canManageJobCompletion = hasSelectedJobs
-    && (isProductionAuthorized || isPaymentReceived || hasAnyActualJobCompletion);
+    && (isProductionAuthorized || isPaymentReceived || hasAnyCompletionSignal);
   const canUnlock = isTeamHold
     || isCheckoutReset
     || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
@@ -11222,11 +11798,157 @@ function buildTeamWorkflowContext_(options) {
   const cancelFlowKind = lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
     ? PAYMENT_METHODS.purchase_order
     : (lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked ? 'manual_payment' : '');
+  const manualPaymentPending = isManualPendingLocked
+    || paymentState === PAYMENT_STATES.manual_pending;
+  const manualPaymentReceived = paymentState === PAYMENT_STATES.manual_received
+    || (isManualMethod && isPaymentReceived);
+  const productionCurrent = !productionComplete && (
+    isProductionAuthorized
+    || orderState === ORDER_STATES.in_production
+    || hasAnyCompletionSignal
+  );
+  const paymentRequired = isCheckoutStarted
+    || isPaymentPending
+    || (hasPlacedOrder && !isPaymentReceived);
+  const paymentDue = hasPlacedOrder
+    && !isPaymentReceived
+    && (
+      isLockedPoSubmittedUnpaid
+      || manualPaymentPending
+      || isPoSubmitted
+      || paymentState === PAYMENT_STATES.pending
+      || paymentState === PAYMENT_STATES.submitted
+      || paymentState === PAYMENT_STATES.checkout_created
+      || orderState === ORDER_STATES.awaiting_payment_confirmation
+    );
+  const orderPlacedAt = trimString_(poSubmittedAt || paidAt || lockedAt);
+  const editorMode = (!hasPlacedOrder && !isLocked && (lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable || lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started))
+    ? 'editable'
+    : 'locked';
+  const saveAllowed = editorMode === 'editable';
+  const orderAllowed = lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable
+    && !hasPlacedOrder
+    && !isCheckoutStarted
+    && !isLocked;
+  const summaryControlsMode = lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+    ? 'po_submission'
+    : (lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
+      ? 'manual_pending'
+      : (summaryDocumentMode === SUMMARY_DOCUMENT_MODES.locked_invoice
+        ? (paymentDue ? 'invoice_payment_due' : 'invoice_final')
+        : 'estimate'));
+  const lifecycleState = derivePortalLifecycleState_({
+    row: row,
+    lifecycleStage: lifecycleStage,
+    paymentPath: paymentPath,
+    isTeamHold: isTeamHold,
+    isCheckoutReset: isCheckoutReset,
+    isCheckoutStarted: isCheckoutStarted,
+    isPoDraftLocked: lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked,
+    isLockedPoSubmittedUnpaid: isLockedPoSubmittedUnpaid,
+    isPoSubmitted: isPoSubmitted,
+    isPaymentReceived: isPaymentReceived,
+    isProductionAuthorized: isProductionAuthorized,
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete,
+    manualPaymentPending: manualPaymentPending,
+    manualPaymentReceived: manualPaymentReceived,
+    paymentMethodSelected: paymentMethodSelected,
+    readinessFlags: opts.readinessFlags
+  });
+  const blockingReasons = buildPortalLifecycleBlockingReasons_({
+    lifecycleState: lifecycleState,
+    hasPlacedOrder: hasPlacedOrder,
+    paymentDue: paymentDue,
+    isPaymentReceived: isPaymentReceived,
+    isProductionAuthorized: isProductionAuthorized,
+    productionComplete: productionComplete,
+    isAwaitingPoSubmission: isAwaitingPoSubmission,
+    manualPaymentPending: manualPaymentPending,
+    isCheckoutStarted: isCheckoutStarted
+  });
+  const nextClientAction = derivePortalLifecycleNextClientAction_({
+    lifecycleState: lifecycleState,
+    paymentDue: paymentDue,
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete
+  });
+  const nextTeamAction = derivePortalLifecycleNextTeamAction_({
+    lifecycleState: lifecycleState,
+    paymentDue: paymentDue,
+    canMarkManualPayment: canMarkManualPayment,
+    canMarkPoPayment: canMarkPoPayment,
+    canManageJobCompletion: canManageJobCompletion,
+    productionComplete: productionComplete
+  });
+  const dashboardState = buildPortalLifecycleDashboardState_({
+    lifecycleState: lifecycleState,
+    variant: isPoFlow ? 'purchase_order' : 'standard',
+    orderPlaced: hasPlacedOrder,
+    paymentReceived: isPaymentReceived,
+    paymentDue: paymentDue,
+    poSubmitted: isPoSubmitted,
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete
+  });
+  const peekState = buildPortalLifecyclePeekState_({
+    lifecycleState: lifecycleState,
+    orderPlaced: hasPlacedOrder,
+    paymentReceived: isPaymentReceived,
+    paymentDue: paymentDue,
+    poSubmitted: isPoSubmitted,
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete
+  });
+  const diagnosticReasons = buildPortalLifecycleDiagnosticReasons_({
+    lifecycleStage: lifecycleStage,
+    lifecycleState: lifecycleState,
+    paymentPath: paymentPath,
+    hasPlacedOrder: hasPlacedOrder,
+    paymentDue: paymentDue,
+    isPaymentReceived: isPaymentReceived,
+    isProductionAuthorized: isProductionAuthorized,
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete,
+    isPoSubmitted: isPoSubmitted,
+    manualPaymentPending: manualPaymentPending,
+    isCheckoutStarted: isCheckoutStarted
+  });
 
   return {
     variant: isPoFlow ? 'purchase_order' : 'standard',
     lifecycleStage: lifecycleStage,
+    lifecycleState: lifecycleState,
     summaryDocumentMode: summaryDocumentMode,
+    summaryControlsMode: summaryControlsMode,
+    paymentPath: paymentPath,
+    paymentMethod: paymentMethodSelected,
+    orderPlaced: hasPlacedOrder,
+    orderPlacedAt: orderPlacedAt,
+    paymentRequired: paymentRequired,
+    paymentDue: paymentDue,
+    paymentReceived: isPaymentReceived,
+    paymentReceivedAt: paidAt,
+    poDraft: !!purchaseOrderDraft,
+    poSubmitted: isPoSubmitted,
+    manualPaymentPending: manualPaymentPending,
+    manualPaymentReceived: manualPaymentReceived,
+    productionAuthorized: isProductionAuthorized,
+    productionStartAt: trimString_(productionStartAt),
+    productionTargetCompleteAt: trimString_(productionTargetMeta.iso),
+    productionCompletionAt: trimString_(productionCompletionAt),
+    productionCompletionSource: trimString_(productionCompletionSource),
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete,
+    editorMode: editorMode,
+    saveAllowed: saveAllowed,
+    orderAllowed: orderAllowed,
+    dashboardState: dashboardState,
+    peekState: peekState,
+    nextClientAction: nextClientAction,
+    nextTeamAction: nextTeamAction,
+    blockingReasons: blockingReasons,
+    diagnosticReasons: diagnosticReasons,
     isPoFlow: isPoFlow,
     hasPurchaseOrderDraft: !!purchaseOrderDraft,
     purchaseOrderDraftStatus: trimString_(purchaseOrderDraft && purchaseOrderDraft.status),
@@ -11255,6 +11977,7 @@ function buildTeamWorkflowContext_(options) {
     productionAuthorizationState: productionAuthorizationState,
     activeOrderId: activeOrderId,
     paidAt: paidAt,
+    paymentReceivedManuallyAt: paymentReceivedManuallyAt,
     poSubmittedAt: poSubmittedAt,
     poNumber: poNumber,
     approvedPaymentTermsDays: Math.max(0, parseInt(String(account.approvedPaymentTermsDays || 0), 10) || 0),
@@ -11269,6 +11992,163 @@ function buildTeamWorkflowContext_(options) {
     canLockWithoutOrdering: canLockWithoutOrdering,
     canManageJobCompletion: canManageJobCompletion
   };
+}
+
+function buildTeamWorkflowContext_(options) {
+  return derivePortalLifecycle_(options);
+}
+
+function derivePortalLifecycleState_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  if (ctx.isTeamHold === true) return PORTAL_LIFECYCLE_STATES.canceled_or_reset;
+  if (ctx.isCheckoutReset === true) return PORTAL_LIFECYCLE_STATES.checkout_abandoned_or_reset;
+  if (ctx.productionComplete === true) return PORTAL_LIFECYCLE_STATES.production_complete;
+  if (ctx.isLockedPoSubmittedUnpaid === true) return PORTAL_LIFECYCLE_STATES.po_submitted_unpaid;
+  if (ctx.isPoSubmitted === true && ctx.isPaymentReceived === true) {
+    return ctx.productionCurrent === true
+      ? PORTAL_LIFECYCLE_STATES.production_in_progress
+      : PORTAL_LIFECYCLE_STATES.po_submitted_paid;
+  }
+  if (ctx.manualPaymentPending === true) return PORTAL_LIFECYCLE_STATES.manual_payment_pending;
+  if (ctx.manualPaymentReceived === true) {
+    return ctx.productionCurrent === true
+      ? PORTAL_LIFECYCLE_STATES.production_in_progress
+      : PORTAL_LIFECYCLE_STATES.manual_payment_received;
+  }
+  if (ctx.productionCurrent === true) return PORTAL_LIFECYCLE_STATES.production_in_progress;
+  if (ctx.isProductionAuthorized === true) return PORTAL_LIFECYCLE_STATES.production_authorized;
+  if (ctx.isPaymentReceived === true && ctx.paymentPath === 'stripe') {
+    return PORTAL_LIFECYCLE_STATES.card_ach_paid;
+  }
+  if (ctx.isPoDraftLocked === true) return PORTAL_LIFECYCLE_STATES.po_draft_invoice_prepared;
+  if (ctx.isCheckoutStarted === true) return PORTAL_LIFECYCLE_STATES.checkout_started_unpaid;
+  return derivePortalEstimateLifecycleState_(ctx.row, ctx.readinessFlags);
+}
+
+function derivePortalEstimateLifecycleState_(row, readinessFlags) {
+  const flags = (readinessFlags && typeof readinessFlags === 'object') ? readinessFlags : {};
+  if (flags.qtySizesComplete === true && flags.artworkApprovalComplete === true) {
+    return PORTAL_LIFECYCLE_STATES.estimate_ready_to_order;
+  }
+  if (flags.qtySizesComplete === true || flags.hasIncludedJobs === true || flags.minimumsMet === true) {
+    return PORTAL_LIFECYCLE_STATES.estimate_artwork_pending;
+  }
+  const portalState = safeJsonParse_(row && row.portalstatejson, {}) || {};
+  if (hasPositivePortalQuantitySignal_(portalState)) {
+    return PORTAL_LIFECYCLE_STATES.estimate_artwork_pending;
+  }
+  return PORTAL_LIFECYCLE_STATES.estimate_empty;
+}
+
+function hasPositivePortalQuantitySignal_(value, depth) {
+  const level = Math.max(0, parseInt(String(depth || 0), 10) || 0);
+  if (level > 8 || value == null) return false;
+  if (typeof value === 'number') return value > 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) return numeric > 0;
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some(function(item) {
+      return hasPositivePortalQuantitySignal_(item, level + 1);
+    });
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value).some(function(key) {
+      const normalizedKey = trimString_(key).toLowerCase();
+      if (normalizedKey === 'version' || normalizedKey === 'savedat' || normalizedKey === 'isreadonly') return false;
+      return hasPositivePortalQuantitySignal_(value[key], level + 1);
+    });
+  }
+  return false;
+}
+
+function buildPortalLifecycleBlockingReasons_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  const reasons = [];
+  if (ctx.isCheckoutStarted === true) reasons.push('checkout_started_unpaid');
+  if (ctx.isAwaitingPoSubmission === true) reasons.push('purchase_order_submission_required');
+  if (ctx.manualPaymentPending === true) reasons.push('manual_payment_pending');
+  if (ctx.paymentDue === true) reasons.push('payment_due');
+  if (ctx.hasPlacedOrder === true) reasons.push('order_placed_locked');
+  if (ctx.isPaymentReceived !== true && ctx.productionComplete === true) reasons.push('production_complete_payment_unreceived');
+  return uniqueTrimmedStrings_(reasons);
+}
+
+function derivePortalLifecycleNextClientAction_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  const state = trimString_(ctx.lifecycleState);
+  if (state === PORTAL_LIFECYCLE_STATES.estimate_empty
+      || state === PORTAL_LIFECYCLE_STATES.estimate_quantities_incomplete) return 'enter_quantities';
+  if (state === PORTAL_LIFECYCLE_STATES.estimate_artwork_pending) return 'approve_artwork';
+  if (state === PORTAL_LIFECYCLE_STATES.estimate_ready_to_order) return 'place_order';
+  if (state === PORTAL_LIFECYCLE_STATES.checkout_started_unpaid) return 'complete_checkout';
+  if (state === PORTAL_LIFECYCLE_STATES.po_draft_invoice_prepared) return 'submit_purchase_order';
+  if (state === PORTAL_LIFECYCLE_STATES.manual_payment_pending) return 'send_manual_payment';
+  if (ctx.paymentDue === true) return 'pay_invoice';
+  if (ctx.productionComplete === true) return 'none';
+  if (ctx.productionCurrent === true) return 'wait_for_production';
+  return 'none';
+}
+
+function derivePortalLifecycleNextTeamAction_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  if (ctx.canMarkManualPayment === true) return 'mark_manual_payment_received';
+  if (ctx.canMarkPoPayment === true) return 'mark_po_payment_received';
+  if (ctx.canManageJobCompletion === true && ctx.productionComplete !== true) return 'mark_production_complete';
+  if (ctx.paymentDue === true) return 'monitor_payment';
+  return 'none';
+}
+
+function buildPortalLifecycleDashboardState_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  return {
+    variant: trimString_(ctx.variant) === 'purchase_order' ? 'purchase_order' : 'standard',
+    orderStep: ctx.orderPlaced === true ? 'complete' : 'pending',
+    paymentStep: ctx.paymentReceived === true ? 'complete' : (ctx.paymentDue === true ? 'due' : 'future'),
+    productionStep: ctx.productionComplete === true ? 'complete' : (ctx.productionCurrent === true ? 'current' : 'future'),
+    paymentDue: ctx.paymentDue === true,
+    productionCurrent: ctx.productionCurrent === true,
+    productionComplete: ctx.productionComplete === true
+  };
+}
+
+function buildPortalLifecyclePeekState_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  let mode = 'not_placed';
+  if (ctx.productionComplete === true) mode = 'complete';
+  else if (ctx.productionCurrent === true) mode = 'production';
+  else if (ctx.poSubmitted === true) mode = 'po_submitted';
+  else if (ctx.paymentReceived === true) mode = 'paid';
+  else if (ctx.orderPlaced === true) mode = ctx.paymentDue === true ? 'payment_due' : 'placed';
+  return {
+    mode: mode,
+    paymentDue: ctx.paymentDue === true,
+    productionCurrent: ctx.productionCurrent === true,
+    productionComplete: ctx.productionComplete === true
+  };
+}
+
+function buildPortalLifecycleDiagnosticReasons_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  const reasons = [
+    'stage:' + trimString_(ctx.lifecycleStage),
+    'state:' + trimString_(ctx.lifecycleState),
+    'payment_path:' + trimString_(ctx.paymentPath)
+  ];
+  if (ctx.hasPlacedOrder === true) reasons.push('order_placed');
+  if (ctx.paymentDue === true) reasons.push('payment_due');
+  if (ctx.isPaymentReceived === true) reasons.push('payment_received');
+  if (ctx.isProductionAuthorized === true) reasons.push('production_authorized');
+  if (ctx.productionCurrent === true) reasons.push('production_current');
+  if (ctx.productionComplete === true) reasons.push('production_complete');
+  if (ctx.isPoSubmitted === true) reasons.push('po_submitted');
+  if (ctx.manualPaymentPending === true) reasons.push('manual_payment_pending');
+  if (ctx.isCheckoutStarted === true) reasons.push('checkout_started');
+  return uniqueTrimmedStrings_(reasons);
 }
 
 function buildTeamWorkflowActionMeta_(workflowContext) {
@@ -11317,13 +12197,481 @@ function buildTeamWorkflowActionMeta_(workflowContext) {
   };
 }
 
-function attachTeamWorkflowMetaToOrderSummary_(orderSummary, workflowContext) {
-  const summary = Object.assign({}, (orderSummary && typeof orderSummary === 'object') ? orderSummary : {});
+function buildPortalLifecycleDiagnosticForRow_(rowInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const projectionContext = (opts.projectionContext && typeof opts.projectionContext === 'object')
+    ? opts.projectionContext
+    : buildDashboardProjectProjectionContext_(rowInfo, opts);
+  const row = (projectionContext.row && typeof projectionContext.row === 'object') ? projectionContext.row : {};
+  const canonical = (projectionContext.workflowContext && typeof projectionContext.workflowContext === 'object')
+    ? projectionContext.workflowContext
+    : derivePortalLifecycle_({
+        row: row,
+        latestOrderSummary: projectionContext.latestOrderSummary,
+        currentStateSummary: projectionContext.currentStateSummary,
+        accountSummary: projectionContext.accountSummary
+      });
+  const surfaces = buildPortalLifecycleSurfaceInterpretations_(Object.assign({}, projectionContext, {
+    includePeek: opts.includePeek,
+    workflowContext: canonical
+  }));
+  const diagnostic = {
+    ok: true,
+    diagnosticVersion: 'lifecycle_tranche_3a_v1',
+    token: trimString_(projectionContext.token || row.token),
+    dealNumber: trimString_(projectionContext.dealNumber || row.dealnumber),
+    generatedAt: new Date().toISOString(),
+    canonical: canonical,
+    contract: buildPortalLifecycleContractDiagnostic_(canonical),
+    serverDashboard: surfaces.serverDashboard,
+    serverProduction: surfaces.serverProduction,
+    serverPeek: surfaces.serverPeek,
+    legacyServer: surfaces.legacyServer,
+    rawState: buildPortalLifecycleDiagnosticRawState_(projectionContext, canonical),
+    mismatches: [],
+    warnings: [],
+    knownClientConsumersNotEvaluated: buildPortalLifecycleKnownClientConsumers_()
+  };
+  const comparison = comparePortalLifecycleInterpretations_(diagnostic);
+  diagnostic.mismatches = comparison.mismatches;
+  diagnostic.warnings = (surfaces.warnings || []).concat(comparison.warnings || []);
+  return diagnostic;
+}
+
+function buildPortalLifecycleSurfaceInterpretations_(projectionContext) {
+  const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
+  const row = (context.row && typeof context.row === 'object') ? context.row : {};
+  const workflowContext = (context.workflowContext && typeof context.workflowContext === 'object') ? context.workflowContext : {};
+  const flags = (context.flags && typeof context.flags === 'object') ? context.flags : {};
+  const legacyDashboardFlags = (context.legacyDashboardFlags && typeof context.legacyDashboardFlags === 'object')
+    ? context.legacyDashboardFlags
+    : {};
+  const timeline = (context.timeline && typeof context.timeline === 'object') ? context.timeline : {};
+  const variant = trimString_(context.variant || workflowContext.variant).toLowerCase() === 'purchase_order'
+    ? 'purchase_order'
+    : 'standard';
+  const warnings = [];
+  let statusMeta = null;
+  let productionMeta = null;
+  let peekMeta = null;
+
+  try {
+    statusMeta = buildDashboardProjectStatusMetaFromProjectionContext_(context);
+  } catch (err) {
+    warnings.push(buildPortalLifecycleDiagnosticIssue_(
+      'dashboard_status_unavailable',
+      'Dashboard status meta could not be built for diagnostic comparison.',
+      String(err && err.message || err || '')
+    ));
+  }
+
+  try {
+    productionMeta = buildDashboardProductionMeta_(flags, variant, {
+      dateValue: timeline.completionDateValue,
+      dateLabel: timeline.completionDateLabel
+    });
+  } catch (err) {
+    warnings.push(buildPortalLifecycleDiagnosticIssue_(
+      'production_meta_unavailable',
+      'Dashboard production meta could not be built for diagnostic comparison.',
+      String(err && err.message || err || '')
+    ));
+  }
+
+  if (context.includePeek !== false) {
+    try {
+      peekMeta = buildDashboardProjectPeekMetaFromProjectionContext_(context);
+    } catch (err) {
+      warnings.push(buildPortalLifecycleDiagnosticIssue_(
+        'peek_meta_unavailable',
+        'Dashboard peek meta could not be built for diagnostic comparison.',
+        String(err && err.message || err || '')
+      ));
+    }
+  }
+
+  return {
+    serverDashboard: buildPortalLifecycleDiagnosticDashboard_(statusMeta, Object.assign({}, context, {
+      legacyDashboardFlags: legacyDashboardFlags
+    })),
+    serverProduction: buildPortalLifecycleDiagnosticProduction_(productionMeta, statusMeta, context),
+    serverPeek: buildPortalLifecycleDiagnosticPeek_(peekMeta),
+    legacyServer: buildPortalLifecycleDiagnosticLegacyServer_(context, row),
+    warnings: warnings
+  };
+}
+
+function comparePortalLifecycleInterpretations_(diagnosticContext) {
+  const diagnostic = (diagnosticContext && typeof diagnosticContext === 'object') ? diagnosticContext : {};
+  const canonical = (diagnostic.canonical && typeof diagnostic.canonical === 'object') ? diagnostic.canonical : {};
+  const dashboard = (diagnostic.serverDashboard && typeof diagnostic.serverDashboard === 'object') ? diagnostic.serverDashboard : {};
+  const dashboardFlags = (dashboard.flags && typeof dashboard.flags === 'object') ? dashboard.flags : {};
+  const legacyDashboardFlags = (dashboard.legacyFlags && typeof dashboard.legacyFlags === 'object') ? dashboard.legacyFlags : {};
+  const production = (diagnostic.serverProduction && typeof diagnostic.serverProduction === 'object') ? diagnostic.serverProduction : {};
+  const legacy = (diagnostic.legacyServer && typeof diagnostic.legacyServer === 'object') ? diagnostic.legacyServer : {};
+  const mismatches = [];
+  const warnings = [];
+
+  comparePortalLifecycleDiagnosticValue_(mismatches, 'variant', canonical.variant, dashboard.variant);
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'order_placed', canonical.hasPlacedOrder, dashboardFlags.orderPlaced);
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'payment_received', canonical.isPaymentReceived, dashboardFlags.paymentReceived);
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'po_submitted', canonical.isPoSubmitted, dashboardFlags.poSubmitted);
+  comparePortalLifecycleDiagnosticBoolean_(
+    mismatches,
+    'po_awaiting_submission',
+    canonical.isAwaitingPoSubmission,
+    dashboardFlags.poInitiated === true && dashboardFlags.poSubmitted !== true
+  );
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'locked_row', canonical.isLocked, legacy.isLockedPortalRow);
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'contract_order_placed', canonical.orderPlaced, dashboardFlags.orderPlaced);
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'contract_payment_received', canonical.paymentReceived, dashboardFlags.paymentReceived);
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'contract_payment_due', canonical.paymentDue, dashboardFlags.paymentDue);
+  comparePortalLifecycleDiagnosticBoolean_(mismatches, 'contract_production_complete', canonical.productionComplete, dashboardFlags.productionComplete);
+
+  comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_order_placed', canonical.orderPlaced, legacyDashboardFlags.orderPlaced);
+  comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_payment_received', canonical.paymentReceived, legacyDashboardFlags.paymentReceived);
+  comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_po_submitted', canonical.poSubmitted, legacyDashboardFlags.poSubmitted);
+  comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_payment_due', canonical.paymentDue, legacyDashboardFlags.paymentDue);
+  comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_production_begun', canonical.productionCurrent || canonical.productionAuthorized, legacyDashboardFlags.productionBegun);
+  comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_production_complete', canonical.productionComplete, legacyDashboardFlags.productionComplete);
+
+  if (canonical.isProductionAuthorized === true && dashboardFlags.productionBegun !== true) {
+    warnings.push(buildPortalLifecycleDiagnosticIssue_(
+      'production_authorized_without_dashboard_production',
+      'Canonical lifecycle sees production as authorized, but dashboard flags do not show production begun.',
+      {
+        lifecycleStage: trimString_(canonical.lifecycleStage),
+        productionMode: trimString_(production.mode),
+        productionLabel: trimString_(production.label)
+      }
+    ));
+  }
+  if (canonical.productionCurrent === true && dashboardFlags.productionBegun !== true) {
+    warnings.push(buildPortalLifecycleDiagnosticIssue_(
+      'contract_production_current_without_dashboard_production',
+      'Canonical contract sees production as current, but dashboard flags do not show production begun.',
+      {
+        lifecycleState: trimString_(canonical.lifecycleState),
+        productionMode: trimString_(production.mode)
+      }
+    ));
+  }
+  if (canonical.paymentDue === true && dashboardFlags.paymentReceived === true) {
+    mismatches.push(buildPortalLifecycleDiagnosticIssue_(
+      'contract_payment_due_dashboard_complete',
+      'Canonical contract sees payment due, but dashboard flags show payment received.',
+      {
+        lifecycleState: trimString_(canonical.lifecycleState),
+        paymentPath: trimString_(canonical.paymentPath)
+      }
+    ));
+  }
+  if (canonical.saveAllowed === true && legacy.isLockedPortalRow === true) {
+    warnings.push(buildPortalLifecycleDiagnosticIssue_(
+      'contract_save_allowed_legacy_locked',
+      'Canonical contract allows saving, but the legacy server lock helper treats the row as locked.',
+      {
+        lifecycleState: trimString_(canonical.lifecycleState),
+        legacyDisplayOrderStatus: trimString_(legacy.displayOrderStatus)
+      }
+    ));
+  }
+  if (canonical.hasAnyActualJobCompletion === true && dashboardFlags.productionBegun !== true) {
+    mismatches.push(buildPortalLifecycleDiagnosticIssue_(
+      'job_completion_without_dashboard_production',
+      'Canonical lifecycle has actual job completion, but dashboard flags do not show production begun.',
+      {
+        lifecycleStage: trimString_(canonical.lifecycleStage),
+        productionMode: trimString_(production.mode)
+      }
+    ));
+  }
+  if (trimString_(legacy.displayOrderStatus) === PORTAL_DISPLAY_ORDER_STATUSES.editable
+      && canonical.hasPlacedOrder === true) {
+    mismatches.push(buildPortalLifecycleDiagnosticIssue_(
+      'placed_order_displayed_editable',
+      'Canonical lifecycle sees an order as placed, but legacy display status is editable.',
+      {
+        lifecycleStage: trimString_(canonical.lifecycleStage),
+        displayOrderStatus: trimString_(legacy.displayOrderStatus)
+      }
+    ));
+  }
+  if (trimString_(legacy.displayOrderStatus) === PORTAL_DISPLAY_ORDER_STATUSES.processing
+      && canonical.hasPlacedOrder !== true
+      && canonical.isPaymentReceived !== true
+      && canonical.isProductionAuthorized !== true) {
+    warnings.push(buildPortalLifecycleDiagnosticIssue_(
+      'processing_status_without_canonical_acceptance',
+      'Legacy display status is processing without canonical placement, payment receipt, or production authorization.',
+      {
+        lifecycleStage: trimString_(canonical.lifecycleStage),
+        displayOrderStatus: trimString_(legacy.displayOrderStatus)
+      }
+    ));
+  }
+  if (trimString_(legacy.displayOrderStatus) === PORTAL_DISPLAY_ORDER_STATUSES.locked
+      && canonical.isEditable === true) {
+    warnings.push(buildPortalLifecycleDiagnosticIssue_(
+      'locked_status_while_canonical_editable',
+      'Legacy display status is locked while canonical lifecycle is editable.',
+      {
+        lifecycleStage: trimString_(canonical.lifecycleStage),
+        displayOrderStatus: trimString_(legacy.displayOrderStatus)
+      }
+    ));
+  }
+
+  return {
+    mismatches: mismatches,
+    warnings: warnings
+  };
+}
+
+function buildPortalLifecycleContractDiagnostic_(canonicalLifecycle) {
+  const lifecycle = (canonicalLifecycle && typeof canonicalLifecycle === 'object') ? canonicalLifecycle : {};
+  return {
+    lifecycleStage: trimString_(lifecycle.lifecycleStage),
+    lifecycleState: trimString_(lifecycle.lifecycleState),
+    paymentPath: trimString_(lifecycle.paymentPath),
+    paymentMethod: trimString_(lifecycle.paymentMethod || lifecycle.paymentMethodSelected),
+    orderPlaced: lifecycle.orderPlaced === true,
+    paymentRequired: lifecycle.paymentRequired === true,
+    paymentDue: lifecycle.paymentDue === true,
+    paymentReceived: lifecycle.paymentReceived === true || lifecycle.isPaymentReceived === true,
+    poDraft: lifecycle.poDraft === true || lifecycle.hasPurchaseOrderDraft === true,
+    poSubmitted: lifecycle.poSubmitted === true || lifecycle.isPoSubmitted === true,
+    manualPaymentPending: lifecycle.manualPaymentPending === true,
+    manualPaymentReceived: lifecycle.manualPaymentReceived === true,
+    productionAuthorized: lifecycle.productionAuthorized === true || lifecycle.isProductionAuthorized === true,
+    productionCurrent: lifecycle.productionCurrent === true,
+    productionComplete: lifecycle.productionComplete === true,
+    editorMode: trimString_(lifecycle.editorMode),
+    saveAllowed: lifecycle.saveAllowed === true,
+    orderAllowed: lifecycle.orderAllowed === true,
+    summaryDocumentMode: trimString_(lifecycle.summaryDocumentMode),
+    summaryControlsMode: trimString_(lifecycle.summaryControlsMode),
+    dashboardState: (lifecycle.dashboardState && typeof lifecycle.dashboardState === 'object') ? lifecycle.dashboardState : {},
+    peekState: (lifecycle.peekState && typeof lifecycle.peekState === 'object') ? lifecycle.peekState : {},
+    nextClientAction: trimString_(lifecycle.nextClientAction),
+    nextTeamAction: trimString_(lifecycle.nextTeamAction),
+    blockingReasons: Array.isArray(lifecycle.blockingReasons) ? lifecycle.blockingReasons : [],
+    diagnosticReasons: Array.isArray(lifecycle.diagnosticReasons) ? lifecycle.diagnosticReasons : []
+  };
+}
+
+function buildPortalLifecycleDiagnosticDashboard_(statusMeta, projectionContext) {
+  const meta = (statusMeta && typeof statusMeta === 'object') ? statusMeta : {};
+  const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
+  const presentation = (context.presentation && typeof context.presentation === 'object') ? context.presentation : {};
+  const legacyDashboardFlags = (context.legacyDashboardFlags && typeof context.legacyDashboardFlags === 'object')
+    ? context.legacyDashboardFlags
+    : {};
+  return {
+    ok: meta.ok === true,
+    variant: trimString_(meta.variant || context.variant),
+    flags: (meta.flags && typeof meta.flags === 'object') ? meta.flags : (context.flags || {}),
+    legacyFlags: legacyDashboardFlags,
+    stateMode: trimString_(
+      (meta.copy && meta.copy.stateMode)
+      || presentation.stateMode
+    ),
+    stepStates: (presentation.stepStates && typeof presentation.stepStates === 'object') ? presentation.stepStates : {},
+    currentStepKey: trimString_(
+      (meta.copy && meta.copy.currentStepKey)
+      || presentation.currentStepKey
+    ),
+    poStageMode: trimString_(
+      (meta.copy && meta.copy.poStageMode)
+      || presentation.poStageMode
+    ),
+    helperText: trimString_(meta.helperText),
+    helperTone: trimString_(meta.helperTone),
+    fallbackStatus: trimString_(meta.fallbackStatus || context.displayStatus),
+    steps: Array.isArray(meta.steps) ? meta.steps : []
+  };
+}
+
+function buildPortalLifecycleDiagnosticProduction_(productionMeta, statusMeta, projectionContext) {
+  const meta = (productionMeta && typeof productionMeta === 'object') ? productionMeta : {};
+  const statusProduction = statusMeta && statusMeta.production && typeof statusMeta.production === 'object'
+    ? statusMeta.production
+    : {};
+  const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
+  const timeline = (context.timeline && typeof context.timeline === 'object') ? context.timeline : {};
+  return {
+    mode: trimString_(meta.mode),
+    label: trimString_(meta.label),
+    dateLabel: trimString_(meta.dateLabel),
+    dateValue: Number.isFinite(Number(meta.dateValue)) ? Number(meta.dateValue) : null,
+    statusMetaMode: trimString_(statusProduction.mode),
+    statusMetaLabel: trimString_(statusProduction.label),
+    printStartDateLabel: trimString_(timeline.printStartDateLabel),
+    printStartDateValue: Number.isFinite(Number(timeline.printStartDateValue)) ? Number(timeline.printStartDateValue) : null,
+    completionDateLabel: trimString_(timeline.completionDateLabel),
+    completionDateValue: Number.isFinite(Number(timeline.completionDateValue)) ? Number(timeline.completionDateValue) : null,
+    hasAnyActualJobCompletion: timeline.hasAnyActualJobCompletion === true,
+    allJobsCompleted: timeline.allJobsCompleted === true
+  };
+}
+
+function buildPortalLifecycleDiagnosticPeek_(peekMeta) {
+  const meta = (peekMeta && typeof peekMeta === 'object') ? peekMeta : null;
+  if (!meta) {
+    return {
+      ok: false,
+      skipped: true
+    };
+  }
+  const project = (meta.project && typeof meta.project === 'object') ? meta.project : {};
+  const summary = (project.summary && typeof project.summary === 'object') ? project.summary : {};
+  return {
+    ok: meta.ok === true,
+    sourceMode: trimString_(meta.sourceMode),
+    jobSource: trimString_(meta.jobSource),
+    projectMode: trimString_(project.mode),
+    projectStatus: trimString_(project.status),
+    headerMeta: (project.headerMeta && typeof project.headerMeta === 'object') ? project.headerMeta : {},
+    summary: {
+      priceLabel: trimString_(summary.priceLabel),
+      completionLabel: trimString_(summary.completionLabel),
+      completionValue: trimString_(summary.completionValue)
+    },
+    timelineFacts: (project.timelineFacts && typeof project.timelineFacts === 'object') ? project.timelineFacts : {}
+  };
+}
+
+function buildPortalLifecycleDiagnosticLegacyServer_(projectionContext, row) {
+  const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
+  const safeRow = (row && typeof row === 'object') ? row : {};
+  const stateInput = Object.assign(
+    {},
+    safeRow,
+    (context.currentStateSummary && typeof context.currentStateSummary === 'object') ? context.currentStateSummary : {},
+    (context.latestOrderSummary && typeof context.latestOrderSummary === 'object') ? context.latestOrderSummary : {}
+  );
+  return {
+    displayOrderStatus: derivePortalDisplayOrderStatus_(stateInput, safeRow.status),
+    isLockedPortalRow: isLockedPortalRow_(safeRow, context.portalStateSource),
+    rowStatus: trimString_(safeRow.status)
+  };
+}
+
+function buildPortalLifecycleDiagnosticRawState_(projectionContext, canonical) {
+  const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
+  const row = (context.row && typeof context.row === 'object') ? context.row : {};
+  const current = (context.currentStateSummary && typeof context.currentStateSummary === 'object') ? context.currentStateSummary : {};
+  const latest = (context.latestOrderSummary && typeof context.latestOrderSummary === 'object') ? context.latestOrderSummary : {};
+  const lifecycle = (canonical && typeof canonical === 'object') ? canonical : {};
+  return {
+    portalLockState: trimString_(current.portalLockState || latest.portalLockState || row.portallockstate || row.currentportallockstate),
+    orderState: trimString_(current.currentOrderState || latest.orderState || row.currentorderstate || row.orderstate || lifecycle.orderState),
+    paymentState: trimString_(current.currentPaymentState || latest.paymentState || row.currentpaymentstate || row.paymentstate || lifecycle.paymentState),
+    productionAuthorizationState: trimString_(
+      current.currentProductionAuthorizationState ||
+      latest.productionAuthorizationState ||
+      row.currentproductionauthorizationstate ||
+      row.productionauthorizationstate ||
+      lifecycle.productionAuthorizationState
+    ),
+    paymentMethod: trimString_(current.currentPaymentMethod || latest.paymentMethodSelected || row.currentpaymentmethod || row.paymentmethodselected || lifecycle.paymentMethodSelected),
+    activeOrderId: trimString_(current.activeOrderId || latest.orderId || row.activeorderid || lifecycle.activeOrderId),
+    latestCheckoutAttemptId: trimString_(current.latestCheckoutAttemptId || row.latestcheckoutattemptid),
+    poNumber: trimString_(latest.poNumber || row.ponumber || lifecycle.poNumber),
+    poSubmittedAt: trimString_(latest.poSubmittedAt || row.posubmittedat || lifecycle.poSubmittedAt),
+    paidAt: trimString_(latest.paidAt || row.paidat || lifecycle.paidAt),
+    authorizedToProduceAt: trimString_(latest.authorizedToProduceAt || row.authorizedtoproduceat),
+    teamWorkflowMode: normalizeTeamWorkflowMode_(current.teamWorkflowMode || latest.teamWorkflowMode || row.teamworkflowmode || lifecycle.teamWorkflowMode),
+    latestInvoiceNumber: trimString_(current.latestInvoiceNumber || latest.invoiceNumber || row.latestinvoicenumber),
+    hasPurchaseOrderDraft: lifecycle.hasPurchaseOrderDraft === true
+  };
+}
+
+function buildPortalLifecycleKnownClientConsumers_() {
+  return [
+    { surface: 'Summary / Invoice tab', status: 'client-side consumer to reroute in later tranche', functions: ['getSummaryDocumentMode_', 'isLockedSummaryInvoiceMode_', 'buildSummaryEstimateControlCard_', 'buildSummaryPurchaseOrderControlCard_', 'buildSummaryManualPendingControlCard_'] },
+    { surface: 'Project editor gates', status: 'client-side consumer to reroute in later tranche', functions: ['isFinalizedPortal', 'describePortalStateForUi'] },
+    { surface: 'Order-flow modal', status: 'client-side consumer to reroute in later tranche', functions: ['canAccessOrderFlow_', 'openOrderFlowModal', 'renderOrderFlowFulfillmentSection'] },
+    { surface: 'Checkout return / resume', status: 'client-side consumer to reroute in later tranche', functions: ['describeCheckoutReturnNotice', 'startOrderFlowCheckout'] },
+    { surface: 'PO continuation', status: 'client-side consumer to reroute in later tranche', functions: ['isAwaitingPurchaseOrderPortal_', 'submitOrderFlowPo'] },
+    { surface: 'Manual payment continuation', status: 'client-side consumer to reroute in later tranche', functions: ['submitOrderFlowManual'] }
+  ];
+}
+
+function comparePortalLifecycleDiagnosticValue_(mismatches, key, canonicalValue, surfaceValue) {
+  const canonical = trimString_(canonicalValue).toLowerCase();
+  const surface = trimString_(surfaceValue).toLowerCase();
+  if (canonical === surface) return;
+  mismatches.push(buildPortalLifecycleDiagnosticIssue_(
+    key + '_mismatch',
+    'Canonical lifecycle value differs from existing server interpretation.',
+    {
+      canonical: canonical,
+      surface: surface
+    }
+  ));
+}
+
+function comparePortalLifecycleDiagnosticBoolean_(mismatches, key, canonicalValue, surfaceValue) {
+  const canonical = canonicalValue === true;
+  const surface = surfaceValue === true;
+  if (canonical === surface) return;
+  mismatches.push(buildPortalLifecycleDiagnosticIssue_(
+    key + '_mismatch',
+    'Canonical lifecycle boolean differs from existing server interpretation.',
+    {
+      canonical: canonical,
+      surface: surface
+    }
+  ));
+}
+
+function comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, key, canonicalValue, legacyValue) {
+  if (legacyValue === undefined || legacyValue === null) return;
+  const canonical = canonicalValue === true;
+  const legacy = legacyValue === true;
+  if (canonical === legacy) return;
+  warnings.push(buildPortalLifecycleDiagnosticIssue_(
+    key + '_drift',
+    'Legacy dashboard interpretation differs from the canonical lifecycle contract.',
+    {
+      canonical: canonical,
+      legacy: legacy
+    }
+  ));
+}
+
+function buildPortalLifecycleDiagnosticIssue_(code, message, details) {
+  const issue = {
+    code: trimString_(code),
+    message: trimString_(message)
+  };
+  if (details !== undefined && details !== null && details !== '') {
+    issue.details = details;
+  }
+  return issue;
+}
+
+function buildPortalLifecycleHydratedContext_(workflowContext) {
   const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
-  summary.workflowContext = {
+  return {
     variant: trimString_(context.variant),
     lifecycleStage: trimString_(context.lifecycleStage),
+    lifecycleState: trimString_(context.lifecycleState),
     summaryDocumentMode: trimString_(context.summaryDocumentMode),
+    summaryControlsMode: trimString_(context.summaryControlsMode),
+    paymentPath: trimString_(context.paymentPath),
+    paymentMethod: trimString_(context.paymentMethod),
+    paymentDue: context.paymentDue === true,
+    paymentReceived: context.paymentReceived === true,
+    productionStartAt: trimString_(context.productionStartAt),
+    productionTargetCompleteAt: trimString_(context.productionTargetCompleteAt),
+    productionCompletionAt: trimString_(context.productionCompletionAt),
+    productionCompletionSource: trimString_(context.productionCompletionSource),
+    productionCurrent: context.productionCurrent === true,
+    productionComplete: context.productionComplete === true,
+    nextClientAction: trimString_(context.nextClientAction),
+    nextTeamAction: trimString_(context.nextTeamAction),
     isPoFlow: context.isPoFlow === true,
     hasPurchaseOrderDraft: context.hasPurchaseOrderDraft === true,
     purchaseOrderDraftStatus: trimString_(context.purchaseOrderDraftStatus),
@@ -11347,42 +12695,20 @@ function attachTeamWorkflowMetaToOrderSummary_(orderSummary, workflowContext) {
     canCancelPendingClientFlow: context.canCancelPendingClientFlow === true,
     cancelFlowKind: trimString_(context.cancelFlowKind)
   };
+}
+
+function attachTeamWorkflowMetaToOrderSummary_(orderSummary, workflowContext) {
+  const summary = Object.assign({}, (orderSummary && typeof orderSummary === 'object') ? orderSummary : {});
+  summary.workflowContext = buildPortalLifecycleHydratedContext_(workflowContext);
   summary.teamControls = {
-    actions: buildTeamWorkflowActionMeta_(context)
+    actions: buildTeamWorkflowActionMeta_(workflowContext)
   };
   return summary;
 }
 
 function attachTeamWorkflowMetaToCurrentStateSummary_(currentStateSummary, workflowContext) {
   const summary = Object.assign({}, (currentStateSummary && typeof currentStateSummary === 'object') ? currentStateSummary : {});
-  const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
-  summary.workflowContext = {
-    variant: trimString_(context.variant),
-    lifecycleStage: trimString_(context.lifecycleStage),
-    summaryDocumentMode: trimString_(context.summaryDocumentMode),
-    isPoFlow: context.isPoFlow === true,
-    hasPurchaseOrderDraft: context.hasPurchaseOrderDraft === true,
-    purchaseOrderDraftStatus: trimString_(context.purchaseOrderDraftStatus),
-    isLocked: context.isLocked === true,
-    isEditable: context.isEditable === true,
-    isCheckoutStarted: context.isCheckoutStarted === true,
-    isPoDraftLocked: context.isPoDraftLocked === true,
-    isManualPendingLocked: context.isManualPendingLocked === true,
-    isAwaitingPoSubmission: context.isAwaitingPoSubmission === true,
-    isPoSubmitted: context.isPoSubmitted === true,
-    isPoSubmittedUnpaid: context.isPoSubmittedUnpaid === true,
-    isPaymentReceived: context.isPaymentReceived === true,
-    isPaymentPending: context.isPaymentPending === true,
-    isProductionAuthorized: context.isProductionAuthorized === true,
-    hasPlacedOrder: context.hasPlacedOrder === true,
-    hasLockedInvoice: context.hasLockedInvoice === true,
-    hasSelectedJobs: context.hasSelectedJobs === true,
-    hasAnyActualJobCompletion: context.hasAnyActualJobCompletion === true,
-    allSelectedJobsCompleted: context.allSelectedJobsCompleted === true,
-    teamWorkflowMode: normalizeTeamWorkflowMode_(context.teamWorkflowMode),
-    canCancelPendingClientFlow: context.canCancelPendingClientFlow === true,
-    cancelFlowKind: trimString_(context.cancelFlowKind)
-  };
+  summary.workflowContext = buildPortalLifecycleHydratedContext_(workflowContext);
   return summary;
 }
 
