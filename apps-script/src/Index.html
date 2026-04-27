@@ -17332,16 +17332,7 @@
   }
 
   function isFinalizedPortal(options){
-    const lockState = readPortalLockStateSignal(options);
-    if (lockState === 'editable') return false;
-    if (lockState === 'locked') return true;
-    const status = readPortalStatusSignal();
-    if (status === 'saved' || status === 'editable' || status === 'editable / estimate') return false;
-    if (hasSubmittedStateSignal()) return true;
-    if (FINAL_LOCK_STATUSES.has(status)) return true;
-    // Some legacy rows may have non-final submittedAt values from older save flows.
-    // Only explicit final states or submittedStateJson should lock the portal.
-    return false;
+    return getPortalEditorLifecycleUiState_(options).isReadOnly === true;
   }
 
   let IS_READ_ONLY = false;
@@ -17801,6 +17792,16 @@
     };
   }
 
+  function normalizeWorkflowContextObject_(rawWorkflow){
+    const parsed = safeJsonParse(rawWorkflow, {});
+    return clonePlainObject(parsed);
+  }
+
+  function normalizeTeamControlsObject_(rawTeamControls){
+    const parsed = safeJsonParse(rawTeamControls, rawTeamControls);
+    return clonePlainObject((parsed && parsed.actions) ? parsed : { actions: {} });
+  }
+
   /* ---------------- Client State Normalization + VM Hydration ---------------- */
 
   function normalizePortalState(rawState){
@@ -18132,9 +18133,9 @@
       stripeSessionId: String(raw.stripeSessionId || '').trim(),
       lastUpdatedAt: String(raw.lastUpdatedAt || '').trim(),
       teamWorkflowMode: String(raw.teamWorkflowMode || '').trim(),
-      workflowContext: clonePlainObject(raw.workflowContext || {}),
-      teamControls: clonePlainObject((raw.teamControls && raw.teamControls.actions) ? raw.teamControls : { actions: {} }),
-      teamJobCompletionByJobId: clonePlainObject(raw.teamJobCompletionByJobId || {}),
+      workflowContext: normalizeWorkflowContextObject_(raw.workflowContext),
+      teamControls: normalizeTeamControlsObject_(raw.teamControls),
+      teamJobCompletionByJobId: clonePlainObject(safeJsonParse(raw.teamJobCompletionByJobId, {})),
       selectedJobs: Array.isArray(raw.selectedJobs) ? raw.selectedJobs.map(job => ({
         printJobId: String(job && job.printJobId || '').trim(),
         printJobNumber: String(job && job.printJobNumber || '').trim(),
@@ -18159,7 +18160,7 @@
       currentProductionAuthorizationState: String(raw.currentProductionAuthorizationState || '').trim(),
       currentPaymentMethod: String(raw.currentPaymentMethod || '').trim(),
       teamWorkflowMode: String(raw.teamWorkflowMode || '').trim(),
-      workflowContext: clonePlainObject(raw.workflowContext || {}),
+      workflowContext: normalizeWorkflowContextObject_(raw.workflowContext),
       purchaseOrderDraft: normalizePurchaseOrderDraftState_(raw.purchaseOrderDraft),
       termsApproved: raw.termsApproved === true,
       taxExemptApproved: raw.taxExemptApproved === true,
@@ -18220,21 +18221,22 @@
     INITIAL_TOKEN = String(VM.token || '').trim();
     CURRENT_TOKEN = INITIAL_TOKEN;
     MESSAGE_LOG_KEY = detectMessageLogKey(SOURCE_PORTAL_STATE);
+    PORTAL_STATE = normalizePortalState(VM.portalState);
+    ACCOUNT_SUMMARY = normalizeAccountSummary(VM.accountSummary);
+    LATEST_ORDER_SUMMARY = normalizeOrderSummary(VM.latestOrderSummary);
+    CURRENT_STATE_SUMMARY = normalizeCurrentStateSummary(VM.currentStateSummary);
     IS_READ_ONLY = isFinalizedPortal({
       vm: VM,
       row: ROW,
-      currentStateSummary: VM.currentStateSummary,
-      latestOrderSummary: VM.latestOrderSummary
+      currentStateSummary: CURRENT_STATE_SUMMARY,
+      latestOrderSummary: LATEST_ORDER_SUMMARY,
+      portalMode: PORTAL_MODE
     });
-    PORTAL_STATE = normalizePortalState(VM.portalState);
     PORTAL_STATE.isReadOnly = IS_READ_ONLY;
-    ACCOUNT_SUMMARY = normalizeAccountSummary(VM.accountSummary);
-    LATEST_ORDER_SUMMARY = normalizeOrderSummary(VM.latestOrderSummary);
     ORDER_FLOW_PO_SHIPPING_DETAILS = cloneOrderFlowShippingDetails_(
       (PORTAL_STATE && PORTAL_STATE.shippingDetails)
       || (LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.shippingDetails)
     );
-    CURRENT_STATE_SUMMARY = normalizeCurrentStateSummary(VM.currentStateSummary);
     TEAM_MODE_AUTH_KEY = IS_TEAM ? readStoredTeamModeAuthKey(INITIAL_TOKEN) : '';
     TEAM_MODE_UNLOCKED = IS_TEAM ? (readStoredTeamModeUnlock(INITIAL_TOKEN) && !!TEAM_MODE_AUTH_KEY) : false;
     if (!IS_TEAM && INITIAL_TOKEN) {
@@ -18268,7 +18270,7 @@
     };
   }
 
-  const CAN_EDIT = () => PORTAL_MODE === 'client' && !IS_READ_ONLY;
+  const CAN_EDIT = () => getPortalEditorLifecycleUiState_().isReadOnly !== true;
 
   const REMOVED_ADDONS_BY_JOB = {};
   const JOB_DOM = new Map();
@@ -19575,6 +19577,8 @@
   let COLOR_REMOVE_CONFIRM_RESOLVER = null;
   let UNSAVED_LEAVE_ACTION_PENDING = false;
   let SNAPSHOT_DIRTY_BASELINE_KEY = '';
+  let SNAPSHOT_DIRTY_BASELINE_FRAME = 0;
+  let SNAPSHOT_DIRTY_BASELINE_READY = false;
   let DASHBOARD_VIEW_VISIBLE_AT = 0;
   let DASHBOARD_OPEN_ARMED_BTN = null;
   let DASHBOARD_OPEN_ARMED_AT = 0;
@@ -20509,21 +20513,45 @@
 
   function resetSnapshotDirtyBaseline(options){
     const opts = (options && typeof options === 'object') ? options : {};
-    if (opts.clear === true || CURRENT_VIEW !== VIEW_SNAPSHOT || !CAN_EDIT()) {
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
+    if (SNAPSHOT_DIRTY_BASELINE_FRAME) {
+      cancelAnimationFrame(SNAPSHOT_DIRTY_BASELINE_FRAME);
+      SNAPSHOT_DIRTY_BASELINE_FRAME = 0;
+    }
+    SNAPSHOT_DIRTY_BASELINE_READY = false;
+    if (opts.clear === true || CURRENT_VIEW !== VIEW_SNAPSHOT || !editorLifecycle.shouldTrackUnsavedChanges) {
       SNAPSHOT_DIRTY_BASELINE_KEY = '';
+      closeUnsavedLeaveModal({ immediate: true });
       return;
     }
-    try {
-      const currentState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
-      SNAPSHOT_DIRTY_BASELINE_KEY = getComparablePortalStateKey(currentState);
-    } catch (_) {
-      SNAPSHOT_DIRTY_BASELINE_KEY = '';
+    const applyBaseline = () => {
+      SNAPSHOT_DIRTY_BASELINE_FRAME = 0;
+      try {
+        const currentState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+        SNAPSHOT_DIRTY_BASELINE_KEY = getComparablePortalStateKey(currentState);
+      } catch (_) {
+        SNAPSHOT_DIRTY_BASELINE_KEY = '';
+      }
+      SNAPSHOT_DIRTY_BASELINE_READY = Boolean(SNAPSHOT_DIRTY_BASELINE_KEY);
+      if (!hasUnsavedSnapshotChanges()) {
+        closeUnsavedLeaveModal({ immediate: true });
+      }
+      setSaveControls();
+    };
+    if (opts.defer === false) {
+      applyBaseline();
+      return;
     }
+    SNAPSHOT_DIRTY_BASELINE_FRAME = requestAnimationFrame(() => {
+      SNAPSHOT_DIRTY_BASELINE_FRAME = requestAnimationFrame(applyBaseline);
+    });
   }
 
   function hasUnsavedSnapshotChanges(){
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
     if (CURRENT_VIEW !== VIEW_SNAPSHOT) return false;
-    if (!CAN_EDIT()) return false;
+    if (!editorLifecycle.shouldTrackUnsavedChanges) return false;
+    if (!SNAPSHOT_DIRTY_BASELINE_READY) return false;
     if (!SNAPSHOT_DIRTY_BASELINE_KEY) return false;
     try {
       const currentState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
@@ -22866,11 +22894,7 @@
   }
 
   function shouldAutoShowIntro(){
-    const orderState = String(CURRENT_STATE_SUMMARY.currentOrderState || '').trim().toLowerCase();
-    const paymentState = String(CURRENT_STATE_SUMMARY.currentPaymentState || '').trim().toLowerCase();
-    if (isInvoiceSummaryDocumentMode_(getSummaryDocumentMode_())) return false;
-    if (paymentState === 'checkout_created' || orderState === 'payment_in_progress' || isAwaitingPurchaseOrderPortal_()) return false;
-    return true;
+    return getPortalEditorLifecycleUiState_().canAccessOrderFlow === true;
   }
 
   function getCurrentPurchaseOrderDraft_(){
@@ -22881,25 +22905,11 @@
   }
 
   function isAwaitingPurchaseOrderPortal_(){
-    const purchaseOrderDraft = getCurrentPurchaseOrderDraft_();
-    const workflowContext = (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.workflowContext && typeof CURRENT_STATE_SUMMARY.workflowContext === 'object')
-      ? CURRENT_STATE_SUMMARY.workflowContext
-      : ((LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.workflowContext && typeof LATEST_ORDER_SUMMARY.workflowContext === 'object')
-        ? LATEST_ORDER_SUMMARY.workflowContext
-        : {});
-    if (workflowContext.isPoSubmitted === true) return false;
-    if (workflowContext.isPoDraftLocked === true) return true;
-    if (purchaseOrderDraft) return true;
-    const orderState = String(
-      (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.currentOrderState)
-      || (LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.orderState)
-      || ''
-    ).trim().toLowerCase();
-    return orderState === 'awaiting_po_submission';
+    return getPortalEditorLifecycleUiState_().isPoDraftResume === true;
   }
 
   function canAccessOrderFlow_(){
-    return CAN_EDIT() || isAwaitingPurchaseOrderPortal_();
+    return getPortalEditorLifecycleUiState_().canAccessOrderFlow === true;
   }
 
   function setImageSrcWithFallback(imgEl, src, fallback){
@@ -30979,7 +30989,8 @@
   }
 
   function applyOrderFlowFulfillmentSelection_(method){
-    if (isAwaitingPurchaseOrderPortal_() || isLockedSummaryInvoiceMode_() || IS_READ_ONLY) {
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
+    if (editorLifecycle.isPoDraftResume || !editorLifecycle.canAccessOrderFlow) {
       return getOrderFlowFulfillmentState_(ORDER_FLOW_SELECTED_FULFILLMENT);
     }
     const fulfillment = getOrderFlowFulfillmentState_(method);
@@ -30993,7 +31004,8 @@
   }
 
   function applyOrderFlowMethodSelection_(method){
-    if (isLockedSummaryInvoiceMode_() || IS_READ_ONLY) {
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
+    if (!editorLifecycle.canAccessOrderFlow && !editorLifecycle.isPoDraftResume) {
       return;
     }
     const normalizedMethod = String(method || '').trim().toLowerCase();
@@ -31003,7 +31015,7 @@
       renderOrderFlowFulfillmentSection();
       return;
     }
-    if (isAwaitingPurchaseOrderPortal_() && normalizedMethod !== 'purchase_order') {
+    if (editorLifecycle.isPoDraftResume && normalizedMethod !== 'purchase_order') {
       return;
     }
     ORDER_FLOW_SELECTED_METHOD = normalizedMethod;
@@ -31018,7 +31030,8 @@
   }
 
   function clearOrderFlowSelections_(){
-    if (isAwaitingPurchaseOrderPortal_() || isLockedSummaryInvoiceMode_() || IS_READ_ONLY) return;
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
+    if (editorLifecycle.isPoDraftResume || !editorLifecycle.canAccessOrderFlow) return;
     ORDER_FLOW_SELECTED_FULFILLMENT = '';
     ORDER_FLOW_SHIPPING_CHARGE_CENTS = 0;
     ORDER_FLOW_SHIPPING_MODE_LABEL = '';
@@ -31096,8 +31109,9 @@
   function renderOrderFlowFulfillmentSection(){
     const readyDateLabel = getOrderFlowReadyDateLabel_();
     const cardFee = getOrderFlowConvenienceFeeLabel_(0.03);
-    const poResumeOnly = isAwaitingPurchaseOrderPortal_();
-    const selectionLocked = poResumeOnly || isLockedSummaryInvoiceMode_() || IS_READ_ONLY;
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
+    const poResumeOnly = editorLifecycle.isPoDraftResume;
+    const selectionLocked = !editorLifecycle.canAccessOrderFlow;
     const poAvailable = isOrderFlowPurchaseOrderAvailable_();
     if (!poAvailable && ORDER_FLOW_SELECTED_METHOD === 'purchase_order' && !poResumeOnly) {
       ORDER_FLOW_SELECTED_METHOD = '';
@@ -31783,7 +31797,12 @@
 
   function openOrderFlowModal(){
     if (!orderFlowBackdrop) return;
-    if (IS_READ_ONLY && !isAwaitingPurchaseOrderPortal_()) {
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
+    if (!editorLifecycle.canAccessOrderFlow) {
+      if (editorLifecycle.isPoDraftResume) {
+        showNotice('Purchase-order submission continues from the Summary / Invoice tab.', 'ok');
+        return;
+      }
       showNotice('This order has already been placed. Messaging is still available if you need follow-up support.', 'ok');
       return;
     }
@@ -34913,6 +34932,73 @@
     };
   }
 
+  function getPortalEditorLifecycleUiState_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const order = normalizeOrderSummary(opts.orderSummary || opts.latestOrderSummary || LATEST_ORDER_SUMMARY);
+    const current = normalizeCurrentStateSummary(opts.currentStateSummary || CURRENT_STATE_SUMMARY);
+    const portalMode = normalizePortalMode(opts.portalMode || opts.mode || PORTAL_MODE || (opts.vm && opts.vm.mode));
+    const summaryLifecycle = getSummaryLifecycleUiState_({
+      orderSummary: order,
+      currentStateSummary: current,
+      documentMode: opts.documentMode
+    });
+    const workflow = summaryLifecycle.workflow || {};
+    const lifecycleState = String(summaryLifecycle.lifecycleState || '').trim().toLowerCase();
+    const lifecycleStage = String(summaryLifecycle.lifecycleStage || '').trim().toLowerCase();
+    const summaryDocumentMode = String(summaryLifecycle.documentMode || '').trim().toLowerCase();
+    const summaryControlsMode = String(summaryLifecycle.controlsMode || '').trim().toLowerCase();
+    const rawEditorMode = String(summaryLifecycle.editorMode || workflow.editorMode || '').trim().toLowerCase();
+    const editorMode = rawEditorMode || (
+      summaryDocumentMode && !isInvoiceSummaryDocumentMode_(summaryDocumentMode)
+        ? 'editable'
+        : (lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable ? 'editable' : 'locked')
+    );
+    const saveAllowed = portalMode === 'client' && (
+      summaryLifecycle.saveAllowed === true
+      || (editorMode === 'editable' && !isInvoiceSummaryDocumentMode_(summaryDocumentMode))
+    );
+    const orderAllowed = portalMode === 'client' && (
+      summaryLifecycle.orderAllowed === true
+      || (
+        editorMode === 'editable'
+        && !isInvoiceSummaryDocumentMode_(summaryDocumentMode)
+        && summaryControlsMode !== 'po_submission'
+        && summaryControlsMode !== 'manual_pending'
+      )
+    );
+    const isPoDraftResume = portalMode === 'client' && (
+      summaryControlsMode === 'po_submission'
+      || summaryDocumentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
+      || lifecycleState === 'po_draft_invoice_prepared'
+      || lifecycleState === 'awaiting_po_submission'
+      || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+    );
+    const isReadOnly = portalMode !== 'client' || editorMode !== 'editable';
+    return {
+      workflow: workflow,
+      order: order,
+      current: current,
+      portalMode: portalMode,
+      lifecycleState: lifecycleState,
+      lifecycleStage: lifecycleStage,
+      summaryDocumentMode: summaryDocumentMode,
+      summaryControlsMode: summaryControlsMode,
+      paymentDue: summaryLifecycle.paymentDue === true,
+      paymentReceived: summaryLifecycle.paymentReceived === true,
+      productionCurrent: summaryLifecycle.productionCurrent === true,
+      productionComplete: summaryLifecycle.productionComplete === true,
+      nextClientAction: String(summaryLifecycle.nextClientAction || '').trim().toLowerCase(),
+      nextTeamAction: String(summaryLifecycle.nextTeamAction || '').trim().toLowerCase(),
+      editorMode: editorMode,
+      saveAllowed: saveAllowed,
+      orderAllowed: orderAllowed,
+      isReadOnly: isReadOnly,
+      isPoDraftResume: isPoDraftResume,
+      canAccessOrderFlow: orderAllowed,
+      shouldTrackUnsavedChanges: saveAllowed
+    };
+  }
+
   function getLockedSummarySuccessfulPaymentTypeLabel_(orderSummary){
     const lifecycle = getSummaryLifecycleUiState_({
       orderSummary: orderSummary || LATEST_ORDER_SUMMARY
@@ -37343,6 +37429,7 @@
       updateHeaderTotals(0, 0, false);
       renderHeaderDeliverySummary();
       applyActivePrintJobVisibility();
+      setSaveControls();
       requestHeaderStateUpdate();
       return;
     }
@@ -37379,6 +37466,7 @@
     requestAnimationFrame(() => {
       fitProjectSnapshotJobTitles_();
     });
+    setSaveControls();
     requestHeaderStateUpdate();
   }
 
@@ -37644,6 +37732,7 @@
     updatePrintJobTabSummaries();
     applyActivePrintJobVisibility();
     renderPortalStatusBanner();
+    setSaveControls();
   }
 
   function setHeaderDetails(){
@@ -37760,7 +37849,9 @@
     const suppressSuccessNotice = Boolean(opts.suppressSuccessNotice);
     const showLoader = Boolean(opts.showLoader);
     const keepLoaderOnSuccess = Boolean(opts.keepLoaderOnSuccess);
-    if (!CAN_EDIT()) return false;
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
+    if (!editorLifecycle.saveAllowed) return false;
+    if (!hasUnsavedSnapshotChanges()) return false;
 
     if (showLoader) {
       rtShowLoader('Saving changes…', '');
@@ -37800,21 +37891,20 @@
   }
 
   function setSaveControls(){
-    const canEdit = CAN_EDIT();
+    const editorLifecycle = getPortalEditorLifecycleUiState_();
     const hideTeamActions = IS_TEAM;
-    const canAccessOrderFlow = canAccessOrderFlow_();
-    const poPendingSubmission = isAwaitingPurchaseOrderPortal_();
+    const hasDirtyChanges = hasUnsavedSnapshotChanges();
 
     if (saveBtnMini) {
       saveBtnMini.style.display = hideTeamActions ? 'none' : '';
-      saveBtnMini.disabled = !canEdit;
+      saveBtnMini.disabled = !(editorLifecycle.saveAllowed && hasDirtyChanges);
       saveBtnMini.textContent = 'Save';
     }
 
     if (placeOrderBtnMini) {
       placeOrderBtnMini.style.display = hideTeamActions ? 'none' : '';
-      placeOrderBtnMini.disabled = hideTeamActions ? true : (poPendingSubmission ? true : !canAccessOrderFlow);
-      placeOrderBtnMini.title = poPendingSubmission
+      placeOrderBtnMini.disabled = hideTeamActions ? true : !editorLifecycle.canAccessOrderFlow;
+      placeOrderBtnMini.title = editorLifecycle.isPoDraftResume
         ? 'Purchase-order submission continues from the Summary tab.'
         : '';
       placeOrderBtnMini.setAttribute('aria-disabled', placeOrderBtnMini.disabled ? 'true' : 'false');
@@ -38869,6 +38959,7 @@
   }
 
   function startPortalApp(){
+    closeUnsavedLeaveModal({ immediate: true });
     setView(VIEW_SNAPSHOT);
     hydrateUIFromPortalState(VM.portalState);
     setHeaderDetails();
