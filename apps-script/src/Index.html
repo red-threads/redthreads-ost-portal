@@ -26059,12 +26059,6 @@
 
   function renderTeamAccountAdminModal_(){
     const busy = String(TEAM_ACCOUNT_ADMIN_BUSY_ACTION || '').trim();
-    const actionMap = (
-      LATEST_ORDER_SUMMARY &&
-      LATEST_ORDER_SUMMARY.teamControls &&
-      LATEST_ORDER_SUMMARY.teamControls.actions &&
-      typeof LATEST_ORDER_SUMMARY.teamControls.actions === 'object'
-    ) ? LATEST_ORDER_SUMMARY.teamControls.actions : {};
     const controls = [
       [teamResetCreditTermsBtn, 'reset_terms', busy === 'reset_terms', 'Reset Credit Terms', 'Resetting…'],
       [teamResetTaxExemptBtn, 'reset_tax', busy === 'reset_tax', 'Reset Tax Exemption', 'Resetting…'],
@@ -26080,11 +26074,9 @@
     controls.forEach(entry => {
       const btn = entry[0];
       if (!btn) return;
-      const actionMeta = (actionMap && typeof actionMap[entry[1]] === 'object') ? actionMap[entry[1]] : null;
-      const visible = actionMeta ? actionMeta.visible === true : true;
-      const idleText = actionMeta && String(actionMeta.label || '').trim()
-        ? String(actionMeta.label || '').trim()
-        : entry[3];
+      const actionMeta = getTeamAdminActionMeta_(entry[1]);
+      const visible = actionMeta.visible === true;
+      const idleText = String(actionMeta.label || '').trim() || entry[3];
       btn.hidden = !visible;
       btn.disabled = !!busy || !visible;
       btn.textContent = entry[2] ? entry[4] : idleText;
@@ -26097,6 +26089,56 @@
     if (teamAccountAdminJobsCancelBtn) teamAccountAdminJobsCancelBtn.disabled = !!busy;
     if (teamAccountAdminJobsSaveBtn) teamAccountAdminJobsSaveBtn.disabled = !!busy;
     if (teamAccountAdminCloseBtn) teamAccountAdminCloseBtn.disabled = !!busy;
+  }
+
+  function getTeamAdminActionMeta_(actionName, options){
+    const actionKey = String(actionName || '').trim();
+    const opts = (options && typeof options === 'object') ? options : {};
+    const workflow = normalizeWorkflowContextObject_(
+      opts.workflowContext || getPortalWorkflowContext_(opts)
+    );
+    const order = normalizeOrderSummary(opts.orderSummary || LATEST_ORDER_SUMMARY);
+    const actionMap = (
+      order &&
+      order.teamControls &&
+      order.teamControls.actions &&
+      typeof order.teamControls.actions === 'object'
+    ) ? order.teamControls.actions : {};
+    const serverMeta = (actionMap && typeof actionMap[actionKey] === 'object') ? actionMap[actionKey] : null;
+    const canonicalVisibility = {
+      reset_terms: workflow.canResetCreditTerms === true,
+      reset_tax: workflow.canResetTaxExemption === true,
+      manual_payment: workflow.canMarkManualPayment === true,
+      po_payment: workflow.canMarkPoPayment === true,
+      unlock_project: workflow.canUnlock === true,
+      reset_checkout: workflow.canResetCheckout === true,
+      reopen_po: workflow.canReopenPo === true,
+      resend_link: workflow.canResendLink === true,
+      lock_project: workflow.canLockWithoutOrdering === true,
+      mark_jobs_completed: workflow.canManageJobCompletion === true
+    };
+    const canonicalLabels = {
+      reset_terms: 'Reset Credit Terms',
+      reset_tax: 'Reset Tax Exemption',
+      manual_payment: 'Mark Manual Payment Received',
+      po_payment: 'Mark PO Payment Received',
+      unlock_project: 'Unlock Project Snapshot',
+      reset_checkout: 'Reset Checkout Selection',
+      reopen_po: 'Reopen PO Submission',
+      resend_link: workflow.isPoFlow === true ? 'Resend PO Return Link' : 'Resend Invoice Link',
+      lock_project: 'Lock Project Without Ordering',
+      mark_jobs_completed: workflow.hasAnyActualJobCompletion === true
+        ? 'Manage Job Completion Dates'
+        : 'Mark Jobs as Completed'
+    };
+    const visible = Object.prototype.hasOwnProperty.call(canonicalVisibility, actionKey)
+      ? canonicalVisibility[actionKey] === true
+      : (serverMeta ? serverMeta.visible === true : false);
+    const serverLabel = serverMeta && String(serverMeta.label || '').trim();
+    return {
+      visible: visible,
+      label: serverLabel || canonicalLabels[actionKey] || ''
+    };
   }
 
   function openTeamAccountAdminModal_(){
@@ -26148,14 +26190,7 @@
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to complete that action.'));
       }
-      if (resp.portalPayload && typeof resp.portalPayload === 'object') {
-        applyPortalPayloadInPlace(resp.portalPayload, {
-          source: 'team-account-admin',
-          fromAuthShell: OPENED_FROM_AUTH_SHELL,
-          reason: 'team-account-admin',
-          preserveTeamMode: true
-        });
-      } else if (resp.accountSummary) {
+      if (!syncTeamAdminLifecycleFromResponse_(resp) && resp.accountSummary) {
         applyReturnedAccountSummary_(resp.accountSummary);
       }
       setTeamAccountAdminMessage_(
@@ -26172,6 +26207,32 @@
       TEAM_ACCOUNT_ADMIN_BUSY_ACTION = '';
       renderTeamAccountAdminModal_();
     }
+  }
+
+  function syncTeamAdminLifecycleFromResponse_(resp){
+    const response = (resp && typeof resp === 'object') ? resp : null;
+    if (!response) return false;
+    const hasLifecyclePayload = !!(
+      response.portalPayload
+      || response.currentStateSummary
+      || response.orderSummary
+      || response.latestOrderSummary
+      || response.workflowContext
+      || response.accountSummary
+    );
+    if (!hasLifecyclePayload) return false;
+    if (response.portalPayload && typeof response.portalPayload === 'object') {
+      applyPortalPayloadInPlace(response.portalPayload, {
+        source: 'team-account-admin',
+        fromAuthShell: OPENED_FROM_AUTH_SHELL,
+        reason: 'team-account-admin',
+        preserveTeamMode: true
+      });
+    } else if (response.accountSummary) {
+      applyReturnedAccountSummary_(response.accountSummary);
+    }
+    updateOrderStateFromResponse(response);
+    return true;
   }
 
   function submitTeamAccountAdminConfirmPanel_(){

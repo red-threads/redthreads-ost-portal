@@ -7796,7 +7796,10 @@ function buildJobCompletionTimestampFromDateInput_(value) {
 }
 
 function buildTeamOrderAdminResponse_(ctx, orderSummary, rowInfo, message) {
-  const refreshedRowInfo = rowInfo || ctx.rowInfo || findRowByToken_(ctx.infra.exportSheet, ctx.token);
+  const sourceRowInfo = rowInfo || ctx.rowInfo || findRowByToken_(ctx.infra.exportSheet, ctx.token);
+  const refreshedRowInfo = sourceRowInfo
+    ? buildRowInfoFromSheet_(ctx.infra.exportSheet, sourceRowInfo.row)
+    : findRowByToken_(ctx.infra.exportSheet, ctx.token);
   const refreshedRow = refreshedRowInfo && refreshedRowInfo.rowObjNormalized ? refreshedRowInfo.rowObjNormalized : {};
   const rawOrderSummary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : null;
   const refreshedCurrentStateSummary = buildCurrentOrderStateSummaryFromRow_(
@@ -7810,10 +7813,19 @@ function buildTeamOrderAdminResponse_(ctx, orderSummary, rowInfo, message) {
     currentStateSummary: refreshedCurrentStateSummary,
     accountSummary: ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {}
   });
+  const decoratedOrderSummary = rawOrderSummary
+    ? attachTeamWorkflowMetaToOrderSummary_(rawOrderSummary, refreshedWorkflowContext)
+    : null;
+  const decoratedCurrentStateSummary = attachTeamWorkflowMetaToCurrentStateSummary_(
+    refreshedCurrentStateSummary,
+    refreshedWorkflowContext
+  );
   return {
     ok: true,
     accountSummary: ctx.accountInfo.summary,
-    orderSummary: rawOrderSummary ? attachTeamWorkflowMetaToOrderSummary_(rawOrderSummary, refreshedWorkflowContext) : null,
+    orderSummary: decoratedOrderSummary,
+    currentStateSummary: decoratedCurrentStateSummary,
+    workflowContext: buildPortalLifecycleHydratedContext_(refreshedWorkflowContext),
     portalPayload: refreshPortalPayloadForToken_(ctx.token, {
       cfg: ctx.cfg,
       ss: ctx.ss,
@@ -8214,6 +8226,15 @@ function adminMarkJobsCompleted(payload) {
 function adminMarkManualPaymentReceived_(payload) {
   const ctx = buildTeamOrderAdminContext_(payload);
   assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'manual_payment');
+  if (ctx.workflowContext.paymentReceived === true || ctx.workflowContext.isPaymentReceived === true) {
+    throw new Error('Manual payment has already been recorded for this project.');
+  }
+  if (ctx.workflowContext.productionComplete === true) {
+    throw new Error('Manual payment cannot be recorded after production is already complete.');
+  }
+  if (trimString_(ctx.workflowContext.lifecycleStage) !== PORTAL_LIFECYCLE_STAGES.manual_pending_locked) {
+    throw new Error('Manual payment can only be recorded while the project is awaiting manual payment.');
+  }
   const p = (payload && typeof payload === 'object') ? payload : {};
   const token = ctx.token;
   const cfg = ctx.cfg;
@@ -8268,6 +8289,15 @@ function adminMarkManualPaymentReceived(payload) {
 function adminMarkPurchaseOrderReceived_(payload) {
   const ctx = buildTeamOrderAdminContext_(payload);
   assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'po_payment');
+  if (ctx.workflowContext.paymentReceived === true || ctx.workflowContext.isPaymentReceived === true) {
+    throw new Error('Purchase-order payment has already been recorded for this project.');
+  }
+  if (ctx.workflowContext.productionComplete === true) {
+    throw new Error('Purchase-order payment cannot be recorded after production is already complete.');
+  }
+  if (ctx.workflowContext.isPoSubmittedUnpaid !== true) {
+    throw new Error('Purchase-order payment can only be recorded after the final PO has been submitted and payment is still due.');
+  }
   const p = (payload && typeof payload === 'object') ? payload : {};
   const token = ctx.token;
   const cfg = ctx.cfg;
@@ -8388,6 +8418,31 @@ function resetAccountDocumentWorkflow_(payload, documentType) {
   const ctx = buildAccountDocumentContext_(payload);
   if (!ctx || ctx.ok !== true) return ctx;
   assertTeamModeAuthorized_(ctx, payload);
+  const token = resolveAccountDocumentPortalToken_(ctx);
+  if (token) {
+    const rowInfo = ctx.exportRowInfo || findRowByToken_(ctx.infra.exportSheet, token);
+    const latestOrderInfo = getLatestPortalOrderByToken_(token, {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      ordersSheet: ctx.infra.ordersSheet
+    });
+    const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
+    const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(
+      rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {},
+      ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {},
+      latestOrderSummary
+    );
+    const workflowContext = buildTeamWorkflowContext_({
+      row: rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {},
+      latestOrderSummary: latestOrderSummary,
+      currentStateSummary: currentStateSummary,
+      accountSummary: ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {}
+    });
+    assertTeamWorkflowActionAllowed_(
+      workflowContext,
+      documentType === ACCOUNT_DOCUMENT_TYPES.credit_terms ? 'reset_terms' : 'reset_tax'
+    );
+  }
   const definition = getRequiredAccountDocumentDefinition_(documentType, ctx.cfg);
   const accountRow = ctx.accountInfo && ctx.accountInfo.rowInfo && ctx.accountInfo.rowInfo.rowObjNormalized
     ? ctx.accountInfo.rowInfo.rowObjNormalized
@@ -8408,7 +8463,6 @@ function resetAccountDocumentWorkflow_(payload, documentType) {
     updates
   );
   refreshAccountDocumentContextAccount_(ctx);
-  const token = resolveAccountDocumentPortalToken_(ctx);
   return {
     ok: true,
     accountSummary: ctx.accountInfo.summary,
@@ -11803,24 +11857,6 @@ function derivePortalLifecycle_(context) {
   const hasLockedInvoice = summaryDocumentMode !== SUMMARY_DOCUMENT_MODES.estimate;
   const hasSelectedJobs = selectedJobs.length > 0;
   const hasAnyActualJobCompletion = actualCompletionMeta.hasAnyActualCompletion === true;
-  const canManageJobCompletion = hasSelectedJobs
-    && (isProductionAuthorized || isPaymentReceived || hasAnyCompletionSignal);
-  const canUnlock = isTeamHold
-    || isCheckoutReset
-    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
-    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked;
-  const canResetCheckout = lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started
-    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
-    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked;
-  const canReopenPo = isLockedPoSubmittedUnpaid;
-  const canMarkManualPayment = lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked;
-  const canMarkPoPayment = isLockedPoSubmittedUnpaid;
-  const canResendLink = hasLockedInvoice && !isTeamHold && !isCheckoutReset;
-  const canLockWithoutOrdering = !isLocked
-    && lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable
-    && !isPaymentReceived
-    && !isPoSubmitted
-    && !trimString_(activeOrderId);
   const isPaymentPending = lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started
     || lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked
     || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_submitted_unpaid;
@@ -11887,6 +11923,27 @@ function derivePortalLifecycle_(context) {
     paymentMethodSelected: paymentMethodSelected,
     readinessFlags: opts.readinessFlags
   });
+  const canResetCreditTerms = true;
+  const canResetTaxExemption = true;
+  const canUnlock = lifecycleState === PORTAL_LIFECYCLE_STATES.po_draft_invoice_prepared
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.manual_payment_pending
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.canceled_or_reset
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.checkout_abandoned_or_reset;
+  const canResetCheckout = lifecycleState === PORTAL_LIFECYCLE_STATES.checkout_started_unpaid
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.po_draft_invoice_prepared
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.manual_payment_pending;
+  const canReopenPo = lifecycleState === PORTAL_LIFECYCLE_STATES.po_submitted_unpaid;
+  const canMarkManualPayment = lifecycleState === PORTAL_LIFECYCLE_STATES.manual_payment_pending;
+  const canMarkPoPayment = lifecycleState === PORTAL_LIFECYCLE_STATES.po_submitted_unpaid;
+  const canResendLink = summaryDocumentMode !== SUMMARY_DOCUMENT_MODES.estimate
+    && lifecycleState !== PORTAL_LIFECYCLE_STATES.canceled_or_reset
+    && lifecycleState !== PORTAL_LIFECYCLE_STATES.checkout_abandoned_or_reset;
+  const canLockWithoutOrdering = lifecycleState === PORTAL_LIFECYCLE_STATES.estimate_empty
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.estimate_quantities_incomplete
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.estimate_artwork_pending
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.estimate_ready_to_order;
+  const canManageJobCompletion = hasSelectedJobs
+    && (isProductionAuthorized || productionCurrent || productionComplete || hasAnyActualJobCompletion);
   const blockingReasons = buildPortalLifecycleBlockingReasons_({
     lifecycleState: lifecycleState,
     hasPlacedOrder: hasPlacedOrder,
@@ -12014,6 +12071,8 @@ function derivePortalLifecycle_(context) {
     approvedPaymentTermsDays: Math.max(0, parseInt(String(account.approvedPaymentTermsDays || 0), 10) || 0),
     canCancelPendingClientFlow: canCancelPendingClientFlow,
     cancelFlowKind: cancelFlowKind,
+    canResetCreditTerms: canResetCreditTerms,
+    canResetTaxExemption: canResetTaxExemption,
     canUnlock: canUnlock,
     canResetCheckout: canResetCheckout,
     canReopenPo: canReopenPo,
@@ -12186,11 +12245,11 @@ function buildTeamWorkflowActionMeta_(workflowContext) {
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   return {
     reset_terms: {
-      visible: true,
+      visible: ctx.canResetCreditTerms === true,
       label: 'Reset Credit Terms'
     },
     reset_tax: {
-      visible: true,
+      visible: ctx.canResetTaxExemption === true,
       label: 'Reset Tax Exemption'
     },
     manual_payment: {
@@ -12724,7 +12783,17 @@ function buildPortalLifecycleHydratedContext_(workflowContext) {
     allSelectedJobsCompleted: context.allSelectedJobsCompleted === true,
     teamWorkflowMode: normalizeTeamWorkflowMode_(context.teamWorkflowMode),
     canCancelPendingClientFlow: context.canCancelPendingClientFlow === true,
-    cancelFlowKind: trimString_(context.cancelFlowKind)
+    cancelFlowKind: trimString_(context.cancelFlowKind),
+    canResetCreditTerms: context.canResetCreditTerms === true,
+    canResetTaxExemption: context.canResetTaxExemption === true,
+    canUnlock: context.canUnlock === true,
+    canResetCheckout: context.canResetCheckout === true,
+    canReopenPo: context.canReopenPo === true,
+    canMarkManualPayment: context.canMarkManualPayment === true,
+    canMarkPoPayment: context.canMarkPoPayment === true,
+    canResendLink: context.canResendLink === true,
+    canLockWithoutOrdering: context.canLockWithoutOrdering === true,
+    canManageJobCompletion: context.canManageJobCompletion === true
   };
 }
 
@@ -12749,6 +12818,8 @@ function assertTeamWorkflowActionAllowed_(workflowContext, actionName) {
   const action = actions[actionKey];
   if (action && action.visible === true) return;
   const messages = {
+    reset_terms: 'Credit terms can only be reset by an authorized team user.',
+    reset_tax: 'Tax exemption can only be reset by an authorized team user.',
     manual_payment: 'Manual payment can only be marked on standard unpaid locked orders.',
     po_payment: 'PO payment can only be marked after purchase-order submission on an unpaid PO order.',
     unlock_project: 'This project cannot be unlocked in its current state.',
