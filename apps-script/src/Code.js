@@ -1685,7 +1685,7 @@ function buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState) {
 }
 
 function getDashboardProjectProjectionVersion_() {
-  return 'v4';
+  return 'v5';
 }
 
 function shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState) {
@@ -3675,6 +3675,19 @@ function buildDashboardStatusCopyMeta_(options) {
   const paymentTermsLabel = trimString_(timeline.paymentTermsLabel);
   const paymentMethodLabel = trimString_(timeline.paymentMethodLabel);
   const allJobsCompleted = timeline.allJobsCompleted === true;
+  const hasPoSubmissionSignal = variant === 'purchase_order'
+    && (flags.poSubmitted === true || !!poSubmittedLabel || !!poNumber);
+  const hasPoInitiationSignal = variant === 'purchase_order'
+    && (flags.poInitiated === true || poStageMode === 'upload_pending');
+  const isPoSubmittedProductionInProgress =
+    hasPoSubmissionSignal
+    && flags.productionBegun === true
+    && flags.productionComplete !== true;
+  const isManualProductionInProgress =
+    variant !== 'purchase_order'
+    && flags.paymentReceived === true
+    && flags.productionBegun === true
+    && flags.productionComplete !== true;
   const stageHelperMap = {};
 
   if (stateMode === 'complete') {
@@ -3770,13 +3783,11 @@ function buildDashboardStatusCopyMeta_(options) {
     ];
     tone = 'blocked';
   } else if (currentStepKey === 'production' && variant === 'purchase_order') {
-    if (flags.paymentReceived) {
-      subtextRuns = [
-        buildDashboardStatusCopyRun_('No action required. Production started on ' + (printStartLabel || 'the submission date') + '. ', ''),
-        buildDashboardStatusCopyRun_('Expand project details', ''),
-        buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
-      ];
-    }
+    subtextRuns = [
+      buildDashboardStatusCopyRun_('No action required. P.O. submitted / Production began on ' + (printStartLabel || 'the submission date') + '. ', ''),
+      buildDashboardStatusCopyRun_('Expand project details', ''),
+      buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+    ];
     helperRuns = [
       buildDashboardStatusCopyRun_('P.O. Submitted / Production began on ' + (printStartLabel || 'the submission date') + '. ', ''),
       buildDashboardStatusCopyRun_('Expand project details', ''),
@@ -3784,15 +3795,29 @@ function buildDashboardStatusCopyMeta_(options) {
     ];
     tone = 'current';
   } else if (currentStepKey === 'production') {
-    subtextRuns = [
-      buildDashboardStatusCopyRun_('No action required. Production started on ' + (printStartLabel || 'the production start date') + '. ', ''),
-      buildDashboardStatusCopyRun_('Expand project details', ''),
-      buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
-    ];
-    helperRuns = [
-      buildDashboardStatusCopyRun_('Production begins when your order is placed and payment is received. Click the project details image 👈 to view estimated completion dates.', '')
-    ];
-    tone = 'complete';
+    if (isManualProductionInProgress) {
+      subtextRuns = [
+        buildDashboardStatusCopyRun_('No action required. Payment was made / Production began on ' + (printStartLabel || paidDateLabel || 'the payment date') + '. ', ''),
+        buildDashboardStatusCopyRun_('Expand project details', ''),
+        buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+      ];
+      helperRuns = [
+        buildDashboardStatusCopyRun_('Payment was made / Production began on ' + (printStartLabel || paidDateLabel || 'the payment date') + '. ', ''),
+        buildDashboardStatusCopyRun_('Expand project details', ''),
+        buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+      ];
+      tone = 'current';
+    } else {
+      subtextRuns = [
+        buildDashboardStatusCopyRun_('No action required. Production started on ' + (printStartLabel || 'the production start date') + '. ', ''),
+        buildDashboardStatusCopyRun_('Expand project details', ''),
+        buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+      ];
+      helperRuns = [
+        buildDashboardStatusCopyRun_('Production begins when your order is placed and payment is received. Click the project details image 👈 to view estimated completion dates.', '')
+      ];
+      tone = 'complete';
+    }
   } else {
     helperRuns = [buildDashboardStatusCopyRun_('Loading project status.', '')];
     tone = 'current';
@@ -3827,9 +3852,19 @@ function buildDashboardStatusCopyMeta_(options) {
         ]
   );
   stageHelperMap.production = buildDashboardStatusHelperPayloadFromRuns_(
-    variant === 'purchase_order'
+    hasPoSubmissionSignal
       ? [
           buildDashboardStatusCopyRun_('P.O. Submitted / Production began on ' + (printStartLabel || 'the submission date') + '. ', ''),
+          buildDashboardStatusCopyRun_('Expand project details', ''),
+          buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
+        ]
+      : hasPoInitiationSignal
+      ? [
+          buildDashboardStatusCopyRun_('Production begins once the final purchase order is submitted.', '')
+        ]
+      : isManualProductionInProgress
+      ? [
+          buildDashboardStatusCopyRun_('Payment was made / Production began on ' + (printStartLabel || paidDateLabel || 'the payment date') + '. ', ''),
           buildDashboardStatusCopyRun_('Expand project details', ''),
           buildDashboardStatusCopyRun_(' 👈 to view turn times.', '')
         ]

@@ -18731,15 +18731,15 @@
   function describePortalStateForUi(){
     const workflow = getPortalWorkflowContext_();
     const lifecycleStage = getPortalLifecycleStage_();
-    const portalLockState = String(CURRENT_STATE_SUMMARY.portalLockState || '').trim().toLowerCase();
-    const orderState = String(CURRENT_STATE_SUMMARY.currentOrderState || '').trim();
-    const paymentState = String(CURRENT_STATE_SUMMARY.currentPaymentState || '').trim();
-    const paymentMethod = String(CURRENT_STATE_SUMMARY.currentPaymentMethod || '').trim();
-    const productionState = String(CURRENT_STATE_SUMMARY.currentProductionAuthorizationState || '').trim();
-    const invoiceNumber = String(CURRENT_STATE_SUMMARY.latestInvoiceNumber || '').trim();
-    const updatedAt = String(CURRENT_STATE_SUMMARY.lastOrderUpdatedAt || '').trim();
+    const current = normalizeCurrentStateSummary(CURRENT_STATE_SUMMARY);
+    const isLocked = workflow.isLocked === true || IS_READ_ONLY;
+    const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
+    const paymentState = String(current.currentPaymentState || '').trim().toLowerCase();
+    const paymentMethod = String(workflow.paymentMethod || current.currentPaymentMethod || '').trim();
+    const invoiceNumber = String(current.latestInvoiceNumber || '').trim();
+    const updatedAt = String(current.lastOrderUpdatedAt || '').trim();
 
-    if (portalLockState === 'locked' || IS_READ_ONLY) {
+    if (isLocked) {
       if (lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked || workflow.isAwaitingPoSubmission === true) {
         return {
           badge: 'Awaiting P.O.',
@@ -18761,28 +18761,28 @@
           meta: updatedAt ? ('Updated ' + updatedAt) : ''
         };
       }
-      if (orderState === 'awaiting_manual_payment') {
+      if (lifecycleState === 'manual_payment_pending') {
         return {
           badge: 'Awaiting Payment',
           text: 'This portal is locked while we wait for your ' + (paymentMethod || 'manual') + ' payment.',
           meta: invoiceNumber ? ('Invoice ' + invoiceNumber + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
         };
       }
-      if (orderState === 'awaiting_payment_confirmation') {
+      if (workflow.isPaymentPending === true) {
         return {
           badge: 'Payment Pending',
           text: 'Your payment was submitted and is waiting for final confirmation before production can begin.',
           meta: paymentState ? ('Payment state: ' + paymentState) : ''
         };
       }
-      if (orderState === 'awaiting_po_submission') {
+      if (workflow.isAwaitingPoSubmission === true) {
         return {
           badge: 'Awaiting P.O.',
           text: 'This portal is locked while we wait for your purchase order paperwork.',
           meta: invoiceNumber ? ('Invoice ' + invoiceNumber) : ''
         };
       }
-      if (orderState === 'ready_for_production' || productionState === 'authorized') {
+      if (workflow.isProductionAuthorized === true || workflow.productionCurrent === true || workflow.productionComplete === true) {
         return {
           badge: 'Ready',
           text: 'Your order is authorized for production.',
@@ -18796,7 +18796,7 @@
       };
     }
 
-    if (lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started || orderState === 'payment_in_progress' || paymentState === 'checkout_created') {
+    if (lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started) {
       if (hasUnsavedSnapshotChanges()) {
         return {
           badge: 'Draft Updated',
@@ -19017,10 +19017,11 @@
     }
     if (result !== 'success') return null;
 
-    const orderState = String(CURRENT_STATE_SUMMARY.currentOrderState || '').trim().toLowerCase();
-    const paymentState = String(CURRENT_STATE_SUMMARY.currentPaymentState || '').trim().toLowerCase();
-    const paymentMethod = String(CURRENT_STATE_SUMMARY.currentPaymentMethod || '').trim().toLowerCase();
-    const productionState = String(CURRENT_STATE_SUMMARY.currentProductionAuthorizationState || '').trim().toLowerCase();
+    const workflow = getPortalWorkflowContext_();
+    const current = normalizeCurrentStateSummary(CURRENT_STATE_SUMMARY);
+    const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
+    const paymentState = String(current.currentPaymentState || '').trim().toLowerCase();
+    const paymentMethod = String(workflow.paymentMethod || current.currentPaymentMethod || '').trim().toLowerCase();
 
     if (paymentState === 'failed') {
       return {
@@ -19028,13 +19029,13 @@
         type: 'err'
       };
     }
-    if (productionState === 'authorized' || orderState === 'ready_for_production' || paymentState === 'paid') {
+    if (workflow.isProductionAuthorized === true || workflow.productionCurrent === true || workflow.productionComplete === true || workflow.paymentReceived === true) {
       return {
         message: 'Payment received. Your order is authorized for production.',
         type: 'ok'
       };
     }
-    if (paymentMethod === 'ach' || paymentState === 'pending' || orderState === 'awaiting_payment_confirmation') {
+    if (paymentMethod === 'ach' || workflow.isPaymentPending === true || lifecycleState === 'awaiting_payment_confirmation') {
       return {
         message: 'Bank payment submitted. We are waiting for final confirmation before production begins.',
         type: 'ok'
@@ -21686,6 +21687,16 @@
     const variant = String(safeCopy.variant || '').trim().toLowerCase();
     const poStageMode = String(safeCopy.poStageMode || '').trim().toLowerCase();
     const isTrackerMode = String(safeCopy.stateMode || 'tracker').trim().toLowerCase() === 'tracker';
+    const hasPoSubmissionSignal = variant === 'purchase_order'
+      && (
+        poStageMode === 'payment_due'
+        || poStageMode === 'print'
+        || !!String(safeCopy.poSubmittedDateLabel || '').trim()
+        || !!String(safeCopy.poNumber || '').trim()
+      );
+    const hasPoInitiationSignal = variant === 'purchase_order'
+      && !hasPoSubmissionSignal
+      && poStageMode === 'upload_pending';
     const buildPayload = runs => {
       const safeRuns = Array.isArray(runs) ? runs.filter(Boolean) : [];
       return {
@@ -21701,6 +21712,9 @@
     ]);
     const buildStandardPaymentCompletePayload = () => buildPayload([
       { text: 'Payment made on ' + (safeCopy.paidDateLabel || 'the payment date') + ' via ' + (safeCopy.paymentMethodLabel || 'the selected payment method') + '.', tone: '' }
+    ]);
+    const buildPoPaymentCompletePayload = () => buildPayload([
+      { text: 'Payment made on ' + (safeCopy.paidDateLabel || 'the payment date') + ' per your account terms: ' + (safeCopy.paymentTermsLabel || 'your approved terms') + '.', tone: '' }
     ]);
     const buildPoPrintPayload = () => buildPayload([
       { text: 'P.O. Submitted / Production began on ' + (safeCopy.printStartDateLabel || 'the submission date') + '. ', tone: '' },
@@ -21746,13 +21760,6 @@
           plainText: basePlainText
         };
       }
-      if (variant === 'purchase_order' && key === 'production' && isTrackerMode) {
-        baseRuns.push({ text: ' IN PROGRESS', tone: 'green' });
-        return {
-          runs: baseRuns,
-          plainText: (basePlainText ? basePlainText + ' IN PROGRESS' : 'IN PROGRESS').trim()
-        };
-      }
       baseRuns.push({ text: ' COMPLETED', tone: 'green' });
       return {
         runs: baseRuns,
@@ -21775,14 +21782,28 @@
     if (variant !== 'purchase_order' && key === 'payment' && state === 'complete') {
       return appendCompletedTag(buildStandardPaymentCompletePayload());
     }
+    if (variant === 'purchase_order' && key === 'payment' && state === 'complete') {
+      return appendCompletedTag(buildPoPaymentCompletePayload());
+    }
     if (variant === 'purchase_order' && key === 'production') {
+      const productionPayload = hasPoSubmissionSignal
+        ? buildPoPrintPayload()
+        : (
+            hasPoInitiationSignal
+              ? buildPayload([
+                  { text: 'Production begins once the final purchase order is submitted.', tone: '' }
+                ])
+              : ((stageHelpers.production && typeof stageHelpers.production === 'object')
+                  ? stageHelpers.production
+                  : buildPoPrintPayload())
+          );
       if (isTrackerMode && (poStageMode === 'print' || poStageMode === 'payment_due' || state === 'complete' || state === 'current')) {
-        const basePayload = poStageMode === 'payment_due'
-          ? buildPoPrintProgressedPayload()
-          : buildPoPrintPayload();
-        return appendGreenTag(basePayload, safeCopy.allJobsCompleted === true ? 'COMPLETED' : 'IN PROGRESS');
+        return appendGreenTag(
+          productionPayload,
+          (state === 'complete' || safeCopy.allJobsCompleted === true) ? 'COMPLETE' : 'IN PROGRESS'
+        );
       }
-      return appendCompletedTag(buildPoPrintPayload());
+      return appendCompletedTag(productionPayload);
     }
     const payload = (stageHelpers[key] && typeof stageHelpers[key] === 'object') ? stageHelpers[key] : null;
     if (payload && Array.isArray(payload.runs) && payload.runs.length) {
@@ -35350,44 +35371,14 @@
     }
     if (explicit) return explicit;
 
-    const portalLockState = String(current.portalLockState || order.portalLockState || '').trim().toLowerCase();
-    const orderState = String(order.orderState || current.currentOrderState || '').trim().toLowerCase();
-    const paymentState = String(order.paymentState || current.currentPaymentState || '').trim().toLowerCase();
-    const productionAuthorizationState = String(order.productionAuthorizationState || current.currentProductionAuthorizationState || '').trim().toLowerCase();
-    const paidAt = String(order.paidAt || '').trim();
-    const authorizedToProduceAt = String(order.authorizedToProduceAt || '').trim();
-
-    const operationallyAccepted =
-      !!paidAt ||
-      !!authorizedToProduceAt ||
-      paymentState === 'paid' ||
-      paymentState === 'manual_received' ||
-      productionAuthorizationState === 'authorized' ||
-      orderState === 'ready_for_production' ||
-      orderState === 'in_production' ||
-      orderState === 'closed';
-
-    const pendingLockedOrder =
-      orderState === 'awaiting_manual_payment' ||
-      orderState === 'awaiting_po_submission' ||
-      orderState === 'awaiting_payment_confirmation' ||
-      paymentState === 'checkout_created' ||
-      paymentState === 'submitted' ||
-      paymentState === 'pending' ||
-      paymentState === 'manual_pending' ||
-      productionAuthorizationState === 'po_pending';
-
-    if (portalLockState === 'editable') return PORTAL_DISPLAY_ORDER_STATUSES.editable;
-    if (portalLockState === 'locked') {
-      return operationallyAccepted
+    if (workflow.isLocked === true) {
+      return (workflow.paymentReceived === true
+        || workflow.productionCurrent === true
+        || workflow.productionComplete === true
+        || workflow.isProductionAuthorized === true)
         ? PORTAL_DISPLAY_ORDER_STATUSES.processing
         : PORTAL_DISPLAY_ORDER_STATUSES.locked;
     }
-    if (operationallyAccepted) return PORTAL_DISPLAY_ORDER_STATUSES.processing;
-    if (explicit.toLowerCase() === PORTAL_DISPLAY_ORDER_STATUSES.processing.toLowerCase()) {
-      return PORTAL_DISPLAY_ORDER_STATUSES.processing;
-    }
-    if (pendingLockedOrder) return PORTAL_DISPLAY_ORDER_STATUSES.locked;
     return PORTAL_DISPLAY_ORDER_STATUSES.editable;
   }
 
@@ -35550,17 +35541,23 @@
     const lifecycleStage = String(summaryLifecycle.lifecycleStage || '').trim().toLowerCase();
     const summaryDocumentMode = String(summaryLifecycle.documentMode || '').trim().toLowerCase();
     const summaryControlsMode = String(summaryLifecycle.controlsMode || '').trim().toLowerCase();
-    const rawEditorMode = String(summaryLifecycle.editorMode || workflow.editorMode || '').trim().toLowerCase();
-    const editorMode = rawEditorMode || (
+    const hasWorkflowEditorMode = Object.prototype.hasOwnProperty.call(workflow, 'editorMode');
+    const workflowEditorMode = String(workflow.editorMode || '').trim().toLowerCase();
+    const editorMode = (hasWorkflowEditorMode && workflowEditorMode) ? workflowEditorMode : (
       summaryDocumentMode && !isInvoiceSummaryDocumentMode_(summaryDocumentMode)
         ? 'editable'
         : (lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable ? 'editable' : 'locked')
     );
-    const saveAllowed = portalMode === 'client' && (
+    const hasWorkflowSaveAllowed = Object.prototype.hasOwnProperty.call(workflow, 'saveAllowed');
+    const fallbackSaveAllowed = portalMode === 'client' && (
       summaryLifecycle.saveAllowed === true
       || (editorMode === 'editable' && !isInvoiceSummaryDocumentMode_(summaryDocumentMode))
     );
-    const orderAllowed = portalMode === 'client' && (
+    const saveAllowed = hasWorkflowSaveAllowed
+      ? (portalMode === 'client' && workflow.saveAllowed === true)
+      : fallbackSaveAllowed;
+    const hasWorkflowOrderAllowed = Object.prototype.hasOwnProperty.call(workflow, 'orderAllowed');
+    const fallbackOrderAllowed = portalMode === 'client' && (
       summaryLifecycle.orderAllowed === true
       || (
         editorMode === 'editable'
@@ -35569,6 +35566,9 @@
         && summaryControlsMode !== 'manual_pending'
       )
     );
+    const orderAllowed = hasWorkflowOrderAllowed
+      ? (portalMode === 'client' && workflow.orderAllowed === true)
+      : fallbackOrderAllowed;
     const isPoDraftResume = portalMode === 'client' && (
       summaryControlsMode === 'po_submission'
       || summaryDocumentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
