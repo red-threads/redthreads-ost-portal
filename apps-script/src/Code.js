@@ -1685,7 +1685,7 @@ function buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState) {
 }
 
 function getDashboardProjectProjectionVersion_() {
-  return 'v3';
+  return 'v4';
 }
 
 function shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState) {
@@ -1775,6 +1775,7 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
     row: row,
     flags: flags,
     variant: variant,
+    workflowContext: workflowContext,
     latestOrderInfo: latestOrderInfo,
     latestOrderSummary: latestOrderSummary,
     runtimeMeta: runtimeMeta,
@@ -1962,7 +1963,7 @@ function buildDashboardPeekLightweightAccountSummaryFromRow_(row) {
 }
 
 function getDashboardProjectPeekPayloadVersion_() {
-  return 'v8';
+  return 'v9';
 }
 
 function buildDashboardProjectPreviewMeta_(rowState, runtimeMeta) {
@@ -2403,9 +2404,12 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
   const productionStarted = productionComplete === true
     || productionCurrent === true
     || (productionAuthorized === true && !!productionStartDate);
-  const canShowEstimatedCompletion = orderPlaced === true
+  const canShowEstimatedCompletion = paymentReceived === true
+    || productionAuthorized === true
     || productionCurrent === true
-    || productionComplete === true;
+    || productionComplete === true
+    || ((context.isPoFlow === true || trimString_(context.variant).toLowerCase() === 'purchase_order')
+      && (context.poSubmitted === true || context.isPoSubmitted === true || !!poSubmittedDate));
   let paymentMethodLabel = trimString_(safeTimeline.paymentMethodLabel);
   if (!paymentMethodLabel) {
     if (paymentMethod === PAYMENT_METHODS.card) paymentMethodLabel = 'Credit Card';
@@ -2441,6 +2445,7 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
     productionStarted: productionStarted,
     productionCurrent: productionCurrent,
     productionComplete: productionComplete,
+    estimatedCompletionAvailable: canShowEstimatedCompletion,
     productionStartAt: productionStartAt,
     productionStartDate: productionStartDate,
     productionStartDateLabel: productionStartDate ? formatDashboardShortDate_(productionStartDate) : trimString_(safeTimeline.printStartDateLabel),
@@ -2533,9 +2538,7 @@ function buildDashboardPeekTimelineFacts_(workflowContext, timeline, row) {
 function buildDashboardPeekSummaryMeta_(workflowContext, timeline, totals) {
   const peek = buildDashboardPeekLifecycleMeta_(workflowContext, timeline);
   const safeTotals = (totals && typeof totals === 'object') ? totals : {};
-  const canShowCompletionDate = peek.orderPlaced === true
-    || peek.productionCurrent === true
-    || peek.productionComplete === true;
+  const canShowCompletionDate = peek.estimatedCompletionAvailable === true;
   return {
     totalUnits: Math.max(0, parseInt(String(safeTotals.totalUnits || 0), 10) || 0),
     priceLabel: peek.productionStarted === true ? 'Final Cost' : 'Estimated Price',
@@ -3961,6 +3964,26 @@ function buildPortalLifecycleIsoDateString_(value) {
   return date ? date.toISOString() : '';
 }
 
+function derivePortalOrderPlacedAt_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const paymentPath = trimString_(opts.paymentPath).toLowerCase();
+  const poSubmittedAt = trimString_(opts.poSubmittedAt);
+  const paidAt = trimString_(opts.paidAt);
+  const lockedAt = trimString_(opts.lockedAt);
+  const createdAt = trimString_(opts.createdAt);
+  const lastOrderUpdatedAt = trimString_(opts.lastOrderUpdatedAt);
+  if (paymentPath === PAYMENT_METHODS.purchase_order) {
+    return poSubmittedAt || lockedAt || createdAt || lastOrderUpdatedAt || '';
+  }
+  if (paymentPath === 'manual') {
+    return lockedAt || createdAt || lastOrderUpdatedAt || '';
+  }
+  if (paymentPath === 'stripe') {
+    return paidAt || lockedAt || createdAt || lastOrderUpdatedAt || '';
+  }
+  return lockedAt || createdAt || lastOrderUpdatedAt || '';
+}
+
 function derivePortalProductionStartAt_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const paymentPath = trimString_(opts.paymentPath).toLowerCase();
@@ -4088,6 +4111,7 @@ function deriveDashboardTimelineMeta_(options) {
   const row = (opts.row && typeof opts.row === 'object') ? opts.row : {};
   const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
   const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
+  const workflowContext = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
   const latestOrderInfo = opts.latestOrderInfo && typeof opts.latestOrderInfo === 'object' ? opts.latestOrderInfo : null;
   const latestOrderSummary = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object')
     ? opts.latestOrderSummary
@@ -4112,6 +4136,7 @@ function deriveDashboardTimelineMeta_(options) {
   const portalState = normalizePortalStateForOrder_(stateSource, printJobs);
   let completionMeta = { dateValue: null, dateLabel: '' };
   const paymentDate = normalizeDashboardCalendarDate_(
+    trimString_(workflowContext.paymentReceivedAt) ||
     latestOrderSummary.paidAt ||
     row.paidat ||
     latestOrderSummary.authorizedToProduceAt ||
@@ -4123,16 +4148,30 @@ function deriveDashboardTimelineMeta_(options) {
     row.paymentmethodselected
   ).toLowerCase();
   const poSubmittedDate = normalizeDashboardCalendarDate_(
+    trimString_(workflowContext.poSubmittedAt) ||
     latestOrderSummary.poSubmittedAt ||
     row.posubmittedat ||
     latestOrderSummary.authorizedToProduceAt ||
     row.authorizedtoproduceat
   );
+  const paymentPath = trimString_(
+    workflowContext.paymentPath ||
+    (variant === 'purchase_order'
+      ? PAYMENT_METHODS.purchase_order
+      : (paymentMethod === PAYMENT_METHODS.card || paymentMethod === PAYMENT_METHODS.ach
+        ? 'stripe'
+        : ((paymentMethod === PAYMENT_METHODS.check || paymentMethod === PAYMENT_METHODS.cash) ? 'manual' : '')))
+  ).toLowerCase();
   const orderPlacedDate = normalizeDashboardCalendarDate_(
-    latestOrderSummary.lockedAt ||
-    row.lockedat ||
-    latestOrderSummary.authorizedToProduceAt ||
-    row.authorizedtoproduceat
+    trimString_(workflowContext.orderPlacedAt) ||
+    derivePortalOrderPlacedAt_({
+      paymentPath: paymentPath,
+      poSubmittedAt: trimString_(workflowContext.poSubmittedAt) || latestOrderSummary.poSubmittedAt || row.posubmittedat,
+      paidAt: trimString_(workflowContext.paymentReceivedAt) || latestOrderSummary.paidAt || row.paidat,
+      lockedAt: latestOrderSummary.lockedAt || row.lockedat,
+      createdAt: latestOrderSummary.createdAt,
+      lastOrderUpdatedAt: latestOrderSummary.lastUpdatedAt || row.lastorderupdatedat || row.lastOrderUpdatedAt
+    })
   );
   const poNumber = trimString_(
     latestOrderSummary.poNumber ||
@@ -4830,6 +4869,37 @@ function buildPreparedOrderActionContext_(payload) {
   return ctx;
 }
 
+function validateEditableOrderInitiationForAction_(ctx) {
+  const lifecycle = buildLatestClientWorkflowContextForAction_(ctx);
+  const workflow = (lifecycle && lifecycle.workflowContext && typeof lifecycle.workflowContext === 'object')
+    ? lifecycle.workflowContext
+    : {};
+  if (workflow.orderAllowed === true) return null;
+  const lifecycleState = trimString_(workflow.lifecycleState).toLowerCase();
+  const nextClientAction = trimString_(workflow.nextClientAction).toLowerCase();
+  let message = 'This project can no longer be placed from checkout.';
+  if (lifecycleState === PORTAL_LIFECYCLE_STATES.manual_payment_pending) {
+    message = 'This order has already been placed and is awaiting manual payment in the Summary / Invoice tab.';
+  } else if (lifecycleState === PORTAL_LIFECYCLE_STATES.po_draft_invoice_prepared) {
+    message = 'Purchase-order submission continues from the Summary / Invoice tab.';
+  } else if (
+    lifecycleState === PORTAL_LIFECYCLE_STATES.po_submitted_unpaid
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.po_submitted_paid
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.production_authorized
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.production_in_progress
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.production_complete
+  ) {
+    message = 'This project is already in a locked post-order lifecycle state and cannot be placed again.';
+  } else if (nextClientAction) {
+    message = 'This project is no longer in an orderable state. Continue from the Summary / Invoice tab.';
+  }
+  return buildOrderActionError_('order_flow_unavailable', message, {
+    lifecycleState: lifecycleState,
+    lifecycleStage: trimString_(workflow.lifecycleStage).toLowerCase(),
+    nextClientAction: nextClientAction
+  });
+}
+
 function buildOrderActionPortalPayload_(ctx, exportRowInfo) {
   try {
     return refreshPortalPayloadForToken_(ctx.orderDraft.token, {
@@ -4998,21 +5068,48 @@ function buildCheckoutAttemptFailureResponse_(stripe, options) {
   return response;
 }
 
-function buildOrderInvoiceArtifacts_(ctx) {
-  const invoiceInfo = generateInvoiceDocumentForOrder_(ctx.orderDraft, { cfg: ctx.cfg });
-  const emailResult = sendInvoiceEmailForOrder_(ctx.orderDraft, invoiceInfo, {
-    to: ctx.orderDraft.personEmail
-  });
+function buildOrderInvoiceArtifacts_(ctx, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const base64Data = trimString_(p.base64Data);
+  const clientArtifactStrategy = trimString_(p.clientArtifactStrategy).toLowerCase();
+  const clientArtifactWarnings = Array.isArray(p.clientArtifactWarnings)
+    ? p.clientArtifactWarnings.map(item => trimString_(item)).filter(Boolean)
+    : [];
+  let invoiceInfo;
+  if (base64Data) {
+    const invoiceNumber = nextInvoiceNumber_();
+    const storedInvoice = storePortalPdfBlobInInvoiceFolder_({
+      cfg: ctx.cfg,
+      base64Data: base64Data,
+      mimeType: trimString_(p.mimeType) || MimeType.PDF,
+      fileName: trimString_(p.fileName),
+      defaultFileName: buildPurchaseOrderInvoiceFileName_(ctx)
+    });
+    invoiceInfo = {
+      invoiceNumber: invoiceNumber,
+      invoicePdfUrl: trimString_(storedInvoice && storedInvoice.fileUrl),
+      invoiceFileId: trimString_(storedInvoice && storedInvoice.fileId),
+      fileName: trimString_(storedInvoice && storedInvoice.fileName)
+    };
+  } else {
+    if (clientArtifactWarnings.length) {
+      console.log('[RT-MANUAL-INVOICE-ARTIFACT-FALLBACK] ' + JSON.stringify({
+        ok: true,
+        token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
+        strategy: clientArtifactStrategy || 'server_fallback',
+        warnings: clientArtifactWarnings
+      }));
+    }
+    invoiceInfo = generateInvoiceDocumentForOrder_(ctx.orderDraft, { cfg: ctx.cfg });
+  }
   return {
     invoiceInfo: invoiceInfo,
-    emailResult: emailResult,
     nowIso: nowIso_()
   };
 }
 
 function buildManualPaymentOrderCreateOptions_(ctx, method, invoiceArtifacts) {
   const invoiceInfo = invoiceArtifacts.invoiceInfo;
-  const emailResult = invoiceArtifacts.emailResult;
   const now = invoiceArtifacts.nowIso;
   const orderDraft = Object.assign({}, ctx.orderDraft, {
     paymentMethodSelected: method,
@@ -5031,8 +5128,8 @@ function buildManualPaymentOrderCreateOptions_(ctx, method, invoiceArtifacts) {
     lockedAt: now,
     invoiceNumber: invoiceInfo.invoiceNumber,
     invoicePdfUrl: invoiceInfo.invoicePdfUrl,
-    invoiceSentToEmail: emailResult.ok ? emailResult.email : normalizeEmail_(ctx.orderDraft.personEmail),
-    invoiceSentAt: emailResult.ok ? now : ''
+    invoiceSentToEmail: '',
+    invoiceSentAt: ''
   });
 }
 
@@ -5078,14 +5175,21 @@ function finalizeLockedOrderTransition_(ctx, created) {
   };
 }
 
-function buildLockedOrderTransitionResponse_(ctx, created, invoiceInfo, portalPayload) {
-  return finalizeOrderActionResponse_({
+function buildLockedOrderTransitionResponse_(ctx, created, invoiceInfo, portalPayload, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const response = {
     ok: true,
     accountSummary: ctx.accountInfo.summary,
     orderSummary: created.summary,
     invoice: invoiceInfo,
     portalPayload: portalPayload
-  }, ctx);
+  };
+  if (trimString_(opts.message)) response.message = trimString_(opts.message);
+  if (Array.isArray(opts.warnings) && opts.warnings.length) response.warnings = opts.warnings.slice();
+  if (opts.paymentLinks && typeof opts.paymentLinks === 'object') {
+    response.paymentLinks = opts.paymentLinks;
+  }
+  return finalizeOrderActionResponse_(response, ctx);
 }
 
 function buildCheckoutAttemptRollbackOrderDraft_(ctx) {
@@ -5435,6 +5539,8 @@ function appendClientLifecycleAuditMessageToPortalState_(portalState, messageTex
 function createCheckoutAttempt(payload) {
   try {
     const ctx = buildPreparedOrderActionContext_(payload);
+    const orderFlowAccessError = validateEditableOrderInitiationForAction_(ctx);
+    if (orderFlowAccessError) return orderFlowAccessError;
     if (readPurchaseOrderDraftFromPortalState_(ctx.portalState)) {
       persistContextPortalState_(ctx, clearPurchaseOrderDraftFromPortalState_(ctx.portalState), {
         locked: false,
@@ -5498,6 +5604,8 @@ function createCheckoutAttempt(payload) {
 
 function initiateManualPaymentOrder_(payload) {
   const ctx = buildPreparedOrderActionContext_(payload);
+  const orderFlowAccessError = validateEditableOrderInitiationForAction_(ctx);
+  if (orderFlowAccessError) return orderFlowAccessError;
   if (readPurchaseOrderDraftFromPortalState_(ctx.portalState)) {
     persistContextPortalState_(ctx, clearPurchaseOrderDraftFromPortalState_(ctx.portalState), {
       locked: false,
@@ -5513,22 +5621,118 @@ function initiateManualPaymentOrder_(payload) {
   }
   const validationError = validateOrderPlacementForAction_(ctx);
   if (validationError) return validationError;
-  const invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx);
-  const created = createPortalOrder_(
-    buildManualPaymentOrderCreateOptions_(ctx, method, invoiceArtifacts)
-  );
-  const finalized = finalizeLockedOrderTransition_(ctx, created);
+  let invoiceArtifacts;
+  try {
+    invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx, payload);
+  } catch (err) {
+    return buildOrderActionError_(
+      'manual_invoice_artifact_failed',
+      'Unable to create the final invoice artifact needed to place this order. Please try again.',
+      {
+        stage: 'invoice_artifact',
+        warnings: [String((err && err.message) || err)]
+      }
+    );
+  }
+  let created;
+  try {
+    created = createPortalOrder_(
+      buildManualPaymentOrderCreateOptions_(ctx, method, invoiceArtifacts)
+    );
+  } catch (err) {
+    return buildOrderActionError_(
+      'manual_order_create_failed',
+      'Unable to place the manual payment order. Please try again.',
+      {
+        stage: 'order_create',
+        warnings: [String((err && err.message) || err)]
+      }
+    );
+  }
+  let finalized;
+  try {
+    finalized = finalizeLockedOrderTransition_(ctx, created);
+  } catch (err) {
+    return buildOrderActionError_(
+      'manual_order_finalize_failed',
+      'Unable to finalize the manual payment order. Please try again.',
+      {
+        stage: 'order_finalize',
+        warnings: [String((err && err.message) || err)]
+      }
+    );
+  }
   return buildLockedOrderTransitionResponse_(
     ctx,
     created,
     invoiceArtifacts.invoiceInfo,
-    finalized.portalPayload
+    finalized.portalPayload,
+    {
+      message: 'Success — your order has officially been placed. Payment is pending manual receipt.'
+    }
   );
 }
 
 function initiateManualPayment(payload) {
   try {
     return initiateManualPaymentOrder_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function sendManualPaymentConfirmationEmail_(payload) {
+  const ctx = buildPreparedOrderActionContext_(payload);
+  const lifecycle = buildLatestClientWorkflowContextForAction_(ctx);
+  ctx.latestOrderInfo = lifecycle.latestOrderInfo || null;
+  ctx.latestOrderSummary = lifecycle.latestOrderSummary || null;
+  ctx.currentStateSummary = lifecycle.currentStateSummary || null;
+  ctx.workflowContext = lifecycle.workflowContext || {};
+  if (trimString_(ctx.workflowContext.lifecycleStage) !== PORTAL_LIFECYCLE_STAGES.manual_pending_locked) {
+    return finalizeOrderActionResponse_({
+      ok: false,
+      error: 'This manual payment confirmation email is only available after the order has been placed.'
+    }, ctx);
+  }
+  const finalOrderSummary = (ctx.latestOrderSummary && typeof ctx.latestOrderSummary === 'object')
+    ? ctx.latestOrderSummary
+    : {};
+  if (!trimString_(finalOrderSummary.orderId)) {
+    return finalizeOrderActionResponse_({
+      ok: false,
+      error: 'The placed order could not be found for email confirmation.'
+    }, ctx);
+  }
+  try {
+    const confirmation = sendLockedOrderConfirmationEmails_(ctx, finalOrderSummary, {
+      intro: 'Your order has been placed and the final invoice is attached. Production will begin after Red Threads receives your manual payment.'
+    });
+    return finalizeOrderActionResponse_({
+      ok: true,
+      message: 'Invoice email sent.',
+      paymentLinks: confirmation && confirmation.ok === true ? {
+        summaryUrl: trimString_(confirmation.summaryUrl),
+        cardUrl: trimString_(confirmation.cardUrl),
+        achUrl: trimString_(confirmation.achUrl)
+      } : null
+    }, ctx);
+  } catch (err) {
+    console.log('[RT-MANUAL-PAYMENT-CONFIRMATION-EMAIL] ' + JSON.stringify({
+      ok: false,
+      token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
+      orderId: trimString_(finalOrderSummary && finalOrderSummary.orderId),
+      error: String((err && err.message) || err)
+    }));
+    return finalizeOrderActionResponse_({
+      ok: false,
+      error: 'The order was placed, but the invoice email is still processing. The invoice remains available in the Summary / Invoice tab.'
+    }, ctx);
+  }
+}
+
+function sendManualPaymentConfirmationEmail(payload) {
+  try {
+    return sendManualPaymentConfirmationEmail_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -11254,6 +11458,7 @@ function buildPortalOrderSummary_(row) {
     paymentReceivedManuallyAt: trimString_(order.paymentreceivedmanuallyat || order.paymentReceivedManuallyAt),
     authorizedToProduceAt: trimString_(order.authorizedtoproduceat || order.authorizedToProduceAt),
     lockedAt: trimString_(order.lockedat || order.lockedAt),
+    createdAt: trimString_(order.createdat || order.createdAt),
     stripeSessionId: trimString_(order.stripesessionid || order.stripeSessionId),
     stripePaymentIntentId: trimString_(order.stripepaymentintentid || order.stripePaymentIntentId),
     lastUpdatedAt: trimString_(order.lastupdatedat || order.lastUpdatedAt),
@@ -11725,6 +11930,7 @@ function derivePortalLifecycle_(context) {
   );
   const invoiceNumber = trimString_(current.latestInvoiceNumber || latest.invoiceNumber || row.latestinvoicenumber);
   const lockedAt = trimString_(latest.lockedAt || row.lockedat);
+  const createdAt = trimString_(latest.createdAt);
   const paidAt = trimString_(latest.paidAt || row.paidat);
   const paymentReceivedManuallyAt = trimString_(latest.paymentReceivedManuallyAt || row.paymentreceivedmanuallyat);
   const authorizedToProduceAt = trimString_(latest.authorizedToProduceAt || row.authorizedtoproduceat);
@@ -11888,7 +12094,14 @@ function derivePortalLifecycle_(context) {
       || paymentState === PAYMENT_STATES.checkout_created
       || orderState === ORDER_STATES.awaiting_payment_confirmation
     );
-  const orderPlacedAt = trimString_(poSubmittedAt || paidAt || lockedAt);
+  const orderPlacedAt = derivePortalOrderPlacedAt_({
+    paymentPath: paymentPath,
+    poSubmittedAt: poSubmittedAt,
+    paidAt: paidAt,
+    lockedAt: lockedAt,
+    createdAt: createdAt,
+    lastOrderUpdatedAt: lastOrderUpdatedAt
+  });
   const editorMode = (!hasPlacedOrder && !isLocked && (lifecycleStage === PORTAL_LIFECYCLE_STAGES.editable || lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started))
     ? 'editable'
     : 'locked';
@@ -12752,8 +12965,12 @@ function buildPortalLifecycleHydratedContext_(workflowContext) {
     summaryControlsMode: trimString_(context.summaryControlsMode),
     paymentPath: trimString_(context.paymentPath),
     paymentMethod: trimString_(context.paymentMethod),
+    orderPlaced: context.orderPlaced === true,
+    orderPlacedAt: trimString_(context.orderPlacedAt),
     paymentDue: context.paymentDue === true,
     paymentReceived: context.paymentReceived === true,
+    paymentReceivedAt: trimString_(context.paymentReceivedAt),
+    poSubmittedAt: trimString_(context.poSubmittedAt),
     productionStartAt: trimString_(context.productionStartAt),
     productionTargetCompleteAt: trimString_(context.productionTargetCompleteAt),
     productionCompletionAt: trimString_(context.productionCompletionAt),
@@ -13576,7 +13793,8 @@ function generateInvoiceDocumentForOrder_(orderRowOrDraft, options) {
   return {
     invoiceNumber: invoiceNumber,
     invoicePdfUrl: pdfFile.getUrl(),
-    invoiceFileId: pdfFile.getId()
+    invoiceFileId: pdfFile.getId(),
+    fileName: pdfFile.getName()
   };
 }
 

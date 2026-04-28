@@ -9287,10 +9287,73 @@
       font-size:14px;
       line-height:1.6;
     }
+    .termsReviewDecisionMeta{
+      padding:12px 14px;
+      border-radius:16px;
+      border:1px solid rgba(18,181,234,.35);
+      background:rgba(12,74,110,.24);
+      color:#bae6fd;
+      font-size:13px;
+      line-height:1.55;
+      white-space:pre-line;
+    }
+    .termsReviewDecisionMeta[hidden]{
+      display:none !important;
+    }
     .termsReviewDecisionActions{
       display:flex;
       justify-content:flex-end;
       gap:10px;
+    }
+    .orderFlowManualSubmitSuccessModal{
+      align-items:center;
+      text-align:center;
+      border-color:var(--rt-glassBorder);
+      background:rgba(4,8,18,.96);
+      box-shadow:0 28px 48px rgba(2,8,23,.42), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .orderFlowManualSubmitSuccessIcon{
+      width:84px;
+      height:84px;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      margin:4px auto 2px;
+      border:1px solid rgba(81,255,183,.8);
+      background:rgba(81,255,183,.14);
+      color:#51ffb7;
+      font-size:48px;
+      font-weight:900;
+      box-shadow:0 14px 28px rgba(52,211,153,.22), inset 0 1px 0 rgba(255,255,255,.1);
+    }
+    .orderFlowManualSubmitSuccessModal .termsReviewDecisionTitle{
+      color:#51ffb7;
+      font-size:24px;
+      line-height:1.15;
+      text-align:center;
+    }
+    .orderFlowManualSubmitSuccessModal .termsReviewDecisionSub{
+      max-width:44ch;
+      color:var(--rt-text);
+      text-align:center;
+      font-size:15px;
+      line-height:1.5;
+    }
+    .orderFlowManualSubmitSuccessModal .termsReviewDecisionActions{
+      justify-content:center;
+      width:100%;
+    }
+    .orderFlowManualSubmitSuccessModal .accountDocActionBtn.is-primary{
+      min-width:136px;
+      border-color:var(--rt-glassBorder);
+      background:rgba(255,255,255,.08);
+      color:var(--rt-text);
+      box-shadow:0 10px 20px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .orderFlowManualSubmitSuccessModal .accountDocActionBtn.is-primary:hover{
+      background:rgba(255,255,255,.13);
+      border-color:rgba(255,255,255,.32);
     }
     @media (max-width: 1120px){
       .termsReviewShell{
@@ -16811,6 +16874,23 @@
             <button class="orderFlowPoViewerPrimary" id="orderFlowPoViewerSubmitBtn" type="button">Submit Purchase Order</button>
           </div>
         </aside>
+        <aside class="orderFlowPoViewerRail orderFlowManualViewerRail" id="orderFlowManualViewerRail" hidden>
+          <div class="orderFlowPoViewerStatus" id="orderFlowManualViewerStatus" hidden></div>
+          <div class="orderFlowPoViewerSectionTitle">Manual Payment Review</div>
+          <div class="orderFlowPoViewerHelp">
+            You are about to officially place this order and submit payment manually. Production will not begin until Red Threads receives your payment.
+          </div>
+          <div class="orderFlowPoViewerHelp">
+            The document shown here is the final invoice / order copy. After you place the order, the portal will lock to the invoice and payment instructions will be emailed or remain available in the Summary / Invoice tab.
+          </div>
+          <div class="orderFlowPoViewerHelp">
+            If your accounting team decides to switch methods later, the locked invoice will still offer credit card and ACH payment options.
+          </div>
+          <div class="orderFlowPoViewerInlineActions">
+            <button class="orderFlowPoViewerInlineBtn" id="orderFlowManualViewerBackBtn" type="button">Back</button>
+            <button class="orderFlowPoViewerInlineBtn isPrimary" id="orderFlowManualViewerSubmitBtn" type="button">Place Order</button>
+          </div>
+        </aside>
       </div>
     </div>
   </div>
@@ -16820,6 +16900,16 @@
       <div class="termsReviewDecisionSub" id="orderFlowPoSubmitSuccessSub">Your purchase order was submitted successfully.</div>
       <div class="termsReviewDecisionActions">
         <button class="accountDocActionBtn is-primary" id="orderFlowPoSubmitSuccessCloseBtn" type="button">Return to Summary</button>
+      </div>
+    </div>
+  </div>
+  <div class="termsReviewDecisionBackdrop" id="orderFlowManualSubmitSuccessBackdrop" hidden>
+    <div class="termsReviewDecisionModal orderFlowManualSubmitSuccessModal" role="dialog" aria-modal="true" aria-labelledby="orderFlowManualSubmitSuccessTitle">
+      <div class="orderFlowManualSubmitSuccessIcon" aria-hidden="true">✓</div>
+      <div class="termsReviewDecisionTitle" id="orderFlowManualSubmitSuccessTitle">Order placed successfully</div>
+      <div class="termsReviewDecisionSub" id="orderFlowManualSubmitSuccessSub">Your order has been placed, and an invoice sent to the email on file. Production will begin once payment is received.</div>
+      <div class="termsReviewDecisionActions">
+        <button class="accountDocActionBtn is-primary" id="orderFlowManualSubmitSuccessCloseBtn" type="button">View Invoice</button>
       </div>
     </div>
   </div>
@@ -19393,6 +19483,10 @@
   const orderFlowSummaryViewerBody = orderFlowSummaryViewerModal ? orderFlowSummaryViewerModal.querySelector('.orderFlowSummaryViewerBody') : null;
   const orderFlowSummaryViewerPages = document.getElementById('orderFlowSummaryViewerPages');
   const orderFlowPoViewerRail = document.getElementById('orderFlowPoViewerRail');
+  const orderFlowManualViewerRail = document.getElementById('orderFlowManualViewerRail');
+  const orderFlowManualViewerStatus = document.getElementById('orderFlowManualViewerStatus');
+  const orderFlowManualViewerBackBtn = document.getElementById('orderFlowManualViewerBackBtn');
+  const orderFlowManualViewerSubmitBtn = document.getElementById('orderFlowManualViewerSubmitBtn');
   const orderFlowPoViewerStatus = document.getElementById('orderFlowPoViewerStatus');
   const orderFlowPoViewerShippingSection = document.getElementById('orderFlowPoViewerShippingSection');
   const orderFlowPoViewerShipFullName = document.getElementById('orderFlowPoViewerShipFullName');
@@ -19424,6 +19518,10 @@
   const orderFlowPoSubmitSuccessTitle = document.getElementById('orderFlowPoSubmitSuccessTitle');
   const orderFlowPoSubmitSuccessSub = document.getElementById('orderFlowPoSubmitSuccessSub');
   const orderFlowPoSubmitSuccessCloseBtn = document.getElementById('orderFlowPoSubmitSuccessCloseBtn');
+  const orderFlowManualSubmitSuccessBackdrop = document.getElementById('orderFlowManualSubmitSuccessBackdrop');
+  const orderFlowManualSubmitSuccessTitle = document.getElementById('orderFlowManualSubmitSuccessTitle');
+  const orderFlowManualSubmitSuccessSub = document.getElementById('orderFlowManualSubmitSuccessSub');
+  const orderFlowManualSubmitSuccessCloseBtn = document.getElementById('orderFlowManualSubmitSuccessCloseBtn');
   const headerDeliverySummary = document.getElementById('headerDeliverySummary');
   const headerDeliveryLines = document.getElementById('headerDeliveryLines');
   const headerDeliveryToggle = document.getElementById('headerDeliveryToggle');
@@ -19544,6 +19642,7 @@
   let ORDER_FLOW_SUMMARY_VIEWER_OPEN = false;
   let ORDER_FLOW_SUMMARY_VIEWER_MODE = 'default';
   let ORDER_FLOW_PO_VIEW_STAGE = '';
+  let ORDER_FLOW_DONE_TARGET = 'snapshot';
   let ORDER_FLOW_PO_EMAIL_OPEN = false;
   let ORDER_FLOW_PO_EMAIL_RECIPIENTS = '';
   let ORDER_FLOW_PO_BUSY_ACTION = '';
@@ -19553,6 +19652,13 @@
   let ORDER_FLOW_PO_DRAFT_READY_KEY = '';
   let ORDER_FLOW_PO_DRAFT_PREP_TIMER = 0;
   let ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
+  let ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT = false;
+  let ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE = null;
+  let ORDER_FLOW_MANUAL_ARTIFACT_PREP_KEY = '';
+  let ORDER_FLOW_MANUAL_ARTIFACT_READY_KEY = '';
+  let ORDER_FLOW_MANUAL_ARTIFACT_READY_RESULT = null;
+  let ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER = 0;
+  let ORDER_FLOW_MANUAL_STATUS = { tone: '', message: '' };
   let ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
   let ORDER_FLOW_PO_EMAIL_ASYNC_RECIPIENTS = '';
   let ORDER_FLOW_PO_EMAIL_SUCCESS_OPEN = false;
@@ -22874,6 +22980,7 @@
       (artworkPreviewLightbox && !artworkPreviewLightbox.hidden && artworkPreviewLightbox.classList.contains('open')) ||
       (orderFlowSummaryViewerBackdrop && !orderFlowSummaryViewerBackdrop.hidden && orderFlowSummaryViewerBackdrop.classList.contains('open')) ||
       (orderFlowPoSubmitSuccessBackdrop && !orderFlowPoSubmitSuccessBackdrop.hidden) ||
+      (orderFlowManualSubmitSuccessBackdrop && !orderFlowManualSubmitSuccessBackdrop.hidden) ||
       !!document.querySelector('.pendingFlowCancelBackdrop.open:not([hidden])') ||
       (orderFlowBackdrop && !orderFlowBackdrop.hidden && orderFlowBackdrop.classList.contains('open'));
     document.body.classList.toggle('modalLocked', Boolean(lock));
@@ -30035,6 +30142,10 @@
     return ORDER_FLOW_SUMMARY_VIEWER_MODE === 'purchase_order';
   }
 
+  function isOrderFlowManualPaymentViewerMode_(){
+    return ORDER_FLOW_SUMMARY_VIEWER_MODE === 'manual_payment';
+  }
+
   function isCanonicalPurchaseOrderDraftWorkflow_(workflowContext){
     const workflow = normalizeWorkflowContextObject_(workflowContext);
     const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
@@ -30080,6 +30191,10 @@
     applyOrderFlowPortalPayload(response, options);
     updateOrderStateFromResponse(response);
     return true;
+  }
+
+  function getOrderFlowManualMethodLabel_(){
+    return ORDER_FLOW_SELECTED_METHOD === PAYMENT_METHODS.cash ? 'cash' : 'check';
   }
 
   function getOrderFlowPurchaseOrderStage_(){
@@ -30380,6 +30495,178 @@
     }
   }
 
+  async function sendManualPaymentConfirmationEmailInBackground_(options){
+    if (ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT) return null;
+    ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT = true;
+    const payload = {
+      token: CURRENT_TOKEN
+    };
+    try {
+      const resp = await callServer('sendManualPaymentConfirmationEmail', payload);
+      if (!resp || resp.ok !== true) {
+        throw new Error(normalizeUiErrorMessage_(
+          resp && (resp.message || resp.error),
+          'Invoice is available in Summary / Invoice. Email delivery is still processing.'
+        ));
+      }
+      showNotice(String(resp.message || 'Invoice email sent.'), 'ok');
+      return resp;
+    } catch (err) {
+      console.error('Background manual-payment confirmation email failed.', err);
+      showNotice(
+        normalizeUiErrorMessage_(err, 'Invoice is available in Summary / Invoice. Email delivery is still processing.'),
+        'ok',
+        { persist: true }
+      );
+      throw err;
+    } finally {
+      ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT = false;
+    }
+  }
+
+  function clearOrderFlowManualStatus_(){
+    ORDER_FLOW_MANUAL_STATUS = { tone: '', message: '' };
+  }
+
+  function setOrderFlowManualStatus_(message, tone){
+    const text = String(message || '').trim();
+    ORDER_FLOW_MANUAL_STATUS = {
+      tone: String(tone || '').trim().toLowerCase() === 'success' ? 'success' : (String(tone || '').trim().toLowerCase() === 'error' ? 'error' : ''),
+      message: text
+    };
+  }
+
+  function buildManualOrderInvoiceArtifactPrepKey_(portalState){
+    const cleanToken = String(CURRENT_TOKEN || '').trim();
+    const state = (portalState && typeof portalState === 'object') ? portalState : {};
+    try {
+      const comparable = String(getComparablePortalStateKey(state) || '').trim();
+      if (cleanToken || comparable) return cleanToken + '|' + comparable;
+    } catch (_) {}
+    let fallback = '';
+    try {
+      fallback = JSON.stringify(state);
+    } catch (_) {}
+    return cleanToken + '|' + fallback;
+  }
+
+  function clearManualOrderInvoiceArtifactPrepState_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE = null;
+    ORDER_FLOW_MANUAL_ARTIFACT_PREP_KEY = '';
+    if (opts.preserveReady !== true) {
+      ORDER_FLOW_MANUAL_ARTIFACT_READY_KEY = '';
+      ORDER_FLOW_MANUAL_ARTIFACT_READY_RESULT = null;
+    }
+    if (ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER) {
+      clearTimeout(ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER);
+      ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER = 0;
+    }
+  }
+
+  async function buildManualOrderInvoiceArtifactPayloadInternal_(){
+    const friendlyArtifactFailure = 'Unable to create the final invoice artifact needed to place this order. Please try again.';
+    const attemptWarnings = [];
+    const attempts = [
+      {
+        source: 'viewer',
+        build: () => buildOrderFlowSummaryViewerPdf_({
+          fallbackMessage: friendlyArtifactFailure
+        })
+      },
+      {
+        source: 'summary',
+        build: () => buildSummaryExportPdf_({
+          fallbackMessage: friendlyArtifactFailure
+        })
+      }
+    ];
+    for (const attempt of attempts) {
+      try {
+        const pdfResult = await attempt.build();
+        const base64Data = await readBlobAsBase64_(pdfResult.blob);
+        if (!base64Data) {
+          throw new Error('Unable to package the generated invoice PDF.');
+        }
+        return {
+          source: attempt.source,
+          payload: {
+            fileName: pdfResult.fileName,
+            mimeType: 'application/pdf',
+            base64Data: base64Data
+          },
+          warnings: attemptWarnings
+        };
+      } catch (err) {
+        const detail = normalizeUiErrorMessage_(err, friendlyArtifactFailure);
+        attemptWarnings.push(attempt.source + ': ' + detail);
+        console.warn('Manual payment invoice artifact export attempt failed.', {
+          source: attempt.source,
+          error: detail
+        });
+      }
+    }
+    return {
+      source: 'server_fallback',
+      payload: null,
+      warnings: attemptWarnings
+    };
+  }
+
+  async function prepareManualOrderInvoiceArtifactClient_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const clickedPortalState = (opts.portalState && typeof opts.portalState === 'object')
+      ? clonePlainObject(opts.portalState)
+      : buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    const prepKey = buildManualOrderInvoiceArtifactPrepKey_(clickedPortalState);
+    if (opts.force !== true) {
+      if (ORDER_FLOW_MANUAL_ARTIFACT_READY_RESULT && ORDER_FLOW_MANUAL_ARTIFACT_READY_KEY === prepKey) {
+        return ORDER_FLOW_MANUAL_ARTIFACT_READY_RESULT;
+      }
+      if (ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE && ORDER_FLOW_MANUAL_ARTIFACT_PREP_KEY === prepKey) {
+        return ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE;
+      }
+    }
+    const prepPromise = buildManualOrderInvoiceArtifactPayloadInternal_()
+      .then(result => {
+        ORDER_FLOW_MANUAL_ARTIFACT_READY_KEY = prepKey;
+        ORDER_FLOW_MANUAL_ARTIFACT_READY_RESULT = result;
+        return result;
+      })
+      .finally(() => {
+        if (ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE === prepPromise) {
+          ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE = null;
+          ORDER_FLOW_MANUAL_ARTIFACT_PREP_KEY = '';
+        }
+      });
+    ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE = prepPromise;
+    ORDER_FLOW_MANUAL_ARTIFACT_PREP_KEY = prepKey;
+    return prepPromise;
+  }
+
+  function scheduleManualOrderInvoiceArtifactPrep_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (!ORDER_FLOW_SUMMARY_VIEWER_OPEN || !isOrderFlowManualPaymentViewerMode_()) return;
+    if (ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER) {
+      clearTimeout(ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER);
+      ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER = 0;
+    }
+    const clickedPortalState = (opts.portalState && typeof opts.portalState === 'object')
+      ? clonePlainObject(opts.portalState)
+      : buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    const delay = Number.isFinite(Number(opts.delayMs)) ? Math.max(0, Number(opts.delayMs)) : 120;
+    ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER = window.setTimeout(() => {
+      ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER = 0;
+      prepareManualOrderInvoiceArtifactClient_({ portalState: clickedPortalState }).catch(err => {
+        console.warn('Manual payment invoice artifact prewarm failed.', err);
+      });
+    }, delay);
+  }
+
+  async function buildManualOrderInvoiceArtifactPayload_(options){
+    return prepareManualOrderInvoiceArtifactClient_(options);
+  }
+
   function buildOrderFlowPurchaseOrderFileName_(){
     const dealNumber = String(getDealNumber() || '').trim();
     const today = new Date();
@@ -30396,6 +30683,7 @@
     const opts = (options && typeof options === 'object') ? options : {};
     ORDER_FLOW_SUMMARY_VIEWER_MODE = 'default';
     ORDER_FLOW_PO_VIEW_STAGE = '';
+    ORDER_FLOW_DONE_TARGET = 'snapshot';
     ORDER_FLOW_PO_EMAIL_OPEN = false;
     SUMMARY_PO_SHIPPING_OPEN = false;
     ORDER_FLOW_PO_EMAIL_RECIPIENTS = '';
@@ -30633,6 +30921,9 @@
 
   function renderOrderFlowPoViewerControls_(){
     if (!orderFlowPoViewerRail) return;
+    if (orderFlowSummaryViewerBody && orderFlowPoViewerRail.parentElement !== orderFlowSummaryViewerBody) {
+      orderFlowSummaryViewerBody.appendChild(orderFlowPoViewerRail);
+    }
     const isPoMode = isOrderFlowPurchaseOrderViewerMode_();
     const stage = String(ORDER_FLOW_PO_VIEW_STAGE || '').trim().toLowerCase() === 'submit' ? 'submit' : 'review';
     const busy = Boolean(ORDER_FLOW_PO_BUSY_ACTION);
@@ -30765,6 +31056,44 @@
     }
   }
 
+  function renderOrderFlowManualViewerControls_(){
+    if (!orderFlowManualViewerRail) return;
+    if (orderFlowSummaryViewerBody && orderFlowManualViewerRail.parentElement !== orderFlowSummaryViewerBody) {
+      if (orderFlowPoViewerRail && orderFlowPoViewerRail.parentElement === orderFlowSummaryViewerBody && orderFlowPoViewerRail.nextSibling) {
+        orderFlowSummaryViewerBody.insertBefore(orderFlowManualViewerRail, orderFlowPoViewerRail.nextSibling);
+      } else {
+        orderFlowSummaryViewerBody.appendChild(orderFlowManualViewerRail);
+      }
+    }
+    const isManualMode = isOrderFlowManualPaymentViewerMode_();
+    const busy = ORDER_FLOW_REQUEST_IN_FLIGHT === true;
+    orderFlowManualViewerRail.hidden = !isManualMode;
+    if (!isManualMode) {
+      if (orderFlowManualViewerStatus) {
+        orderFlowManualViewerStatus.hidden = true;
+        orderFlowManualViewerStatus.textContent = '';
+        orderFlowManualViewerStatus.className = 'orderFlowPoViewerStatus';
+      }
+      return;
+    }
+    if (orderFlowSummaryViewerModal) orderFlowSummaryViewerModal.classList.remove('isDocumentOnly');
+    if (orderFlowSummaryViewerBody) orderFlowSummaryViewerBody.classList.remove('isDocumentOnly');
+    if (orderFlowManualViewerStatus) {
+      const text = String((ORDER_FLOW_MANUAL_STATUS && ORDER_FLOW_MANUAL_STATUS.message) || '').trim();
+      orderFlowManualViewerStatus.hidden = !text;
+      orderFlowManualViewerStatus.className = 'orderFlowPoViewerStatus'
+        + (ORDER_FLOW_MANUAL_STATUS.tone === 'error'
+          ? ' isError'
+          : (ORDER_FLOW_MANUAL_STATUS.tone === 'success' ? ' isSuccess' : ''));
+      orderFlowManualViewerStatus.textContent = text;
+    }
+    if (orderFlowManualViewerBackBtn) orderFlowManualViewerBackBtn.disabled = busy;
+    if (orderFlowManualViewerSubmitBtn) {
+      orderFlowManualViewerSubmitBtn.disabled = busy;
+      orderFlowManualViewerSubmitBtn.textContent = busy ? 'Placing Order…' : 'Place Order';
+    }
+  }
+
   function renderOrderFlowSummaryViewer_(){
     if (!orderFlowSummaryViewerPages) return;
     if (!ORDER_FLOW_SUMMARY_VIEWER_OPEN && (!orderFlowSummaryViewerBackdrop || orderFlowSummaryViewerBackdrop.hidden)) return;
@@ -30774,6 +31103,8 @@
         orderFlowSummaryViewerTitle.textContent = String(ORDER_FLOW_PO_VIEW_STAGE || '').trim().toLowerCase() === 'submit'
           ? 'Submit Purchase Order'
           : 'Purchase Order Invoice';
+      } else if (isOrderFlowManualPaymentViewerMode_()) {
+        orderFlowSummaryViewerTitle.textContent = 'Review Manual Payment Order';
       } else {
         orderFlowSummaryViewerTitle.textContent = 'Final Order / Invoice Preview';
       }
@@ -30783,6 +31114,8 @@
       orderFlowSummaryViewerSub.hidden = !showPreviewSub;
       if (isOrderFlowPurchaseOrderViewerMode_()) {
         orderFlowSummaryViewerSub.textContent = 'Complete the following steps to submit your purchase order.';
+      } else if (isOrderFlowManualPaymentViewerMode_()) {
+        orderFlowSummaryViewerSub.textContent = 'Review the final invoice and confirm the order. Production begins only after Red Threads receives your manual payment.';
       } else if (showPreviewSub) {
         orderFlowSummaryViewerSub.textContent = 'Once your order is placed the final invoice will be emailed and production will begin.';
       }
@@ -30804,6 +31137,7 @@
     }
     window.setTimeout(() => rerunPagination(), 120);
     renderOrderFlowPoViewerControls_();
+    renderOrderFlowManualViewerControls_();
   }
 
   function openOrderFlowSummaryViewer(){
@@ -30838,6 +31172,23 @@
     });
   }
 
+  function openOrderFlowManualPaymentViewer_(){
+    if (!orderFlowSummaryViewerBackdrop) return;
+    resetOrderFlowPoViewerState_();
+    clearOrderFlowManualStatus_();
+    ORDER_FLOW_SUMMARY_VIEWER_MODE = 'manual_payment';
+    ORDER_FLOW_SUMMARY_VIEWER_OPEN = true;
+    renderOrderFlowSummaryViewer_();
+    orderFlowSummaryViewerBackdrop.hidden = false;
+    requestAnimationFrame(() => {
+      orderFlowSummaryViewerBackdrop.classList.add('open');
+      syncOverlayScrollLock();
+      if (orderFlowManualViewerSubmitBtn) orderFlowManualViewerSubmitBtn.focus();
+      else if (orderFlowSummaryViewerClose) orderFlowSummaryViewerClose.focus();
+    });
+    scheduleManualOrderInvoiceArtifactPrep_({ delayMs: 0 });
+  }
+
   function closeOrderFlowSummaryViewer(options){
     if (!orderFlowSummaryViewerBackdrop) return;
     ORDER_FLOW_SUMMARY_VIEWER_OPEN = false;
@@ -30845,6 +31196,7 @@
     orderFlowSummaryViewerBackdrop.hidden = true;
     if (orderFlowSummaryViewerPages) orderFlowSummaryViewerPages.innerHTML = '';
     resetOrderFlowPoViewerState_();
+    clearManualOrderInvoiceArtifactPrepState_({ preserveReady: true });
     syncOverlayScrollLock();
   }
 
@@ -30859,9 +31211,10 @@
     return pages;
   }
 
-  async function buildOrderFlowSummaryViewerPdf_(){
+  async function buildOrderFlowSummaryViewerPdf_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
     const libs = await ensureSummaryExportLibraries_();
-    const fileName = buildOrderFlowPurchaseOrderFileName_();
+    const fileName = String(opts.fileName || buildOrderFlowPurchaseOrderFileName_()).trim() || buildOrderFlowPurchaseOrderFileName_();
     const pages = collectOrderFlowSummaryViewerPageElements_();
     const pagesRoot = orderFlowSummaryViewerPages;
     await settleSummaryExportLayout_();
@@ -30891,7 +31244,7 @@
         }
         const canvas = await renderSummaryExportCanvas_(libs, page, rect, {
           root: pagesRoot,
-          fallbackMessage: 'Unable to generate the invoice PDF for email. Please try again.'
+          fallbackMessage: String(opts.fallbackMessage || 'Unable to generate the invoice PDF for email. Please try again.')
         });
         const imageData = canvas.toDataURL('image/png');
         pdf.addImage(imageData, 'PNG', 0, 0, pageWidthPt, pageHeightPt, undefined, 'FAST');
@@ -31350,6 +31703,8 @@
       orderFlowAchBtn,
       orderFlowSelectionConfirmBtn,
       orderFlowManualConfirmBtn,
+      orderFlowManualViewerBackBtn,
+      orderFlowManualViewerSubmitBtn,
       orderFlowPoConfirmBtn,
       orderFlowSubmitTermsBtn,
       orderFlowCheckoutLaunchBtn,
@@ -31632,22 +31987,22 @@
   }
 
   function renderOrderFlowManualSection(){
-    const label = 'check';
+    const label = getOrderFlowManualMethodLabel_();
     if (orderFlowManualBody) {
-      orderFlowManualBody.textContent = 'We will generate an invoice, email it to you, and lock this portal while ' + label + ' payment is pending.';
+      orderFlowManualBody.textContent = 'Review the final invoice before you place the order and submit payment manually by ' + label + '.';
     }
     if (orderFlowManualInfo) {
       orderFlowManualInfo.innerHTML = '';
       [
-        'An invoice PDF will be generated in the portal invoices folder.',
-        'The portal will switch to a locked client state while payment is pending.',
+        'The next step opens a final invoice review screen before the order is placed.',
+        'Once confirmed, the portal will switch to a locked client state while payment is pending.',
         'Production does not begin until the Red Threads team marks the payment as received.'
       ].forEach(line => {
         orderFlowManualInfo.appendChild(createEl('p', '', line));
       });
     }
     if (orderFlowManualConfirmBtn) {
-      orderFlowManualConfirmBtn.textContent = 'Confirm Pay by Check';
+      orderFlowManualConfirmBtn.textContent = 'Review Final Invoice';
     }
   }
 
@@ -31693,6 +32048,7 @@
   function showOrderFlowResult(title, body, meta, options){
     const opts = (options && typeof options === 'object') ? options : {};
     ORDER_FLOW_RESULT_KIND = String(opts.kind || 'info');
+    ORDER_FLOW_DONE_TARGET = String(opts.doneTarget || 'snapshot').trim().toLowerCase() === 'summary' ? 'summary' : 'snapshot';
     setOrderFlowMode('result');
     setOrderFlowStatePill(ORDER_FLOW_RESULT_KIND === 'success' ? 'Updated' : 'Status');
     if (orderFlowResultIcon) {
@@ -31707,7 +32063,36 @@
     if (orderFlowResultTitle) orderFlowResultTitle.textContent = String(title || 'Order status updated.');
     if (orderFlowResultBody) orderFlowResultBody.textContent = String(body || '');
     if (orderFlowResultMeta) orderFlowResultMeta.textContent = String(meta || '');
+    if (orderFlowDoneBtn) orderFlowDoneBtn.textContent = String(opts.doneLabel || (ORDER_FLOW_DONE_TARGET === 'summary' ? 'Return to Summary' : 'Return to Snapshot'));
     if (orderFlowDoneBtn) orderFlowDoneBtn.focus();
+  }
+
+  function openOrderFlowManualSubmitSuccessBackdrop_(resp){
+    if (!orderFlowManualSubmitSuccessBackdrop) return;
+    if (orderFlowManualSubmitSuccessTitle) {
+      orderFlowManualSubmitSuccessTitle.textContent = 'Order placed successfully';
+    }
+    if (orderFlowManualSubmitSuccessSub) {
+      orderFlowManualSubmitSuccessSub.textContent = 'Your order has been placed, and an invoice sent to the email on file. Production will begin once payment is received.';
+    }
+    if (orderFlowManualSubmitSuccessCloseBtn) {
+      orderFlowManualSubmitSuccessCloseBtn.textContent = 'View Invoice';
+    }
+    orderFlowManualSubmitSuccessBackdrop.hidden = false;
+    requestAnimationFrame(() => {
+      syncOverlayScrollLock();
+      if (orderFlowManualSubmitSuccessCloseBtn) orderFlowManualSubmitSuccessCloseBtn.focus();
+    });
+  }
+
+  function closeOrderFlowManualSubmitSuccessBackdrop_(options){
+    if (!orderFlowManualSubmitSuccessBackdrop) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    orderFlowManualSubmitSuccessBackdrop.hidden = true;
+    if (!opts.skipSummaryRender) {
+      setActiveSummaryPanel({ render: true });
+    }
+    syncOverlayScrollLock();
   }
 
   function setOrderFlowBlockingJobsState(blockingJobs, options){
@@ -31781,6 +32166,12 @@
         metaParts.join('\n'),
         { kind: 'error' }
       );
+      return true;
+    }
+    if (opts.surface === 'manual') {
+      setOrderFlowManualStatus_(message, 'error');
+      renderOrderFlowSummaryViewer_();
+      showNotice(message, 'err', { persist: true });
       return true;
     }
     showNotice(message, 'err');
@@ -31930,9 +32321,14 @@
     }
     ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
     ORDER_FLOW_RESULT_KIND = 'info';
+    ORDER_FLOW_DONE_TARGET = 'snapshot';
     ORDER_FLOW_FULFILLMENT_ERROR = false;
     ORDER_FLOW_METHOD_ERROR = false;
     ORDER_FLOW_PO_UNLOCK_ERROR = false;
+    ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT = false;
+    clearOrderFlowManualStatus_();
+    if (orderFlowManualSubmitSuccessBackdrop) orderFlowManualSubmitSuccessBackdrop.hidden = true;
+    clearManualOrderInvoiceArtifactPrepState_();
     closeOrderFlowSummaryViewer({ immediate: true });
     setOrderFlowButtonsBusy(false);
     renderOrderFlowFulfillmentSection();
@@ -31955,6 +32351,7 @@
     if (orderFlowResultTitle) orderFlowResultTitle.textContent = 'Order status updated.';
     if (orderFlowResultBody) orderFlowResultBody.textContent = 'We saved the latest order state.';
     if (orderFlowResultMeta) orderFlowResultMeta.textContent = '';
+    if (orderFlowDoneBtn) orderFlowDoneBtn.textContent = 'Return to Snapshot';
   }
 
   function openOrderFlowModal(){
@@ -32046,38 +32443,61 @@
 
   async function submitOrderFlowManual(){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
-    const method = 'check';
-    const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    if (maybeBlockOrderFlow()) return;
+    if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
+      setOrderFlowStatePill('Fulfillment');
+      setOrderFlowMode('fulfillment');
+      return;
+    }
+    clearOrderFlowManualStatus_();
+    openOrderFlowManualPaymentViewer_();
+  }
+
+  async function handleOrderFlowManualSubmit_(){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    const method = ORDER_FLOW_SELECTED_METHOD === PAYMENT_METHODS.cash ? PAYMENT_METHODS.cash : PAYMENT_METHODS.check;
+    clearOrderFlowManualStatus_();
     setOrderFlowButtonsBusy(true);
+    renderOrderFlowSummaryViewer_();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
+      const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+      const artifact = await buildManualOrderInvoiceArtifactPayload_({
+        portalState: clickedPortalState
+      });
       const resp = await callServer('initiateManualPayment', {
         token: CURRENT_TOKEN,
         paymentMethodSelected: method,
-        portalState: JSON.stringify(clickedPortalState)
+        portalState: JSON.stringify(clickedPortalState),
+        clientArtifactStrategy: artifact.source,
+        clientArtifactWarnings: Array.isArray(artifact.warnings) ? artifact.warnings : [],
+        fileName: artifact && artifact.payload ? artifact.payload.fileName : '',
+        mimeType: artifact && artifact.payload ? artifact.payload.mimeType : '',
+        base64Data: artifact && artifact.payload ? artifact.payload.base64Data : ''
       });
       if (!resp || resp.ok !== true) {
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         if (handleOrderFlowActionError(resp, {
           surface: 'manual',
-          fallbackMessage: 'Unable to start manual payment order.'
+          fallbackMessage: 'Unable to place the manual payment order.'
         })) return;
-        throw new Error(String((resp && resp.error) || 'Unable to start manual payment order.'));
+        throw new Error(String((resp && (resp.error || resp.message)) || 'Unable to place the manual payment order.'));
       }
       SUPPRESS_NEXT_AUTO_INTRO = true;
       syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
-      const invoiceLine = resp && resp.invoice && resp.invoice.invoiceNumber
-        ? ('Invoice ' + resp.invoice.invoiceNumber + (resp.invoice.invoicePdfUrl ? '\n' + resp.invoice.invoicePdfUrl : ''))
-        : '';
-      showOrderFlowResult(
-        'Awaiting Manual Payment',
-        'The portal is now locked while we wait for your ' + method + ' payment. An invoice has been generated for the team/client payment handoff.',
-        invoiceLine,
-        { kind: 'success' }
-      );
+      closeOrderFlowSummaryViewer({ immediate: true });
+      closeOrderFlowModal({ immediate: true });
+      setActiveSummaryPanel({ render: true });
+      openOrderFlowManualSubmitSuccessBackdrop_(resp);
+      sendManualPaymentConfirmationEmailInBackground_().catch(() => {});
     } catch (err) {
-      showNotice(String((err && err.message) || err), 'err');
+      const message = normalizeUiErrorMessage_(err, 'Unable to place the manual payment order.');
+      setOrderFlowManualStatus_(message, 'error');
+      renderOrderFlowSummaryViewer_();
+      showNotice(message, 'err', { persist: true });
     } finally {
       setOrderFlowButtonsBusy(false);
+      renderOrderFlowSummaryViewer_();
     }
   }
 
@@ -32535,9 +32955,10 @@
     };
   }
 
-  async function buildSummaryExportPdf_(){
+  async function buildSummaryExportPdf_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
     const libs = await ensureSummaryExportLibraries_();
-    const fileName = buildSummaryExportFileName_();
+    const fileName = String(opts.fileName || buildSummaryExportFileName_()).trim() || buildSummaryExportFileName_();
     const restoreExportPresentation = prepareSummaryExportPresentation_();
     try {
       const pages = collectSummaryExportPageElements_();
@@ -32570,9 +32991,9 @@
           }
           const canvas = await renderSummaryExportCanvas_(libs, page, rect, {
             root: pagesRoot || summaryRoot,
-            fallbackMessage: isLockedSummaryInvoiceMode_()
+            fallbackMessage: String(opts.fallbackMessage || (isLockedSummaryInvoiceMode_()
               ? 'Unable to generate the invoice PDF for email. Please try again.'
-              : 'Unable to generate the Summary PDF. Please try again.'
+              : 'Unable to generate the Summary PDF. Please try again.'))
           });
           const imageData = canvas.toDataURL('image/png');
           pdf.addImage(imageData, 'PNG', 0, 0, pageWidthPt, pageHeightPt, undefined, 'FAST');
@@ -36218,7 +36639,7 @@
     const paymentLabel = String(lifecycle.paymentMethodLabel || '').trim().toLowerCase() || 'manual';
     const card = createEl('section', 'summaryEstimatePoSection');
     card.appendChild(createEl('div', 'summaryEstimatePoSectionTitle', 'Awaiting Payment'));
-    card.appendChild(createEl('div', 'summaryEstimatePoSectionSub', 'This project is locked to the final invoice while we wait for your ' + paymentLabel + ' payment. If you need to reopen the estimate and choose a different payment path, cancel this order first.'));
+    card.appendChild(createEl('div', 'summaryEstimatePoSectionSub', 'This project is locked to the final invoice while we wait for your ' + paymentLabel + ' payment. Production begins only after Red Threads records payment. Credit card and ACH payment options remain available below if you need to switch methods.'));
     const cancelBtn = createEl(
       'button',
       'summaryEstimateControlSecondary',
@@ -36528,6 +36949,7 @@
     const documentMode = lifecycle.documentMode;
     const isLockedInvoice = lifecycle.isLockedInvoice;
     const isInvoiceMode = lifecycle.isInvoiceMode;
+    const isLockedPaymentSurface = isLockedInvoice || lifecycle.isManualPendingInvoice;
     const order = lifecycle.order;
     const paymentMethodSelected = lifecycle.paymentMethodSelected;
     const canToggleSalesTax = ACCOUNT_SUMMARY.taxExemptActive || ACCOUNT_SUMMARY.taxExemptApproved;
@@ -36537,9 +36959,10 @@
     const card = createEl('aside', 'summaryEstimateControlsCard');
     const isBusy = Boolean(SUMMARY_SHARE_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
     const emailActionLabel = isInvoiceMode ? 'Share / Download Invoice' : 'Share / Download Estimate';
-    const canShowLockedStripePaymentActions = lifecycle.showPaymentDueControls
+    const canShowLockedStripePaymentActions = (lifecycle.showPaymentDueControls
       && paymentMethodSelected !== PAYMENT_METHODS.check
-      && paymentMethodSelected !== PAYMENT_METHODS.cash;
+      && paymentMethodSelected !== PAYMENT_METHODS.cash)
+      || (lifecycle.showManualPendingControls && lifecycle.paymentDue === true);
 
     const emailBtn = createEl(
       'button',
@@ -36627,9 +37050,8 @@
     }
     if (lifecycle.showManualPendingControls) {
       card.appendChild(buildSummaryManualPendingControlCard_(Object.assign({}, data, { lifecycleUiState: lifecycle })));
-      return card;
     }
-    if (isLockedInvoice) {
+    if (isLockedPaymentSurface) {
       if (canShowLockedStripePaymentActions) {
         const paymentGroup = createEl('div', 'summaryEstimateToggleGroup');
         const amountDue = Number(order.amountGrandTotal || 0);
@@ -38955,6 +39377,14 @@
     if (orderFlowDoneBtn) {
       orderFlowDoneBtn.addEventListener('click', () => {
         closeOrderFlowModal();
+        if (ORDER_FLOW_DONE_TARGET === 'summary') {
+          setActiveSummaryPanel({ render: true });
+        }
+      });
+    }
+    if (orderFlowManualSubmitSuccessCloseBtn) {
+      orderFlowManualSubmitSuccessCloseBtn.addEventListener('click', () => {
+        closeOrderFlowManualSubmitSuccessBackdrop_();
       });
     }
     if (orderFlowBackdrop) {
@@ -38968,6 +39398,20 @@
         if (evt.target !== orderFlowSummaryViewerBackdrop) return;
         closeOrderFlowSummaryViewer({ immediate: true });
       });
+    }
+    if (orderFlowManualSubmitSuccessBackdrop) {
+      orderFlowManualSubmitSuccessBackdrop.addEventListener('click', evt => {
+        if (evt.target !== orderFlowManualSubmitSuccessBackdrop) return;
+        closeOrderFlowManualSubmitSuccessBackdrop_();
+      });
+    }
+    if (orderFlowManualViewerBackBtn) {
+      orderFlowManualViewerBackBtn.addEventListener('click', () => {
+        closeOrderFlowSummaryViewer({ immediate: true });
+      });
+    }
+    if (orderFlowManualViewerSubmitBtn) {
+      orderFlowManualViewerSubmitBtn.addEventListener('click', handleOrderFlowManualSubmit_);
     }
     if (orderFlowPoViewerEmailBtn) {
       orderFlowPoViewerEmailBtn.addEventListener('click', () => {
