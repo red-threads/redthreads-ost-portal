@@ -17465,6 +17465,8 @@
   }
 
   function legacyQuantityStateKey(jobId, skuId, colorway, size){
+    // Legacy compatibility layer — keep until Tranche 4D deletion pass.
+    // Older quantity-state caches still read this token-prefixed key shape.
     return [
       encodeURIComponent(String(INITIAL_TOKEN || '')),
       encodeURIComponent(String(jobId || '')),
@@ -18260,6 +18262,9 @@
   }
 
   function getPortalWorkflowContext_(options){
+    // Canonical client lifecycle accessor — do not bypass for new UI decisions.
+    // Client surfaces should read workflowContext first, then fall back only
+    // where a compatibility bridge is explicitly quarantined.
     const opts = (options && typeof options === 'object') ? options : {};
     const current = normalizeCurrentStateSummary(opts.currentStateSummary || CURRENT_STATE_SUMMARY);
     const latest = normalizeOrderSummary(opts.orderSummary || LATEST_ORDER_SUMMARY);
@@ -21299,6 +21304,8 @@
   }
 
   function applyPortalPayloadInPlace(portalPayload, options){
+    // Canonical client payload applicator — lifecycle consumers should refresh
+    // through this path rather than mutating summary/order state ad hoc.
     const opts = (options && typeof options === 'object') ? options : {};
     const payload = clonePlainObject(portalPayload);
     const payloadToken = String(payload.token || '').trim();
@@ -26165,6 +26172,8 @@
   }
 
   function renderTeamAccountAdminModal_(){
+    // Canonical team/admin consumer — modal visibility should mirror the
+    // canonical workflowContext + server action metadata contract.
     const busy = String(TEAM_ACCOUNT_ADMIN_BUSY_ACTION || '').trim();
     const controls = [
       [teamResetCreditTermsBtn, 'reset_terms', busy === 'reset_terms', 'Reset Credit Terms', 'Resetting…'],
@@ -26199,6 +26208,8 @@
   }
 
   function getTeamAdminActionMeta_(actionName, options){
+    // Canonical team/admin consumer — prefer workflowContext booleans and
+    // server metadata; do not invent parallel visibility rules in the modal.
     const actionKey = String(actionName || '').trim();
     const opts = (options && typeof options === 'object') ? options : {};
     const workflow = normalizeWorkflowContextObject_(
@@ -30178,6 +30189,8 @@
   }
 
   function syncOrderFlowLifecycleFromResponse_(resp, options){
+    // Canonical order-flow refresh path — do not bypass with bespoke response
+    // handling when workflowContext/current state/order summary are returned.
     const response = (resp && typeof resp === 'object') ? resp : null;
     if (!response) return false;
     const hasLifecyclePayload = !!(
@@ -31662,6 +31675,7 @@
 
   function setOrderFlowMode(mode){
     const validModes = new Set(['fulfillment', 'method', 'manual', 'po', 'blocking', 'checkout', 'result']);
+    // Legacy compatibility layer — keep until Tranche 4D deletion pass.
     // `method` is retained as a quarantined compatibility mode. The shipped
     // compact flow uses `fulfillment` as the active delivery/payment surface.
     ORDER_FLOW_MODE = validModes.has(mode) ? mode : 'fulfillment';
@@ -34865,6 +34879,9 @@
     parent.appendChild(field);
   }
 
+  /* Legacy compatibility layer — keep until Tranche 4D deletion pass.
+     These legacyBuildSummary* helpers describe the older estimate-summary
+     rendering stack and should not become the basis for new lifecycle behavior. */
   function legacyBuildSummaryDocumentHeaderData_(rollup){
     const data = (rollup && typeof rollup === 'object') ? rollup : buildSummaryRollupData_();
     return {
@@ -35296,6 +35313,9 @@
   }
 
   function getDisplayOrderStatusLabel_(options){
+    // Legacy compatibility fallback — prefer canonical workflowContext/lifecycle
+    // stage above. Raw order/payment/state readers below are retained only to
+    // bridge older summary/status consumers during Tranche 4 cleanup.
     const opts = (options && typeof options === 'object') ? options : {};
     const order = normalizeOrderSummary(opts.orderSummary || LATEST_ORDER_SUMMARY);
     const current = normalizeCurrentStateSummary(opts.currentStateSummary || CURRENT_STATE_SUMMARY);
@@ -35600,6 +35620,9 @@
   }
 
   function getLockedSummaryTimelineState_(){
+    // Compatibility-heavy summary timeline reader — keep until Tranche 4D
+    // cleanup. Raw order/payment/date fallbacks below should not be copied into
+    // new lifecycle decisions when workflowContext already contains canonical truth.
     const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
     const current = normalizeCurrentStateSummary(CURRENT_STATE_SUMMARY);
     const purchaseOrderDraft = getCurrentPurchaseOrderDraft_();

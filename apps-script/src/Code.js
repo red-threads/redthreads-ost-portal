@@ -1712,6 +1712,8 @@ function shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState) {
 }
 
 function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
+  /* Canonical dashboard projection builder — do not bypass. Dashboard status row
+     and peek should flow from this projection context, not bespoke row parsing. */
   const opts = (options && typeof options === 'object') ? options : {};
   const info = (opts.rowInfo && typeof opts.rowInfo === 'object')
     ? opts.rowInfo
@@ -1758,6 +1760,9 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
   const lockedStateSource = safeJsonParse_(row.submittedstatejson || row.portalstatejson, {}) || {};
   const lockedPortalState = normalizePortalStateForOrder_(lockedStateSource, printJobs);
   const isLocked = workflowContext.isLocked === true;
+  /* Legacy compatibility layer — keep until Tranche 4C deletion pass. These
+     legacy flags bridge older dashboard assumptions while canonical workflowContext
+     remains the authoritative lifecycle source. */
   const legacyDashboardFlags = deriveDashboardProjectStepFlags_(
     info || { rowObjNormalized: row },
     snapshot,
@@ -2377,6 +2382,8 @@ function buildDashboardPeekHeaderMeta_(workflowContext, timeline) {
 }
 
 function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
+  /* Canonical dashboard consumer — peek lifecycle/timeline state should be read
+     from workflowContext + canonical timeline meta, not reinterpreted ad hoc. */
   const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
   const safeRow = (row && typeof row === 'object') ? row : {};
@@ -3214,6 +3221,9 @@ function deriveDashboardWorkflowVariant_(row, latestOrderSummary, currentStateSu
 }
 
 function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latestOrderSummary, currentStateSummary, options) {
+  /* Legacy compatibility layer — keep until Tranche 4C deletion pass.
+     Raw row/order/payment fields are still interpreted here for dashboard bridge
+     logic. Do not use this helper for new lifecycle decisions. */
   const opts = (options && typeof options === 'object') ? options : {};
   const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
   const latest = (latestOrderSummary && typeof latestOrderSummary === 'object') ? latestOrderSummary : {};
@@ -3385,6 +3395,8 @@ function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latest
 }
 
 function buildDashboardProjectStepFlagsFromLifecycle_(legacyFlags, workflowContext) {
+  /* Canonical dashboard adapter — overlays legacy dashboard flags with
+     workflowContext truth during the migration window. */
   const legacy = (legacyFlags && typeof legacyFlags === 'object') ? legacyFlags : {};
   const lifecycle = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const dashboardState = (lifecycle.dashboardState && typeof lifecycle.dashboardState === 'object') ? lifecycle.dashboardState : {};
@@ -3552,6 +3564,7 @@ function buildDashboardLifecycleStepStateMap_(flags, variant, presentation) {
 }
 
 function buildDashboardStatusPresentationMeta_(options) {
+  /* Canonical dashboard consumer — step-state presentation adapter. */
   const opts = (options && typeof options === 'object') ? options : {};
   const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
   const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
@@ -3643,6 +3656,7 @@ function buildDashboardStatusPresentationMeta_(options) {
 }
 
 function buildDashboardStatusCopyMeta_(options) {
+  /* Canonical dashboard consumer — status helper/tooltip copy adapter. */
   const opts = (options && typeof options === 'object') ? options : {};
   const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
   const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
@@ -4107,6 +4121,8 @@ function derivePortalValidatedCompletionMeta_(selectedJobs, completedJobsByJobId
 }
 
 function deriveDashboardTimelineMeta_(options) {
+  /* Canonical dashboard consumer — shared date derivation for dashboard status
+     hover/copy and dashboard peek. Do not create parallel timeline logic. */
   const opts = (options && typeof options === 'object') ? options : {};
   const row = (opts.row && typeof opts.row === 'object') ? opts.row : {};
   const flags = (opts.flags && typeof opts.flags === 'object') ? opts.flags : {};
@@ -4901,6 +4917,8 @@ function validateEditableOrderInitiationForAction_(ctx) {
 }
 
 function buildOrderActionPortalPayload_(ctx, exportRowInfo) {
+  /* Canonical lifecycle response adapter — do not bypass. Mutating order/admin
+     responses should attach fresh portal payload through this path. */
   try {
     return refreshPortalPayloadForToken_(ctx.orderDraft.token, {
       cfg: ctx.cfg,
@@ -4919,6 +4937,8 @@ function buildOrderActionPortalPayload_(ctx, exportRowInfo) {
 }
 
 function finalizeOrderActionResponse_(response, ctx, exportRowInfo) {
+  /* Canonical lifecycle response adapter — server fan-in point for attaching
+     fresh portal payload/current state/latest order summary to action responses. */
   const base = (response && typeof response === 'object') ? Object.assign({}, response) : {};
   const payload = base.portalPayload || buildOrderActionPortalPayload_(ctx, exportRowInfo || ctx.rowInfo);
   if (!payload || typeof payload !== 'object') return base;
@@ -11426,6 +11446,13 @@ function buildPortalOrderSelectedJobsSummary_(selectedJobs) {
   });
 }
 
+/* ---------------- Canonical Lifecycle Source Chain ---------------- */
+/* Canonical lifecycle source — do not bypass for new lifecycle decisions.
+   Command chain:
+   1. buildPortalOrderSummary_()
+   2. buildCurrentOrderStateSummaryFromRow_()
+   3. derivePortalLifecycle_()
+   4. buildPortalLifecycleHydratedContext_() */
 function buildPortalOrderSummary_(row) {
   const order = (row && typeof row === 'object') ? row : {};
   const draft = safeJsonParse_(order.orderdraftjson || order.orderDraftJson, {}) || {};
@@ -11833,6 +11860,9 @@ function invalidateDashboardProjectsCacheForRow_(rowInfo) {
 }
 
 function buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderSummary) {
+  /* Canonical lifecycle source — export-row pointer summary only.
+     Raw export-row fields remain compatibility inputs here; do not use them
+     directly for new lifecycle decisions outside the canonical chain. */
   const normalizedRow = (row && typeof row === 'object') ? row : {};
   const latest = latestOrderSummary || {};
   const account = accountSummary || {};
@@ -11878,6 +11908,8 @@ function buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderS
 }
 
 function derivePortalLifecycle_(context) {
+  /* Canonical lifecycle source — do not bypass. New lifecycle states, booleans,
+     and next-action semantics should be derived here first. */
   const options = context;
   const opts = (options && typeof options === 'object') ? options : {};
   const row = (opts.row && typeof opts.row === 'object') ? opts.row : {};
@@ -12298,6 +12330,8 @@ function derivePortalLifecycle_(context) {
 }
 
 function buildTeamWorkflowContext_(options) {
+  /* Canonical lifecycle alias — team/admin permissions intentionally share the
+     same derivePortalLifecycle_() contract as dashboard and client surfaces. */
   return derivePortalLifecycle_(options);
 }
 
@@ -12455,6 +12489,8 @@ function buildPortalLifecycleDiagnosticReasons_(context) {
 }
 
 function buildTeamWorkflowActionMeta_(workflowContext) {
+  /* Canonical team/admin permission adapter — client visibility metadata should
+     flow from canonical workflowContext, not from ad hoc state guesses. */
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   return {
     reset_terms: {
@@ -12542,6 +12578,9 @@ function buildPortalLifecycleDiagnosticForRow_(rowInfo, options) {
 }
 
 function buildPortalLifecycleSurfaceInterpretations_(projectionContext) {
+  /* Legacy compatibility/diagnostic layer — keep until Tranche 4C/4D deletion
+     pass. This compares canonical lifecycle output against older server
+     interpretations during the migration window. */
   const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
   const row = (context.row && typeof context.row === 'object') ? context.row : {};
   const workflowContext = (context.workflowContext && typeof context.workflowContext === 'object') ? context.workflowContext : {};
@@ -12605,6 +12644,8 @@ function buildPortalLifecycleSurfaceInterpretations_(projectionContext) {
 }
 
 function comparePortalLifecycleInterpretations_(diagnosticContext) {
+  /* Legacy compatibility/diagnostic layer — no production lifecycle behavior
+     should depend on these comparison results once clean-up is complete. */
   const diagnostic = (diagnosticContext && typeof diagnosticContext === 'object') ? diagnosticContext : {};
   const canonical = (diagnostic.canonical && typeof diagnostic.canonical === 'object') ? diagnostic.canonical : {};
   const dashboard = (diagnostic.serverDashboard && typeof diagnostic.serverDashboard === 'object') ? diagnostic.serverDashboard : {};
@@ -12891,6 +12932,8 @@ function buildPortalLifecycleDiagnosticRawState_(projectionContext, canonical) {
 }
 
 function buildPortalLifecycleKnownClientConsumers_() {
+  /* Audit/quarantine map — documents remaining client consumers that still need
+     to be steered fully onto canonical workflowContext during Tranche 4B/4D. */
   return [
     { surface: 'Summary / Invoice tab', status: 'client-side consumer to reroute in later tranche', functions: ['getSummaryDocumentMode_', 'isLockedSummaryInvoiceMode_', 'buildSummaryEstimateControlCard_', 'buildSummaryPurchaseOrderControlCard_', 'buildSummaryManualPendingControlCard_'] },
     { surface: 'Project editor gates', status: 'client-side consumer to reroute in later tranche', functions: ['isFinalizedPortal', 'describePortalStateForUi'] },
@@ -12956,6 +12999,8 @@ function buildPortalLifecycleDiagnosticIssue_(code, message, details) {
 }
 
 function buildPortalLifecycleHydratedContext_(workflowContext) {
+  /* Canonical lifecycle hydration — do not bypass. This is the contract shipped
+     to client consumers via workflowContext on current state and latest order. */
   const context = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   return {
     variant: trimString_(context.variant),
@@ -13030,6 +13075,8 @@ function attachTeamWorkflowMetaToCurrentStateSummary_(currentStateSummary, workf
 }
 
 function assertTeamWorkflowActionAllowed_(workflowContext, actionName) {
+  /* Canonical team/admin enforcement — do not bypass with raw state checks.
+     Hidden or stale client actions must still be blocked here on the server. */
   const actions = buildTeamWorkflowActionMeta_(workflowContext);
   const actionKey = trimString_(actionName);
   const action = actions[actionKey];
@@ -15635,6 +15682,9 @@ function isFinalPortalStatus_(status) {
 }
 
 function derivePortalDisplayOrderStatus_(stateInput, fallbackStatus) {
+  /* Legacy compatibility layer — keep until Tranche 4E deletion pass.
+     Raw order/payment/lock fields are interpreted here as a display-status bridge.
+     Do not use this helper for new lifecycle decisions when workflowContext is available. */
   const state = (stateInput && typeof stateInput === 'object') ? stateInput : {};
   const teamWorkflowMode = normalizeTeamWorkflowMode_(state.teamWorkflowMode);
   const portalLockState = trimString_(
@@ -15717,6 +15767,9 @@ function getFinalStatusForRow_(row) {
 }
 
 function isLockedPortalRow_(row, portalState) {
+  /* Legacy compatibility layer — keep until Tranche 4E deletion pass.
+     Raw export-row fallback — do not use for new lifecycle decisions. Canonical
+     lock/editability should flow from derivePortalLifecycle_() and hydrated workflowContext. */
   const status = String((row && row.status) || '').trim().toLowerCase();
   const portalLockState = trimString_(
     row && (row.portallockstate || row.portalLockState || row.currentportallockstate || row.currentPortalLockState)
