@@ -35657,7 +35657,7 @@
     const summaryDocumentMode = String(workflow.summaryDocumentMode || '').trim().toLowerCase();
     const paidAt = String(order.paidAt || '').trim();
     const poSubmittedAt = String(order.poSubmittedAt || '').trim();
-    const orderState = String(
+    const rawOrderState = String(
       (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.currentOrderState)
       || order.orderState
       || ''
@@ -35680,6 +35680,20 @@
     const paymentReceived = lifecycle.paymentReceived === true;
     const controlsMode = String(lifecycle.controlsMode || '').trim().toLowerCase();
     const paymentMethodSelected = String(lifecycle.paymentMethodSelected || order.paymentMethodSelected || '').trim().toLowerCase();
+    const isPoDraftBranch = controlsMode === 'po_submission'
+      || summaryDocumentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
+      || workflow.isPoDraftLocked === true
+      || workflow.isAwaitingPoSubmission === true
+      || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
+      || lifecycleState === 'po_draft_invoice_prepared'
+      || lifecycleState === 'awaiting_po_submission'
+      || (
+        !!purchaseOrderDraft
+        && !paymentDue
+        && !productionCurrent
+        && !poSubmittedAt
+        && rawOrderState === 'awaiting_po_submission'
+      );
     const submittedAt = String(
       poSubmittedAt
       || order.lockedAt
@@ -35752,20 +35766,7 @@
         paymentDue: paymentDue
       };
     }
-    if (
-      controlsMode === 'po_submission'
-      || summaryDocumentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
-      || lifecycleStage === PORTAL_LIFECYCLE_STAGES.po_draft_locked
-      || lifecycleState === 'po_draft_invoice_prepared'
-      || lifecycleState === 'awaiting_po_submission'
-      || (
-        !!purchaseOrderDraft
-        && !paymentDue
-        && !productionCurrent
-        && !poSubmittedAt
-        && orderState === 'awaiting_po_submission'
-      )
-    ) {
+    if (isPoDraftBranch) {
       return {
         isLocked: true,
         freeze: false,
