@@ -1968,7 +1968,7 @@ function buildDashboardPeekLightweightAccountSummaryFromRow_(row) {
 }
 
 function getDashboardProjectPeekPayloadVersion_() {
-  return 'v9';
+  return 'v10';
 }
 
 function buildDashboardProjectPreviewMeta_(rowState, runtimeMeta) {
@@ -2300,14 +2300,14 @@ function buildDashboardPeekHeaderMeta_(workflowContext, timeline) {
       displayText: 'Awaiting purchase order submission.'
     };
   }
-  if (peek.productionComplete === true) {
+  if (peek.projectComplete === true) {
     return {
       mode: 'complete',
       primaryLabel: 'Project complete',
-      primaryDateLabel: peek.completionDateLabel,
+      primaryDateLabel: peek.projectCompletionDateLabel,
       poNumber: peek.poNumber,
-      displayText: peek.completionDateLabel
-        ? ('Project completed on ' + peek.completionDateLabel + '.')
+      displayText: peek.projectCompletionDateLabel
+        ? ('Project completed on ' + peek.projectCompletionDateLabel + '.')
         : 'Project completed.'
     };
   }
@@ -2408,6 +2408,13 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
   const productionStartDate = normalizeDashboardCalendarDate_(productionStartAt || safeTimeline.printStartDateValue);
   const productionTargetCompleteDate = normalizeDashboardCalendarDate_(productionTargetCompleteAt || safeTimeline.completionDateValue);
   const productionCompletionDate = normalizeDashboardCalendarDate_(productionCompletionAt);
+  const projectCompletionDate = derivePortalProjectCompletionAt_({
+    orderPlaced: orderPlaced,
+    paymentReceived: paymentReceived,
+    productionComplete: productionComplete,
+    paymentReceivedAt: trimString_(context.paymentReceivedAt) || safeTimeline.paidDateValue,
+    productionCompletionAt: productionCompletionAt || (productionComplete === true && productionTargetCompleteDate ? productionTargetCompleteDate : '')
+  });
   const productionStarted = productionComplete === true
     || productionCurrent === true
     || (productionAuthorized === true && !!productionStartDate);
@@ -2449,6 +2456,7 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
     paymentDue: paymentDue,
     paymentReceived: paymentReceived,
     paymentMethodLabel: paymentMethodLabel,
+    projectComplete: !!projectCompletionDate,
     productionStarted: productionStarted,
     productionCurrent: productionCurrent,
     productionComplete: productionComplete,
@@ -2464,6 +2472,8 @@ function buildDashboardPeekLifecycleMeta_(workflowContext, timeline, row) {
     completionDateLabel: productionCompletionDate
       ? formatDashboardShortDate_(productionCompletionDate)
       : (productionComplete === true && productionTargetCompleteDate ? formatDashboardShortDate_(productionTargetCompleteDate) : ''),
+    projectCompletionDateValue: projectCompletionDate ? projectCompletionDate.getTime() : null,
+    projectCompletionDateLabel: projectCompletionDate ? formatDashboardShortDate_(projectCompletionDate) : '',
     estimatedCompletionDateLabel: estimatedCompletionDateLabel,
     poSubmittedDateLabel: poSubmittedDate ? formatDashboardShortDate_(poSubmittedDate) : trimString_(safeTimeline.poSubmittedDateLabel),
     paidDateLabel: paidDate ? formatDashboardShortDate_(paidDate) : trimString_(safeTimeline.paidDateLabel),
@@ -2537,7 +2547,7 @@ function buildDashboardPeekTimelineFacts_(workflowContext, timeline, row) {
     ),
     projectCompletedOn: buildDashboardPeekTimelineFact_(
       'Project Completed on',
-      peek.productionComplete === true ? peek.completionDateLabel : ''
+      peek.projectComplete === true ? peek.projectCompletionDateLabel : ''
     )
   };
 }
@@ -4031,6 +4041,19 @@ function derivePortalOrderPlacedAt_(options) {
     return paidAt || lockedAt || createdAt || lastOrderUpdatedAt || '';
   }
   return lockedAt || createdAt || lastOrderUpdatedAt || '';
+}
+
+function derivePortalProjectCompletionAt_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (opts.orderPlaced !== true || opts.paymentReceived !== true || opts.productionComplete !== true) {
+    return null;
+  }
+  const paymentReceivedDate = normalizeDashboardCalendarDate_(opts.paymentReceivedAt);
+  const productionCompletionDate = normalizeDashboardCalendarDate_(opts.productionCompletionAt);
+  if (!paymentReceivedDate || !productionCompletionDate) return null;
+  return paymentReceivedDate.getTime() >= productionCompletionDate.getTime()
+    ? paymentReceivedDate
+    : productionCompletionDate;
 }
 
 function derivePortalProductionStartAt_(options) {
