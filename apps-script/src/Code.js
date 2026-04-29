@@ -3238,7 +3238,14 @@ function deriveDashboardWorkflowVariant_(row, latestOrderSummary, currentStateSu
 function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latestOrderSummary, currentStateSummary, options) {
   /* Legacy compatibility layer — keep until Tranche 4C deletion pass.
      Raw row/order/payment fields are still interpreted here for dashboard bridge
-     logic. Do not use this helper for new lifecycle decisions. */
+     logic. Do not use this helper for new lifecycle decisions.
+
+     Returned fields are intentionally mixed during the migration window:
+     - readiness-only live inputs: hasIncludedJobs, minimumsMet,
+       qtySizesComplete, artworkApprovalComplete, includedJobCount
+     - live compatibility fallbacks: hasPurchaseOrderDraft, teamWorkflowMode
+     - diagnostics-only legacy interpretations: orderPlaced, paymentReceived,
+       paymentPending, poInitiated, poSubmitted, productionBegun, isLocked */
   const opts = (options && typeof options === 'object') ? options : {};
   const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
   const latest = (latestOrderSummary && typeof latestOrderSummary === 'object') ? latestOrderSummary : {};
@@ -3422,7 +3429,16 @@ function extractDashboardReadinessFacts_(legacyDashboardFlags) {
 
 function buildDashboardProjectStepFlagsFromLifecycle_(dashboardReadiness, legacyFlags, workflowContext) {
   /* Canonical dashboard adapter — overlays legacy dashboard flags with
-     workflowContext truth during the migration window. */
+     workflowContext truth during the migration window.
+
+     Live dashboard decisions should now come from:
+     - dashboardReadiness for readiness facts
+     - workflowContext for lifecycle truth
+
+     legacyFlags remains here only for the narrow compatibility fallbacks that
+     are not yet fully canonicalized:
+     - hasPurchaseOrderDraft
+     - teamWorkflowMode */
   const readiness = (dashboardReadiness && typeof dashboardReadiness === 'object') ? dashboardReadiness : {};
   const legacy = (legacyFlags && typeof legacyFlags === 'object') ? legacyFlags : {};
   const lifecycle = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
@@ -12655,7 +12671,10 @@ function buildPortalLifecycleDiagnosticForRow_(rowInfo, options) {
 function buildPortalLifecycleSurfaceInterpretations_(projectionContext) {
   /* Legacy compatibility/diagnostic layer — keep until Tranche 4C/4D deletion
      pass. This compares canonical lifecycle output against older server
-     interpretations during the migration window. */
+     interpretations during the migration window.
+
+     legacyDashboardFlags is forwarded here strictly as a diagnostic snapshot.
+     It is not the live dashboard projection source after Tranche 4C.1. */
   const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
   const row = (context.row && typeof context.row === 'object') ? context.row : {};
   const workflowContext = (context.workflowContext && typeof context.workflowContext === 'object') ? context.workflowContext : {};
@@ -12720,7 +12739,12 @@ function buildPortalLifecycleSurfaceInterpretations_(projectionContext) {
 
 function comparePortalLifecycleInterpretations_(diagnosticContext) {
   /* Legacy compatibility/diagnostic layer — no production lifecycle behavior
-     should depend on these comparison results once clean-up is complete. */
+     should depend on these comparison results once clean-up is complete.
+
+     Note: some legacy boolean comparisons are intentionally dormant right now.
+     The legacy dashboard flag builder no longer emits fields like paymentDue
+     or productionComplete, so those warnings remain only as deletion-prep
+     markers until the diagnostic layer is retired. */
   const diagnostic = (diagnosticContext && typeof diagnosticContext === 'object') ? diagnosticContext : {};
   const canonical = (diagnostic.canonical && typeof diagnostic.canonical === 'object') ? diagnostic.canonical : {};
   const dashboard = (diagnostic.serverDashboard && typeof diagnostic.serverDashboard === 'object') ? diagnostic.serverDashboard : {};
@@ -12750,8 +12774,14 @@ function comparePortalLifecycleInterpretations_(diagnosticContext) {
   comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_order_placed', canonical.orderPlaced, legacyDashboardFlags.orderPlaced);
   comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_payment_received', canonical.paymentReceived, legacyDashboardFlags.paymentReceived);
   comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_po_submitted', canonical.poSubmitted, legacyDashboardFlags.poSubmitted);
+  /* Dormant deletion-prep check: legacyDashboardFlags no longer emits
+     paymentDue, so this warning is currently passive unless another legacy
+     source starts populating that field again. */
   comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_payment_due', canonical.paymentDue, legacyDashboardFlags.paymentDue);
   comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_production_begun', canonical.productionCurrent || canonical.productionAuthorized, legacyDashboardFlags.productionBegun);
+  /* Dormant deletion-prep check: legacyDashboardFlags no longer emits
+     productionComplete, so this warning is currently passive unless another
+     legacy source starts populating that field again. */
   comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, 'legacy_production_complete', canonical.productionComplete, legacyDashboardFlags.productionComplete);
 
   if (canonical.isProductionAuthorized === true && dashboardFlags.productionBegun !== true) {
@@ -12880,6 +12910,9 @@ function buildPortalLifecycleContractDiagnostic_(canonicalLifecycle) {
 }
 
 function buildPortalLifecycleDiagnosticDashboard_(statusMeta, projectionContext) {
+  /* Diagnostic dashboard wrapper — preserves both canonical live flags and the
+     quarantined legacy flag snapshot for migration inspection. Do not route
+     production dashboard behavior through legacyFlags. */
   const meta = (statusMeta && typeof statusMeta === 'object') ? statusMeta : {};
   const context = (projectionContext && typeof projectionContext === 'object') ? projectionContext : {};
   const presentation = (context.presentation && typeof context.presentation === 'object') ? context.presentation : {};
@@ -13048,6 +13081,8 @@ function comparePortalLifecycleDiagnosticBoolean_(mismatches, key, canonicalValu
 }
 
 function comparePortalLifecycleDiagnosticLegacyBooleanWarning_(warnings, key, canonicalValue, legacyValue) {
+  /* Legacy-only drift reporter. This helper exists for migration diagnostics
+     and should not be treated as a live lifecycle decision surface. */
   if (legacyValue === undefined || legacyValue === null) return;
   const canonical = canonicalValue === true;
   const legacy = legacyValue === true;
