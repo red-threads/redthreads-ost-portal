@@ -228,6 +228,7 @@ const PAYMENT_METHODS = {
   cash: 'cash',
   purchase_order: 'purchase_order'
 };
+const ACH_CLIENT_PAYMENT_ENABLED = false;
 
 const FULFILLMENT_METHODS = {
   shipping: 'shipping',
@@ -5099,12 +5100,13 @@ function hasUsableCheckoutSession_(stripe) {
 }
 
 function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkoutIdentity) {
+  const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
   return {
     cfg: ctx.cfg,
     paymentMethodSelected: paymentMethodSelected,
     checkoutAttemptId: trimString_(checkoutIdentity && checkoutIdentity.checkoutAttemptId),
     orderId: trimString_(checkoutIdentity && checkoutIdentity.orderId),
-    returnUrl: trimString_(ctx.payload.returnUrl || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(ctx.orderDraft.token))
+    returnUrl: trimString_(ctx.payload.returnUrl || buildExternalPortalUrl_(token) || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(token))
   };
 }
 
@@ -10748,7 +10750,7 @@ function appendQueryParamsToUrl_(baseUrl, params) {
 
 function buildStripeReturnBaseUrl_(token, options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const base = trimString_(opts.returnUrl || getConfig_().stripeReturnUrl || buildPortalDirectUrl_(token));
+  const base = trimString_(opts.returnUrl || buildExternalPortalUrl_(token) || getConfig_().stripeReturnUrl || buildPortalDirectUrl_(token));
   if (!base) return '';
   const tokenValue = trimString_(token);
   if (!tokenValue) return base;
@@ -10759,7 +10761,8 @@ function buildStripeReturnBaseUrl_(token, options) {
 function buildStripeCheckoutReturnUrl_(token, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const baseUrl = buildStripeReturnBaseUrl_(token, opts);
-  return appendQueryParamsToUrl_(baseUrl, opts.queryParams || {});
+  return appendQueryParamsToUrl_(baseUrl, opts.queryParams || {})
+    .replace(/%7BCHECKOUT_SESSION_ID%7D/gi, '{CHECKOUT_SESSION_ID}');
 }
 
 function normalizePriceMapForOrder_(raw) {
@@ -13519,7 +13522,7 @@ function buildLockedOrderPaymentLinkBundle_(token) {
   return {
     summaryUrl: buildPortalSummaryUrl_(cleanToken),
     cardUrl: buildLockedOrderPaymentPortalUrl_(cleanToken, PAYMENT_METHODS.card),
-    achUrl: buildLockedOrderPaymentPortalUrl_(cleanToken, PAYMENT_METHODS.ach)
+    achUrl: ACH_CLIENT_PAYMENT_ENABLED ? buildLockedOrderPaymentPortalUrl_(cleanToken, PAYMENT_METHODS.ach) : ''
   };
 }
 

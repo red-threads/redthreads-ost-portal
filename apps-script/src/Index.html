@@ -17352,6 +17352,11 @@
     cash: 'cash',
     purchase_order: 'purchase_order'
   };
+  const ACH_CLIENT_PAYMENT_ENABLED = false;
+
+  function isClientAchPaymentEnabled_(){
+    return ACH_CLIENT_PAYMENT_ENABLED === true;
+  }
 
   function hasNonBlankSignalValue(value){
     if (value == null) return false;
@@ -19012,7 +19017,7 @@
   }
 
   function describeCheckoutReturnNotice(){
-    const result = String(CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+    const result = getCheckoutReturnResult_();
     if (!result) return null;
     if (result === 'cancel') {
       return {
@@ -19053,6 +19058,8 @@
   }
 
   function clearConsumedCheckoutReturnParams(){
+    PARENT_CHECKOUT_RETURN_RESULT = '';
+    PARENT_STRIPE_SESSION_ID = '';
     if (typeof window === 'undefined' || !window.location || !window.history) return;
     try {
       const url = new URL(window.location.href);
@@ -19066,6 +19073,10 @@
       const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
       window.history.replaceState({}, document.title, nextUrl);
     } catch (_) {}
+  }
+
+  function getCheckoutReturnResult_(){
+    return String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
   }
 
   function handleCheckoutReturnNotice(){
@@ -19597,6 +19608,8 @@
     'rt_view'
   ];
   let AUTH_SESSION_ID = '';
+  let PARENT_CHECKOUT_RETURN_RESULT = '';
+  let PARENT_STRIPE_SESSION_ID = '';
   let DASHBOARD_CONTEXT_MODE = 'session';
   let DASHBOARD_CONTEXT_TOKEN = '';
   let CHAT_MESSAGES = [];
@@ -20394,6 +20407,19 @@
     return String(payload.token || message.token || '').trim();
   }
 
+  function applyCheckoutReturnMetaFromPortalMessage_(message){
+    const msg = (message && typeof message === 'object') ? message : {};
+    const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+    const checkoutResult = String(payload.checkoutResult || msg.checkoutResult || '').trim().toLowerCase();
+    const stripeSessionId = String(payload.stripeSessionId || msg.stripeSessionId || '').trim();
+    if (checkoutResult === 'success' || checkoutResult === 'cancel') {
+      PARENT_CHECKOUT_RETURN_RESULT = checkoutResult;
+    }
+    if (stripeSessionId) {
+      PARENT_STRIPE_SESSION_ID = stripeSessionId;
+    }
+  }
+
   function initPortalParentBridge(){
     if (PORTAL_PARENT_BRIDGE_BOUND) return;
     PORTAL_PARENT_BRIDGE_BOUND = true;
@@ -20411,6 +20437,7 @@
 
       const token = getTokenFromPortalMessage_(data);
       if (!token) return;
+      applyCheckoutReturnMetaFromPortalMessage_(data);
       loadProjectTokenInPlace(token, {
         source: 'parent-message',
         requireAuthSession: false
@@ -31709,6 +31736,12 @@
     if (editorLifecycle.isPoDraftResume && normalizedMethod !== 'purchase_order') {
       return;
     }
+    if (normalizedMethod === PAYMENT_METHODS.ach && !isClientAchPaymentEnabled_()) {
+      ORDER_FLOW_SELECTED_METHOD = '';
+      ORDER_FLOW_METHOD_ERROR = false;
+      renderOrderFlowFulfillmentSection();
+      return;
+    }
     ORDER_FLOW_SELECTED_METHOD = normalizedMethod;
     ORDER_FLOW_METHOD_ERROR = false;
     ORDER_FLOW_PO_UNLOCK_ERROR = false;
@@ -31772,6 +31805,10 @@
     ORDER_FLOW_FULFILLMENT_ERROR = !ORDER_FLOW_SELECTED_FULFILLMENT;
     ORDER_FLOW_METHOD_ERROR = !ORDER_FLOW_SELECTED_METHOD;
     ORDER_FLOW_PO_UNLOCK_ERROR = ORDER_FLOW_SELECTED_METHOD === 'purchase_order' && !isOrderFlowPurchaseOrderAvailable_();
+    if (ORDER_FLOW_SELECTED_METHOD === PAYMENT_METHODS.ach && !isClientAchPaymentEnabled_()) {
+      ORDER_FLOW_SELECTED_METHOD = '';
+      ORDER_FLOW_METHOD_ERROR = true;
+    }
     renderOrderFlowFulfillmentSection();
     if (ORDER_FLOW_FULFILLMENT_ERROR || ORDER_FLOW_METHOD_ERROR || ORDER_FLOW_PO_UNLOCK_ERROR) {
       clearNotice();
@@ -31804,7 +31841,11 @@
     const poResumeOnly = editorLifecycle.isPoDraftResume;
     const selectionLocked = !editorLifecycle.canAccessOrderFlow;
     const poAvailable = isOrderFlowPurchaseOrderAvailable_();
+    const achAvailable = isClientAchPaymentEnabled_();
     if (!poAvailable && ORDER_FLOW_SELECTED_METHOD === 'purchase_order' && !poResumeOnly) {
+      ORDER_FLOW_SELECTED_METHOD = '';
+    }
+    if (!achAvailable && ORDER_FLOW_SELECTED_METHOD === PAYMENT_METHODS.ach) {
       ORDER_FLOW_SELECTED_METHOD = '';
     }
     renderOrderFlowAccountBanner_();
@@ -31833,7 +31874,11 @@
     if (orderFlowPickupBtn) orderFlowPickupBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
     if (orderFlowClearSelectionsBtn) orderFlowClearSelectionsBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
     if (orderFlowCardBtn) orderFlowCardBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
-    if (orderFlowAchBtn) orderFlowAchBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
+    if (orderFlowAchBtn) {
+      orderFlowAchBtn.hidden = !achAvailable;
+      orderFlowAchBtn.setAttribute('aria-hidden', achAvailable ? 'false' : 'true');
+      orderFlowAchBtn.disabled = !achAvailable || ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
+    }
     if (orderFlowCheckBtn) orderFlowCheckBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
     if (orderFlowPoBtn) {
       orderFlowPoBtn.hidden = !poAvailable;
@@ -32730,13 +32775,20 @@
   async function startOrderFlowCheckout(method){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
     if (maybeBlockOrderFlow()) return;
+    const normalizedMethod = String(method || '').trim().toLowerCase();
+    if (normalizedMethod === PAYMENT_METHODS.ach && !isClientAchPaymentEnabled_()) {
+      showNotice('ACH bank payments are not available in the portal yet.', 'err', { persist: true });
+      ORDER_FLOW_SELECTED_METHOD = '';
+      renderOrderFlowFulfillmentSection();
+      return;
+    }
     if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
       setOrderFlowStatePill('Fulfillment');
       setOrderFlowMode('fulfillment');
       return;
     }
-    setSummaryOptions({ creditCardFeeEnabled: String(method || '').trim().toLowerCase() === 'card' });
-    const paymentLabel = method === 'ach' ? 'ACH bank payment' : 'card payment';
+    setSummaryOptions({ creditCardFeeEnabled: normalizedMethod === 'card' });
+    const paymentLabel = normalizedMethod === 'ach' ? 'ACH bank payment' : 'card payment';
     const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
     const pendingWindow = openPendingOrderFlowCheckoutWindow();
     ORDER_FLOW_CHECKOUT_WINDOW = pendingWindow;
@@ -32748,7 +32800,7 @@
     try {
       const resp = await callServer('createCheckoutAttempt', {
         token: CURRENT_TOKEN,
-        paymentMethodSelected: method,
+        paymentMethodSelected: normalizedMethod,
         portalState: JSON.stringify(clickedPortalState)
       });
       if (!resp || resp.ok !== true) {
@@ -32799,7 +32851,7 @@
         showNotice('Your browser blocked the payment tab. Allow pop-ups, then click Place Order again to continue.', 'err');
         return;
       }
-      setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, {
+      setOrderFlowCheckoutReadyState(resp, normalizedMethod, checkoutUrl, {
         launched: true,
         showActions: false
       });
@@ -35993,6 +36045,9 @@
     if (paymentMethodSelected !== 'card' && paymentMethodSelected !== 'ach') {
       throw new Error('Unsupported payment method.');
     }
+    if (paymentMethodSelected === PAYMENT_METHODS.ach && !isClientAchPaymentEnabled_()) {
+      throw new Error('ACH bank payments are not available in the portal yet.');
+    }
     if (!CURRENT_TOKEN) {
       throw new Error('Missing token.');
     }
@@ -36852,7 +36907,7 @@
     const paymentLabel = String(lifecycle.paymentMethodLabel || '').trim().toLowerCase() || 'manual';
     const card = createEl('section', 'summaryEstimatePoSection');
     card.appendChild(createEl('div', 'summaryEstimatePoSectionTitle', 'Awaiting Payment'));
-    card.appendChild(createEl('div', 'summaryEstimatePoSectionSub', 'This project is locked to the final invoice while we wait for your ' + paymentLabel + ' payment. Production begins only after Red Threads records payment. Credit card and ACH payment options remain available below if you need to switch methods.'));
+    card.appendChild(createEl('div', 'summaryEstimatePoSectionSub', 'This project is locked to the final invoice while we wait for your ' + paymentLabel + ' payment. Production begins only after Red Threads records payment. Credit card payment remains available below if you need to switch methods.'));
     const cancelBtn = createEl(
       'button',
       'summaryEstimateControlSecondary',
@@ -37166,6 +37221,7 @@
     const order = lifecycle.order;
     const paymentMethodSelected = lifecycle.paymentMethodSelected;
     const canToggleSalesTax = ACCOUNT_SUMMARY.taxExemptActive || ACCOUNT_SUMMARY.taxExemptApproved;
+    const achAvailable = isClientAchPaymentEnabled_();
     if (lifecycle.showPoSubmissionControls) {
       return buildSummaryPurchaseOrderControlCard_(Object.assign({}, data, { lifecycleUiState: lifecycle }));
     }
@@ -37286,20 +37342,22 @@
         });
         paymentGroup.appendChild(cardBtn);
 
-        const achBtn = createEl(
-          'button',
-          'summaryEstimateControlSecondary isPayment',
-          SUMMARY_SHARE_BUSY_ACTION === 'pay_ach' ? 'Preparing…' : 'Pay by ACH'
-        );
-        achBtn.type = 'button';
-        achBtn.disabled = isBusy;
-        achBtn.addEventListener('click', () => {
-          if (isBusy) return;
-          startLockedSummaryPaymentCheckout_('ach').catch(err => {
-            showNotice(String((err && err.message) || err || 'Unable to start ACH payment.'), 'err', { persist: true });
+        if (achAvailable) {
+          const achBtn = createEl(
+            'button',
+            'summaryEstimateControlSecondary isPayment',
+            SUMMARY_SHARE_BUSY_ACTION === 'pay_ach' ? 'Preparing…' : 'Pay by ACH'
+          );
+          achBtn.type = 'button';
+          achBtn.disabled = isBusy;
+          achBtn.addEventListener('click', () => {
+            if (isBusy) return;
+            startLockedSummaryPaymentCheckout_('ach').catch(err => {
+              showNotice(String((err && err.message) || err || 'Unable to start ACH payment.'), 'err', { persist: true });
+            });
           });
-        });
-        paymentGroup.appendChild(achBtn);
+          paymentGroup.appendChild(achBtn);
+        }
 
         const paymentNote = createEl('div', 'summaryEstimatePaymentNote');
         const cardLine = createEl('div', 'summaryEstimatePaymentNoteLine');
@@ -37309,10 +37367,12 @@
         cardLine.appendChild(document.createTextNode('). The final invoice will be updated for your records.'));
         paymentNote.appendChild(cardLine);
 
-        const achLine = createEl('div', 'summaryEstimatePaymentNoteLine');
-        achLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'ACH Payment: '));
-        achLine.appendChild(document.createTextNode('Final amount on the invoice is what you will pay.'));
-        paymentNote.appendChild(achLine);
+        if (achAvailable) {
+          const achLine = createEl('div', 'summaryEstimatePaymentNoteLine');
+          achLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'ACH Payment: '));
+          achLine.appendChild(document.createTextNode('Final amount on the invoice is what you will pay.'));
+          paymentNote.appendChild(achLine);
+        }
 
         const checkLine = createEl('div', 'summaryEstimatePaymentNoteLine');
         checkLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'Physical Check Payment: '));
@@ -39551,7 +39611,10 @@
     }
     if (orderFlowClearSelectionsBtn) orderFlowClearSelectionsBtn.addEventListener('click', clearOrderFlowSelections_);
     if (orderFlowCardBtn) orderFlowCardBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('card'));
-    if (orderFlowAchBtn) orderFlowAchBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('ach'));
+    if (orderFlowAchBtn) orderFlowAchBtn.addEventListener('click', () => {
+      if (!isClientAchPaymentEnabled_()) return;
+      applyOrderFlowMethodSelection_('ach');
+    });
     if (orderFlowCheckBtn) orderFlowCheckBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('check'));
     if (orderFlowPoBtn) orderFlowPoBtn.addEventListener('click', () => applyOrderFlowMethodSelection_('purchase_order'));
     if (orderFlowSelectionConfirmBtn) orderFlowSelectionConfirmBtn.addEventListener('click', submitOrderFlowSelection_);
@@ -39800,11 +39863,12 @@
   }
 
   function startPortalApp(){
+    const checkoutReturnResult = getCheckoutReturnResult_();
     closeUnsavedLeaveModal({ immediate: true });
     setView(VIEW_SNAPSHOT);
     hydrateUIFromPortalState(VM.portalState);
     routeCurrentPaidFinalizedProjectToInvoice_(
-      CHECKOUT_RETURN_RESULT === 'success' ? 'checkout-success-return' : 'project-load'
+      checkoutReturnResult === 'success' ? 'checkout-success-return' : 'project-load'
     );
     setHeaderDetails();
     renderSnapshotSummary();
@@ -39816,7 +39880,7 @@
     handleCheckoutReturnNotice();
     const suppressIntroForIntent = SUMMARY_DEEPLINK_REQUEST || PO_RESUME_REQUEST || isAwaitingPurchaseOrderPortal_() || !!PAY_NOW_METHOD || SUPPRESS_NEXT_AUTO_INTRO;
     SUPPRESS_NEXT_AUTO_INTRO = false;
-    if (!IS_TEAM && !CHECKOUT_RETURN_RESULT && !suppressIntroForIntent && shouldAutoShowIntro()) initIntro();
+    if (!IS_TEAM && !checkoutReturnResult && !suppressIntroForIntent && shouldAutoShowIntro()) initIntro();
     wireEvents();
     syncTeamModeUi();
     notifyPortalReady({ reason: 'snapshot-ready' });

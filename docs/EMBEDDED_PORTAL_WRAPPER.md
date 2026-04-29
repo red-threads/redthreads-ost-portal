@@ -1,41 +1,23 @@
 # Embedded Portal Wrapper
 
-This portal now supports two access patterns:
+This is the current production Squarespace `/portal` code block for the Red Threads Portal.
 
-- Embedded first-party wrapper mode:
-  - Parent page URL stays fixed on `redthreads.com`
-  - Iframe stays on the stable base Apps Script `/exec` URL
-  - Project snapshots are loaded in place via `postMessage`
-- Direct token mode:
-  - Raw Apps Script links like `/exec?t=<token>` still render snapshots directly
+The wrapper uses direct iframe query passthrough:
 
-## Message contract
+- No visible loading overlay.
+- No `postMessage` token bridge required.
+- The iframe `src` is set dynamically to the stable Apps Script deployment URL.
+- The wrapper forwards these query parameters into the iframe URL when present:
+  - `t`
+  - `checkoutResult`
+  - `stripeSessionId`
 
-Parent -> iframe:
+Raw Apps Script token links remain supported separately by the Apps Script web app.
 
-- `RT_PORTAL_PING`
-- `RT_PORTAL_LOAD_TOKEN`
-
-Iframe -> parent:
-
-- `RT_PORTAL_READY`
-
-Notes:
-
-- The iframe app validates parent origins against:
-  - `https://www.redthreads.com`
-  - `https://redthreads.com`
-- The parent wrapper should accept ready events from:
-  - `https://script.google.com`
-  - `https://*.googleusercontent.com`
-- The parent should reply to the exact `event.source` / `event.origin` that emitted `RT_PORTAL_READY`.
-
-## Fullscreen wrapper with loading state
-
-Replace `YOUR_DEPLOYMENT_URL` with the current stable base `/exec` deployment URL.
+## Production Squarespace `/portal` Code Block
 
 ```html
-<!-- /portal PAGE Code Block — Fullscreen Apps Script + token bridge -->
+<!-- /portal PAGE Code Block — Fullscreen Apps Script + branded token passthrough -->
 <style>
   html, body {
     margin: 0 !important;
@@ -61,32 +43,12 @@ Replace `YOUR_DEPLOYMENT_URL` with the current stable base `/exec` deployment UR
     display: block;
     background: transparent;
   }
-
-  .rt-portal-loading {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.72);
-    color: #fff;
-    font: 700 18px/1.4 system-ui, sans-serif;
-    letter-spacing: 0.02em;
-    transition: opacity 180ms ease;
-  }
-
-  .rt-portal-loading[hidden] {
-    opacity: 0;
-    pointer-events: none;
-  }
 </style>
 
 <div class="rt-portal-fullscreen">
-  <div id="rtPortalLoading" class="rt-portal-loading">Loading portal…</div>
   <iframe
     id="rtPortalFrame"
     title="Red Threads Portal"
-    src="YOUR_DEPLOYMENT_URL"
     allow="clipboard-read; clipboard-write"
     referrerpolicy="strict-origin-when-cross-origin"
     loading="eager">
@@ -98,64 +60,40 @@ Replace `YOUR_DEPLOYMENT_URL` with the current stable base `/exec` deployment UR
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
 
-    var token = new URLSearchParams(window.location.search).get("t");
-    var loadingEl = document.getElementById("rtPortalLoading");
-    var portalWindow = null;
-    var portalOrigin = "";
-    var tokenSent = false;
+    var APP_URL = "https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec";
 
-    function isPortalOrigin(origin) {
-      try {
-        var url = new URL(origin);
-        return (
-          url.origin === "https://script.google.com" ||
-          /\.googleusercontent\.com$/i.test(url.hostname)
-        );
-      } catch (_) {
-        return false;
-      }
+    var queryParams = new URLSearchParams(window.location.search);
+    var iframeParams = new URLSearchParams();
+
+    var token = queryParams.get("t");
+    var checkoutResult = queryParams.get("checkoutResult");
+    var stripeSessionId = queryParams.get("stripeSessionId");
+
+    if (token) {
+      iframeParams.set("t", token);
     }
 
-    function hideLoading() {
-      if (!loadingEl) return;
-      loadingEl.hidden = true;
+    if (checkoutResult) {
+      iframeParams.set("checkoutResult", checkoutResult);
     }
 
-    function sendTokenToPortal() {
-      if (!token || !portalWindow || !portalOrigin || tokenSent) return;
-      try {
-        portalWindow.postMessage(
-          {
-            type: "RT_PORTAL_LOAD_TOKEN",
-            payload: { token: token }
-          },
-          portalOrigin
-        );
-        tokenSent = true;
-      } catch (_) {}
+    if (stripeSessionId) {
+      iframeParams.set("stripeSessionId", stripeSessionId);
     }
 
-    window.addEventListener("message", function (event) {
-      if (!isPortalOrigin(event.origin)) return;
-      if (!event.data || typeof event.data !== "object") return;
+    var iframe = document.getElementById("rtPortalFrame");
 
-      if (event.data.type === "RT_PORTAL_READY") {
-        portalWindow = event.source;
-        portalOrigin = event.origin;
-        sendTokenToPortal();
-        hideLoading();
-      }
-    });
-
-    setTimeout(hideLoading, 12000);
+    iframe.src = iframeParams.toString()
+      ? APP_URL + "?" + iframeParams.toString()
+      : APP_URL;
   })();
 </script>
 ```
 
-## Manual test checklist
+## Manual Test Checklist
 
-1. Load `https://www.redthreads.com/portal` and confirm the iframe fills the page.
-2. Log in and confirm the dashboard loads without changing the parent URL.
-3. Open a project from the dashboard and confirm the parent URL and iframe URL both stay fixed.
-4. Use `https://www.redthreads.com/portal?t=<token>` and confirm the exact snapshot loads in place.
-5. Use a raw Apps Script URL `.../exec?t=<token>` and confirm direct token mode still renders the snapshot directly.
+1. Load `https://www.redthreads.com/portal` and confirm the Apps Script portal fills the page.
+2. Load `https://www.redthreads.com/portal?t=<token>` and confirm the tokenized project loads inside the iframe.
+3. Load `https://www.redthreads.com/portal?t=<token>&checkoutResult=success&stripeSessionId=<session_id>` and confirm all three parameters are present on the iframe URL.
+4. Confirm a paid/locked project lands on the Invoice/Summary tab.
+5. Confirm there is no visible wrapper loading overlay and no dependency on a parent/iframe `postMessage` token bridge.
