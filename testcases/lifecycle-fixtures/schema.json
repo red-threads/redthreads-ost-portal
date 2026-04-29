@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "lifecycle_fixture_baseline_v1",
+  "description": "Redacted lifecycle fixture baseline shape reserved for future approved captures.",
+  "fixture": {
+    "fixtureId": "1900",
+    "projectNumber": "1900",
+    "lifecycleLabel": "fresh_estimate"
+  },
+  "captureMeta": {
+    "captureStatus": "pending",
+    "captureMethod": "diagnostic_export",
+    "acceptedAppsScriptVersion": 759,
+    "redacted": true
+  },
+  "serverLifecycle": {
+    "lifecycleState": "",
+    "lifecycleStage": "",
+    "summaryDocumentMode": "",
+    "summaryControlsMode": "",
+    "editorMode": "",
+    "saveAllowed": false,
+    "orderAllowed": false,
+    "paymentDue": false,
+    "paymentReceived": false,
+    "productionCurrent": false,
+    "productionComplete": false,
+    "projectComplete": false,
+    "projectCompletedAt": "",
+    "nextClientAction": "",
+    "nextTeamAction": ""
+  },
+  "dashboardStatus": {
+    "variant": "",
+    "stateMode": "",
+    "currentStepKey": "",
+    "stepStates": {},
+    "helperText": "",
+    "helperTone": "",
+    "printHoverText": "",
+    "printHoverTag": "",
+    "completePillState": ""
+  },
+  "dashboardPeek": {
+    "projectMode": "",
+    "projectStatus": "",
+    "totalUnits": null,
+    "estimatedPriceLabel": "",
+    "estimatedPriceValue": "",
+    "estimatedCompletionLabel": "",
+    "startedDate": "",
+    "orderPlacedDate": "",
+    "paymentMadeDate": "",
+    "projectCompletedDate": "",
+    "jobRows": [],
+    "productionFacts": {}
+  },
+  "summaryInvoice": {
+    "documentMode": "",
+    "controlsMode": "",
+    "timelineNote": "",
+    "paymentMethodLabel": "",
+    "showPoSubmissionControls": false,
+    "showManualPendingControls": false,
+    "showPaymentDueControls": false,
+    "showFinalInvoiceControls": false,
+    "saveAllowed": false,
+    "orderAllowed": false,
+    "isReadOnly": false,
+    "headerMeta": {}
+  },
+  "teamAdmin": {
+    "visibleActions": [],
+    "hiddenActions": [],
+    "repeatBlockedActions": []
+  }
+}

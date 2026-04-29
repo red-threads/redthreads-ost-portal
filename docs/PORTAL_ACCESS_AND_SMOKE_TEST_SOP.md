@@ -2,9 +2,11 @@
 
 ## Purpose
 
-This file defines how to access and smoke-test the Red Threads portal without rediscovering the app topology each time.
+This file defines how to access and smoke-test the Red Threads portal without
+rediscovering the app topology each time.
 
-The portal can be accessed through multiple paths. Each path has different behavior.
+The portal can be accessed through multiple paths. Each path has different
+behavior.
 
 ## Stable deployment
 
@@ -26,6 +28,12 @@ Public wrapper:
 https://www.redthreads.com/portal
 ```
 
+Accepted stable Apps Script version:
+
+```text
+759
+```
+
 ## Deployment rule
 
 Always:
@@ -40,142 +48,100 @@ Never create a new deployment unless explicitly instructed.
 
 ### 1. Public Red Threads wrapper
 
-URL:
-
-```text
-https://www.redthreads.com/portal
-```
-
-Purpose:
-- customer-facing login/dashboard wrapper
-- public website route
-- iframe-hosted portal experience
-
-Important:
-- The app is embedded.
-- Browser automation may not see the inner app DOM directly from this wrapper.
-- Do not treat wrapper DOM as the same thing as the portal app DOM.
-- If testing logged-in dashboard behavior, make sure the browser session is authenticated first.
-
-Use this path for:
+Use for:
 - final customer-facing sanity checks
-- dashboard wrapper behavior
+- authenticated dashboard behavior
 - iframe embedding behavior
 
-Do not use this path as the first choice for detailed project fixture testing.
-
----
+Do not use this as the first path for detailed fixture testing.
 
 ### 2. Direct Apps Script base URL
 
-URL:
-
-```text
-https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec
-```
-
-Purpose:
-- direct app entry
-- login shell or tokenized project rendering depending on query params
-
-Important:
-- Google Apps Script wraps user HTML inside nested iframes.
-- In browser automation, the actual portal DOM may be inside:
-  - `#sandboxFrame`
-  - then nested `#userHtmlFrame`
-
-Use this path for:
+Use for:
 - direct deployment validation
-- direct tokenized project testing
-- bypassing public wrapper complexity
-
----
-
-### 3. Direct tokenized project URL
-
-Format:
-
-```text
-https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=<token>
-```
-
-Purpose:
-- direct project fixture testing
-- validates token deep-link behavior
-- bypasses login/dashboard
+- direct app shell validation
+- direct tokenized project testing when needed
 
 Important:
-- deal/project numbers are not tokens.
-- Do not guess URLs like `?t=1900`.
-- Look up the fixture token from `EXPORT_LOG.token` or `docs/LIFECYCLE_FIXTURES.md`.
+- Apps Script may wrap the app in nested iframes
+- iframe traversal trouble is a harness problem first, not automatically an app regression
 
-Use this path for:
-- seven-fixture lifecycle smoke tests
-- project editor behavior
-- Summary/Invoice behavior
-- Save/Place Order gating
-- PO/manual/payment lifecycle views
+### 3. Direct tokenized fixture URL
 
----
-
-### 4. Authenticated dashboard route
-
-URL:
-
-```text
-https://www.redthreads.com/portal
-```
-
-Purpose:
-- dashboard row/status/peek testing
+Use for:
+- project-level fixture smoke
+- Summary/Invoice checks
+- editor/save/order gating checks
+- PO/manual/payment project flow checks
 
 Important:
-- requires login
-- dashboard row testing should use authenticated wrapper state
-- if automation cannot interact with the iframe, use browser DevTools frame traversal rather than changing app code
+- project numbers are not tokens
+- live tokens must come from the local ignored fixture access file, not the committed catalog
 
-Use this path for:
-- dashboard status row smoke tests
-- dashboard peek smoke tests
-- customer-facing dashboard behavior
+Local-only access file:
 
-## Known iframe behavior
+```text
+docs/LIFECYCLE_FIXTURES.local.md
+```
 
-Public wrapper:
-- the Red Threads page hosts the portal inside an iframe
+## Fixture catalog
 
-Apps Script direct page:
-- Google Apps Script may wrap app HTML in nested frames
-- automation often needs to enter:
-  - `#sandboxFrame`
-  - then `#userHtmlFrame`
-
-Do not classify iframe traversal trouble as an app regression unless the real user-facing browser also fails.
-
-## Fixture matrix
-
-The standard lifecycle fixture projects are:
+The accepted lifecycle fixture family is:
 
 | Project | Expected lifecycle |
 |---|---|
-| `1900` | fresh estimate / no action |
+| `1900` | fresh estimate / reset |
 | `1916` | quantities entered / artwork pending |
 | `1922` | ready to order |
-| `1923` | PO draft invoice prepared / awaiting PO submission |
-| `1925` | PO submitted unpaid / production active / payment due |
-| `2003` | payment received / production active |
-| `2004` | production complete |
+| `1923` | PO initiated / awaiting submission |
+| `1925` | PO submitted unpaid / production active |
+| `2003` | PO submitted unpaid / jobs complete |
+| `2004` | PO submitted paid / print incomplete |
+| `2005` | PO submitted paid / complete |
+| `2006` | manual payment pending |
+| `2007` | manual payment received / print incomplete |
+| `2008` | manual payment received / complete |
 
-Important:
-- Project numbers are not tokens.
-- Use the exact tokens in `docs/LIFECYCLE_FIXTURES.md`.
-- Verify source row/order data before declaring an app bug.
+Use:
+- committed fixture catalog:
+  - [docs/LIFECYCLE_FIXTURES.md](/Users/Josiah/Documents/GitHub/redthreads-ost-portal/docs/LIFECYCLE_FIXTURES.md)
+- local tokenized access file:
+  - `docs/LIFECYCLE_FIXTURES.local.md`
 
-## Smoke-test source data checks
+## Smoke order
 
-For each fixture, inspect:
+Use this order when validating a fixture:
 
-EXPORT_LOG:
+1. **Server truth**
+   - canonical lifecycle state/stage
+   - current order/payment/production source data
+2. **Dashboard status row**
+   - step states
+   - helper/subtext
+   - PRINT hover copy
+   - complete pill state where applicable
+3. **Dashboard peek**
+   - timeline rails
+   - total units / price / completion summary
+   - payment/project completion facts
+4. **Summary/Invoice**
+   - document mode
+   - controls mode
+   - timeline note
+   - PO/manual/payment controls
+   - save/order lock state
+5. **Team/admin controls**
+   - visible actions
+   - hidden actions
+   - obvious invalid-repeat blocking where safe to confirm
+
+## Source data checks
+
+For each fixture, verify the relevant source data before declaring an app bug.
+
+### EXPORT_LOG
+
+Inspect:
 - `token`
 - `activeOrderId`
 - `portalLockState`
@@ -188,7 +154,9 @@ EXPORT_LOG:
 - `portalStateJson`
 - `submittedStateJson`
 
-PORTAL_ORDERS, when `activeOrderId` exists:
+### PORTAL_ORDERS
+
+When `activeOrderId` exists, inspect:
 - `orderId`
 - `orderState`
 - `paymentMethodSelected`
@@ -202,106 +170,63 @@ PORTAL_ORDERS, when `activeOrderId` exists:
 - `lockedAt`
 - `orderDraftJson`
 
-## Standard seven-fixture expectations
+## Expected smoke focus by fixture
 
-### 1900 — fresh estimate
-
-Expected:
-- editor editable
-- Save inactive on initial load
-- Save active after real edit
-- Place Order follows existing readiness/blocker behavior
+### 1900
+- editable
 - no invoice/payment/PO controls
-- no false unsaved-change modal
+- Save inactive on initial load
 
-### 1916 — quantities entered / artwork pending
-
-Expected:
-- editor editable
+### 1916
+- editable
 - artwork still pending
-- Save active only after real edit
-- Place Order reaches existing blocker stack
-- no false unsaved-change modal
+- blocker path still correct
 
-### 1922 — ready to order
-
-Expected:
-- editor editable
-- stale `portalState.isReadOnly` must not lock it
-- Save active only after real edit
+### 1922
+- editable
+- stale legacy read-only must not win
 - Place Order available
-- no false unsaved-change modal
 
-### 1923 — PO draft awaiting submission
-
-Expected:
-- estimate editor locked
+### 1923
+- PO draft lane only
 - Save blocked
-- normal Place Order blocked
-- PO continuation available from Summary/Invoice only
-- no payment-due implication
 - no production-start implication
 
-### 1925 — PO submitted unpaid / production active
-
-Expected:
-- estimate editor locked
-- Save blocked
-- normal Place Order blocked
-- payment due visible through Summary/Invoice
+### 1925
+- payment due
 - production active/current
 - no PO draft language
 
-### 2003 — payment received / production active
+### 2003
+- unpaid but production complete
+- not fully project-complete
 
-Expected:
-- estimate editor locked
-- Save blocked
-- normal Place Order blocked
-- paid/in-production state
-- no client payment action
+### 2004
+- payment received
+- production active/incomplete
+- project not complete
 
-### 2004 — production complete
+### 2005
+- full PO-path complete state
 
-Expected:
-- terminal complete state
-- editor locked
-- Save blocked
-- normal Place Order blocked
-- no payment/order action
-- no suspicious stale completion date
+### 2006
+- manual payment pending
+- production not started
 
-## Browser testing rules
+### 2007
+- manual payment received
+- production active/incomplete
 
-Preferred order:
-1. Verify source row/order data.
-2. Use direct tokenized Apps Script URL for project-level smoke tests.
-3. Use authenticated public wrapper for dashboard smoke tests.
-4. If using automation, enter the nested frame containing the actual app.
-5. If automation fails to click due to iframe/cross-origin constraints, classify as test harness issue first.
+### 2008
+- full manual-path complete state
 
-Do not:
-- brute-force token URLs
-- assume project number equals token
-- change app code to satisfy a flawed automation path
-- confuse hidden modal DOM nodes with visible modal state
-- treat generic Apps Script sandbox/CORB warnings as app regressions unless they block user flow
+## Regression harness note
 
-## Regression classification
+Committed fixture docs are intentionally redacted.
 
-When a mismatch appears, classify it as one of:
+Future lifecycle regression baselines and harness workflow are defined in:
 
-- source row/order data
-- canonical lifecycle
-- hydrated workflow context
-- editor lifecycle adapter
-- save gating
-- order-flow gating
-- summary lifecycle adapter
-- dashboard status adapter
-- dashboard peek adapter
-- dirty-baseline initialization
-- project VM/view refresh
-- iframe/wrapper access issue
-- frontend rendering
-- unrelated/defer
+- [docs/LIFECYCLE_REGRESSION_HARNESS.md](/Users/Josiah/Documents/GitHub/redthreads-ost-portal/docs/LIFECYCLE_REGRESSION_HARNESS.md)
+
+Do not add live tokens, tokenized URLs, or raw exported data to committed smoke
+docs.

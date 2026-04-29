@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "lifecycle_fixture_manifest_v1",
+  "acceptedAppsScriptVersion": 759,
+  "deploymentId": "AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw",
+  "notes": [
+    "Committed manifest is intentionally redacted.",
+    "Live tokens and direct URLs belong only in docs/LIFECYCLE_FIXTURES.local.md.",
+    "Baseline files are reserved for approved redacted captures after 4D.1b/4D.1c."
+  ],
+  "fixtures": [
+    {
+      "fixtureId": "1900",
+      "projectNumber": "1900",
+      "lifecycleLabel": "fresh_estimate",
+      "expectedHighLevelState": "editable_quantity_entry",
+      "category": "estimate",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/1900.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#1900"
+    },
+    {
+      "fixtureId": "1916",
+      "projectNumber": "1916",
+      "lifecycleLabel": "artwork_pending",
+      "expectedHighLevelState": "editable_artwork_approval_needed",
+      "category": "estimate",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/1916.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#1916"
+    },
+    {
+      "fixtureId": "1922",
+      "projectNumber": "1922",
+      "lifecycleLabel": "ready_to_order",
+      "expectedHighLevelState": "editable_order_allowed",
+      "category": "estimate",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/1922.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#1922"
+    },
+    {
+      "fixtureId": "1923",
+      "projectNumber": "1923",
+      "lifecycleLabel": "po_draft_awaiting_submission",
+      "expectedHighLevelState": "locked_estimate_po_submission_lane",
+      "category": "purchase_order",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/1923.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#1923"
+    },
+    {
+      "fixtureId": "1925",
+      "projectNumber": "1925",
+      "lifecycleLabel": "po_submitted_unpaid",
+      "expectedHighLevelState": "locked_estimate_payment_due_production_active",
+      "category": "purchase_order",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/1925.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#1925"
+    },
+    {
+      "fixtureId": "2003",
+      "projectNumber": "2003",
+      "lifecycleLabel": "po_submitted_unpaid_jobs_complete",
+      "expectedHighLevelState": "locked_estimate_unpaid_production_complete",
+      "category": "purchase_order",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/2003.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#2003"
+    },
+    {
+      "fixtureId": "2004",
+      "projectNumber": "2004",
+      "lifecycleLabel": "po_submitted_paid_print_incomplete",
+      "expectedHighLevelState": "locked_estimate_paid_production_active",
+      "category": "purchase_order",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/2004.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#2004"
+    },
+    {
+      "fixtureId": "2005",
+      "projectNumber": "2005",
+      "lifecycleLabel": "po_submitted_paid_complete",
+      "expectedHighLevelState": "project_complete",
+      "category": "purchase_order",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/2005.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#2005"
+    },
+    {
+      "fixtureId": "2006",
+      "projectNumber": "2006",
+      "lifecycleLabel": "manual_payment_pending",
+      "expectedHighLevelState": "locked_estimate_manual_payment_pending",
+      "category": "manual_payment",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/2006.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#2006"
+    },
+    {
+      "fixtureId": "2007",
+      "projectNumber": "2007",
+      "lifecycleLabel": "manual_payment_received_print_incomplete",
+      "expectedHighLevelState": "locked_estimate_paid_production_active",
+      "category": "manual_payment",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/2007.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#2007"
+    },
+    {
+      "fixtureId": "2008",
+      "projectNumber": "2008",
+      "lifecycleLabel": "manual_payment_received_complete",
+      "expectedHighLevelState": "project_complete",
+      "category": "manual_payment",
+      "baselinePath": "testcases/lifecycle-fixtures/baselines/2008.expected.json",
+      "localAccessRef": "docs/LIFECYCLE_FIXTURES.local.md#2008"
+    }
+  ]
+}

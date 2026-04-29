@@ -1,7 +1,7 @@
 # Lifecycle Canonical Architecture
 
 This note documents the lifecycle architecture accepted through Tranches 3A–3G
-and the quarantine boundaries introduced in Tranche 4A.
+and the quarantine boundaries introduced during Tranche 4 cleanup.
 
 ## Canonical Server Chain
 
@@ -44,7 +44,7 @@ summary modes rather than raw `orderState`, `paymentState`, `paidAt`,
 
 ## Quarantined Compatibility Layers
 
-These helpers remain intentionally quarantined during Tranche 4 cleanup:
+These helpers remain intentionally quarantined during Tranche 4 cleanup.
 
 ### Server (`Code.js`)
 
@@ -63,23 +63,37 @@ These helpers remain intentionally quarantined during Tranche 4 cleanup:
 - `ORDER_FLOW_MODE === 'method'` compatibility branch
 - raw order/payment/status readers inside older summary/status helpers
 
-Rule: keep these helpers for compatibility until the staged Tranche 4 deletion
-passes. Do not use them as the basis for new lifecycle decisions.
+Rule: keep these helpers for compatibility until staged deletion passes are
+backed by fixture baselines. Do not use them as the basis for new lifecycle
+decisions.
 
 ## Tranche 4 Sequence
 
-Recommended staged refactor sequence:
+Accepted / recommended sequence:
 
 1. **4A** Audit + quarantine markers
 2. **4B** Safe client consumer consolidation onto `workflowContext`
 3. **4C** Dashboard legacy reduction
-4. **4D** Summary legacy reduction
-5. **4E** Lock/display compatibility review
-6. **4F** Deletion pass after regression coverage
+4. **4D** Fixture snapshot / regression harness prerequisite
+5. **4E** Lock/display compatibility review after baselines exist
+6. **4F** Deletion pass only after regression coverage is in place
 
-## Regression Focus Before Any Deletion
+## Regression Requirement Before Any Deletion
 
-Minimum lifecycle fixture coverage:
+No further lifecycle deletion or compatibility removal should proceed until
+fixture baselines exist for the accepted lifecycle family.
+
+Baseline work should be anchored by:
+
+- [docs/LIFECYCLE_FIXTURES.md](/Users/Josiah/Documents/GitHub/redthreads-ost-portal/docs/LIFECYCLE_FIXTURES.md)
+- [docs/LIFECYCLE_REGRESSION_HARNESS.md](/Users/Josiah/Documents/GitHub/redthreads-ost-portal/docs/LIFECYCLE_REGRESSION_HARNESS.md)
+- `testcases/lifecycle-fixtures/manifest.json`
+- `testcases/lifecycle-fixtures/schema.json`
+
+Deletion/refactor approval should depend on baseline comparison, not memory or
+ad hoc manual judgment.
+
+## Minimum Accepted Fixture Family
 
 - `1900`
 - `1916`
@@ -88,16 +102,21 @@ Minimum lifecycle fixture coverage:
 - `1925`
 - `2003`
 - `2004`
+- `2005`
+- `2006`
+- `2007`
+- `2008`
 
-Surfaces to verify:
+## Surfaces That Must Be Covered
 
-- Dashboard status row
-- Dashboard peek
+- dashboard status row
+- dashboard peek
 - Summary/Invoice document and controls
-- Editor / Save / Place Order gating
-- Card / ACH / PO / manual payment continuation
-- Team/admin visibility and server enforcement
+- editor / Save / Place Order gating
+- card / ACH / PO / manual payment continuation
+- team/admin visibility and server enforcement
+- canonical lifecycle truth used by those surfaces
 
-Known deferred item:
+## Known deferred item
 
-- Shipping capture/display for manual-payment invoice flow
+- shipping capture/display for manual-payment invoice flow

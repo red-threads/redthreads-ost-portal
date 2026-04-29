@@ -7,3 +7,5 @@ data/
 *.csv
 *.jsonl
 EXPORT_LOG*
+docs/LIFECYCLE_FIXTURES.local.md
+testcases/lifecycle-fixtures/private/

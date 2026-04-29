@@ -1,82 +1,86 @@
-# Lifecycle Fixture Manifest
+# Lifecycle Fixture Catalog
 
 ## Security
 
-This file contains live tokenized project access links.
+This committed file is intentionally **redacted**.
 
-Keep this repo private. If this repo may ever become public, move this file to a local ignored path such as:
+It is the fixture catalog for lifecycle regression work, but it must not contain:
+
+- live tokens
+- tokenized URLs
+- customer/client identifiers
+- raw row JSON or state payloads
+
+Local-only access data belongs in:
 
 ```text
 docs/LIFECYCLE_FIXTURES.local.md
 ```
 
-## Stable deployment
+That local file should be ignored by Git and may contain:
 
-Web app URL:
+- fixture tokens
+- direct Apps Script test URLs
+- temporary maintainer-only notes
 
-```text
-https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec
-```
+## Accepted stable reference
 
-Deployment ID:
-
-```text
-AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw
-```
+- accepted Apps Script version: `759`
+- deployment ID: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`
 
 ## Fixture table
 
-| Project | Token | Direct test URL | Lifecycle | Expected high-level state |
-|---|---|---|---|---|
-| `1900` | `d29f8ea7-4a86-4814-88e7-209108b01062` | `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=d29f8ea7-4a86-4814-88e7-209108b01062` | fresh estimate / no action | editable / quantity entry |
-| `1916` | `3cecd311-0e7c-4ea2-8c07-78d5d7b42853` | `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=3cecd311-0e7c-4ea2-8c07-78d5d7b42853` | quantities entered / artwork pending | editable / artwork approval needed |
-| `1922` | `3bfd064f-64a4-4fee-bcd1-b89bd0562ccf` | `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=3bfd064f-64a4-4fee-bcd1-b89bd0562ccf` | ready to order | editable / order allowed |
-| `1923` | `b4353cdf-0610-4e7d-a223-f0ab598bbde5` | `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=b4353cdf-0610-4e7d-a223-f0ab598bbde5` | PO draft invoice prepared / awaiting PO submission | locked estimate / PO submission lane |
-| `1925` | `fa49c61c-fe2e-4d82-8ddc-0dfef1329023` | `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=fa49c61c-fe2e-4d82-8ddc-0dfef1329023` | PO submitted unpaid / production active | locked estimate / payment due / production active |
-| `2003` | `4e13efcc-82d8-4613-a795-3eaff5929773` | `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=4e13efcc-82d8-4613-a795-3eaff5929773` | payment received / production active | locked estimate / paid / production active |
-| `2004` | `70bf3b62-9999-4939-aa00-228bbf546814` | `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec?t=70bf3b62-9999-4939-aa00-228bbf546814` | production complete | locked estimate / terminal complete |
+| Project | Lifecycle label | Expected high-level state | Category |
+|---|---|---|---|
+| `1900` | `fresh_estimate` | editable quantity entry | estimate |
+| `1916` | `artwork_pending` | editable / artwork approval still needed | estimate |
+| `1922` | `ready_to_order` | editable / order allowed | estimate |
+| `1923` | `po_draft_awaiting_submission` | locked estimate / PO submission lane | purchase_order |
+| `1925` | `po_submitted_unpaid` | locked estimate / payment due / production active | purchase_order |
+| `2003` | `po_submitted_unpaid_jobs_complete` | locked estimate / unpaid / production complete | purchase_order |
+| `2004` | `po_submitted_paid_print_incomplete` | locked estimate / paid / production active | purchase_order |
+| `2005` | `po_submitted_paid_complete` | full project complete | purchase_order |
+| `2006` | `manual_payment_pending` | locked estimate / manual payment pending | manual_payment |
+| `2007` | `manual_payment_received_print_incomplete` | locked estimate / paid / production active | manual_payment |
+| `2008` | `manual_payment_received_complete` | full project complete | manual_payment |
 
 ## Notes by fixture
 
 ### 1900
 
-Fresh estimate / no action.
+Fresh estimate / reset state.
 
 Expected:
 - editable
 - no invoice/payment/PO controls
 - Save inactive on initial load
-- Save active after real edit
-- no false unsaved-change modal
+- Save active only after a real edit
 
 ### 1916
 
-Quantities entered, artwork pending.
+Quantities entered, artwork still pending.
 
 Expected:
 - editable
 - artwork still pending
-- Save active only after real edit
-- normal order flow should still be governed by existing blockers
+- order flow still blocked by the existing readiness path
 
 ### 1922
 
 Ready to order.
 
 Important:
-- This fixture may contain stale legacy `portalStateJson.isReadOnly = true`.
-- Canonical lifecycle must override that stale legacy flag.
-- This is a key test case for lifecycle truth beating stale client state.
+- this fixture may contain stale legacy `portalStateJson.isReadOnly = true`
+- canonical lifecycle must beat that stale client flag
 
 Expected:
 - editable
 - Place Order available
-- Save active only after real edit
 - no false locked state
 
 ### 1923
 
-PO draft invoice prepared / awaiting PO submission.
+PO initiated, not submitted.
 
 Expected:
 - estimate editor locked
@@ -88,39 +92,81 @@ Expected:
 
 ### 1925
 
-PO submitted unpaid / production active / payment due.
+PO submitted, unpaid, production active.
 
 Important:
-- This fixture may still carry stale `purchaseOrderDraft` metadata.
-- Canonical lifecycle must override stale draft metadata.
+- this fixture may still carry stale purchase-order draft metadata
+- canonical lifecycle must beat stale draft metadata
 
 Expected:
 - estimate editor locked
-- Save blocked
-- normal Place Order blocked
-- payment due visible through Summary/Invoice
-- production active/current
+- payment due
+- production current
 - no PO draft language
 
 ### 2003
 
-Payment received / production active.
+PO submitted, unpaid, jobs completed.
 
 Expected:
 - estimate editor locked
-- Save blocked
-- normal Place Order blocked
-- paid/in-production state
-- no client payment action
+- payment still due
+- production complete
+- project not fully complete until payment is received
 
 ### 2004
 
-Production complete.
+PO submitted, payment made, print incomplete.
 
 Expected:
-- terminal complete state
+- estimate editor locked
+- payment received
+- production active / incomplete
+- project not complete
+
+### 2005
+
+PO submitted, payment made, jobs completed / complete.
+
+Expected:
+- full project complete
 - editor locked
-- Save blocked
-- normal Place Order blocked
 - no payment/order action
-- no suspicious stale completion date
+
+### 2006
+
+Manual payment pending.
+
+Expected:
+- estimate editor locked
+- manual payment instructions visible
+- payment still due
+- production not started
+
+### 2007
+
+Manual payment received, print incomplete.
+
+Expected:
+- estimate editor locked
+- paid / production active
+- no PO-specific language
+
+### 2008
+
+Manual payment received, jobs completed / complete.
+
+Expected:
+- full project complete
+- editor locked
+- no payment/order action
+
+## Harness note
+
+This file is the committed fixture catalog only.
+
+Future regression baselines should be tracked through:
+
+- [docs/LIFECYCLE_REGRESSION_HARNESS.md](/Users/Josiah/Documents/GitHub/redthreads-ost-portal/docs/LIFECYCLE_REGRESSION_HARNESS.md)
+- `testcases/lifecycle-fixtures/manifest.json`
+- `testcases/lifecycle-fixtures/schema.json`
