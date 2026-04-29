@@ -35436,30 +35436,47 @@
       orderSummary: order,
       currentStateSummary: current
     });
+    const hasWorkflowSummaryDocumentMode = Object.prototype.hasOwnProperty.call(workflow, 'summaryDocumentMode');
+    const hasWorkflowSummaryControlsMode = Object.prototype.hasOwnProperty.call(workflow, 'summaryControlsMode');
+    const hasWorkflowPaymentMethod = Object.prototype.hasOwnProperty.call(workflow, 'paymentMethod');
+    const hasWorkflowPaymentReceived = Object.prototype.hasOwnProperty.call(workflow, 'paymentReceived')
+      || Object.prototype.hasOwnProperty.call(workflow, 'isPaymentReceived');
+    const hasWorkflowPaymentReceivedAt = Object.prototype.hasOwnProperty.call(workflow, 'paymentReceivedAt');
+    const hasWorkflowPaymentDue = Object.prototype.hasOwnProperty.call(workflow, 'paymentDue');
+    const hasWorkflowIsAwaitingPoSubmission = Object.prototype.hasOwnProperty.call(workflow, 'isAwaitingPoSubmission');
+    const hasWorkflowIsPoDraftLocked = Object.prototype.hasOwnProperty.call(workflow, 'isPoDraftLocked');
+    const hasWorkflowHasPurchaseOrderDraft = Object.prototype.hasOwnProperty.call(workflow, 'hasPurchaseOrderDraft');
+    const hasWorkflowIsManualPendingLocked = Object.prototype.hasOwnProperty.call(workflow, 'isManualPendingLocked');
+    const hasWorkflowManualPaymentPending = Object.prototype.hasOwnProperty.call(workflow, 'manualPaymentPending');
     const documentMode = String(
       opts.documentMode
-      || workflow.summaryDocumentMode
+      || (hasWorkflowSummaryDocumentMode ? workflow.summaryDocumentMode : '')
       || getSummaryDocumentMode_({
         orderSummary: order,
         currentStateSummary: current
       })
     ).trim().toLowerCase();
-    let controlsMode = String(workflow.summaryControlsMode || '').trim().toLowerCase();
+    let controlsMode = String(hasWorkflowSummaryControlsMode ? workflow.summaryControlsMode : '').trim().toLowerCase();
     const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
     const lifecycleStage = String(workflow.lifecycleStage || '').trim().toLowerCase();
     const paymentMethodSelected = String(
-      workflow.paymentMethod
+      (hasWorkflowPaymentMethod ? workflow.paymentMethod : '')
       || workflow.paymentMethodSelected
       || order.paymentMethodSelected
       || current.currentPaymentMethod
       || ''
     ).trim().toLowerCase();
     const paymentPath = String(workflow.paymentPath || '').trim().toLowerCase();
-    const paymentReceivedAt = String(order.paymentReceivedManuallyAt || order.paidAt || '').trim();
-    const paymentReceived = workflow.paymentReceived === true
-      || workflow.isPaymentReceived === true
-      || !!paymentReceivedAt;
-    const paymentDue = workflow.paymentDue === true && !paymentReceived;
+    const paymentReceivedAt = String(
+      (hasWorkflowPaymentReceivedAt ? workflow.paymentReceivedAt : '')
+      || order.paymentReceivedManuallyAt
+      || order.paidAt
+      || ''
+    ).trim();
+    const paymentReceived = hasWorkflowPaymentReceived
+      ? (workflow.paymentReceived === true || workflow.isPaymentReceived === true)
+      : !!paymentReceivedAt;
+    const paymentDue = (hasWorkflowPaymentDue ? workflow.paymentDue === true : false) && !paymentReceived;
     if (!controlsMode) {
       if (documentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice) controlsMode = 'po_submission';
       else if (documentMode === SUMMARY_DOCUMENT_MODES.manual_pending_invoice) controlsMode = 'manual_pending';
@@ -35468,15 +35485,15 @@
     }
     const isPoDraft = controlsMode === 'po_submission'
       || documentMode === SUMMARY_DOCUMENT_MODES.po_draft_invoice
-      || workflow.isPoDraftLocked === true
-      || workflow.isAwaitingPoSubmission === true
-      || workflow.hasPurchaseOrderDraft === true
+      || (hasWorkflowIsPoDraftLocked && workflow.isPoDraftLocked === true)
+      || (hasWorkflowIsAwaitingPoSubmission && workflow.isAwaitingPoSubmission === true)
+      || (hasWorkflowHasPurchaseOrderDraft && workflow.hasPurchaseOrderDraft === true)
       || lifecycleState === 'po_draft_invoice_prepared'
       || lifecycleState === 'awaiting_po_submission';
     const isManualPending = controlsMode === 'manual_pending'
       || documentMode === SUMMARY_DOCUMENT_MODES.manual_pending_invoice
-      || workflow.manualPaymentPending === true
-      || workflow.isManualPendingLocked === true
+      || (hasWorkflowManualPaymentPending && workflow.manualPaymentPending === true)
+      || (hasWorkflowIsManualPendingLocked && workflow.isManualPendingLocked === true)
       || lifecycleState === 'manual_payment_pending';
     const paymentMethodLabel = (
       paymentMethodSelected === PAYMENT_METHODS.card ? 'Credit Card'
