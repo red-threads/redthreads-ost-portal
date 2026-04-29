@@ -153,6 +153,11 @@ const PORTAL_ORDER_HEADERS = [
   'amountRush',
   'amountTax',
   'amountGrandTotal',
+  'amountCardFee',
+  'amountChargedTax',
+  'amountChargedTotal',
+  'stripeAmountSubtotalCents',
+  'stripeAmountTotalCents',
   'currency',
   'stripeSessionId',
   'stripePaymentIntentId',
@@ -2814,9 +2819,14 @@ function buildDashboardPeekTotalsFromLockedDraft_(draft, latestOrderSummary, opt
   const opts = (options && typeof options === 'object') ? options : {};
   const context = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
   const productionStarted = buildDashboardPeekLifecycleMeta_(context).productionStarted === true;
+  const paidCardChargedTotal = trimString_(latest.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.card
+    && (!!trimString_(latest.paidAt) || trimString_(latest.paymentState).toLowerCase() === PAYMENT_STATES.paid)
+    && roundMoney_(latest.amountChargedTotal) > 0
+    ? roundMoney_(latest.amountChargedTotal)
+    : 0;
   return {
     totalUnits: Math.max(0, parseInt(String(normalizedDraft.totalUnits || 0), 10) || 0),
-    totalPrice: roundMoney_(latest.amountGrandTotal || normalizedDraft.amountGrandTotal || 0),
+    totalPrice: paidCardChargedTotal || roundMoney_(latest.amountGrandTotal || normalizedDraft.amountGrandTotal || 0),
     currency: trimString_(latest.currency || normalizedDraft.currency || DEFAULT_STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY,
     priceLabel: productionStarted ? 'Final Cost' : 'Estimated Price',
     priceDisclaimer: productionStarted ? '' : 'Price excludes taxes, shipping, CC fees'
@@ -4976,12 +4986,35 @@ function buildPreparedOrderActionContext_(payload) {
   return ctx;
 }
 
-function validateEditableOrderInitiationForAction_(ctx) {
+function isRetryableUnpaidStripeCheckoutWorkflow_(workflow) {
+  const wf = (workflow && typeof workflow === 'object') ? workflow : {};
+  const lifecycleState = trimString_(wf.lifecycleState).toLowerCase();
+  const paymentMethodSelected = trimString_(wf.paymentMethodSelected).toLowerCase();
+  const orderState = trimString_(wf.orderState).toLowerCase();
+  const paymentState = trimString_(wf.paymentState).toLowerCase();
+  const isStripeMethod = paymentMethodSelected === PAYMENT_METHODS.card || paymentMethodSelected === PAYMENT_METHODS.ach;
+  return lifecycleState === PORTAL_LIFECYCLE_STATES.checkout_started_unpaid
+    && wf.isCheckoutStarted === true
+    && wf.isEditable === true
+    && wf.isLocked !== true
+    && wf.isPaymentReceived !== true
+    && wf.isProductionAuthorized !== true
+    && wf.hasPlacedOrder !== true
+    && (
+      isStripeMethod
+      || orderState === ORDER_STATES.payment_in_progress
+      || paymentState === PAYMENT_STATES.checkout_created
+    );
+}
+
+function validateEditableOrderInitiationForAction_(ctx, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
   const lifecycle = buildLatestClientWorkflowContextForAction_(ctx);
   const workflow = (lifecycle && lifecycle.workflowContext && typeof lifecycle.workflowContext === 'object')
     ? lifecycle.workflowContext
     : {};
   if (workflow.orderAllowed === true) return null;
+  if (opts.allowCheckoutStartedRetry === true && isRetryableUnpaidStripeCheckoutWorkflow_(workflow)) return null;
   const lifecycleState = trimString_(workflow.lifecycleState).toLowerCase();
   const nextClientAction = trimString_(workflow.nextClientAction).toLowerCase();
   let message = 'This project can no longer be placed from checkout.';
@@ -5078,13 +5111,13 @@ function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkout
 function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe) {
   const identity = (checkoutIdentity && typeof checkoutIdentity === 'object') ? checkoutIdentity : {};
   const stripeResult = (stripe && typeof stripe === 'object') ? stripe : {};
-  const orderDraft = Object.assign({}, ctx.orderDraft, {
+  const orderDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(Object.assign({}, ctx.orderDraft, {
     paymentMethodSelected: paymentMethodSelected,
     paymentState: PAYMENT_STATES.checkout_created,
     orderState: ORDER_STATES.payment_in_progress,
     productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
     portalLockState: PORTAL_LOCK_STATES.editable
-  });
+  }), stripeResult);
   return Object.assign({}, ctx, {
     orderDraft: orderDraft,
     orderId: trimString_(identity.orderId),
@@ -5453,6 +5486,11 @@ function supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
   if (!token) return [];
+  const excludedOrderIds = new Set(
+    (Array.isArray(opts.excludeOrderIds) ? opts.excludeOrderIds : [opts.excludeOrderId])
+      .map(function(orderId) { return trimString_(orderId); })
+      .filter(Boolean)
+  );
   const rows = listPortalOrdersByToken_(token, {
     cfg: ctx.cfg,
     ss: ctx.ss,
@@ -5461,6 +5499,8 @@ function supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, options) {
   const reason = trimString_(opts.revisionReason) || 'payment_method_superseded';
   const updatedRows = [];
   rows.forEach(function(orderInfo) {
+    const orderId = trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid);
+    if (orderId && excludedOrderIds.has(orderId)) return;
     if (!isSupersedableOrderRowForPaymentPathSwitch_(orderInfo)) return;
     const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
     const updated = updatePortalOrderState_({
@@ -5650,7 +5690,9 @@ function appendClientLifecycleAuditMessageToPortalState_(portalState, messageTex
 function createCheckoutAttempt(payload) {
   try {
     const ctx = buildPreparedOrderActionContext_(payload);
-    const orderFlowAccessError = validateEditableOrderInitiationForAction_(ctx);
+    const orderFlowAccessError = validateEditableOrderInitiationForAction_(ctx, {
+      allowCheckoutStartedRetry: true
+    });
     if (orderFlowAccessError) return orderFlowAccessError;
     if (readPurchaseOrderDraftFromPortalState_(ctx.portalState)) {
       persistContextPortalState_(ctx, clearPurchaseOrderDraftFromPortalState_(ctx.portalState), {
@@ -5688,6 +5730,21 @@ function createCheckoutAttempt(payload) {
       const finalOrderInfo = updateCheckoutAttemptOrderWithStripeSession_(ctx, created, stripe);
       orderSummary = buildPortalOrderSummary_(finalOrderInfo.rowObjNormalized);
       exportRowInfo = writeCheckoutAttemptPointers_(ctx, orderSummary, paymentMethodSelected, checkoutIdentity.checkoutAttemptId);
+      try {
+        supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
+          excludeOrderId: checkoutIdentity.orderId,
+          revisionReason: 'checkout_attempt_superseded',
+          notes: 'Superseded by a newer hosted Stripe Checkout attempt.'
+        });
+      } catch (supersedeErr) {
+        console.log('[RT-CHECKOUT-SUPERSEDE] ' + JSON.stringify({
+          ok: false,
+          token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
+          orderId: trimString_(checkoutIdentity && checkoutIdentity.orderId),
+          checkoutAttemptId: trimString_(checkoutIdentity && checkoutIdentity.checkoutAttemptId),
+          error: String((supersedeErr && supersedeErr.message) || supersedeErr)
+        }));
+      }
     } catch (persistErr) {
       restoreExportOrderPointers_(ctx, pointerSnapshot);
       rollbackCheckoutAttemptOrder_(
@@ -8825,6 +8882,55 @@ function extractStripeMetadataValue_(obj, key) {
   return trimString_(meta[key]);
 }
 
+function validateCurrentStripeCheckoutWebhookOrder_(eventObj, orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const token = trimString_(
+    extractStripeMetadataValue_(eventObj, 'token') ||
+    row.token
+  );
+  if (!token) return { ok: true, current: true, rowInfo: null };
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const rowInfo = findRowByToken_(infra.exportSheet, token);
+  if (!rowInfo) return { ok: true, current: true, rowInfo: null };
+  const exportRow = rowInfo.rowObjNormalized || {};
+  const activeOrderId = trimString_(exportRow.activeorderid);
+  const latestCheckoutAttemptId = trimString_(exportRow.latestcheckoutattemptid);
+  const orderId = trimString_(row.orderid);
+  const orderCheckoutAttemptId = trimString_(row.checkoutattemptid);
+  const eventCheckoutAttemptId = trimString_(extractStripeMetadataValue_(eventObj, 'checkoutAttemptId'));
+  const effectiveCheckoutAttemptId = orderCheckoutAttemptId || eventCheckoutAttemptId;
+  const eventObjectType = trimString_(eventObj && eventObj.object).toLowerCase();
+  const eventId = trimString_(eventObj && eventObj.id);
+  const eventIsCheckoutSession = eventObjectType === 'checkout.session' || eventId.indexOf('cs_') === 0;
+  const orderStripeSessionId = trimString_(row.stripesessionid);
+  const eventStripeSessionId = eventIsCheckoutSession ? eventId : '';
+  const hasCurrentCheckoutPointers = !!activeOrderId || !!latestCheckoutAttemptId;
+  const current = hasCurrentCheckoutPointers
+    && (!activeOrderId || (orderId && activeOrderId === orderId))
+    && (!latestCheckoutAttemptId || (effectiveCheckoutAttemptId && latestCheckoutAttemptId === effectiveCheckoutAttemptId))
+    && (!eventCheckoutAttemptId || !latestCheckoutAttemptId || eventCheckoutAttemptId === latestCheckoutAttemptId)
+    && (!eventStripeSessionId || !orderStripeSessionId || eventStripeSessionId === orderStripeSessionId);
+  if (current) {
+    return { ok: true, current: true, rowInfo: rowInfo };
+  }
+  const result = {
+    ok: true,
+    ignored: true,
+    code: 'superseded_checkout_attempt',
+    eventType: trimString_(opts.eventType),
+    token: token,
+    orderId: orderId,
+    checkoutAttemptId: effectiveCheckoutAttemptId,
+    activeOrderId: activeOrderId,
+    latestCheckoutAttemptId: latestCheckoutAttemptId
+  };
+  console.log('[RT-STRIPE-WEBHOOK-SUPERSEDED] ' + JSON.stringify(result));
+  return Object.assign({ current: false, rowInfo: rowInfo }, result);
+}
+
 function handleCheckoutSessionCompleted_(sessionObj) {
   const token = extractStripeMetadataValue_(sessionObj, 'token');
   const checkoutAttemptId = extractStripeMetadataValue_(sessionObj, 'checkoutAttemptId');
@@ -8835,10 +8941,20 @@ function handleCheckoutSessionCompleted_(sessionObj) {
   const orderInfo = getPortalOrderByCheckoutAttemptId_(checkoutAttemptId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) ||
     getPortalOrderByStripeSessionId_(trimString_(sessionObj && sessionObj.id), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
   if (!orderInfo) return { ok: false, error: 'Order not found for checkout session.' };
+  const currentGuard = validateCurrentStripeCheckoutWebhookOrder_(sessionObj, orderInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    eventType: 'checkout.session.completed'
+  });
+  if (currentGuard.current === false) return currentGuard;
   const now = nowIso_();
   const delayed = paymentMethodSelected === PAYMENT_METHODS.ach || trimString_(sessionObj && sessionObj.payment_status).toLowerCase() !== 'paid';
   const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
-  const nextDraft = mergeOrderDraftShippingDetails_(currentDraft, sessionObj);
+  const nextDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(
+    mergeOrderDraftShippingDetails_(currentDraft, sessionObj),
+    buildStripeCheckoutActualAmountSummary_(sessionObj, currentDraft)
+  );
   const updatedOrder = updatePortalOrderState_({
     cfg: cfg,
     ss: ss,
@@ -8847,6 +8963,11 @@ function handleCheckoutSessionCompleted_(sessionObj) {
     orderDraft: nextDraft,
     stripeSessionId: trimString_(sessionObj && sessionObj.id),
     stripePaymentIntentId: trimString_(sessionObj && sessionObj.payment_intent),
+    amountCardFee: nextDraft.amountCardFee,
+    amountChargedTax: nextDraft.amountChargedTax,
+    amountChargedTotal: nextDraft.amountChargedTotal,
+    stripeAmountSubtotalCents: nextDraft.stripeAmountSubtotalCents,
+    stripeAmountTotalCents: nextDraft.stripeAmountTotalCents,
     portalLockState: PORTAL_LOCK_STATES.locked,
     paymentMethodSelected: paymentMethodSelected,
     paymentState: delayed ? PAYMENT_STATES.pending : PAYMENT_STATES.paid,
@@ -8892,9 +9013,19 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj) {
   const orderInfo = getPortalOrderByCheckoutAttemptId_(checkoutAttemptId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) ||
     getPortalOrderByStripeSessionId_(trimString_(sessionObj && sessionObj.id), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
   if (!orderInfo) return { ok: false, error: 'Order not found for async success.' };
+  const currentGuard = validateCurrentStripeCheckoutWebhookOrder_(sessionObj, orderInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    eventType: 'checkout.session.async_payment_succeeded'
+  });
+  if (currentGuard.current === false) return currentGuard;
   const now = nowIso_();
   const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
-  const nextDraft = mergeOrderDraftShippingDetails_(currentDraft, sessionObj);
+  const nextDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(
+    mergeOrderDraftShippingDetails_(currentDraft, sessionObj),
+    buildStripeCheckoutActualAmountSummary_(sessionObj, currentDraft)
+  );
   const updatedOrder = updatePortalOrderState_({
     cfg: cfg,
     ss: ss,
@@ -8903,6 +9034,11 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj) {
     orderDraft: nextDraft,
     stripeSessionId: trimString_(sessionObj && sessionObj.id),
     stripePaymentIntentId: trimString_(sessionObj && sessionObj.payment_intent),
+    amountCardFee: nextDraft.amountCardFee,
+    amountChargedTax: nextDraft.amountChargedTax,
+    amountChargedTotal: nextDraft.amountChargedTotal,
+    stripeAmountSubtotalCents: nextDraft.stripeAmountSubtotalCents,
+    stripeAmountTotalCents: nextDraft.stripeAmountTotalCents,
     portalLockState: PORTAL_LOCK_STATES.locked,
     paymentState: PAYMENT_STATES.paid,
     orderState: ORDER_STATES.ready_for_production,
@@ -8939,6 +9075,13 @@ function handleCheckoutAsyncPaymentFailed_(sessionObj) {
   const orderInfo = getPortalOrderByCheckoutAttemptId_(checkoutAttemptId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) ||
     getPortalOrderByStripeSessionId_(trimString_(sessionObj && sessionObj.id), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
   if (!orderInfo) return { ok: false, error: 'Order not found for async failure.' };
+  const currentGuard = validateCurrentStripeCheckoutWebhookOrder_(sessionObj, orderInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    eventType: 'checkout.session.async_payment_failed'
+  });
+  if (currentGuard.current === false) return currentGuard;
   const updatedOrder = updatePortalOrderState_({
     cfg: cfg,
     ss: ss,
@@ -8973,6 +9116,13 @@ function handlePaymentIntentFailed_(paymentIntentObj) {
   const orderInfo = listSheetRowInfos_(infra.ordersSheet)
     .find((info) => trimString_(info.rowObjNormalized.stripepaymentintentid) === paymentIntentId) || null;
   if (!orderInfo) return { ok: false, error: 'Order not found for payment intent.' };
+  const currentGuard = validateCurrentStripeCheckoutWebhookOrder_(paymentIntentObj, orderInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    eventType: 'payment_intent.payment_failed'
+  });
+  if (currentGuard.current === false) return currentGuard;
   const updatedOrder = updatePortalOrderState_({
     cfg: cfg,
     ss: ss,
@@ -11222,15 +11372,27 @@ function normalizeSummaryOptionsForOrderDraft_(summaryOptions) {
   };
 }
 
-function shouldApplySalesTaxToOrderDraft_(accountSummary, summaryOptions) {
-  if (accountSummary && accountSummary.taxExemptActive) return false;
-  const taxToggleAllowed = !!(accountSummary && (accountSummary.taxExemptActive || accountSummary.taxExemptApproved));
+function resolveOrderDraftTaxDecision_(accountSummary, summaryOptions) {
   const normalizedSummaryOptions = normalizeSummaryOptionsForOrderDraft_(summaryOptions);
-  return taxToggleAllowed ? normalizedSummaryOptions.salesTaxEnabled !== false : true;
+  const taxExemptionActive = !!(accountSummary && accountSummary.taxExemptActive === true);
+  const taxExemptApplied = taxExemptionActive && normalizedSummaryOptions.salesTaxEnabled === false;
+  const taxShouldApply = !taxExemptApplied;
+  return {
+    taxShouldApply: taxShouldApply,
+    taxExemptApplied: taxExemptApplied,
+    taxStatusApplied: taxExemptApplied ? 'tax_exempt_active' : 'standard'
+  };
 }
 
-function deriveTaxAmountForOrderDraft_(totalsBeforeTax, accountSummary, summaryOptions) {
-  if (!shouldApplySalesTaxToOrderDraft_(accountSummary, summaryOptions)) return 0;
+function shouldApplySalesTaxToOrderDraft_(accountSummary, summaryOptions) {
+  return resolveOrderDraftTaxDecision_(accountSummary, summaryOptions).taxShouldApply;
+}
+
+function deriveTaxAmountForOrderDraft_(totalsBeforeTax, accountSummary, summaryOptions, taxDecision) {
+  const decision = (taxDecision && typeof taxDecision === 'object')
+    ? taxDecision
+    : resolveOrderDraftTaxDecision_(accountSummary, summaryOptions);
+  if (decision.taxShouldApply !== true) return 0;
   const taxableBasis = Math.max(0, roundMoney_(toFiniteNumber_(totalsBeforeTax, 0)));
   return roundMoney_(taxableBasis * 0.06);
 }
@@ -11251,7 +11413,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   const accountSummary = options.accountSummary || null;
   const dealNumber = trimString_(row.dealnumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber));
   const includedJobSelectionStates = getIncludedOrderJobSelectionStates_(printJobs, portalState);
-  const taxExemptApplied = Boolean(accountSummary && accountSummary.taxExemptActive);
+  const taxDecision = resolveOrderDraftTaxDecision_(accountSummary, summaryOptions);
   const selectedJobs = [];
   const canceledJobs = [];
 
@@ -11416,7 +11578,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   amountSubtotal = roundMoney_(amountSubtotal);
   amountShipping = roundMoney_(amountShipping);
   amountRush = roundMoney_(amountRush);
-  const amountTax = roundMoney_(deriveTaxAmountForOrderDraft_(amountSubtotal + amountShipping + amountRush, accountSummary, summaryOptions));
+  const amountTax = roundMoney_(deriveTaxAmountForOrderDraft_(amountSubtotal + amountShipping + amountRush, accountSummary, summaryOptions, taxDecision));
   const amountGrandTotal = roundMoney_(amountSubtotal + amountShipping + amountRush + amountTax);
   const fulfillment = computeFulfillmentContextForOrderDraft_(portalState, amountGrandTotal);
   const orgContext = deriveOrgContextFromRow_(row);
@@ -11437,6 +11599,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
     amountSubtotal: amountSubtotal,
     amountShipping: amountShipping,
     amountRush: amountRush,
+    taxShouldApply: taxDecision.taxShouldApply,
     amountTax: amountTax,
     amountGrandTotal: amountGrandTotal,
     fulfillmentMethod: fulfillment.fulfillmentMethod,
@@ -11447,8 +11610,8 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
     shippingDetails: normalizeOrderDraftShippingDetailsInput_(portalState.shippingDetails),
     shippingDetailsCaptured: !!normalizeOrderDraftShippingDetailsInput_(portalState.shippingDetails),
     currency: currency || DEFAULT_STRIPE_PRICE_CURRENCY,
-    taxStatusApplied: taxExemptApplied ? 'tax_exempt_active' : 'standard',
-    taxExemptApplied: taxExemptApplied,
+    taxStatusApplied: taxDecision.taxStatusApplied,
+    taxExemptApplied: taxDecision.taxExemptApplied,
     portalLockState: trimString_(row.portallockstate) || PORTAL_LOCK_STATES.editable,
     paymentState: trimString_(row.currentpaymentstate) || PAYMENT_STATES.not_started,
     paymentMethodSelected: trimString_(row.currentpaymentmethod),
@@ -11566,6 +11729,11 @@ function buildPortalOrderSummary_(row) {
     poSubmittedAt: trimString_(order.posubmittedat || order.poSubmittedAt),
     amountGrandTotal: roundMoney_(order.amountgrandtotal || order.amountGrandTotal || 0),
     amountTax: roundMoney_(order.amounttax || order.amountTax || 0),
+    amountCardFee: roundMoney_(order.amountcardfee || order.amountCardFee || draft.amountCardFee || 0),
+    amountChargedTax: roundMoney_(order.amountchargedtax || order.amountChargedTax || draft.amountChargedTax || 0),
+    amountChargedTotal: roundMoney_(order.amountchargedtotal || order.amountChargedTotal || draft.amountChargedTotal || 0),
+    stripeAmountSubtotalCents: Math.max(0, parseInt(String(order.stripeamountsubtotalcents || order.stripeAmountSubtotalCents || draft.stripeAmountSubtotalCents || 0), 10) || 0),
+    stripeAmountTotalCents: Math.max(0, parseInt(String(order.stripeamounttotalcents || order.stripeAmountTotalCents || draft.stripeAmountTotalCents || 0), 10) || 0),
     currency: trimString_(order.currency || DEFAULT_STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY,
     fulfillmentMethod: normalizeFulfillmentMethod_(draft.fulfillmentMethod),
     shippingChargeCents: Math.max(0, parseInt(String(draft.shippingChargeCents || 0), 10) || 0),
@@ -11784,6 +11952,11 @@ function createPortalOrder_(opts) {
     amountRush: roundMoney_(draft.amountRush),
     amountTax: roundMoney_(draft.amountTax),
     amountGrandTotal: roundMoney_(draft.amountGrandTotal),
+    amountCardFee: roundMoney_(draft.amountCardFee),
+    amountChargedTax: roundMoney_(draft.amountChargedTax),
+    amountChargedTotal: roundMoney_(draft.amountChargedTotal),
+    stripeAmountSubtotalCents: Math.max(0, parseInt(String(draft.stripeAmountSubtotalCents || 0), 10) || 0),
+    stripeAmountTotalCents: Math.max(0, parseInt(String(draft.stripeAmountTotalCents || 0), 10) || 0),
     currency: trimString_(draft.currency || cfg.stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY),
     stripeSessionId: trimString_(options.stripeSessionId),
     stripePaymentIntentId: trimString_(options.stripePaymentIntentId),
@@ -11862,6 +12035,11 @@ function updatePortalOrderState_(opts) {
     'productionAuthorizationState',
     'stripeSessionId',
     'stripePaymentIntentId',
+    'amountCardFee',
+    'amountChargedTax',
+    'amountChargedTotal',
+    'stripeAmountSubtotalCents',
+    'stripeAmountTotalCents',
     'invoiceNumber',
     'invoicePdfUrl',
     'invoiceSentToEmail',
@@ -11888,6 +12066,11 @@ function updatePortalOrderState_(opts) {
     updates.orderDraftJson = JSON.stringify(options.orderDraft);
     if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountTax')) updates.amountTax = roundMoney_(options.orderDraft.amountTax);
     if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountGrandTotal')) updates.amountGrandTotal = roundMoney_(options.orderDraft.amountGrandTotal);
+    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountCardFee')) updates.amountCardFee = roundMoney_(options.orderDraft.amountCardFee);
+    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountChargedTax')) updates.amountChargedTax = roundMoney_(options.orderDraft.amountChargedTax);
+    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountChargedTotal')) updates.amountChargedTotal = roundMoney_(options.orderDraft.amountChargedTotal);
+    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'stripeAmountSubtotalCents')) updates.stripeAmountSubtotalCents = Math.max(0, parseInt(String(options.orderDraft.stripeAmountSubtotalCents || 0), 10) || 0);
+    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'stripeAmountTotalCents')) updates.stripeAmountTotalCents = Math.max(0, parseInt(String(options.orderDraft.stripeAmountTotalCents || 0), 10) || 0);
   }
   setRowValuesByHeaderMap_(ordersSheet, orderInfo.row, orderInfo.colMap, updates);
   return buildRowInfoFromSheet_(ordersSheet, orderInfo.row);
@@ -13686,6 +13869,7 @@ function createLockedOrderPaymentCheckout_(payload) {
   if (!hasUsableCheckoutSession_(stripe)) {
     return buildCheckoutAttemptFailureResponse_(stripe);
   }
+  const chargedOrderDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(orderDraft, stripe);
   const updatedOrder = updatePortalOrderState_({
     cfg: ctx.cfg,
     ss: ctx.ss,
@@ -13693,7 +13877,13 @@ function createLockedOrderPaymentCheckout_(payload) {
     orderRowInfo: latestOrder,
     checkoutAttemptId: checkoutAttemptId,
     stripeSessionId: trimString_(stripe.sessionId),
-    paymentState: PAYMENT_STATES.checkout_created
+    paymentState: PAYMENT_STATES.checkout_created,
+    amountCardFee: chargedOrderDraft.amountCardFee,
+    amountChargedTax: chargedOrderDraft.amountChargedTax,
+    amountChargedTotal: chargedOrderDraft.amountChargedTotal,
+    stripeAmountSubtotalCents: chargedOrderDraft.stripeAmountSubtotalCents,
+    stripeAmountTotalCents: chargedOrderDraft.stripeAmountTotalCents,
+    orderDraft: chargedOrderDraft
   });
   const orderSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
   const exportRowInfo = writeCurrentOrderPointersToExportLog_({
@@ -13929,7 +14119,13 @@ function generateInvoiceDocumentForOrder_(orderRowOrDraft, options) {
   body.appendParagraph('Shipping / Fees: ' + roundMoney_(draft.amountShipping));
   body.appendParagraph('Rush: ' + roundMoney_(draft.amountRush));
   body.appendParagraph('Tax: ' + roundMoney_(draft.amountTax));
-  body.appendParagraph('Grand Total: ' + roundMoney_(draft.amountGrandTotal) + ' ' + trimString_(draft.currency || order.currency || cfg.stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY));
+  if (roundMoney_(draft.amountCardFee) > 0) {
+    body.appendParagraph('Card Fee: ' + roundMoney_(draft.amountCardFee));
+  }
+  const invoiceGrandTotal = roundMoney_(draft.amountChargedTotal) > 0
+    ? roundMoney_(draft.amountChargedTotal)
+    : roundMoney_(draft.amountGrandTotal);
+  body.appendParagraph('Grand Total: ' + invoiceGrandTotal + ' ' + trimString_(draft.currency || order.currency || cfg.stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY));
   body.appendParagraph('');
   body.appendParagraph('Selected Print Jobs').setHeading(DocumentApp.ParagraphHeading.HEADING2);
   (Array.isArray(draft.selectedJobs) ? draft.selectedJobs : []).forEach((job) => {
@@ -14735,7 +14931,8 @@ function buildStripeCheckoutColorwayLineItems_(job, skuSummary) {
       displayQuantity: 1,
       amountCents: amountCents,
       imageUrl: imageUrl,
-      unitLabel: ''
+      unitLabel: '',
+      printJobLabel: buildStripeCheckoutPrintJobLabel_(job)
     });
     lineItems.push(apparelLineItem);
   });
@@ -14756,7 +14953,8 @@ function buildStripeCheckoutColorwayLineItems_(job, skuSummary) {
     displayQuantity: 1,
     amountCents: amountCents,
     imageUrl: imageUrl,
-    unitLabel: ''
+    unitLabel: '',
+    printJobLabel: buildStripeCheckoutPrintJobLabel_(job)
   }].map(finalizeStripeCheckoutLineItemPricing_);
 }
 
@@ -14766,7 +14964,7 @@ function buildStripeCheckoutAddOnLineItem_(job, addOnSummary) {
   const fallbackName = addOnSummary && addOnSummary.type === 'rush'
     ? 'Rush Service'
     : (addOnSummary && addOnSummary.type === 'shipping' ? 'Shipping' : 'Additional Fee');
-  return finalizeStripeCheckoutLineItemPricing_({
+  const lineItem = {
     type: trimString_(addOnSummary && addOnSummary.type) || 'fee',
     name: truncateStripeCheckoutText_(trimString_(addOnSummary && addOnSummary.label) || fallbackName, 80),
     descriptionParts: uniqueTrimmedStrings_([
@@ -14776,8 +14974,10 @@ function buildStripeCheckoutAddOnLineItem_(job, addOnSummary) {
     displayQuantity: 1,
     amountCents: amountCents,
     imageUrl: '',
-    unitLabel: ''
-  });
+    unitLabel: '',
+    printJobLabel: buildStripeCheckoutPrintJobLabel_(job)
+  };
+  return amountCents > 0 ? finalizeStripeCheckoutLineItemPricing_(lineItem) : lineItem;
 }
 
 function buildStripeCheckoutTaxLineItem_(orderDraft) {
@@ -14785,8 +14985,8 @@ function buildStripeCheckoutTaxLineItem_(orderDraft) {
   if (!amountCents) return null;
   return finalizeStripeCheckoutLineItemPricing_({
     type: 'tax',
-    name: 'Sales Tax',
-    descriptionParts: ['Calculated from current portal draft'],
+    name: 'Estimated Sales Tax',
+    descriptionParts: ['Applied based on your current order selections.'],
     quantity: 1,
     displayQuantity: 1,
     amountCents: amountCents,
@@ -14818,6 +15018,101 @@ function buildStripeCheckoutDefaultLineItems_(orderDraft) {
   })];
 }
 
+function getStripeCheckoutLineItemAmountCents_(lineItem) {
+  return parseInt(String(lineItem && lineItem.amountCents || 0), 10) || 0;
+}
+
+function isStripeCheckoutTaxLineItem_(lineItem) {
+  return trimString_(lineItem && lineItem.type).toLowerCase() === 'tax';
+}
+
+function getStripeCheckoutReductionPriority_(lineItem) {
+  const type = trimString_(lineItem && lineItem.type).toLowerCase();
+  if (type === 'fee' || type === 'shipping' || type === 'rush') return 0;
+  if (type === 'summary') return 2;
+  if (type === 'tax') return 99;
+  return 1;
+}
+
+function reduceStripeCheckoutLineItems_(lineItems, reductionCents) {
+  const reductionTarget = Math.max(0, parseInt(String(reductionCents || 0), 10) || 0);
+  const adjustedItems = (Array.isArray(lineItems) ? lineItems : [])
+    .filter(Boolean)
+    .map((item) => Object.assign({}, item));
+  if (!reductionTarget) {
+    return { ok: true, lineItems: adjustedItems, remainingReductionCents: 0 };
+  }
+  const targets = adjustedItems
+    .filter((item) => !isStripeCheckoutTaxLineItem_(item) && getStripeCheckoutLineItemAmountCents_(item) > 1)
+    .sort((left, right) => {
+      const priorityDiff = getStripeCheckoutReductionPriority_(left) - getStripeCheckoutReductionPriority_(right);
+      if (priorityDiff !== 0) return priorityDiff;
+      return getStripeCheckoutLineItemAmountCents_(right) - getStripeCheckoutLineItemAmountCents_(left);
+    });
+  let remainingReductionCents = reductionTarget;
+  targets.forEach((item) => {
+    if (!remainingReductionCents) return;
+    const currentAmountCents = Math.max(0, getStripeCheckoutLineItemAmountCents_(item));
+    const availableReductionCents = Math.max(0, currentAmountCents - 1);
+    const reduction = Math.min(remainingReductionCents, availableReductionCents);
+    if (!reduction) return;
+    item.amountCents = currentAmountCents - reduction;
+    remainingReductionCents -= reduction;
+  });
+  return {
+    ok: remainingReductionCents === 0,
+    lineItems: adjustedItems.filter((item) => getStripeCheckoutLineItemAmountCents_(item) > 0),
+    remainingReductionCents: remainingReductionCents
+  };
+}
+
+function buildStripeCheckoutAdjustmentLineItem_(amountCents) {
+  const safeAmountCents = Math.max(0, parseInt(String(amountCents || 0), 10) || 0);
+  if (!safeAmountCents) return null;
+  return finalizeStripeCheckoutLineItemPricing_({
+    type: 'adjustment',
+    name: 'Order Adjustment',
+    descriptionParts: ['Aligns itemized pricing with your current order total.'],
+    quantity: 1,
+    displayQuantity: 1,
+    amountCents: safeAmountCents,
+    imageUrl: '',
+    unitLabel: ''
+  });
+}
+
+function buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected) {
+  const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
+  const pricedFallbackItems = trimString_(paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.card
+    ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
+    : fallbackItems;
+  return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
+}
+
+function buildStripeCheckoutDiscountDisplayText_(negativeItems) {
+  const items = Array.isArray(negativeItems) ? negativeItems : [];
+  const labels = uniqueTrimmedStrings_(items.map((item) => {
+    const amountCents = Math.abs(getStripeCheckoutLineItemAmountCents_(item));
+    const amountText = amountCents > 0 ? (' (-' + formatUsdAmount_(amountCents / 100) + ')') : '';
+    return truncateStripeCheckoutText_(trimString_(item && item.name) + amountText, 80);
+  }));
+  return labels.length ? ('Discount applied: ' + truncateStripeCheckoutText_(labels.join(' + '), 120)) : '';
+}
+
+function chooseStripeCheckoutDiscountNoteTarget_(lineItems, negativeItems) {
+  const items = Array.isArray(lineItems) ? lineItems : [];
+  const negatives = Array.isArray(negativeItems) ? negativeItems : [];
+  const relatedLabels = uniqueTrimmedStrings_(negatives.map((item) => item && item.printJobLabel));
+  if (relatedLabels.length) {
+    const related = items.find((item) => {
+      const label = trimString_(item && item.printJobLabel);
+      return label && relatedLabels.indexOf(label) >= 0 && !isStripeCheckoutTaxLineItem_(item);
+    });
+    if (related) return related;
+  }
+  return items.find((item) => !isStripeCheckoutTaxLineItem_(item)) || items[0] || null;
+}
+
 function applyNegativeStripeCheckoutAdjustments_(lineItems) {
   const allItems = (Array.isArray(lineItems) ? lineItems : []).filter(Boolean);
   const positiveItems = allItems.filter((item) => item.amountCents > 0);
@@ -14830,32 +15125,16 @@ function applyNegativeStripeCheckoutAdjustments_(lineItems) {
   }
 
   let remainingDiscountCents = negativeItems.reduce((sum, item) => sum + Math.abs(item.amountCents), 0);
-  const sortedTargets = positiveItems.slice().sort((a, b) => {
-    const typePriority = function (item) {
-      const type = trimString_(item && item.type).toLowerCase();
-      if (type === 'fee' || type === 'shipping' || type === 'rush' || type === 'tax') return 0;
-      if (type === 'summary') return 2;
-      return 1;
-    };
-    const priorityDiff = typePriority(a) - typePriority(b);
-    if (priorityDiff !== 0) return priorityDiff;
-    return b.amountCents - a.amountCents;
-  });
   const discountLabels = uniqueTrimmedStrings_(negativeItems.map((item) => item.name));
-
-  sortedTargets.forEach((item) => {
-    if (!remainingDiscountCents) return;
-    const reduction = Math.min(remainingDiscountCents, item.amountCents);
-    if (!reduction) return;
-    item.amountCents -= reduction;
-    remainingDiscountCents -= reduction;
-  });
-
-  const cleanedItems = positiveItems.filter((item) => item.amountCents > 0);
-  if (discountLabels.length && cleanedItems.length) {
-    cleanedItems[0].descriptionParts = uniqueTrimmedStrings_(
-      (cleanedItems[0].descriptionParts || []).concat([
-        'Adjusted for: ' + truncateStripeCheckoutText_(discountLabels.join(' + '), 80)
+  const reduced = reduceStripeCheckoutLineItems_(positiveItems, remainingDiscountCents);
+  remainingDiscountCents = reduced.remainingReductionCents;
+  const cleanedItems = reduced.lineItems;
+  const discountText = buildStripeCheckoutDiscountDisplayText_(negativeItems);
+  if ((discountText || discountLabels.length) && cleanedItems.length) {
+    const discountNoteTarget = chooseStripeCheckoutDiscountNoteTarget_(cleanedItems, negativeItems);
+    discountNoteTarget.descriptionParts = uniqueTrimmedStrings_(
+      (discountNoteTarget.descriptionParts || []).concat([
+        discountText || ('Discount applied: ' + truncateStripeCheckoutText_(discountLabels.join(' + '), 80))
       ])
     );
   }
@@ -14899,43 +15178,36 @@ function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, options) {
   if (taxLineItem) rawLineItems.push(taxLineItem);
 
   const adjusted = applyNegativeStripeCheckoutAdjustments_(rawLineItems);
-  let lineItems = adjusted.ok ? adjusted.lineItems : buildStripeCheckoutDefaultLineItems_(draft);
-  if (!lineItems.length) {
-    lineItems = buildStripeCheckoutDefaultLineItems_(draft);
+  if (!adjusted.ok) {
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
   }
-  if (!lineItems.length) return [];
+  let lineItems = adjusted.lineItems;
+  if (!lineItems.length) {
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
+  }
 
   const grandTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
   const lineItemsTotalCents = lineItems.reduce((sum, item) => sum + Math.max(0, parseInt(String(item && item.amountCents || 0), 10) || 0), 0);
   const diffCents = grandTotalCents - lineItemsTotalCents;
-  if (diffCents !== 0) {
-    const target = lineItems[lineItems.length - 1];
-    if (!target) {
-      const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
-      const pricedFallbackItems = paymentMethodSelected === PAYMENT_METHODS.card
-        ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
-        : fallbackItems;
-      return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
+  if (diffCents > 0) {
+    const adjustmentLineItem = buildStripeCheckoutAdjustmentLineItem_(diffCents);
+    if (adjustmentLineItem) lineItems.push(adjustmentLineItem);
+  } else if (diffCents < 0) {
+    const reduced = reduceStripeCheckoutLineItems_(lineItems, Math.abs(diffCents));
+    if (!reduced.ok) {
+      return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
     }
-    target.amountCents += diffCents;
-    if (target.amountCents <= 0) {
-      const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
-      const pricedFallbackItems = paymentMethodSelected === PAYMENT_METHODS.card
-        ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
-        : fallbackItems;
-      return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
-    }
+    lineItems = reduced.lineItems;
+  }
+  if (lineItems.length > 100) {
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
   }
   const pricedLineItems = lineItems.map(finalizeStripeCheckoutLineItemPricing_);
   const pricedCheckoutLineItems = paymentMethodSelected === PAYMENT_METHODS.card
     ? applyStripeCheckoutConvenienceFeeToLineItems_(pricedLineItems, 0.03)
     : pricedLineItems;
   if (pricedCheckoutLineItems.length > 100) {
-    const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
-    const pricedFallbackItems = paymentMethodSelected === PAYMENT_METHODS.card
-      ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
-      : fallbackItems;
-    return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
   }
   return finalizeStripeCheckoutLineItemDescriptions_(pricedCheckoutLineItems);
 }
@@ -14977,6 +15249,79 @@ function summarizeStripeCheckoutLineItemsForLog_(lineItems) {
   }));
 }
 
+function calculateStripeCheckoutLineItemsTotalCents_(lineItems) {
+  return (Array.isArray(lineItems) ? lineItems : []).reduce((sum, item) => {
+    return sum + Math.max(0, getStripeCheckoutLineItemAmountCents_(item));
+  }, 0);
+}
+
+function summarizeStripeCheckoutChargeAmounts_(orderDraft, paymentMethodSelected, checkoutLineItems, shippingChargeCents) {
+  const draft = (orderDraft && typeof orderDraft === 'object') ? orderDraft : {};
+  const method = trimString_(paymentMethodSelected).toLowerCase();
+  const lineSubtotalCents = calculateStripeCheckoutLineItemsTotalCents_(checkoutLineItems);
+  const shippingCents = Math.max(0, parseInt(String(shippingChargeCents || 0), 10) || 0);
+  const baseLineTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
+  const stripeAmountTotalCents = lineSubtotalCents + shippingCents;
+  const chargedTaxCents = (Array.isArray(checkoutLineItems) ? checkoutLineItems : [])
+    .filter(isStripeCheckoutTaxLineItem_)
+    .reduce((sum, item) => sum + Math.max(0, getStripeCheckoutLineItemAmountCents_(item)), 0);
+  const cardFeeCents = method === PAYMENT_METHODS.card
+    ? Math.max(0, lineSubtotalCents - baseLineTotalCents)
+    : 0;
+  return {
+    amountCardFee: roundMoney_(cardFeeCents / 100),
+    amountChargedTax: roundMoney_(chargedTaxCents / 100),
+    amountChargedTotal: roundMoney_(stripeAmountTotalCents / 100),
+    stripeAmountSubtotalCents: lineSubtotalCents,
+    stripeAmountTotalCents: stripeAmountTotalCents
+  };
+}
+
+function applyStripeCheckoutChargeSummaryToOrderDraft_(orderDraft, chargeSummary) {
+  const draft = Object.assign({}, (orderDraft && typeof orderDraft === 'object') ? orderDraft : {});
+  const summary = (chargeSummary && typeof chargeSummary === 'object') ? chargeSummary : {};
+  [
+    'amountCardFee',
+    'amountChargedTax',
+    'amountChargedTotal',
+    'stripeAmountSubtotalCents',
+    'stripeAmountTotalCents'
+  ].forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(summary, key)) return;
+    if (key.indexOf('Cents') >= 0) {
+      draft[key] = Math.max(0, parseInt(String(summary[key] || 0), 10) || 0);
+    } else {
+      draft[key] = roundMoney_(summary[key]);
+    }
+  });
+  return draft;
+}
+
+function buildStripeCheckoutActualAmountSummary_(sessionObj, fallbackDraft) {
+  const session = (sessionObj && typeof sessionObj === 'object') ? sessionObj : {};
+  const draft = (fallbackDraft && typeof fallbackDraft === 'object') ? fallbackDraft : {};
+  const summary = {};
+  const subtotalCents = parseInt(String(session.amount_subtotal || ''), 10);
+  const totalCents = parseInt(String(session.amount_total || ''), 10);
+  if (Number.isFinite(subtotalCents) && subtotalCents >= 0) {
+    summary.stripeAmountSubtotalCents = subtotalCents;
+    const baseLineTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
+    summary.amountCardFee = roundMoney_(Math.max(0, subtotalCents - baseLineTotalCents) / 100);
+  }
+  if (Number.isFinite(totalCents) && totalCents >= 0) {
+    summary.stripeAmountTotalCents = totalCents;
+    summary.amountChargedTotal = roundMoney_(totalCents / 100);
+    if (!Object.prototype.hasOwnProperty.call(summary, 'amountCardFee')) {
+      const baseLineTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
+      summary.amountCardFee = roundMoney_(Math.max(0, totalCents - baseLineTotalCents) / 100);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(draft, 'amountChargedTax')) {
+    summary.amountChargedTax = roundMoney_(draft.amountChargedTax);
+  }
+  return summary;
+}
+
 function getHttpHeaderValue_(headers, key) {
   const wanted = trimString_(key).toLowerCase();
   if (!wanted || !headers || typeof headers !== 'object') return '';
@@ -15014,6 +15359,16 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
   const fulfillmentMethod = normalizeFulfillmentMethod_(orderDraft && orderDraft.fulfillmentMethod);
   const shippingChargeCents = Math.max(0, parseInt(String(orderDraft && orderDraft.shippingChargeCents || 0), 10) || 0);
   const shippingModeLabel = trimString_(orderDraft && orderDraft.shippingModeLabel);
+  const checkoutLineItems = lineItems.length ? lineItems : finalizeStripeCheckoutLineItemDescriptions_(buildStripeCheckoutDefaultLineItems_(orderDraft));
+  const checkoutShippingChargeCents = fulfillmentMethod === FULFILLMENT_METHODS.shipping && !suppressShippingAddressCollection
+    ? shippingChargeCents
+    : 0;
+  const chargeSummary = summarizeStripeCheckoutChargeAmounts_(
+    orderDraft,
+    paymentMethodSelected,
+    checkoutLineItems,
+    checkoutShippingChargeCents
+  );
   const metadata = {
     token: trimString_(orderDraft.token),
     checkoutAttemptId: trimString_(opts.checkoutAttemptId),
@@ -15021,7 +15376,9 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     paymentMethodSelected: paymentMethodSelected,
     fulfillmentMethod: fulfillmentMethod,
     shippingChargeCents: String(shippingChargeCents),
-    shippingModeLabel: shippingModeLabel
+    shippingModeLabel: shippingModeLabel,
+    amountChargedTotal: String(chargeSummary.amountChargedTotal || ''),
+    amountCardFee: String(chargeSummary.amountCardFee || '')
   };
   const payload = {
     mode: 'payment',
@@ -15030,7 +15387,6 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     customer_email: normalizeEmail_(orderDraft.personEmail),
     'payment_method_types[0]': paymentMethodType
   };
-  const checkoutLineItems = lineItems.length ? lineItems : finalizeStripeCheckoutLineItemDescriptions_(buildStripeCheckoutDefaultLineItems_(orderDraft));
   checkoutLineItems.forEach((lineItem, idx) => {
     appendStripeCheckoutLineItemToPayload_(payload, idx, lineItem, currency);
   });
@@ -15054,6 +15410,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
   return {
     payload: payload,
     checkoutLineItems: checkoutLineItems,
+    chargeSummary: chargeSummary,
     stripeVersion: DEFAULT_STRIPE_CHECKOUT_SESSION_API_VERSION
   };
 }
@@ -15099,6 +15456,7 @@ function createStripeCheckoutSession_(orderDraft, options) {
     checkoutAttemptId: trimString_(opts.checkoutAttemptId),
     orderId: trimString_(opts.orderId),
     stripeVersion: sessionRequestData.stripeVersion,
+    chargeSummary: sessionRequestData.chargeSummary,
     hasAnyImages: hasAnyImages,
     imageLineItemCount: lineItemDiagnostics.filter((item) => item.hasImage === true).length,
     lineItems: lineItemDiagnostics
@@ -15163,6 +15521,7 @@ function createStripeCheckoutSession_(orderDraft, options) {
     hasCheckoutUrl: !!checkoutUrl,
     stripeVersion: sessionRequestData.stripeVersion,
     responseStripeVersion: responseStripeVersion,
+    chargeSummary: sessionRequestData.chargeSummary,
     hasAnyImages: hasAnyImages,
     imageLineItemCount: lineItemDiagnostics.filter((item) => item.hasImage === true).length
   }));
@@ -15211,6 +15570,12 @@ function createStripeCheckoutSession_(orderDraft, options) {
     returnUrl: returnBaseUrl,
     successUrl: successUrl,
     cancelUrl: cancelUrl,
+    amountCardFee: sessionRequestData.chargeSummary.amountCardFee,
+    amountChargedTax: sessionRequestData.chargeSummary.amountChargedTax,
+    amountChargedTotal: sessionRequestData.chargeSummary.amountChargedTotal,
+    stripeAmountSubtotalCents: sessionRequestData.chargeSummary.stripeAmountSubtotalCents,
+    stripeAmountTotalCents: sessionRequestData.chargeSummary.stripeAmountTotalCents,
+    chargeSummary: sessionRequestData.chargeSummary,
     raw: body
   };
 }

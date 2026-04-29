@@ -18212,6 +18212,11 @@
       poSubmittedAt: String(raw.poSubmittedAt || '').trim(),
       amountGrandTotal: toNumber(raw.amountGrandTotal, 0),
       amountTax: toNumber(raw.amountTax, 0),
+      amountCardFee: toNumber(raw.amountCardFee, 0),
+      amountChargedTax: toNumber(raw.amountChargedTax, 0),
+      amountChargedTotal: toNumber(raw.amountChargedTotal, 0),
+      stripeAmountSubtotalCents: Math.max(0, parseInt(String(raw.stripeAmountSubtotalCents || 0), 10) || 0),
+      stripeAmountTotalCents: Math.max(0, parseInt(String(raw.stripeAmountTotalCents || 0), 10) || 0),
       currency: String(raw.currency || 'USD').trim() || 'USD',
       fulfillmentMethod: String(raw.fulfillmentMethod || '').trim(),
       shippingChargeCents: Math.max(0, parseInt(String(raw.shippingChargeCents || 0), 10) || 0),
@@ -19544,6 +19549,9 @@
   const COMPARE_GUIDANCE_PREFIX = 'Minimum order is 15 pieces. Prices shown at that tier until you reach the next break. Your unit pricing for all SKUs will be related to the total amount of SKUs in the print job. ';
   const COMPARE_GUIDANCE_EMPHASIS = 'Buy in bulk and save.';
   const COMPARE_GUIDANCE_TEXT = COMPARE_GUIDANCE_PREFIX + COMPARE_GUIDANCE_EMPHASIS;
+  const POST_PAYMENT_HYDRATION_MESSAGE = 'Payment has been received. This order is now locked. Reloading your invoice…';
+  const POST_PAYMENT_HYDRATION_DEBOUNCE_MS = 400;
+  const POST_PAYMENT_HYDRATION_THROTTLE_MS = 20000;
   let ORDER_FLOW_PO_STATE_MENU_OPEN = false;
   let SUPPRESS_NEXT_AUTO_INTRO = false;
   let SUMMARY_PO_SHIPPING_OPEN = false;
@@ -19610,6 +19618,9 @@
   let PROJECT_EVENTS_BOUND = false;
   let PROJECT_RUNTIME_EPOCH = 0;
   let PROJECT_OPEN_REQUEST_SEQ = 0;
+  let POST_PAYMENT_HYDRATION_TIMER = 0;
+  let POST_PAYMENT_HYDRATION_LAST_CHECK_AT = 0;
+  let POST_PAYMENT_HYDRATION_IN_FLIGHT = false;
   let SAVE_NOTICE_HIDE_TIMER = 0;
   let TERMS_SUBMIT_SUCCESS_HIDE_TIMER = 0;
   let UNSAVED_LEAVE_HIDE_TIMER = 0;
@@ -19876,6 +19887,159 @@
       }
       fn[methodName](payload || {});
     });
+  }
+
+  function isFinalizedSaveFailure_(err){
+    const errorObj = (err && typeof err === 'object') ? err : {};
+    const code = String(errorObj.code || errorObj.errorCode || '').trim().toLowerCase();
+    if (code === 'portal_finalized') return true;
+    const message = String((errorObj && errorObj.message) || err || '').trim();
+    return /^Portal is finalized\.?$/i.test(message);
+  }
+
+  function isTokenizedProjectHydrationEligible_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (CURRENT_VIEW !== VIEW_SNAPSHOT) return false;
+    if (!String(CURRENT_TOKEN || '').trim()) return false;
+    if (typeof document !== 'undefined' && document.hidden === true && opts.force !== true) return false;
+    if (opts.force !== true && IS_READ_ONLY === true) return false;
+    return true;
+  }
+
+  function hasPaidPaymentState_(value){
+    return String(value || '').trim().toLowerCase() === 'paid';
+  }
+
+  function hasPaymentReceivedWorkflowSignal_(workflow){
+    const wf = (workflow && typeof workflow === 'object') ? workflow : {};
+    return wf.paymentReceived === true || wf.isPaymentReceived === true;
+  }
+
+  function isLockedPortalStateValue_(value){
+    return String(value || '').trim().toLowerCase() === 'locked';
+  }
+
+  function hasStrongPaidFinalizedSignal_(portalPayload){
+    const payload = (portalPayload && typeof portalPayload === 'object') ? portalPayload : {};
+    const latest = normalizeOrderSummary(payload.latestOrderSummary);
+    const current = normalizeCurrentStateSummary(payload.currentStateSummary);
+    const latestWorkflow = (latest.workflowContext && typeof latest.workflowContext === 'object') ? latest.workflowContext : {};
+    const currentWorkflow = (current.workflowContext && typeof current.workflowContext === 'object') ? current.workflowContext : {};
+    const workflow = Object.assign({}, latestWorkflow, currentWorkflow);
+    if (hasPaidPaymentState_(current.currentPaymentState) || hasPaidPaymentState_(latest.paymentState)) return true;
+    if (hasPaymentReceivedWorkflowSignal_(workflow)) return true;
+    const locked = isLockedPortalStateValue_(current.portalLockState) || isLockedPortalStateValue_(latest.portalLockState);
+    const paidAt = String(
+      latest.paidAt ||
+      latest.paymentReceivedManuallyAt ||
+      workflow.paymentReceivedAt ||
+      workflow.paidAt ||
+      ''
+    ).trim();
+    return locked && !!paidAt;
+  }
+
+  function routePaidFinalizedPayloadToInvoice_(portalPayload){
+    const payload = clonePlainObject(portalPayload);
+    const payloadState = normalizePortalState(payload.portalState || {});
+    if (!hasStrongPaidFinalizedSignal_(payload)) return payload;
+    payloadState.activePanel = 'summary';
+    payload.portalState = payloadState;
+    return payload;
+  }
+
+  function routeCurrentPaidFinalizedProjectToInvoice_(reason){
+    if (!hasStrongPaidFinalizedSignal_(VM)) return false;
+    if (!PORTAL_STATE || typeof PORTAL_STATE !== 'object') return false;
+    activePanel = 'summary';
+    PORTAL_STATE.activePanel = 'summary';
+    SUPPRESS_NEXT_AUTO_INTRO = true;
+    debugLog('postPaymentInvoiceRoute', { reason: String(reason || 'paid-finalized') });
+    return true;
+  }
+
+  function applyFinalizedPaymentPayload_(portalPayload, reason){
+    const payload = routePaidFinalizedPayloadToInvoice_(portalPayload);
+    showNotice(POST_PAYMENT_HYDRATION_MESSAGE, 'ok', { persist: true });
+    applyPortalPayloadInPlace(payload, {
+      source: String(reason || 'post-payment-hydration'),
+      reason: String(reason || 'post-payment-hydration')
+    });
+    requestAnimationFrame(() => {
+      closeIntroModal();
+      setActiveSummaryPanel({ render: true });
+      resetSnapshotDirtyBaseline();
+    });
+  }
+
+  async function rehydrateProjectIfServerFinalized_(reason, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (!isTokenizedProjectHydrationEligible_(opts)) return false;
+    if (POST_PAYMENT_HYDRATION_IN_FLIGHT) return false;
+    const token = String(CURRENT_TOKEN || '').trim();
+    if (!token) return false;
+    POST_PAYMENT_HYDRATION_IN_FLIGHT = true;
+    POST_PAYMENT_HYDRATION_LAST_CHECK_AT = Date.now();
+    if (opts.showLoading === true) {
+      rtShowLoader('Refreshing invoice', 'Checking the latest project status.');
+    }
+    try {
+      const resp = await callServer('getSnapshotByToken', { token: token });
+      if (!resp || resp.ok !== true || !resp.portalPayload) {
+        throw new Error(String((resp && resp.error) || 'Unable to refresh project status.'));
+      }
+      if (!hasStrongPaidFinalizedSignal_(resp.portalPayload)) {
+        return false;
+      }
+      applyFinalizedPaymentPayload_(resp.portalPayload, reason);
+      return true;
+    } catch (err) {
+      console.warn('Post-payment hydration failed:', err);
+      if (opts.showError === true) {
+        showNotice('This project may have changed, but this tab could not refresh automatically. Please reload the invoice.', 'err', { persist: true });
+      }
+      return false;
+    } finally {
+      POST_PAYMENT_HYDRATION_IN_FLIGHT = false;
+      if (opts.showLoading === true) rtHideLoader();
+    }
+  }
+
+  function schedulePostPaymentHydrationCheck_(reason, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (!isTokenizedProjectHydrationEligible_(opts)) return false;
+    const now = Date.now();
+    if (opts.force !== true && POST_PAYMENT_HYDRATION_LAST_CHECK_AT && now - POST_PAYMENT_HYDRATION_LAST_CHECK_AT < POST_PAYMENT_HYDRATION_THROTTLE_MS) {
+      return false;
+    }
+    if (POST_PAYMENT_HYDRATION_TIMER) {
+      clearTimeout(POST_PAYMENT_HYDRATION_TIMER);
+      POST_PAYMENT_HYDRATION_TIMER = 0;
+    }
+    POST_PAYMENT_HYDRATION_TIMER = setTimeout(() => {
+      POST_PAYMENT_HYDRATION_TIMER = 0;
+      rehydrateProjectIfServerFinalized_(reason, opts);
+    }, opts.force === true ? 0 : POST_PAYMENT_HYDRATION_DEBOUNCE_MS);
+    return true;
+  }
+
+  async function handleFinalizedSaveFailure_(err){
+    console.warn('Save rejected because portal is finalized; refreshing canonical project state.', err);
+    showNotice(POST_PAYMENT_HYDRATION_MESSAGE, 'ok', { persist: true });
+    if (saveBtnMini) {
+      saveBtnMini.disabled = true;
+      saveBtnMini.textContent = 'Refreshing...';
+    }
+    const refreshed = await rehydrateProjectIfServerFinalized_('save-finalized', {
+      force: true,
+      showLoading: true,
+      showError: true
+    });
+    if (!refreshed && saveBtnMini) {
+      saveBtnMini.disabled = false;
+      saveBtnMini.textContent = 'Save';
+    }
+    return refreshed;
   }
 
   function readStoredSessionId(){
@@ -21318,7 +21482,7 @@
       payload.mode = 'team';
     }
     payload.__fromAuthShell = opts.fromAuthShell === true;
-    applyVmRuntimeState(payload);
+    applyVmRuntimeState(routePaidFinalizedPayloadToInvoice_(payload));
     startPortalApp();
     notifyPortalReady({ reason: String(opts.reason || opts.source || 'project-loaded') });
   }
@@ -36120,6 +36284,14 @@
     const isLockedPoInvoice = lifecycle.isLockedInvoice && lifecycle.paymentPath === PAYMENT_METHODS.purchase_order && !!poSubmittedAt;
     const showPaymentMeta = lifecycle.paymentReceived
       && !!successfulPaymentType;
+    const paidCardChargedTotal = lifecycle.paymentReceived
+      && String(lifecycle.paymentMethodSelected || '').trim().toLowerCase() === PAYMENT_METHODS.card
+      && Number(order.amountChargedTotal) > 0
+      ? Number(order.amountChargedTotal)
+      : 0;
+    const paidCardChargedTax = paidCardChargedTotal > 0 && Number(order.amountChargedTax) > 0
+      ? Number(order.amountChargedTax)
+      : 0;
     const displayDate = productionComplete && completedAt
       ? formatSummaryDateOnly_(completedAt)
       : (isLockedPoInvoice
@@ -36149,12 +36321,12 @@
       showShipping: !!(totals && totals.showShipping),
       creditCardFee: money(Number((totals && totals.creditCardFee) || 0)),
       showCreditCardFee: false,
-      salesTax: money(Number((totals && totals.salesTax) || 0)),
-      totalCost: money(Number((totals && totals.totalCost) || 0)),
+      salesTax: money(paidCardChargedTax || Number((totals && totals.salesTax) || 0)),
+      totalCost: money(paidCardChargedTotal || Number((totals && totals.totalCost) || 0)),
       shippingDetails: normalizeOrderFlowShippingDetails_(opts.shippingDetails),
       activeJobs: String(safeRollup.jobCount || 0),
       totalUnits: String(safeRollup.units || 0),
-      totalCostCard: money(Number((totals && totals.totalCost) || 0)),
+      totalCostCard: money(paidCardChargedTotal || Number((totals && totals.totalCost) || 0)),
       readyBy: String(safeRollup.readyDateLabel || '--').trim() || '--'
     };
   }
@@ -38510,6 +38682,10 @@
       return true;
     } catch (err) {
       console.error('Save failed:', err);
+      if (isFinalizedSaveFailure_(err)) {
+        await handleFinalizedSaveFailure_(err);
+        return false;
+      }
       showNotice('Save failed: ' + String((err && err.message) || err), 'err');
       if (saveBtnMini) {
         saveBtnMini.disabled = false;
@@ -39583,6 +39759,16 @@
 
     window.addEventListener('beforeunload', beforeUnloadGuard);
     window.addEventListener('resize', syncHeaderUtilityOffset);
+    window.addEventListener('focus', () => {
+      schedulePostPaymentHydrationCheck_('window-focus');
+    });
+    window.addEventListener('pageshow', () => {
+      schedulePostPaymentHydrationCheck_('pageshow');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden === true) return;
+      schedulePostPaymentHydrationCheck_('visibilitychange');
+    });
 
   }
 
@@ -39617,6 +39803,9 @@
     closeUnsavedLeaveModal({ immediate: true });
     setView(VIEW_SNAPSHOT);
     hydrateUIFromPortalState(VM.portalState);
+    routeCurrentPaidFinalizedProjectToInvoice_(
+      CHECKOUT_RETURN_RESULT === 'success' ? 'checkout-success-return' : 'project-load'
+    );
     setHeaderDetails();
     renderSnapshotSummary();
     renderTeamDiagnostics();
