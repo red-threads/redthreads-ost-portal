@@ -1775,7 +1775,12 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
       workflowContext: workflowContext
     }
   );
-  const flags = buildDashboardProjectStepFlagsFromLifecycle_(legacyDashboardFlags, workflowContext);
+  const dashboardReadiness = extractDashboardReadinessFacts_(legacyDashboardFlags);
+  const flags = buildDashboardProjectStepFlagsFromLifecycle_(
+    dashboardReadiness,
+    legacyDashboardFlags,
+    workflowContext
+  );
   const timeline = deriveDashboardTimelineMeta_({
     row: row,
     flags: flags,
@@ -3404,9 +3409,21 @@ function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latest
   };
 }
 
-function buildDashboardProjectStepFlagsFromLifecycle_(legacyFlags, workflowContext) {
+function extractDashboardReadinessFacts_(legacyDashboardFlags) {
+  const legacy = (legacyDashboardFlags && typeof legacyDashboardFlags === 'object') ? legacyDashboardFlags : {};
+  return {
+    hasIncludedJobs: legacy.hasIncludedJobs === true,
+    minimumsMet: legacy.minimumsMet === true,
+    qtySizesComplete: legacy.qtySizesComplete === true,
+    artworkApprovalComplete: legacy.artworkApprovalComplete === true,
+    includedJobCount: Math.max(0, parseInt(String(legacy.includedJobCount || 0), 10) || 0)
+  };
+}
+
+function buildDashboardProjectStepFlagsFromLifecycle_(dashboardReadiness, legacyFlags, workflowContext) {
   /* Canonical dashboard adapter — overlays legacy dashboard flags with
      workflowContext truth during the migration window. */
+  const readiness = (dashboardReadiness && typeof dashboardReadiness === 'object') ? dashboardReadiness : {};
   const legacy = (legacyFlags && typeof legacyFlags === 'object') ? legacyFlags : {};
   const lifecycle = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const dashboardState = (lifecycle.dashboardState && typeof lifecycle.dashboardState === 'object') ? lifecycle.dashboardState : {};
@@ -3432,10 +3449,10 @@ function buildDashboardProjectStepFlagsFromLifecycle_(legacyFlags, workflowConte
     || trimString_(dashboardState.productionStep) === 'current';
 
   return {
-    hasIncludedJobs: legacy.hasIncludedJobs === true,
-    minimumsMet: legacy.minimumsMet === true,
-    qtySizesComplete: legacy.qtySizesComplete === true,
-    artworkApprovalComplete: legacy.artworkApprovalComplete === true,
+    hasIncludedJobs: readiness.hasIncludedJobs === true,
+    minimumsMet: readiness.minimumsMet === true,
+    qtySizesComplete: readiness.qtySizesComplete === true,
+    artworkApprovalComplete: readiness.artworkApprovalComplete === true,
     hasPurchaseOrderDraft: lifecycle.hasPurchaseOrderDraft === true || lifecycle.poDraft === true || legacy.hasPurchaseOrderDraft === true,
     orderPlaced: orderPlaced,
     paymentReceived: paymentReceived,
@@ -3447,7 +3464,7 @@ function buildDashboardProjectStepFlagsFromLifecycle_(legacyFlags, workflowConte
     productionComplete: productionComplete,
     isLocked: lifecycle.isLocked === true,
     teamWorkflowMode: normalizeTeamWorkflowMode_(lifecycle.teamWorkflowMode || legacy.teamWorkflowMode),
-    includedJobCount: Math.max(0, parseInt(String(legacy.includedJobCount || 0), 10) || 0)
+    includedJobCount: Math.max(0, parseInt(String(readiness.includedJobCount || 0), 10) || 0)
   };
 }
 
