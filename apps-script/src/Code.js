@@ -14613,6 +14613,8 @@ function normalizeStripeCheckoutDecorationLocation_(location) {
   if (!clean) return '';
   if (/left sleeve|left side/.test(clean)) return 'left sleeve';
   if (/right sleeve|right side/.test(clean)) return 'right sleeve';
+  if (/front right|right front/.test(clean)) return 'front right';
+  if (/front left|left front/.test(clean)) return 'front left';
   if (/full front/.test(clean)) return 'full front';
   if (/full back/.test(clean)) return 'full back';
   if (/front center|front centre/.test(clean)) return 'front-center';
@@ -14622,6 +14624,26 @@ function normalizeStripeCheckoutDecorationLocation_(location) {
   if (/front/.test(clean)) return 'front';
   if (/back/.test(clean)) return 'back';
   return clean.replace(/\s*\/\s*/g, ' / ');
+}
+
+function formatStripeCheckoutCompactDecorationLocation_(location) {
+  const normalized = normalizeStripeCheckoutDecorationLocation_(location);
+  if (!normalized) return '';
+  const map = {
+    'left sleeve': 'Left Sleeve',
+    'right sleeve': 'Right Sleeve',
+    'full front': 'Full Front',
+    'full back': 'Full Back',
+    'front-center': 'Front Center',
+    'back-center': 'Back Center',
+    'left chest': 'Left Chest',
+    'right chest': 'Right Chest',
+    'front right': 'Front Right',
+    'front left': 'Front Left',
+    front: 'Front',
+    back: 'Back'
+  };
+  return map[normalized] || formatStripeCheckoutClientLabel_(normalized);
 }
 
 function normalizeStripeCheckoutDecorationMethod_(method) {
@@ -14679,6 +14701,34 @@ function buildStripeCheckoutDecorationSummary_(job) {
   return truncateStripeCheckoutText_(limitedParts.join(' + '), 90);
 }
 
+function buildStripeCheckoutCompactDecorationSummary_(job) {
+  const decorations = Array.isArray(job && job.decorations) ? job.decorations : [];
+  const parts = [];
+  decorations.forEach((item) => {
+    const method = normalizeStripeCheckoutDecorationMethod_(item && (item.decorationMethod || item.method || item.type || item.decoType));
+    const location = formatStripeCheckoutCompactDecorationLocation_(item && item.location);
+    let piece = '';
+    if (method === 'embroidery') {
+      piece = trimString_([location, 'Emb'].filter(Boolean).join(' '));
+    } else if (/^\d+-color$/.test(method)) {
+      const colors = method.replace('-color', 'C');
+      piece = trimString_([location, 'SP', colors].filter(Boolean).join(' '));
+    } else if (method === 'print') {
+      piece = trimString_([location, 'SP'].filter(Boolean).join(' '));
+    } else if (method === 'DTF' || method === 'DTG') {
+      piece = trimString_([location, method].filter(Boolean).join(' '));
+    } else if (method === 'heat transfer') {
+      piece = trimString_([location, 'Transfer'].filter(Boolean).join(' '));
+    } else {
+      piece = trimString_([location, formatStripeCheckoutClientLabel_(method)].filter(Boolean).join(' '));
+    }
+    if (!piece || parts.indexOf(piece) >= 0) return;
+    parts.push(piece);
+  });
+  const summary = parts.slice(0, 3).join(' + ');
+  return summary ? truncateStripeCheckoutText_(summary, 80) : '';
+}
+
 function buildStripeCheckoutSizeSummary_(skuSummary) {
   const colors = Array.isArray(skuSummary && skuSummary.colors) ? skuSummary.colors : [];
   const totals = {};
@@ -14705,9 +14755,20 @@ function buildStripeCheckoutSizeSummaryFromQtyMap_(qtyBySize) {
   const orderedSizes = sortStripeCheckoutSizes_(Object.keys(map));
   const sortedSizes = orderedSizes.filter((size) => Math.max(0, parseInt(String(map[size] || 0), 10) || 0) > 0);
   if (!sortedSizes.length) return '';
-  const sizeParts = sortedSizes.slice(0, 6).map((size) => size + ' ' + Math.max(0, parseInt(String(map[size] || 0), 10) || 0));
-  if (sortedSizes.length > 6) sizeParts.push('+');
-  return 'Sizes: ' + sizeParts.join(' / ');
+  const quantities = sortedSizes.map((size) => Math.max(0, parseInt(String(map[size] || 0), 10) || 0));
+  const allSameQty = quantities.length > 1 && quantities.every((qty) => qty === quantities[0]);
+  if (allSameQty) {
+    return 'Sizes: ' + sortedSizes.join('/') + ' ×' + quantities[0];
+  }
+  return 'Sizes: ' + sortedSizes.map((size) => size + ' ' + Math.max(0, parseInt(String(map[size] || 0), 10) || 0)).join(' / ');
+}
+
+function buildStripeCheckoutQtySizeSummaryFromQtyMap_(qtyBySize) {
+  const map = (qtyBySize && typeof qtyBySize === 'object') ? qtyBySize : {};
+  const orderedSizes = sortStripeCheckoutSizes_(Object.keys(map));
+  const sortedSizes = orderedSizes.filter((size) => Math.max(0, parseInt(String(map[size] || 0), 10) || 0) > 0);
+  if (!sortedSizes.length) return '';
+  return 'Sizes: ' + sortedSizes.map((size) => Math.max(0, parseInt(String(map[size] || 0), 10) || 0) + ' ' + size).join(' / ');
 }
 
 function buildStripeCheckoutUnitsSummary_(units) {
@@ -14723,17 +14784,40 @@ function buildStripeCheckoutDisplayName_(job, skuSummary, options) {
   return truncateStripeCheckoutText_(colorLabel ? (baseName + ' — ' + colorLabel) : baseName, 80);
 }
 
+function buildStripeCheckoutSkuLineName_(job) {
+  const printJobLabel = trimString_(buildStripeCheckoutPrintJobLabel_(job));
+  const decorationSummary = trimString_(buildStripeCheckoutCompactDecorationSummary_(job) || buildStripeCheckoutDecorationSummary_(job));
+  return truncateStripeCheckoutText_(
+    [printJobLabel, decorationSummary].filter(Boolean).join(' • ') || 'Red Threads Item',
+    80
+  );
+}
+
+function buildStripeCheckoutSkuDescriptionParts_(job, skuSummary, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const parts = [];
+  const colorLabel = formatStripeCheckoutClientLabel_(trimString_(opts.colorLabel || opts.colorway) || buildStripeCheckoutColorLabel_(skuSummary));
+  if (colorLabel) parts.push(colorLabel);
+  const productName = trimString_(skuSummary && skuSummary.uiName);
+  if (productName) parts.push(productName);
+  const sizeSummary = trimString_(buildStripeCheckoutQtySizeSummaryFromQtyMap_(opts.qtyBySize) || buildStripeCheckoutSizeSummary_(skuSummary));
+  if (sizeSummary) parts.push(sizeSummary);
+  const totalUnits = Math.max(0, parseInt(String(opts.totalUnits || skuSummary && skuSummary.units || 0), 10) || 0);
+  if (totalUnits > 0) parts.push('Total Qty: ' + totalUnits);
+  return uniqueTrimmedStrings_(parts);
+}
+
 function buildStripeCheckoutDescriptionParts_(job, skuSummary, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const parts = [];
   const printJobLabel = trimString_(opts.printJobLabel || buildStripeCheckoutPrintJobLabel_(job));
   if (printJobLabel) parts.push(printJobLabel);
-  const decorationSummary = trimString_(opts.decorationSummary || buildStripeCheckoutDecorationSummary_(job));
-  if (decorationSummary) parts.push(decorationSummary);
-  const unitsSummary = trimString_(opts.unitsSummary || buildStripeCheckoutUnitsSummary_(opts.totalUnits));
-  if (unitsSummary) parts.push(unitsSummary);
   const sizeSummary = trimString_(opts.sizeSummary || buildStripeCheckoutSizeSummaryFromQtyMap_(opts.qtyBySize) || buildStripeCheckoutSizeSummary_(skuSummary));
   if (sizeSummary) parts.push(sizeSummary);
+  const unitsSummary = trimString_(opts.unitsSummary || buildStripeCheckoutUnitsSummary_(opts.totalUnits));
+  if (unitsSummary) parts.push(unitsSummary);
+  const decorationSummary = trimString_(opts.decorationSummary || buildStripeCheckoutCompactDecorationSummary_(job) || buildStripeCheckoutDecorationSummary_(job));
+  if (decorationSummary) parts.push(decorationSummary);
   const extraParts = Array.isArray(opts.extraParts) ? opts.extraParts : [];
   if (extraParts.length) Array.prototype.push.apply(parts, extraParts);
   return uniqueTrimmedStrings_(parts);
@@ -14864,6 +14948,11 @@ function applyStripeCheckoutConvenienceFeeToLineItems_(lineItems, feeRate) {
     const baseAmountCents = Math.max(0, parseInt(String(item.amountCents || 0), 10) || 0);
     if (!baseAmountCents) return finalizeStripeCheckoutLineItemPricing_(item);
     item.amountCents = baseAmountCents + Math.round(baseAmountCents * rate);
+    if (Math.max(0, parseInt(String(item.__stripeDiscountReductionCents || 0), 10) || 0) > 0) {
+      const baseReductionCents = Math.max(0, parseInt(String(item.__stripeDiscountReductionCents || 0), 10) || 0);
+      item.__stripeDiscountDisplayCents = baseReductionCents + Math.round(baseReductionCents * rate);
+      renameStripeCheckoutLineItemForDiscount_(item);
+    }
     return finalizeStripeCheckoutLineItemPricing_(item);
   });
 }
@@ -14920,13 +15009,12 @@ function buildStripeCheckoutColorwayLineItems_(job, skuSummary) {
     const units = Math.max(0, parseInt(String(entry && entry.units || 0), 10) || 0);
     const amountCents = Math.max(0, parseInt(String(entry && entry.totalCents || 0), 10) || 0);
     if (!units || !amountCents) return;
-    const name = buildStripeCheckoutDisplayName_(job, skuSummary, {
-      colorLabel: trimString_(entry && entry.colorway)
-    });
+    const name = buildStripeCheckoutSkuLineName_(job);
     const apparelLineItem = finalizeStripeCheckoutLineItemPricing_({
       type: 'apparel',
       name: name,
-      descriptionParts: buildStripeCheckoutDescriptionParts_(job, skuSummary, {
+      descriptionParts: buildStripeCheckoutSkuDescriptionParts_(job, skuSummary, {
+        colorLabel: trimString_(entry && entry.colorway),
         totalUnits: units,
         qtyBySize: entry && entry.qtyBySize
       }),
@@ -14944,12 +15032,12 @@ function buildStripeCheckoutColorwayLineItems_(job, skuSummary) {
 
   const amountCents = Math.max(0, Math.round(roundMoney_(skuSummary && skuSummary.total) * 100));
   if (!amountCents) return [];
-  const name = buildStripeCheckoutDisplayName_(job, skuSummary);
+  const name = buildStripeCheckoutSkuLineName_(job);
   const units = Math.max(1, parseInt(String(skuSummary && skuSummary.units || 1), 10) || 1);
   return [{
     type: 'apparel',
     name: name,
-    descriptionParts: buildStripeCheckoutDescriptionParts_(job, skuSummary, {
+    descriptionParts: buildStripeCheckoutSkuDescriptionParts_(job, skuSummary, {
       totalUnits: units
     }),
     quantity: 1,
@@ -14983,12 +15071,14 @@ function buildStripeCheckoutAddOnLineItem_(job, addOnSummary) {
   return amountCents > 0 ? finalizeStripeCheckoutLineItemPricing_(lineItem) : lineItem;
 }
 
-function buildStripeCheckoutTaxLineItem_(orderDraft) {
-  const amountCents = Math.round(roundMoney_(orderDraft && orderDraft.amountTax) * 100);
+function buildStripeCheckoutTaxLineItem_(orderDraft, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const amountCents = Math.round(roundMoney_(orderDraft && orderDraft.amountTax) * 100)
+    + Math.max(0, parseInt(String(opts.additionalTaxCents || 0), 10) || 0);
   if (!amountCents) return null;
   return finalizeStripeCheckoutLineItemPricing_({
     type: 'tax',
-    name: 'Estimated Sales Tax',
+    name: 'Michigan Sales Tax',
     descriptionParts: ['Applied based on your current order selections.'],
     quantity: 1,
     displayQuantity: 1,
@@ -14996,6 +15086,13 @@ function buildStripeCheckoutTaxLineItem_(orderDraft) {
     imageUrl: '',
     unitLabel: ''
   });
+}
+
+function calculateStripeCheckoutAdditionalShippingTaxCents_(orderDraft, shippingChargeCents) {
+  const draft = (orderDraft && typeof orderDraft === 'object') ? orderDraft : {};
+  const shippingCents = Math.max(0, parseInt(String(shippingChargeCents || 0), 10) || 0);
+  if (!shippingCents || draft.taxShouldApply !== true) return 0;
+  return Math.max(0, Math.round(shippingCents * 0.06));
 }
 
 function buildStripeCheckoutDefaultLineItems_(orderDraft) {
@@ -15037,35 +15134,92 @@ function getStripeCheckoutReductionPriority_(lineItem) {
   return 1;
 }
 
-function reduceStripeCheckoutLineItems_(lineItems, reductionCents) {
+function isStripeCheckoutApparelLineItem_(lineItem) {
+  return trimString_(lineItem && lineItem.type).toLowerCase() === 'apparel';
+}
+
+function isStripeCheckoutDiscountReductionEligible_(lineItem) {
+  const type = trimString_(lineItem && lineItem.type).toLowerCase();
+  if (type === 'tax' || type === 'discount_info' || type === 'adjustment') return false;
+  return getStripeCheckoutLineItemAmountCents_(lineItem) > 1;
+}
+
+function getStripeCheckoutDiscountReductionPriority_(lineItem, relatedPrintJobLabels) {
+  const relatedLabels = Array.isArray(relatedPrintJobLabels) ? relatedPrintJobLabels : [];
+  const type = trimString_(lineItem && lineItem.type).toLowerCase();
+  const printJobLabel = trimString_(lineItem && lineItem.printJobLabel);
+  if (type === 'apparel') {
+    return printJobLabel && relatedLabels.indexOf(printJobLabel) >= 0 ? 0 : 1;
+  }
+  if (type === 'fee' || type === 'shipping' || type === 'rush') return 2;
+  if (type === 'summary') return 3;
+  return 99;
+}
+
+function reduceStripeCheckoutLineItems_(lineItems, reductionCents, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const trackDiscountAllocation = opts.trackDiscountAllocation === true;
+  const relatedPrintJobLabels = uniqueTrimmedStrings_(opts.relatedPrintJobLabels || []);
   const reductionTarget = Math.max(0, parseInt(String(reductionCents || 0), 10) || 0);
   const adjustedItems = (Array.isArray(lineItems) ? lineItems : [])
     .filter(Boolean)
-    .map((item) => Object.assign({}, item));
+    .map((item, idx) => Object.assign({}, item, { __stripeReductionSortIndex: idx }));
   if (!reductionTarget) {
-    return { ok: true, lineItems: adjustedItems, remainingReductionCents: 0 };
+    return { ok: true, lineItems: adjustedItems, remainingReductionCents: 0, allocations: [] };
   }
   const targets = adjustedItems
-    .filter((item) => !isStripeCheckoutTaxLineItem_(item) && getStripeCheckoutLineItemAmountCents_(item) > 1)
+    .filter((item) => {
+      return trackDiscountAllocation
+        ? isStripeCheckoutDiscountReductionEligible_(item)
+        : (!isStripeCheckoutTaxLineItem_(item) && getStripeCheckoutLineItemAmountCents_(item) > 1);
+    })
     .sort((left, right) => {
-      const priorityDiff = getStripeCheckoutReductionPriority_(left) - getStripeCheckoutReductionPriority_(right);
+      const leftPriority = trackDiscountAllocation
+        ? getStripeCheckoutDiscountReductionPriority_(left, relatedPrintJobLabels)
+        : getStripeCheckoutReductionPriority_(left);
+      const rightPriority = trackDiscountAllocation
+        ? getStripeCheckoutDiscountReductionPriority_(right, relatedPrintJobLabels)
+        : getStripeCheckoutReductionPriority_(right);
+      const priorityDiff = leftPriority - rightPriority;
       if (priorityDiff !== 0) return priorityDiff;
+      if (trackDiscountAllocation) {
+        return (parseInt(String(left.__stripeReductionSortIndex || 0), 10) || 0)
+          - (parseInt(String(right.__stripeReductionSortIndex || 0), 10) || 0);
+      }
       return getStripeCheckoutLineItemAmountCents_(right) - getStripeCheckoutLineItemAmountCents_(left);
     });
   let remainingReductionCents = reductionTarget;
+  const allocations = [];
   targets.forEach((item) => {
     if (!remainingReductionCents) return;
     const currentAmountCents = Math.max(0, getStripeCheckoutLineItemAmountCents_(item));
     const availableReductionCents = Math.max(0, currentAmountCents - 1);
     const reduction = Math.min(remainingReductionCents, availableReductionCents);
     if (!reduction) return;
+    const originalAmountCents = Math.max(
+      currentAmountCents,
+      parseInt(String(item.__stripeOriginalAmountCents || currentAmountCents), 10) || currentAmountCents
+    );
     item.amountCents = currentAmountCents - reduction;
+    if (trackDiscountAllocation) {
+      item.__stripeOriginalAmountCents = originalAmountCents;
+      item.__stripeDiscountReductionCents = Math.max(0, parseInt(String(item.__stripeDiscountReductionCents || 0), 10) || 0) + reduction;
+      allocations.push({
+        type: trimString_(item && item.type),
+        name: trimString_(item && item.name),
+        printJobLabel: trimString_(item && item.printJobLabel),
+        originalAmountCents: originalAmountCents,
+        reductionCents: reduction,
+        remainingAmountCents: item.amountCents
+      });
+    }
     remainingReductionCents -= reduction;
   });
   return {
     ok: remainingReductionCents === 0,
     lineItems: adjustedItems.filter((item) => getStripeCheckoutLineItemAmountCents_(item) > 0),
-    remainingReductionCents: remainingReductionCents
+    remainingReductionCents: remainingReductionCents,
+    allocations: allocations
   };
 }
 
@@ -15084,36 +15238,49 @@ function buildStripeCheckoutAdjustmentLineItem_(amountCents) {
   });
 }
 
-function buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected) {
-  const fallbackItems = buildStripeCheckoutDefaultLineItems_(draft);
+function buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const additionalTaxCents = Math.max(0, parseInt(String(opts.additionalTaxCents || 0), 10) || 0);
+  const fallbackDraft = additionalTaxCents > 0
+    ? Object.assign({}, (draft && typeof draft === 'object') ? draft : {}, {
+      amountGrandTotal: roundMoney_(roundMoney_(draft && draft.amountGrandTotal) + (additionalTaxCents / 100))
+    })
+    : draft;
+  const fallbackItems = buildStripeCheckoutDefaultLineItems_(fallbackDraft);
   const pricedFallbackItems = trimString_(paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.card
     ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
     : fallbackItems;
   return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
 }
 
-function buildStripeCheckoutDiscountDisplayText_(negativeItems) {
+function buildStripeCheckoutDiscountSummaries_(negativeItems) {
   const items = Array.isArray(negativeItems) ? negativeItems : [];
-  const labels = uniqueTrimmedStrings_(items.map((item) => {
+  return items.map((item, idx) => {
     const amountCents = Math.abs(getStripeCheckoutLineItemAmountCents_(item));
-    const amountText = amountCents > 0 ? (' (-' + formatUsdAmount_(amountCents / 100) + ')') : '';
-    return truncateStripeCheckoutText_(trimString_(item && item.name) + amountText, 80);
-  }));
-  return labels.length ? ('Discount applied: ' + truncateStripeCheckoutText_(labels.join(' + '), 120)) : '';
+    const name = truncateStripeCheckoutText_(trimString_(item && item.name) || ('Discount ' + (idx + 1)), 48);
+    return {
+      name: name,
+      amountCents: amountCents,
+      label: name + ': -' + formatUsdAmount_(amountCents / 100)
+    };
+  }).filter((item) => item.amountCents > 0);
 }
 
-function chooseStripeCheckoutDiscountNoteTarget_(lineItems, negativeItems) {
-  const items = Array.isArray(lineItems) ? lineItems : [];
-  const negatives = Array.isArray(negativeItems) ? negativeItems : [];
-  const relatedLabels = uniqueTrimmedStrings_(negatives.map((item) => item && item.printJobLabel));
-  if (relatedLabels.length) {
-    const related = items.find((item) => {
-      const label = trimString_(item && item.printJobLabel);
-      return label && relatedLabels.indexOf(label) >= 0 && !isStripeCheckoutTaxLineItem_(item);
-    });
-    if (related) return related;
-  }
-  return items.find((item) => !isStripeCheckoutTaxLineItem_(item)) || items[0] || null;
+function buildStripeCheckoutDiscountNameSuffix_(discountSummaries) {
+  const names = uniqueTrimmedStrings_((Array.isArray(discountSummaries) ? discountSummaries : []).map((item) => item && item.name));
+  return names.length ? truncateStripeCheckoutText_(names.join(' + '), 48) : 'Discount';
+}
+
+function renameStripeCheckoutLineItemForDiscount_(lineItem, discountSummaries) {
+  const item = (lineItem && typeof lineItem === 'object') ? lineItem : {};
+  const baseName = truncateStripeCheckoutText_(trimString_(item.__stripeDiscountBaseName || item.name) || 'Item', 58);
+  const reductionCents = Math.max(0, parseInt(String(item.__stripeDiscountDisplayCents || item.__stripeDiscountReductionCents || 0), 10) || 0);
+  const discountCount = Math.max(0, parseInt(String(item.__stripeDiscountCount || (Array.isArray(discountSummaries) ? discountSummaries.length : 0)), 10) || 0);
+  const suffix = reductionCents > 0
+    ? (' • ' + formatUsdAmount_(reductionCents / 100) + (discountCount > 1 ? ' Discounts Applied' : ' Discount Applied'))
+    : (' • ' + buildStripeCheckoutDiscountNameSuffix_(discountSummaries) + ' Applied');
+  item.__stripeDiscountBaseName = baseName;
+  item.name = truncateStripeCheckoutText_(baseName + suffix, 80);
 }
 
 function applyNegativeStripeCheckoutAdjustments_(lineItems) {
@@ -15128,19 +15295,21 @@ function applyNegativeStripeCheckoutAdjustments_(lineItems) {
   }
 
   let remainingDiscountCents = negativeItems.reduce((sum, item) => sum + Math.abs(item.amountCents), 0);
-  const discountLabels = uniqueTrimmedStrings_(negativeItems.map((item) => item.name));
-  const reduced = reduceStripeCheckoutLineItems_(positiveItems, remainingDiscountCents);
+  const relatedPrintJobLabels = uniqueTrimmedStrings_(negativeItems.map((item) => item && item.printJobLabel));
+  const reduced = reduceStripeCheckoutLineItems_(positiveItems, remainingDiscountCents, {
+    trackDiscountAllocation: true,
+    relatedPrintJobLabels: relatedPrintJobLabels
+  });
   remainingDiscountCents = reduced.remainingReductionCents;
   const cleanedItems = reduced.lineItems;
-  const discountText = buildStripeCheckoutDiscountDisplayText_(negativeItems);
-  if ((discountText || discountLabels.length) && cleanedItems.length) {
-    const discountNoteTarget = chooseStripeCheckoutDiscountNoteTarget_(cleanedItems, negativeItems);
-    discountNoteTarget.descriptionParts = uniqueTrimmedStrings_(
-      (discountNoteTarget.descriptionParts || []).concat([
-        discountText || ('Discount applied: ' + truncateStripeCheckoutText_(discountLabels.join(' + '), 80))
-      ])
-    );
-  }
+  const discountSummaries = buildStripeCheckoutDiscountSummaries_(negativeItems);
+  const allocationTargets = cleanedItems.filter((item) => {
+    return Math.max(0, parseInt(String(item && item.__stripeDiscountReductionCents || 0), 10) || 0) > 0;
+  });
+  allocationTargets.forEach((item) => {
+    item.__stripeDiscountCount = discountSummaries.length;
+    renameStripeCheckoutLineItemForDiscount_(item, discountSummaries);
+  });
   return {
     ok: remainingDiscountCents === 0,
     lineItems: cleanedItems
@@ -15156,6 +15325,12 @@ function finalizeStripeCheckoutLineItemDescriptions_(lineItems) {
     }
     item.description = truncateStripeCheckoutText_(parts.join(' • '), 180);
     delete item.descriptionParts;
+    delete item.__stripeOriginalAmountCents;
+    delete item.__stripeDiscountReductionCents;
+    delete item.__stripeDiscountDisplayCents;
+    delete item.__stripeDiscountBaseName;
+    delete item.__stripeDiscountCount;
+    delete item.__stripeReductionSortIndex;
     return item;
   });
 }
@@ -15164,6 +15339,7 @@ function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const paymentMethodSelected = trimString_(opts.paymentMethodSelected).toLowerCase();
   const draft = (orderDraft && typeof orderDraft === 'object') ? orderDraft : {};
+  const additionalTaxCents = Math.max(0, parseInt(String(opts.additionalTaxCents || 0), 10) || 0);
   const rawLineItems = [];
   const selectedJobs = Array.isArray(draft.selectedJobs) ? draft.selectedJobs : [];
   selectedJobs.forEach((job) => {
@@ -15177,19 +15353,21 @@ function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, options) {
     });
   });
 
-  const taxLineItem = buildStripeCheckoutTaxLineItem_(draft);
+  const taxLineItem = buildStripeCheckoutTaxLineItem_(draft, {
+    additionalTaxCents: additionalTaxCents
+  });
   if (taxLineItem) rawLineItems.push(taxLineItem);
 
   const adjusted = applyNegativeStripeCheckoutAdjustments_(rawLineItems);
   if (!adjusted.ok) {
-    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, { additionalTaxCents: additionalTaxCents });
   }
   let lineItems = adjusted.lineItems;
   if (!lineItems.length) {
-    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, { additionalTaxCents: additionalTaxCents });
   }
 
-  const grandTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
+  const grandTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100)) + additionalTaxCents;
   const lineItemsTotalCents = lineItems.reduce((sum, item) => sum + Math.max(0, parseInt(String(item && item.amountCents || 0), 10) || 0), 0);
   const diffCents = grandTotalCents - lineItemsTotalCents;
   if (diffCents > 0) {
@@ -15198,19 +15376,19 @@ function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, options) {
   } else if (diffCents < 0) {
     const reduced = reduceStripeCheckoutLineItems_(lineItems, Math.abs(diffCents));
     if (!reduced.ok) {
-      return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
+      return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, { additionalTaxCents: additionalTaxCents });
     }
     lineItems = reduced.lineItems;
   }
   if (lineItems.length > 100) {
-    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, { additionalTaxCents: additionalTaxCents });
   }
   const pricedLineItems = lineItems.map(finalizeStripeCheckoutLineItemPricing_);
   const pricedCheckoutLineItems = paymentMethodSelected === PAYMENT_METHODS.card
     ? applyStripeCheckoutConvenienceFeeToLineItems_(pricedLineItems, 0.03)
     : pricedLineItems;
   if (pricedCheckoutLineItems.length > 100) {
-    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected);
+    return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, { additionalTaxCents: additionalTaxCents });
   }
   return finalizeStripeCheckoutLineItemDescriptions_(pricedCheckoutLineItems);
 }
@@ -15258,12 +15436,15 @@ function calculateStripeCheckoutLineItemsTotalCents_(lineItems) {
   }, 0);
 }
 
-function summarizeStripeCheckoutChargeAmounts_(orderDraft, paymentMethodSelected, checkoutLineItems, shippingChargeCents) {
+function summarizeStripeCheckoutChargeAmounts_(orderDraft, paymentMethodSelected, checkoutLineItems, shippingChargeCents, options) {
   const draft = (orderDraft && typeof orderDraft === 'object') ? orderDraft : {};
+  const opts = (options && typeof options === 'object') ? options : {};
   const method = trimString_(paymentMethodSelected).toLowerCase();
   const lineSubtotalCents = calculateStripeCheckoutLineItemsTotalCents_(checkoutLineItems);
   const shippingCents = Math.max(0, parseInt(String(shippingChargeCents || 0), 10) || 0);
-  const baseLineTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
+  const baseLineTotalCents = Object.prototype.hasOwnProperty.call(opts, 'baseLineTotalCents')
+    ? Math.max(0, parseInt(String(opts.baseLineTotalCents || 0), 10) || 0)
+    : Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
   const stripeAmountTotalCents = lineSubtotalCents + shippingCents;
   const chargedTaxCents = (Array.isArray(checkoutLineItems) ? checkoutLineItems : [])
     .filter(isStripeCheckoutTaxLineItem_)
@@ -15356,21 +15537,26 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     }
   });
   const currency = trimString_(orderDraft.currency || getConfig_().stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY).toLowerCase();
-  const lineItems = buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, {
-    paymentMethodSelected: paymentMethodSelected
-  });
   const fulfillmentMethod = normalizeFulfillmentMethod_(orderDraft && orderDraft.fulfillmentMethod);
   const shippingChargeCents = Math.max(0, parseInt(String(orderDraft && orderDraft.shippingChargeCents || 0), 10) || 0);
   const shippingModeLabel = trimString_(orderDraft && orderDraft.shippingModeLabel);
-  const checkoutLineItems = lineItems.length ? lineItems : finalizeStripeCheckoutLineItemDescriptions_(buildStripeCheckoutDefaultLineItems_(orderDraft));
   const checkoutShippingChargeCents = fulfillmentMethod === FULFILLMENT_METHODS.shipping && !suppressShippingAddressCollection
     ? shippingChargeCents
     : 0;
+  const additionalTaxCents = calculateStripeCheckoutAdditionalShippingTaxCents_(orderDraft, checkoutShippingChargeCents);
+  const lineItems = buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, {
+    paymentMethodSelected: paymentMethodSelected,
+    additionalTaxCents: additionalTaxCents
+  });
+  const checkoutLineItems = lineItems.length ? lineItems : finalizeStripeCheckoutLineItemDescriptions_(buildStripeCheckoutDefaultLineItems_(orderDraft));
   const chargeSummary = summarizeStripeCheckoutChargeAmounts_(
     orderDraft,
     paymentMethodSelected,
     checkoutLineItems,
-    checkoutShippingChargeCents
+    checkoutShippingChargeCents,
+    {
+      baseLineTotalCents: Math.max(0, Math.round(roundMoney_(orderDraft && orderDraft.amountGrandTotal) * 100)) + additionalTaxCents
+    }
   );
   const metadata = {
     token: trimString_(orderDraft.token),
@@ -15390,6 +15576,9 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     customer_email: normalizeEmail_(orderDraft.personEmail),
     'payment_method_types[0]': paymentMethodType
   };
+  if (paymentMethodType === 'card') {
+    payload['wallet_options[link][display]'] = 'never';
+  }
   checkoutLineItems.forEach((lineItem, idx) => {
     appendStripeCheckoutLineItemToPayload_(payload, idx, lineItem, currency);
   });
@@ -16307,10 +16496,39 @@ function createChatMessage_(sender, text, tsOverride, options) {
   };
 }
 
+function getChatMessageSemanticKey_(message) {
+  if (!message || typeof message !== 'object') return '';
+  const sender = String(message.sender || '').trim().toLowerCase();
+  const text = String(message.text || '').trim();
+  if (sender === 'system' && /^Order placed successfully on .+\.$/.test(text)) {
+    return 'system:order_placed_successfully';
+  }
+  return '';
+}
+
+function dedupeChatLogBySemanticKey_(chatLog, semanticKey) {
+  if (!semanticKey) return normalizeChatLog_(chatLog);
+  let seen = false;
+  return normalizeChatLog_(chatLog).filter((item) => {
+    if (getChatMessageSemanticKey_(item) !== semanticKey) return true;
+    if (seen) return false;
+    seen = true;
+    return true;
+  });
+}
+
 function appendUniqueChatMessage_(chatLog, message) {
-  const nextLog = normalizeChatLog_(chatLog);
+  let nextLog = normalizeChatLog_(chatLog);
   const normalized = normalizeChatLog_([message])[0];
   if (!normalized) return nextLog;
+  const semanticKey = getChatMessageSemanticKey_(normalized);
+  if (semanticKey) {
+    nextLog = dedupeChatLogBySemanticKey_(nextLog, semanticKey);
+    const hasSemanticMatch = nextLog.some((item) => (
+      getChatMessageSemanticKey_(item) === semanticKey
+    ));
+    if (hasSemanticMatch) return nextLog;
+  }
   const alreadyPresent = nextLog.some((item) => (
     String(item.sender || '') === String(normalized.sender || '') &&
     String(item.text || '') === String(normalized.text || '') &&
