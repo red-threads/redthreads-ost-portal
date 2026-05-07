@@ -1,0 +1,1302 @@
+diff --git a/apps-script/src/Code.js b/apps-script/src/Code.js
+index bbe7bba..520747b 100644
+--- a/apps-script/src/Code.js
++++ b/apps-script/src/Code.js
+@@ -179,6 +179,39 @@ const PORTAL_ORDER_HEADERS = [
+   'notes'
+ ];
+ 
++const PORTAL_EMAIL_QUEUE_SHEET_NAME = 'PORTAL_EMAIL_QUEUE';
++const PORTAL_EMAIL_QUEUE_HEADERS = [
++  'jobId',
++  'jobType',
++  'idempotencyKey',
++  'token',
++  'status',
++  'recipientsJson',
++  'portalStateJson',
++  'orderDraftJson',
++  'invoicePdfUrl',
++  'invoiceFileName',
++  'attemptCount',
++  'lastError',
++  'createdAt',
++  'updatedAt',
++  'startedAt',
++  'completedAt',
++  'leaseUntil'
++];
++const PORTAL_EMAIL_QUEUE_JOB_TYPES = {
++  purchase_order_invoice_email: 'purchase_order_invoice_email'
++};
++const PORTAL_EMAIL_QUEUE_STATUSES = {
++  queued: 'queued',
++  processing: 'processing',
++  sent: 'sent',
++  failed: 'failed'
++};
++const PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS = 3;
++const PORTAL_EMAIL_QUEUE_LEASE_MS = 5 * 60 * 1000;
++const PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS = 60 * 1000;
++
+ const PORTAL_ACCOUNT_HEADERS = [
+   'accountId',
+   'orgId',
+@@ -11277,6 +11310,10 @@ function normalizePurchaseOrderDraftState_(rawDraft) {
+     || source.fulfillmentMethod != null
+     || source.resumeStage != null
+     || source.shippingDetails != null
++    || source.emailJobId != null
++    || source.emailJobStatus != null
++    || source.emailJobUpdatedAt != null
++    || source.emailJobError != null
+   );
+   if (!hasMeaningfulValue) return null;
+   const invoiceSentToEmail = normalizeEmailRecipients_(source.invoiceSentToEmail).join(', ');
+@@ -11295,7 +11332,11 @@ function normalizePurchaseOrderDraftState_(rawDraft) {
+     draftFingerprint: trimString_(source.draftFingerprint),
+     fulfillmentMethod: normalizeFulfillmentMethod_(source.fulfillmentMethod),
+     shippingDetails: normalizeOrderDraftShippingDetailsInput_(source.shippingDetails, { preserveEmpty: true }),
+-    resumeStage: normalizePurchaseOrderDraftResumeStage_(source.resumeStage)
++    resumeStage: normalizePurchaseOrderDraftResumeStage_(source.resumeStage),
++    emailJobId: trimString_(source.emailJobId),
++    emailJobStatus: trimString_(source.emailJobStatus),
++    emailJobUpdatedAt: trimString_(source.emailJobUpdatedAt),
++    emailJobError: trimString_(source.emailJobError)
+   };
+ }
+ 
+@@ -11629,6 +11670,10 @@ function getOrderSheet_(ss, cfg) {
+   return ensureNamedSheetWithHeaders_(ss, cfg.portalOrdersSheetName, PORTAL_ORDER_HEADERS);
+ }
+ 
++function getPortalEmailQueueSheet_(ss) {
++  return ensureNamedSheetWithHeaders_(ss, PORTAL_EMAIL_QUEUE_SHEET_NAME, PORTAL_EMAIL_QUEUE_HEADERS);
++}
++
+ function getPortalAccountSheet_(ss, cfg) {
+   return ensureNamedSheetWithHeaders_(ss, cfg.portalAccountsSheetName, PORTAL_ACCOUNT_HEADERS);
+ }
+@@ -13723,36 +13768,12 @@ function ensurePurchaseOrderInvoice(payload) {
+   }
+ }
+ 
+-function sendPurchaseOrderInvoiceEmail_(payload) {
+-  const p = (payload && typeof payload === 'object') ? payload : {};
+-  const recipients = normalizeEmailRecipients_(p.recipients || p.to || p.toList);
+-  if (!recipients.length) {
+-    throw new Error('Enter at least one valid email address.');
+-  }
+-  const ensured = ensurePurchaseOrderInvoice_(payload);
+-  if (!ensured || ensured.ok !== true) return ensured;
+-  if (ensured.gated) return ensured;
+-  const invoiceUrl = trimString_(ensured.invoice && ensured.invoice.invoicePdfUrl)
+-    || trimString_(ensured.orderSummary && ensured.orderSummary.invoicePdfUrl);
+-  const invoiceFileId = extractDriveFileIdFromUrl_(invoiceUrl);
+-  const invoiceFile = invoiceFileId ? getDriveFileByIdSafe_(invoiceFileId) : null;
+-  if (!invoiceFile) {
+-    throw new Error('The purchase order invoice PDF could not be found.');
+-  }
+-  const attachment = invoiceFile.getBlob().setName(
+-    sanitizeUploadedDocumentName_(
+-      ensured.invoice && ensured.invoice.fileName,
+-      invoiceFile.getName()
+-    )
+-  );
+-  const dealNumber = trimString_(ensured && ensured.orderSummary && ensured.orderSummary.orderId)
+-    ? trimString_(ensured && ensured.accountSummary && ensured.accountSummary.orgName)
+-    : '';
+-  const draftProjectName = trimString_(p.projectName || (payload && payload.projectName));
+-  const invoiceNumber = trimString_(ensured.invoice && ensured.invoice.invoiceNumber)
+-    || trimString_(ensured.orderSummary && ensured.orderSummary.invoiceNumber);
+-  const portalToken = trimString_(p.token);
+-  const resumeUrl = buildPurchaseOrderResumePortalUrl_(portalToken, { stage: 'submit' });
++function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
++  const invoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
++  const opts = (options && typeof options === 'object') ? options : {};
++  const invoiceNumber = trimString_(invoice.invoiceNumber);
++  const projectName = trimString_(opts.projectName);
++  const resumeUrl = buildPurchaseOrderResumePortalUrl_(token, { stage: 'submit' });
+   const subject = invoiceNumber
+     ? ('Red Threads Invoice ' + invoiceNumber)
+     : 'Red Threads Invoice';
+@@ -13760,7 +13781,7 @@ function sendPurchaseOrderInvoiceEmail_(payload) {
+     'Your Red Threads invoice is attached.',
+     '',
+     invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+-    draftProjectName ? ('Project: ' + draftProjectName) : '',
++    projectName ? ('Project: ' + projectName) : '',
+     '',
+     'Next steps:',
+     '1. Email this invoice to your purchasing or accounts payable team so they can issue the company purchase order.',
+@@ -13773,7 +13794,7 @@ function sendPurchaseOrderInvoiceEmail_(payload) {
+     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1f2937;">',
+     '  <p style="margin:0 0 14px;">Your Red Threads invoice is attached.</p>',
+     invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
+-    draftProjectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(draftProjectName) + '</p>') : '',
++    projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
+     '  <ol style="margin:0 0 16px 20px;padding:0;">',
+     '    <li style="margin:0 0 8px;">Email this invoice to your purchasing or accounts payable team so they can issue the company purchase order.</li>',
+     '    <li style="margin:0 0 8px;">Use the return link below to reopen the portal directly in the purchase-order upload step.</li>',
+@@ -13785,15 +13806,59 @@ function sendPurchaseOrderInvoiceEmail_(payload) {
+     '  <p style="margin:0;color:#5f6f86;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+     '</div>'
+   ].filter(Boolean).join('\n');
+-  sendNotificationEmail_({
+-    toList: recipients,
++  return {
+     subject: subject,
+     body: body,
+-    htmlBody: htmlBody,
++    htmlBody: htmlBody
++  };
++}
++
++function sendPurchaseOrderInvoiceEmailWithAttachment_(token, recipients, invoiceInfo, options) {
++  const invoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
++  const invoiceUrl = trimString_(invoice.invoicePdfUrl);
++  const invoiceFileId = extractDriveFileIdFromUrl_(invoiceUrl);
++  const invoiceFile = invoiceFileId ? getDriveFileByIdSafe_(invoiceFileId) : null;
++  if (!invoiceFile) {
++    throw new Error('The purchase order invoice PDF could not be found.');
++  }
++  const attachment = invoiceFile.getBlob().setName(
++    sanitizeUploadedDocumentName_(
++      invoice.fileName,
++      invoiceFile.getName()
++    )
++  );
++  const content = buildPurchaseOrderInvoiceEmailContent_(token, invoice, options);
++  sendNotificationEmail_({
++    toList: recipients,
++    subject: content.subject,
++    body: content.body,
++    htmlBody: content.htmlBody,
+     attachments: [attachment],
+     fromAlias: NOTIFICATION_FROM_ALIAS,
+     replyTo: NOTIFICATION_FROM_ALIAS
+   });
++}
++
++function sendPurchaseOrderInvoiceEmail_(payload) {
++  const p = (payload && typeof payload === 'object') ? payload : {};
++  const recipients = normalizeEmailRecipients_(p.recipients || p.to || p.toList);
++  if (!recipients.length) {
++    throw new Error('Enter at least one valid email address.');
++  }
++  const ensured = ensurePurchaseOrderInvoice_(payload);
++  if (!ensured || ensured.ok !== true) return ensured;
++  if (ensured.gated) return ensured;
++  const invoiceInfo = {
++    invoiceNumber: trimString_(ensured.invoice && ensured.invoice.invoiceNumber)
++      || trimString_(ensured.orderSummary && ensured.orderSummary.invoiceNumber),
++    invoicePdfUrl: trimString_(ensured.invoice && ensured.invoice.invoicePdfUrl)
++      || trimString_(ensured.orderSummary && ensured.orderSummary.invoicePdfUrl),
++    fileName: trimString_(ensured.invoice && ensured.invoice.fileName)
++      || trimString_(ensured.orderSummary && ensured.orderSummary.invoiceFileName)
++  };
++  sendPurchaseOrderInvoiceEmailWithAttachment_(trimString_(p.token), recipients, invoiceInfo, {
++    projectName: trimString_(p.projectName || (payload && payload.projectName))
++  });
+   const emailCtx = buildOrderActionContext_({
+     token: trimString_(p.token),
+     personEmail: trimString_(p.personEmail),
+@@ -13830,6 +13895,494 @@ function sendPurchaseOrderInvoiceEmail(payload) {
+   }
+ }
+ 
++function normalizePortalEmailQueueStatus_(value) {
++  const normalized = trimString_(value).toLowerCase();
++  return Object.keys(PORTAL_EMAIL_QUEUE_STATUSES).some(function(key) {
++    return PORTAL_EMAIL_QUEUE_STATUSES[key] === normalized;
++  }) ? normalized : '';
++}
++
++function buildPortalEmailQueueIdempotencyKey_(token, recipients, draftFingerprint) {
++  const source = {
++    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.purchase_order_invoice_email,
++    token: trimString_(token),
++    recipients: normalizeEmailRecipients_(recipients).map(function(email) {
++      return normalizeEmail_(email);
++    }).sort(),
++    draftFingerprint: trimString_(draftFingerprint)
++  };
++  const digest = Utilities.computeDigest(
++    Utilities.DigestAlgorithm.SHA_256,
++    JSON.stringify(source)
++  );
++  return Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
++}
++
++function findPortalEmailQueueJobByField_(sheet, headerKey, value) {
++  const cleanValue = trimString_(value);
++  if (!sheet || !cleanValue) return null;
++  const normalizedKey = normalizeHeaderKey_(headerKey);
++  return listSheetRowInfos_(sheet).find(function(info) {
++    return trimString_(info.rowObjNormalized[normalizedKey]) === cleanValue;
++  }) || null;
++}
++
++function findPortalEmailQueueJobById_(sheet, jobId) {
++  return findPortalEmailQueueJobByField_(sheet, 'jobId', jobId);
++}
++
++function findPortalEmailQueueJobByIdempotencyKey_(sheet, idempotencyKey) {
++  return findPortalEmailQueueJobByField_(sheet, 'idempotencyKey', idempotencyKey);
++}
++
++function buildPortalEmailQueueStatusPayload_(jobInfo, portalPayload) {
++  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
++  const status = normalizePortalEmailQueueStatus_(row.status) || PORTAL_EMAIL_QUEUE_STATUSES.queued;
++  const payload = {
++    jobId: trimString_(row.jobid),
++    jobType: trimString_(row.jobtype),
++    token: trimString_(row.token),
++    status: status,
++    attemptCount: Math.max(0, parseInt(String(row.attemptcount || 0), 10) || 0),
++    lastError: trimString_(row.lasterror),
++    createdAt: trimString_(row.createdat),
++    updatedAt: trimString_(row.updatedat),
++    startedAt: trimString_(row.startedat),
++    completedAt: trimString_(row.completedat)
++  };
++  if (portalPayload && typeof portalPayload === 'object') payload.portalPayload = portalPayload;
++  return payload;
++}
++
++function deletePortalEmailQueueProcessorTriggers_() {
++  try {
++    ScriptApp.getProjectTriggers().forEach(function(trigger) {
++      if (trigger.getHandlerFunction && trigger.getHandlerFunction() === 'processPortalEmailQueue') {
++        ScriptApp.deleteTrigger(trigger);
++      }
++    });
++  } catch (err) {
++    console.log('[RT-EMAIL-QUEUE-TRIGGER-DELETE] ' + String((err && err.message) || err));
++  }
++}
++
++function schedulePortalEmailQueueProcessor_() {
++  try {
++    const hasTrigger = ScriptApp.getProjectTriggers().some(function(trigger) {
++      return trigger.getHandlerFunction && trigger.getHandlerFunction() === 'processPortalEmailQueue';
++    });
++    if (!hasTrigger) {
++      ScriptApp.newTrigger('processPortalEmailQueue')
++        .timeBased()
++        .after(PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS)
++        .create();
++    }
++  } catch (err) {
++    console.log('[RT-EMAIL-QUEUE-TRIGGER] ' + String((err && err.message) || err));
++  }
++}
++
++function resolvePurchaseOrderQueueInvoiceInfo_(ctx, payload, existingDraft) {
++  const p = (payload && typeof payload === 'object') ? payload : {};
++  const draft = normalizePurchaseOrderDraftState_(existingDraft);
++  const invoiceNumber = trimString_(draft && draft.invoiceNumber) || nextInvoiceNumber_();
++  if (trimString_(p.base64Data)) {
++    return preparePurchaseOrderDraftInvoiceArtifact_(ctx, p, {
++      existingDraft: draft,
++      invoiceNumber: invoiceNumber
++    });
++  }
++  const invoicePdfUrl = trimString_(p.invoicePdfUrl || (draft && draft.invoicePdfUrl));
++  return {
++    invoiceNumber: invoiceNumber,
++    invoicePdfUrl: invoicePdfUrl,
++    fileName: trimString_(p.invoiceFileName || p.fileName || (draft && draft.invoiceFileName) || buildPurchaseOrderInvoiceFileName_(ctx))
++  };
++}
++
++function appendPortalEmailQueueJob_(sheet, values) {
++  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
++  const rowValues = header.map(function(headerName) {
++    return Object.prototype.hasOwnProperty.call(values, headerName)
++      ? values[headerName]
++      : values[normalizeHeaderKey_(headerName)];
++  });
++  sheet.appendRow(rowValues);
++  return buildRowInfoFromSheet_(sheet, sheet.getLastRow());
++}
++
++function buildPurchaseOrderEmailQueuedDraftState_(ctx, invoiceInfo, jobInfo, options) {
++  const opts = (options && typeof options === 'object') ? options : {};
++  const existingDraft = readPurchaseOrderDraftFromPortalState_(ctx.portalState);
++  const now = trimString_(opts.now) || nowIso_();
++  return normalizePurchaseOrderDraftState_(Object.assign(
++    {},
++    existingDraft || {},
++    buildPurchaseOrderDraftStateFromInvoice_(ctx, invoiceInfo, {
++      status: existingDraft && existingDraft.status === PURCHASE_ORDER_DRAFT_STATUSES.email_sent
++        ? PURCHASE_ORDER_DRAFT_STATUSES.email_sent
++        : PURCHASE_ORDER_DRAFT_STATUSES.draft_ready,
++      invoiceSentToEmail: existingDraft && existingDraft.invoiceSentToEmail,
++      invoiceSentAt: existingDraft && existingDraft.invoiceSentAt,
++      lastPreparedAt: now,
++      resumeStage: 'submit'
++    }),
++    {
++      emailJobId: trimString_(jobInfo && jobInfo.jobId),
++      emailJobStatus: trimString_(jobInfo && jobInfo.status) || PORTAL_EMAIL_QUEUE_STATUSES.queued,
++      emailJobUpdatedAt: now,
++      emailJobError: trimString_(jobInfo && jobInfo.error)
++    }
++  ));
++}
++
++function queuePurchaseOrderInvoiceEmail_(payload) {
++  const p = (payload && typeof payload === 'object') ? payload : {};
++  const recipients = normalizeEmailRecipients_(p.recipients || p.to || p.toList);
++  if (!recipients.length) throw new Error('Enter at least one valid email address.');
++
++  const ctx = buildPreparedOrderActionContext_(payload);
++  const validationError = validateOrderPlacementForAction_(ctx);
++  if (validationError) return validationError;
++  if (normalizeFulfillmentMethod_(ctx.orderDraft && ctx.orderDraft.fulfillmentMethod) === FULFILLMENT_METHODS.shipping) {
++    const shippingError = validateRequiredOrderDraftShippingDetails_(ctx.orderDraft && ctx.orderDraft.shippingDetails);
++    if (shippingError) return { ok: false, error: shippingError };
++  }
++  if (!ctx.accountInfo.summary.termsApproved) {
++    return {
++      ok: true,
++      gated: true,
++      termsRequired: true,
++      accountSummary: ctx.accountInfo.summary,
++      termsDocumentUrl: ctx.accountInfo.summary.termsDocumentUrl || ctx.cfg.termsDocumentUrl,
++      message: 'Terms approval is required before you can submit a purchase order.'
++    };
++  }
++  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
++    cfg: ctx.cfg,
++    ss: ctx.ss,
++    ordersSheet: ctx.infra.ordersSheet
++  });
++  if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
++    const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
++    return finalizeOrderActionResponse_({
++      ok: false,
++      error: trimString_(latestSummary.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.purchase_order
++        ? 'This purchase order has already been submitted.'
++        : 'This order has already moved past the editable checkout stage.'
++    }, ctx);
++  }
++
++  const queueSheet = getPortalEmailQueueSheet_(ctx.ss);
++  const existingDraft = readPurchaseOrderDraftFromPortalState_(ctx.portalState);
++  const invoiceInfo = resolvePurchaseOrderQueueInvoiceInfo_(ctx, p, existingDraft);
++  const draftFingerprint = buildPurchaseOrderDraftFingerprint_(ctx.orderDraft);
++  const idempotencyKey = buildPortalEmailQueueIdempotencyKey_(ctx.orderDraft.token, recipients, draftFingerprint);
++  let existingJob = findPortalEmailQueueJobByIdempotencyKey_(queueSheet, idempotencyKey);
++  const now = nowIso_();
++  let jobId = existingJob
++    ? trimString_(existingJob.rowObjNormalized.jobid)
++    : newPortalId_('eml');
++  const existingOriginalStatus = existingJob
++    ? normalizePortalEmailQueueStatus_(existingJob.rowObjNormalized.status)
++    : '';
++  let jobStatus = existingJob
++    ? (existingOriginalStatus || PORTAL_EMAIL_QUEUE_STATUSES.queued)
++    : PORTAL_EMAIL_QUEUE_STATUSES.queued;
++  if (jobStatus === PORTAL_EMAIL_QUEUE_STATUSES.failed) jobStatus = PORTAL_EMAIL_QUEUE_STATUSES.queued;
++
++  let draftState = buildPurchaseOrderEmailQueuedDraftState_(ctx, invoiceInfo, {
++    jobId: jobId,
++    status: jobStatus,
++    error: ''
++  }, { now: now });
++  if (existingOriginalStatus === PORTAL_EMAIL_QUEUE_STATUSES.sent) {
++    draftState = normalizePurchaseOrderDraftState_(Object.assign({}, draftState, {
++      status: PURCHASE_ORDER_DRAFT_STATUSES.email_sent,
++      invoiceSentToEmail: recipients.join(', '),
++      invoiceSentAt: trimString_(existingJob && existingJob.rowObjNormalized.completedat) || now
++    }));
++  }
++  const queuedPortalState = writePurchaseOrderDraftIntoPortalState_(ctx.portalState, draftState);
++
++  supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
++    revisionReason: 'payment_method_superseded_to_purchase_order',
++    notes: 'Superseded by durable purchase-order invoice email queue.'
++  });
++  lockCurrentOrderPointersToPurchaseOrderDraftState_(ctx, queuedPortalState, draftState);
++
++  const keepExistingQueueRow = existingJob && (
++    existingOriginalStatus === PORTAL_EMAIL_QUEUE_STATUSES.processing
++    || existingOriginalStatus === PORTAL_EMAIL_QUEUE_STATUSES.sent
++  );
++  if (!keepExistingQueueRow) {
++    const queueValues = {
++      jobId: jobId,
++      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.purchase_order_invoice_email,
++      idempotencyKey: idempotencyKey,
++      token: trimString_(ctx.orderDraft.token),
++      status: jobStatus,
++      recipientsJson: JSON.stringify(recipients),
++      portalStateJson: JSON.stringify(queuedPortalState),
++      orderDraftJson: JSON.stringify(ctx.orderDraft),
++      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl),
++      invoiceFileName: trimString_(invoiceInfo.fileName),
++      attemptCount: existingJob ? Math.max(0, parseInt(String(existingJob.rowObjNormalized.attemptcount || 0), 10) || 0) : 0,
++      lastError: '',
++      createdAt: existingJob ? trimString_(existingJob.rowObjNormalized.createdat) || now : now,
++      updatedAt: now,
++      startedAt: '',
++      completedAt: '',
++      leaseUntil: ''
++    };
++    if (existingJob) {
++      setRowValuesByHeaderMap_(queueSheet, existingJob.row, existingJob.colMap, queueValues);
++      existingJob = buildRowInfoFromSheet_(queueSheet, existingJob.row);
++    } else {
++      existingJob = appendPortalEmailQueueJob_(queueSheet, queueValues);
++    }
++  }
++  if (jobStatus === PORTAL_EMAIL_QUEUE_STATUSES.queued) schedulePortalEmailQueueProcessor_();
++
++  const statusPayload = buildPortalEmailQueueStatusPayload_(existingJob);
++  return finalizeOrderActionResponse_({
++    ok: true,
++    queued: true,
++    emailJob: statusPayload,
++    message: 'Your invoice email is queued and will send even if you close this tab.',
++    accountSummary: ctx.accountInfo.summary,
++    invoice: invoiceInfo,
++    portalPayload: buildOrderActionPortalPayload_(ctx, ctx.rowInfo)
++  }, ctx);
++}
++
++function queuePurchaseOrderInvoiceEmail(payload) {
++  try {
++    return queuePurchaseOrderInvoiceEmail_(payload);
++  } catch (err) {
++    return { ok: false, error: String((err && err.message) || err) };
++  }
++}
++
++function isPortalEmailQueueJobEligible_(jobInfo, nowDate) {
++  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
++  const status = normalizePortalEmailQueueStatus_(row.status);
++  const attemptCount = Math.max(0, parseInt(String(row.attemptcount || 0), 10) || 0);
++  if (status === PORTAL_EMAIL_QUEUE_STATUSES.queued) return true;
++  if (status === PORTAL_EMAIL_QUEUE_STATUSES.failed && attemptCount < PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS) return true;
++  if (status === PORTAL_EMAIL_QUEUE_STATUSES.processing) {
++    const leaseUntilMs = Date.parse(trimString_(row.leaseuntil));
++    return !leaseUntilMs || leaseUntilMs <= nowDate.getTime();
++  }
++  return false;
++}
++
++function updatePurchaseOrderDraftEmailJobStatusForToken_(cfg, ss, infra, token, jobInfo, extra) {
++  const exportSheet = infra.exportSheet;
++  const rowInfo = findRowByToken_(exportSheet, trimString_(token));
++  if (!rowInfo) return null;
++  const portalState = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {}) || { printJobs: {} };
++  const currentDraft = readPurchaseOrderDraftFromPortalState_(portalState);
++  if (!currentDraft) return rowInfo;
++  const opts = (extra && typeof extra === 'object') ? extra : {};
++  const nextDraft = normalizePurchaseOrderDraftState_(Object.assign({}, currentDraft, {
++    status: trimString_(opts.status) || currentDraft.status,
++    invoicePdfUrl: trimString_(opts.invoicePdfUrl) || currentDraft.invoicePdfUrl,
++    invoiceFileName: trimString_(opts.invoiceFileName) || currentDraft.invoiceFileName,
++    invoiceSentToEmail: trimString_(opts.invoiceSentToEmail) || currentDraft.invoiceSentToEmail,
++    invoiceSentAt: trimString_(opts.invoiceSentAt) || currentDraft.invoiceSentAt,
++    emailJobId: trimString_(jobInfo && jobInfo.jobId) || currentDraft.emailJobId,
++    emailJobStatus: trimString_(jobInfo && jobInfo.status) || currentDraft.emailJobStatus,
++    emailJobUpdatedAt: trimString_(jobInfo && jobInfo.updatedAt) || nowIso_(),
++    emailJobError: trimString_(jobInfo && jobInfo.error)
++  }));
++  const nextPortalState = writePurchaseOrderDraftIntoPortalState_(portalState, nextDraft);
++  const chatLog = readChatLogFromPortalState_(nextPortalState, readChatLogForRow_(exportSheet, rowInfo));
++  const persisted = persistPortalStateForRow_(exportSheet, rowInfo, nextPortalState, {
++    token: trimString_(token),
++    locked: true,
++    chatLog: chatLog,
++    currentOrderState: ORDER_STATES.awaiting_po_submission,
++    currentPaymentState: PAYMENT_STATES.not_started,
++    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.po_pending,
++    currentPaymentMethod: PAYMENT_METHODS.purchase_order
++  });
++  if (!persisted || persisted.ok !== true) {
++    throw new Error(String((persisted && persisted.error) || 'Unable to update purchase-order email status.'));
++  }
++  SpreadsheetApp.flush();
++  return buildRowInfoFromSheet_(exportSheet, rowInfo.row);
++}
++
++function processPurchaseOrderInvoiceEmailQueueJob_(jobInfo, options) {
++  const opts = (options && typeof options === 'object') ? options : {};
++  const cfg = opts.cfg || getConfig_();
++  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
++  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
++  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
++  const token = trimString_(row.token);
++  const recipients = normalizeEmailRecipients_(safeJsonParse_(row.recipientsjson, []));
++  if (!token) throw new Error('Email queue job is missing a token.');
++  if (!recipients.length) throw new Error('Email queue job has no recipients.');
++  const orderDraft = safeJsonParse_(row.orderdraftjson, {}) || {};
++  const queuedPortalState = safeJsonParse_(row.portalstatejson, {}) || {};
++  const queuedDraft = readPurchaseOrderDraftFromPortalState_(queuedPortalState);
++  let invoiceInfo = {
++    invoiceNumber: trimString_(queuedDraft && queuedDraft.invoiceNumber),
++    invoicePdfUrl: trimString_(row.invoicepdfurl || (queuedDraft && queuedDraft.invoicePdfUrl)),
++    fileName: trimString_(row.invoicefilename || (queuedDraft && queuedDraft.invoiceFileName))
++  };
++  if (!invoiceInfo.invoicePdfUrl) {
++    invoiceInfo = generateInvoiceDocumentForOrder_(orderDraft, {
++      cfg: cfg,
++      invoiceNumber: invoiceInfo.invoiceNumber
++    });
++  }
++  sendPurchaseOrderInvoiceEmailWithAttachment_(token, recipients, invoiceInfo, {
++    projectName: trimString_(orderDraft.projectName)
++  });
++  const now = nowIso_();
++  let refreshedRow = null;
++  try {
++    refreshedRow = updatePurchaseOrderDraftEmailJobStatusForToken_(cfg, ss, infra, token, {
++      jobId: trimString_(row.jobid),
++      status: PORTAL_EMAIL_QUEUE_STATUSES.sent,
++      updatedAt: now,
++      error: ''
++    }, {
++      status: PURCHASE_ORDER_DRAFT_STATUSES.email_sent,
++      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl),
++      invoiceFileName: trimString_(invoiceInfo.fileName),
++      invoiceSentToEmail: recipients.join(', '),
++      invoiceSentAt: now
++    });
++  } catch (err) {
++    console.log('[RT-EMAIL-QUEUE-PORTAL-SENT-STATUS] ' + String((err && err.message) || err));
++  }
++  return {
++    invoiceInfo: invoiceInfo,
++    exportRowInfo: refreshedRow
++  };
++}
++
++function processPortalEmailQueue() {
++  const lock = LockService.getScriptLock();
++  if (!lock.tryLock(5000)) return;
++  let shouldScheduleAgain = false;
++  try {
++    deletePortalEmailQueueProcessorTriggers_();
++    const cfg = getConfig_();
++    const ss = SpreadsheetApp.openById(cfg.sheetId);
++    const infra = ensurePortalInfrastructure_(ss, cfg);
++    const queueSheet = getPortalEmailQueueSheet_(ss);
++    const nowDate = new Date();
++    const jobs = listSheetRowInfos_(queueSheet)
++      .filter(function(jobInfo) { return isPortalEmailQueueJobEligible_(jobInfo, nowDate); })
++      .slice(0, 3);
++    jobs.forEach(function(jobInfo) {
++      const row = jobInfo.rowObjNormalized || {};
++      const attemptCount = Math.max(0, parseInt(String(row.attemptcount || 0), 10) || 0) + 1;
++      const startedAt = nowIso_();
++      const leaseUntil = new Date(Date.now() + PORTAL_EMAIL_QUEUE_LEASE_MS).toISOString();
++      setRowValuesByHeaderMap_(queueSheet, jobInfo.row, jobInfo.colMap, {
++        status: PORTAL_EMAIL_QUEUE_STATUSES.processing,
++        attemptCount: attemptCount,
++        lastError: '',
++        updatedAt: startedAt,
++        startedAt: startedAt,
++        leaseUntil: leaseUntil
++      });
++      const processingJobInfo = buildRowInfoFromSheet_(queueSheet, jobInfo.row);
++      try {
++        const result = processPurchaseOrderInvoiceEmailQueueJob_(processingJobInfo, {
++          cfg: cfg,
++          ss: ss,
++          infra: infra
++        });
++        const completedAt = nowIso_();
++        setRowValuesByHeaderMap_(queueSheet, jobInfo.row, jobInfo.colMap, {
++          status: PORTAL_EMAIL_QUEUE_STATUSES.sent,
++          invoicePdfUrl: trimString_(result && result.invoiceInfo && result.invoiceInfo.invoicePdfUrl),
++          invoiceFileName: trimString_(result && result.invoiceInfo && result.invoiceInfo.fileName),
++          lastError: '',
++          updatedAt: completedAt,
++          completedAt: completedAt,
++          leaseUntil: ''
++        });
++      } catch (err) {
++        const failedAt = nowIso_();
++        const errorMessage = String((err && err.message) || err);
++        const retryable = attemptCount < PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS;
++        setRowValuesByHeaderMap_(queueSheet, jobInfo.row, jobInfo.colMap, {
++          status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
++          lastError: errorMessage,
++          updatedAt: failedAt,
++          leaseUntil: ''
++        });
++        try {
++          updatePurchaseOrderDraftEmailJobStatusForToken_(cfg, ss, infra, trimString_(row.token), {
++            jobId: trimString_(row.jobid),
++            status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
++            updatedAt: failedAt,
++            error: errorMessage
++          }, {});
++        } catch (statusErr) {
++          console.log('[RT-EMAIL-QUEUE-STATUS-FAIL] ' + String((statusErr && statusErr.message) || statusErr));
++        }
++        if (retryable) shouldScheduleAgain = true;
++      }
++    });
++    const hasMore = listSheetRowInfos_(queueSheet).some(function(info) {
++      return isPortalEmailQueueJobEligible_(info, new Date());
++    });
++    if (hasMore) shouldScheduleAgain = true;
++  } catch (err) {
++    console.log('[RT-EMAIL-QUEUE-PROCESS] ' + String((err && err.message) || err));
++    shouldScheduleAgain = true;
++  } finally {
++    lock.releaseLock();
++  }
++  if (shouldScheduleAgain) schedulePortalEmailQueueProcessor_();
++}
++
++function getPurchaseOrderEmailJobStatus_(payload) {
++  const p = (payload && typeof payload === 'object') ? payload : {};
++  const token = trimString_(p.token);
++  const jobId = trimString_(p.jobId);
++  if (!token || !jobId) return { ok: false, error: 'Missing purchase-order email job.' };
++  const cfg = getConfig_();
++  const ss = SpreadsheetApp.openById(cfg.sheetId);
++  const infra = ensurePortalInfrastructure_(ss, cfg);
++  const queueSheet = getPortalEmailQueueSheet_(ss);
++  const jobInfo = findPortalEmailQueueJobById_(queueSheet, jobId);
++  if (!jobInfo || trimString_(jobInfo.rowObjNormalized.token) !== token) {
++    return { ok: false, error: 'Purchase-order email job not found.' };
++  }
++  const rowInfo = findRowByToken_(infra.exportSheet, token);
++  const portalPayload = rowInfo
++    ? buildOrderActionPortalPayload_({
++        cfg: cfg,
++        ss: ss,
++        infra: infra,
++        rowInfo: rowInfo,
++        orderDraft: { token: token }
++      }, rowInfo)
++    : null;
++  return {
++    ok: true,
++    emailJob: buildPortalEmailQueueStatusPayload_(jobInfo, portalPayload),
++    portalPayload: portalPayload
++  };
++}
++
++function getPurchaseOrderEmailJobStatus(payload) {
++  try {
++    return getPurchaseOrderEmailJobStatus_(payload);
++  } catch (err) {
++    return { ok: false, error: String((err && err.message) || err) };
++  }
++}
++
+ function createLockedOrderPaymentCheckout_(payload) {
+   const p = (payload && typeof payload === 'object') ? payload : {};
+   const method = trimString_(p.paymentMethodSelected).toLowerCase();
+diff --git a/apps-script/src/Index.html b/apps-script/src/Index.html
+index f7b7202..50a091d 100644
+--- a/apps-script/src/Index.html
++++ b/apps-script/src/Index.html
+@@ -485,6 +485,7 @@
+       border:1px solid var(--c-comp-hex-93c5fd);
+       background:var(--c-comp-hex-eff6ff);
+       color:var(--c-link);
++      text-decoration:none;
+       border-radius:999px;
+       min-width:126px;
+       height:34px;
+@@ -1020,6 +1021,7 @@
+       border:1px solid rgba(70,239,196,.72);
+       background:rgba(70,239,196,.06);
+       color:#46efc4;
++      text-decoration:none;
+       min-width:146px;
+       height:34px;
+       padding:0 16px;
+@@ -15900,14 +15902,14 @@
+               <p class="dashboardPeekSub" id="dashboardPeekSub">Loading project details…</p>
+             </div>
+             <div class="dashboardPeekHeadAction">
+-              <button class="dashboardPeekOpenBtn" id="dashboardPeekOpenBtn" type="button" hidden>
++              <a class="dashboardPeekOpenBtn" id="dashboardPeekOpenBtn" hidden>
+                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                   <path d="M14 4h6v6" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"></path>
+                   <path d="M20 4 11 13" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"></path>
+                   <path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"></path>
+                 </svg>
+                 <span>Open Project</span>
+-              </button>
++              </a>
+             </div>
+             <button class="dashboardPeekClose" id="dashboardPeekClose" type="button" aria-label="Close project preview">X</button>
+           </div>
+@@ -16647,7 +16649,7 @@
+       </div>
+       <div class="artworkApproveSuccess" id="poEmailSuccessPanel">
+         <div class="artworkApproveSuccessIcon" aria-hidden="true">✓</div>
+-        <p class="artworkApproveSuccessTitle">Success, your invoice is being sent.</p>
++        <p class="artworkApproveSuccessTitle">Success, your invoice email is queued.</p>
+         <p class="artworkApproveSuccessBody">Once your company approves the purchase order, return to this project and use the Invoice tab to upload the purchase order details and submit them. That final submission is what starts production.</p>
+         <div class="artworkApproveActions">
+           <button class="artworkApproveBtn artworkApproveBtnBack" id="poEmailSuccessDoneBtn" type="button">Go to Invoice Tab</button>
+@@ -17867,6 +17869,10 @@
+       || Object.prototype.hasOwnProperty.call(source, 'fulfillmentMethod')
+       || Object.prototype.hasOwnProperty.call(source, 'shippingDetails')
+       || Object.prototype.hasOwnProperty.call(source, 'resumeStage')
++      || Object.prototype.hasOwnProperty.call(source, 'emailJobId')
++      || Object.prototype.hasOwnProperty.call(source, 'emailJobStatus')
++      || Object.prototype.hasOwnProperty.call(source, 'emailJobUpdatedAt')
++      || Object.prototype.hasOwnProperty.call(source, 'emailJobError')
+     );
+     if (!hasMeaningfulValue) return null;
+     const invoiceSentToEmail = String(source.invoiceSentToEmail || '').trim();
+@@ -17885,7 +17891,11 @@
+         ? String(source.fulfillmentMethod || '').trim().toLowerCase()
+         : '',
+       shippingDetails: normalizeOrderFlowShippingDetails_(source.shippingDetails),
+-      resumeStage: normalizePurchaseOrderDraftResumeStage_(source.resumeStage)
++      resumeStage: normalizePurchaseOrderDraftResumeStage_(source.resumeStage),
++      emailJobId: String(source.emailJobId || '').trim(),
++      emailJobStatus: String(source.emailJobStatus || '').trim().toLowerCase(),
++      emailJobUpdatedAt: String(source.emailJobUpdatedAt || '').trim(),
++      emailJobError: String(source.emailJobError || '').trim()
+     };
+   }
+ 
+@@ -19682,6 +19692,8 @@
+   let ORDER_FLOW_PO_DRAFT_READY_KEY = '';
+   let ORDER_FLOW_PO_DRAFT_PREP_TIMER = 0;
+   let ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
++  let ORDER_FLOW_PO_EMAIL_JOB_ID = '';
++  let ORDER_FLOW_PO_EMAIL_STATUS_TIMER = 0;
+   let ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT = false;
+   let ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE = null;
+   let ORDER_FLOW_MANUAL_ARTIFACT_PREP_KEY = '';
+@@ -20703,6 +20715,21 @@
+     btn.textContent = busy ? String(busyText || 'Working...') : String(btn.dataset.idleText);
+   }
+ 
++  function buildExternalPortalProjectUrl_(token){
++    const cleanToken = String(token || '').trim();
++    return cleanToken ? ('https://www.redthreads.com/portal?t=' + encodeURIComponent(cleanToken)) : '';
++  }
++
++  function isPlainLeftClick_(event){
++    if (!event) return true;
++    const button = typeof event.button === 'number' ? event.button : 0;
++    return button === 0
++      && event.metaKey !== true
++      && event.ctrlKey !== true
++      && event.shiftKey !== true
++      && event.altKey !== true;
++  }
++
+   function armDashboardProjectOpen(btn, source){
+     if (!btn) return;
+     DASHBOARD_OPEN_ARMED_BTN = btn;
+@@ -22192,9 +22219,15 @@
+     if (dashboardPeekOpenBtn) {
+       const token = String(project && project.token || '').trim();
+       const canOpen = !!(header && header.canOpenProject) && !!token;
++      const projectUrl = canOpen ? buildExternalPortalProjectUrl_(token) : '';
+       dashboardPeekOpenBtn.hidden = !canOpen;
+-      dashboardPeekOpenBtn.disabled = !canOpen;
++      dashboardPeekOpenBtn.setAttribute('aria-disabled', canOpen ? 'false' : 'true');
+       dashboardPeekOpenBtn.dataset.projectToken = canOpen ? token : '';
++      if (projectUrl) {
++        dashboardPeekOpenBtn.href = projectUrl;
++      } else {
++        dashboardPeekOpenBtn.removeAttribute('href');
++      }
+     }
+   }
+ 
+@@ -22593,7 +22626,20 @@
+     dashboardPeekOpenBtn.innerHTML = '';
+     dashboardPeekOpenBtn.appendChild(createDashboardPeekSvgIcon_('open'));
+     dashboardPeekOpenBtn.appendChild(createEl('span', '', 'Open Project'));
+-    dashboardPeekOpenBtn.addEventListener('click', () => {
++    dashboardPeekOpenBtn.addEventListener('click', event => {
++      if (!isPlainLeftClick_(event)) return;
++      if (event && typeof event.preventDefault === 'function') event.preventDefault();
++      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
++      const token = String(dashboardPeekOpenBtn.dataset.projectToken || '').trim();
++      if (!token) return;
++      closeDashboardProjectPeek();
++      openProjectFromDashboard(token, dashboardPeekOpenBtn);
++    });
++    dashboardPeekOpenBtn.addEventListener('keydown', event => {
++      if (!event || event.key !== ' ') return;
++      if (!isPlainLeftClick_(event)) return;
++      event.preventDefault();
++      event.stopPropagation();
+       const token = String(dashboardPeekOpenBtn.dataset.projectToken || '').trim();
+       if (!token) return;
+       closeDashboardProjectPeek();
+@@ -22694,19 +22740,29 @@
+       tr.appendChild(statusCell);
+ 
+       const openCell = createEl('td', 'authProjectsActionCell');
+-      const openBtn = createEl('button', 'authProjectsOpenBtn');
++      const openBtn = createEl('a', 'authProjectsOpenBtn');
+       openBtn.appendChild(createDashboardPeekSvgIcon_('open'));
+       openBtn.appendChild(createEl('span', '', 'Open Project'));
+-      openBtn.type = 'button';
+-      openBtn.addEventListener('pointerdown', () => {
++      const projectUrl = buildExternalPortalProjectUrl_(projectToken);
++      if (projectUrl) openBtn.href = projectUrl;
++      else openBtn.setAttribute('aria-disabled', 'true');
++      openBtn.addEventListener('pointerdown', event => {
++        if (!isPlainLeftClick_(event)) return;
+         armDashboardProjectOpen(openBtn, 'pointer');
+       });
+       openBtn.addEventListener('keydown', event => {
+         if (!event) return;
+         if (event.key !== 'Enter' && event.key !== ' ') return;
+         armDashboardProjectOpen(openBtn, 'keyboard');
++        if (event.key === ' ') {
++          event.preventDefault();
++          event.stopPropagation();
++          if (!shouldAllowDashboardProjectOpen(openBtn, event)) return;
++          openProjectFromDashboard(project.token, openBtn);
++        }
+       });
+       openBtn.addEventListener('click', event => {
++        if (!isPlainLeftClick_(event)) return;
+         if (event && typeof event.preventDefault === 'function') event.preventDefault();
+         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+         if (!shouldAllowDashboardProjectOpen(openBtn, event)) return;
+@@ -30639,6 +30695,85 @@
+     }, delay);
+   }
+ 
++  function normalizePurchaseOrderEmailJobStatus_(value){
++    const normalized = String(value || '').trim().toLowerCase();
++    return ['queued', 'processing', 'sent', 'failed'].includes(normalized) ? normalized : '';
++  }
++
++  function getCurrentPurchaseOrderEmailJobId_(){
++    const draft = getCurrentPurchaseOrderDraft_();
++    return String(ORDER_FLOW_PO_EMAIL_JOB_ID || (draft && draft.emailJobId) || '').trim();
++  }
++
++  function clearPurchaseOrderEmailJobStatusTimer_(){
++    if (ORDER_FLOW_PO_EMAIL_STATUS_TIMER) {
++      clearTimeout(ORDER_FLOW_PO_EMAIL_STATUS_TIMER);
++      ORDER_FLOW_PO_EMAIL_STATUS_TIMER = 0;
++    }
++  }
++
++  function schedulePurchaseOrderEmailJobStatusRefresh_(delayMs){
++    clearPurchaseOrderEmailJobStatusTimer_();
++    const jobId = getCurrentPurchaseOrderEmailJobId_();
++    if (!jobId || !CURRENT_TOKEN) return;
++    const delay = Number.isFinite(Number(delayMs)) ? Math.max(0, Number(delayMs)) : 10000;
++    ORDER_FLOW_PO_EMAIL_STATUS_TIMER = window.setTimeout(() => {
++      ORDER_FLOW_PO_EMAIL_STATUS_TIMER = 0;
++      refreshPurchaseOrderEmailJobStatus_().catch(err => {
++        console.warn('Purchase-order email queue status refresh failed.', err);
++      });
++    }, delay);
++  }
++
++  async function refreshPurchaseOrderEmailJobStatus_(){
++    const jobId = getCurrentPurchaseOrderEmailJobId_();
++    if (!jobId || !CURRENT_TOKEN) return null;
++    const resp = await callServer('getPurchaseOrderEmailJobStatus', {
++      token: CURRENT_TOKEN,
++      jobId: jobId
++    });
++    if (!resp || resp.ok !== true) {
++      throw new Error(normalizeUiErrorMessage_(resp && (resp.message || resp.error), 'Unable to check invoice email status.'));
++    }
++    const emailJob = resp.emailJob || {};
++    const status = normalizePurchaseOrderEmailJobStatus_(emailJob.status);
++    syncOrderFlowLifecycleFromResponse_(resp, {
++      expectedPortalState: buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })
++    });
++    ORDER_FLOW_PO_EMAIL_JOB_ID = String(emailJob.jobId || jobId || '').trim();
++    if (status === 'sent') {
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
++      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
++      ORDER_FLOW_PO_EMAIL_ASYNC_RECIPIENTS = '';
++      ORDER_FLOW_PO_EMAIL_RECIPIENTS = '';
++      ORDER_FLOW_PO_STATUS = { tone: '', message: '' };
++      clearPurchaseOrderEmailJobStatusTimer_();
++      clearOrderFlowOptimisticPurchaseOrderWorkflow_();
++      rerenderPurchaseOrderContinuationSurfaces_();
++      showNotice('Invoice email sent successfully.', 'ok');
++      return resp;
++    }
++    if (status === 'failed') {
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
++      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = normalizeUiErrorMessage_(emailJob.lastError, 'Unable to email the invoice.');
++      ORDER_FLOW_PO_STATUS = {
++        tone: 'error',
++        message: ORDER_FLOW_PO_EMAIL_ASYNC_ERROR
++      };
++      clearPurchaseOrderEmailJobStatusTimer_();
++      rerenderPurchaseOrderContinuationSurfaces_();
++      showNotice(ORDER_FLOW_PO_EMAIL_ASYNC_ERROR, 'err', { persist: true });
++      return resp;
++    }
++    if (status === 'queued' || status === 'processing') {
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = true;
++      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
++      rerenderPurchaseOrderContinuationSurfaces_();
++      if (!document.hidden) schedulePurchaseOrderEmailJobStatusRefresh_(10000);
++    }
++    return resp;
++  }
++
+   async function sendPurchaseOrderInvoiceEmailInBackground_(options){
+     const opts = (options && typeof options === 'object') ? options : {};
+     const recipients = Array.isArray(opts.recipients) ? opts.recipients.slice() : [];
+@@ -30653,30 +30788,12 @@
+       projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || ''
+     };
+     try {
+-      let preparedDraft = getPreparedPurchaseOrderDraftArtifactForPortalState_(clickedPortalState);
+-      if (!preparedDraft) {
+-        try {
+-          const prepResult = await ensurePreparedPurchaseOrderDraftArtifactClient_(Object.assign({}, opts, {
+-            portalState: clickedPortalState
+-          }));
+-          preparedDraft = prepResult && prepResult.preparedDraft
+-            ? prepResult.preparedDraft
+-            : getPreparedPurchaseOrderDraftArtifactForPortalState_(clickedPortalState);
+-        } catch (prepErr) {
+-          console.warn('Purchase-order draft invoice preparation failed before email send; falling back to live export.', prepErr);
+-        }
+-      }
++      const preparedDraft = getPreparedPurchaseOrderDraftArtifactForPortalState_(clickedPortalState);
+       if (preparedDraft) {
+-        basePayload.fileName = preparedDraft.fileName;
+-      } else {
+-        const pdfResult = await buildSummaryExportPdf_();
+-        const base64Data = await readBlobAsBase64_(pdfResult.blob);
+-        if (!base64Data) throw new Error('Unable to package the invoice PDF.');
+-        basePayload.fileName = pdfResult.fileName;
+-        basePayload.mimeType = 'application/pdf';
+-        basePayload.base64Data = base64Data;
++        basePayload.invoicePdfUrl = preparedDraft.invoicePdfUrl;
++        basePayload.invoiceFileName = preparedDraft.fileName;
+       }
+-      const resp = await callServer('sendPurchaseOrderInvoiceEmail', basePayload);
++      const resp = await callServer('queuePurchaseOrderInvoiceEmail', basePayload);
+       if (!resp || resp.ok !== true) {
+         if (resp && resp.gated) {
+           ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
+@@ -30696,15 +30813,32 @@
+         expectedPortalState: buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })
+       });
+       clearOrderFlowOptimisticPurchaseOrderWorkflow_();
+-      ORDER_FLOW_PO_EMAIL_RECIPIENTS = '';
+-      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
+-      ORDER_FLOW_PO_EMAIL_ASYNC_RECIPIENTS = '';
+-      ORDER_FLOW_PO_STATUS = { tone: '', message: '' };
++      const emailJob = resp.emailJob || {};
++      ORDER_FLOW_PO_EMAIL_JOB_ID = String(emailJob.jobId || '').trim();
++      const jobStatus = normalizePurchaseOrderEmailJobStatus_(emailJob.status);
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = jobStatus !== 'sent' && jobStatus !== 'failed';
++      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = jobStatus === 'failed'
++        ? normalizeUiErrorMessage_(emailJob.lastError, 'Unable to email the invoice.')
++        : '';
++      ORDER_FLOW_PO_EMAIL_ASYNC_RECIPIENTS = recipients.join(', ');
++      ORDER_FLOW_PO_STATUS = ORDER_FLOW_PO_EMAIL_ASYNC_ERROR
++        ? { tone: 'error', message: ORDER_FLOW_PO_EMAIL_ASYNC_ERROR }
++        : { tone: '', message: '' };
+       rerenderPurchaseOrderContinuationSurfaces_();
+-      showNotice('Invoice email sent successfully.', 'ok');
++      if (jobStatus === 'sent') {
++        ORDER_FLOW_PO_EMAIL_RECIPIENTS = '';
++        ORDER_FLOW_PO_EMAIL_ASYNC_RECIPIENTS = '';
++        showNotice('Invoice email sent successfully.', 'ok');
++      } else if (jobStatus === 'failed') {
++        showNotice(ORDER_FLOW_PO_EMAIL_ASYNC_ERROR, 'err', { persist: true });
++      } else {
++        showNotice('Your invoice email is queued and will send even if you close this tab.', 'ok');
++        if (!document.hidden) schedulePurchaseOrderEmailJobStatusRefresh_(10000);
++      }
+       return resp;
+     } catch (err) {
+       console.error('Background purchase-order invoice email failed.', err);
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
+       ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = normalizeUiErrorMessage_(err, 'Unable to email the invoice.');
+       ORDER_FLOW_PO_EMAIL_ASYNC_RECIPIENTS = recipients.join(', ');
+       ORDER_FLOW_PO_STATUS = {
+@@ -30715,7 +30849,6 @@
+       showNotice(ORDER_FLOW_PO_EMAIL_ASYNC_ERROR, 'err', { persist: true });
+       throw err;
+     } finally {
+-      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
+       rerenderPurchaseOrderContinuationSurfaces_();
+     }
+   }
+@@ -31098,7 +31231,35 @@
+     }
+   }
+ 
++  function syncPurchaseOrderEmailUiStateFromDraft_(){
++    const draft = getCurrentPurchaseOrderDraft_();
++    if (!draft) return;
++    const jobId = String(draft.emailJobId || '').trim();
++    const status = normalizePurchaseOrderEmailJobStatus_(draft.emailJobStatus);
++    if (jobId) ORDER_FLOW_PO_EMAIL_JOB_ID = jobId;
++    if ((status === 'queued' || status === 'processing') && !String(draft.invoiceSentAt || '').trim()) {
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = true;
++      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
++      if (!ORDER_FLOW_PO_EMAIL_STATUS_TIMER && !document.hidden) {
++        schedulePurchaseOrderEmailJobStatusRefresh_(10000);
++      }
++      return;
++    }
++    if (status === 'sent' || String(draft.invoiceSentAt || '').trim()) {
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
++      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
++      clearPurchaseOrderEmailJobStatusTimer_();
++      return;
++    }
++    if (status === 'failed') {
++      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
++      ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = String(draft.emailJobError || '').trim() || ORDER_FLOW_PO_EMAIL_ASYNC_ERROR;
++      clearPurchaseOrderEmailJobStatusTimer_();
++    }
++  }
++
+   function rerenderPurchaseOrderContinuationSurfaces_(){
++    syncPurchaseOrderEmailUiStateFromDraft_();
+     renderOrderFlowSummaryViewer_();
+     rerenderSummaryEstimateControls_();
+   }
+@@ -36951,7 +37112,7 @@
+         createEl(
+           'div',
+           'summaryEstimatePoStatus isSuccess',
+-          'Your invoice email is being sent in the background. You can keep working in this invoice tab while it finishes.'
++          'Your invoice email is queued and will send even if you close this tab.'
+         )
+       );
+     }
+@@ -39824,13 +39985,28 @@
+     window.addEventListener('resize', syncHeaderUtilityOffset);
+     window.addEventListener('focus', () => {
+       schedulePostPaymentHydrationCheck_('window-focus');
++      if (getCurrentPurchaseOrderEmailJobId_()) {
++        refreshPurchaseOrderEmailJobStatus_().catch(err => {
++          console.warn('Purchase-order email queue focus refresh failed.', err);
++        });
++      }
+     });
+     window.addEventListener('pageshow', () => {
+       schedulePostPaymentHydrationCheck_('pageshow');
++      if (getCurrentPurchaseOrderEmailJobId_()) {
++        refreshPurchaseOrderEmailJobStatus_().catch(err => {
++          console.warn('Purchase-order email queue pageshow refresh failed.', err);
++        });
++      }
+     });
+     document.addEventListener('visibilitychange', () => {
+       if (document.hidden === true) return;
+       schedulePostPaymentHydrationCheck_('visibilitychange');
++      if (getCurrentPurchaseOrderEmailJobId_()) {
++        refreshPurchaseOrderEmailJobStatus_().catch(err => {
++          console.warn('Purchase-order email queue visibility refresh failed.', err);
++        });
++      }
+     });
+ 
+   }
+diff --git a/docs/EMBEDDED_PORTAL_WRAPPER.md b/docs/EMBEDDED_PORTAL_WRAPPER.md
+index 0d22388..05bf774 100644
+--- a/docs/EMBEDDED_PORTAL_WRAPPER.md
++++ b/docs/EMBEDDED_PORTAL_WRAPPER.md
+@@ -4,7 +4,7 @@ This is the current production Squarespace `/portal` code block for the Red Thre
+ 
+ The wrapper uses direct iframe query passthrough:
+ 
+-- No visible loading overlay.
++- Lightweight branded loading overlay for tokenized project/checkout-return URLs.
+ - No `postMessage` token bridge required.
+ - The iframe `src` is set dynamically to the stable Apps Script deployment URL.
+ - The wrapper forwards these query parameters into the iframe URL when present:
+@@ -17,7 +17,7 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
+ ## Production Squarespace `/portal` Code Block
+ 
+ ```html
+-<!-- /portal PAGE Code Block — Fullscreen Apps Script + branded token passthrough -->
++<!-- /portal PAGE Code Block — Fullscreen Apps Script + branded token passthrough + loading state -->
+ <style>
+   html, body {
+     margin: 0 !important;
+@@ -43,9 +43,121 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
+     display: block;
+     background: transparent;
+   }
++
++  .rt-portal-loading {
++    position: absolute;
++    inset: 0;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    background:
++      radial-gradient(circle at 50% 42%, rgba(225, 29, 72, 0.18), transparent 34rem),
++      rgba(0, 0, 0, 0.86);
++    color: #fff;
++    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
++    transition: opacity 220ms ease, visibility 220ms ease;
++    z-index: 2;
++  }
++
++  .rt-portal-loading.is-hidden {
++    opacity: 0;
++    visibility: hidden;
++    pointer-events: none;
++  }
++
++  .rt-portal-loading-card {
++    width: min(420px, calc(100vw - 48px));
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    gap: 16px;
++    padding: 28px 24px;
++    text-align: center;
++  }
++
++  .rt-portal-spinner {
++    width: 72px;
++    height: 72px;
++    position: relative;
++    display: grid;
++    place-items: center;
++    filter: drop-shadow(0 0 16px rgba(225, 29, 72, 0.36));
++  }
++
++  .rt-portal-spinner::before {
++    content: "";
++    position: absolute;
++    inset: 0;
++    border-radius: 999px;
++    background:
++      conic-gradient(
++        from 210deg,
++        rgba(225, 29, 72, 0.16) 0deg,
++        rgba(225, 29, 72, 0.28) 78deg,
++        rgba(244, 63, 94, 0.96) 78deg,
++        rgba(244, 63, 94, 0.96) 186deg,
++        rgba(225, 29, 72, 0.16) 186deg,
++        rgba(225, 29, 72, 0.16) 360deg
++      );
++    -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
++    mask: radial-gradient(circle, transparent 58%, #000 60%);
++    animation: rtPortalSpin 1180ms linear infinite;
++  }
++
++  .rt-portal-spinner img {
++    position: relative;
++    z-index: 1;
++    width: 38px;
++    height: 38px;
++    object-fit: contain;
++    user-select: none;
++    -webkit-user-drag: none;
++    animation: rtPortalPulse 1200ms ease-in-out infinite;
++  }
++
++  .rt-portal-loading-title {
++    margin: 0;
++    color: #f8fafc;
++    font-size: 24px;
++    line-height: 1.25;
++    font-weight: 800;
++  }
++
++  .rt-portal-loading-sub {
++    margin: 0;
++    color: #cbd5e1;
++    font-size: 16px;
++    line-height: 1.45;
++    font-weight: 600;
++  }
++
++  @keyframes rtPortalSpin {
++    to { transform: rotate(360deg); }
++  }
++
++  @keyframes rtPortalPulse {
++    0%, 100% {
++      transform: scale(0.96);
++      opacity: 0.82;
++    }
++    50% {
++      transform: scale(1.04);
++      opacity: 1;
++    }
++  }
+ </style>
+ 
+ <div class="rt-portal-fullscreen">
++  <div class="rt-portal-loading is-hidden" id="rtPortalLoading" role="status" aria-live="polite">
++    <div class="rt-portal-loading-card">
++      <div class="rt-portal-spinner" aria-hidden="true">
++        <img src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
++      </div>
++      <p class="rt-portal-loading-title" id="rtPortalLoadingTitle">Loading portal…</p>
++      <p class="rt-portal-loading-sub">One moment while Red Threads opens your workspace.</p>
++    </div>
++  </div>
++
+   <iframe
+     id="rtPortalFrame"
+     title="Red Threads Portal"
+@@ -82,6 +194,37 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
+     }
+ 
+     var iframe = document.getElementById("rtPortalFrame");
++    var loading = document.getElementById("rtPortalLoading");
++    var loadingTitle = document.getElementById("rtPortalLoadingTitle");
++    var shouldShowLoading = !!(token || checkoutResult || stripeSessionId);
++
++    if (shouldShowLoading && loading) {
++      if (loadingTitle && token) {
++        loadingTitle.textContent = "Loading project…";
++      }
++
++      loading.classList.remove("is-hidden");
++    }
++
++    function hideLoading() {
++      if (!loading || !shouldShowLoading) {
++        return;
++      }
++
++      loading.classList.add("is-hidden");
++
++      window.setTimeout(function () {
++        if (loading && loading.parentNode) {
++          loading.parentNode.removeChild(loading);
++        }
++      }, 260);
++    }
++
++    if (shouldShowLoading) {
++      iframe.addEventListener("load", hideLoading);
++
++      window.setTimeout(hideLoading, 16000);
++    }
+ 
+     iframe.src = iframeParams.toString()
+       ? APP_URL + "?" + iframeParams.toString()
+@@ -96,4 +239,6 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
+ 2. Load `https://www.redthreads.com/portal?t=<token>` and confirm the tokenized project loads inside the iframe.
+ 3. Load `https://www.redthreads.com/portal?t=<token>&checkoutResult=success&stripeSessionId=<session_id>` and confirm all three parameters are present on the iframe URL.
+ 4. Confirm a paid/locked project lands on the Invoice/Summary tab.
+-5. Confirm there is no visible wrapper loading overlay and no dependency on a parent/iframe `postMessage` token bridge.
++5. Confirm the branded loading overlay does not appear for plain `https://www.redthreads.com/portal`.
++6. Confirm the branded loading overlay appears for tokenized/checkout-return URLs, then disappears once the iframe loads.
++7. Confirm there is no dependency on a parent/iframe `postMessage` token bridge.

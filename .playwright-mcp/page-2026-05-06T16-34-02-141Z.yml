@@ -1,0 +1,42 @@
+- generic [ref=e2]:
+  - main [ref=e3]:
+    - article [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e10]:
+          - generic [ref=e17]:
+            - link:
+              - /url: /
+          - iframe [ref=e22]:
+            - table [ref=f1e2]:
+              - rowgroup [ref=f1e3]:
+                - row:
+                  - cell
+                - row [ref=f1e4]:
+                  - cell [ref=f1e5]:
+                    - iframe [ref=f1e6]:
+                      - iframe [ref=f2e2]:
+                        - generic [ref=f3e2]:
+                          - link "Home" [ref=f3e3] [cursor=pointer]:
+                            - /url: https://www.redthreads.com
+                          - img "Red Threads logo"
+                          - generic [ref=f3e4]:
+                            - heading "PORTAL LOGIN" [level=1] [ref=f3e5]
+                            - paragraph [ref=f3e6]: Use the same email that you started your order with.
+                            - generic [ref=f3e7]: Email
+                            - generic [ref=f3e8]:
+                              - textbox "Email" [ref=f3e9]
+                              - button "Email help" [ref=f3e10] [cursor=pointer]: "?"
+                              - tooltip "You must use the email associated with a Red Threads order."
+                            - generic [ref=f3e11]: Password
+                            - generic [ref=f3e12]:
+                              - textbox "Password" [ref=f3e13]
+                              - button "Show password" [ref=f3e14] [cursor=pointer]: Show
+                              - button "Password help" [ref=f3e15] [cursor=pointer]: "?"
+                              - tooltip "First time here? The password you enter will become your portal password."
+                            - generic [ref=f3e16]:
+                              - button "Log in" [ref=f3e17] [cursor=pointer]
+                              - button "Reset password" [ref=f3e18] [cursor=pointer]
+        - generic:
+          - img
+          - img
+  - contentinfo

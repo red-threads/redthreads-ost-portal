@@ -4,7 +4,7 @@ This is the current production Squarespace `/portal` code block for the Red Thre
 
 The wrapper uses direct iframe query passthrough:
 
-- No visible loading overlay.
+- Lightweight branded loading overlay for tokenized project/checkout-return URLs.
 - No `postMessage` token bridge required.
 - The iframe `src` is set dynamically to the stable Apps Script deployment URL.
 - The wrapper forwards these query parameters into the iframe URL when present:
@@ -17,7 +17,7 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
 ## Production Squarespace `/portal` Code Block
 
 ```html
-<!-- /portal PAGE Code Block — Fullscreen Apps Script + branded token passthrough -->
+<!-- /portal PAGE Code Block — Fullscreen Apps Script + branded token passthrough + loading state -->
 <style>
   html, body {
     margin: 0 !important;
@@ -43,9 +43,121 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
     display: block;
     background: transparent;
   }
+
+  .rt-portal-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(circle at 50% 42%, rgba(225, 29, 72, 0.18), transparent 34rem),
+      rgba(0, 0, 0, 0.86);
+    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    transition: opacity 220ms ease, visibility 220ms ease;
+    z-index: 2;
+  }
+
+  .rt-portal-loading.is-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .rt-portal-loading-card {
+    width: min(420px, calc(100vw - 48px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 28px 24px;
+    text-align: center;
+  }
+
+  .rt-portal-spinner {
+    width: 72px;
+    height: 72px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    filter: drop-shadow(0 0 16px rgba(225, 29, 72, 0.36));
+  }
+
+  .rt-portal-spinner::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background:
+      conic-gradient(
+        from 210deg,
+        rgba(225, 29, 72, 0.16) 0deg,
+        rgba(225, 29, 72, 0.28) 78deg,
+        rgba(244, 63, 94, 0.96) 78deg,
+        rgba(244, 63, 94, 0.96) 186deg,
+        rgba(225, 29, 72, 0.16) 186deg,
+        rgba(225, 29, 72, 0.16) 360deg
+      );
+    -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+    mask: radial-gradient(circle, transparent 58%, #000 60%);
+    animation: rtPortalSpin 1180ms linear infinite;
+  }
+
+  .rt-portal-spinner img {
+    position: relative;
+    z-index: 1;
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    animation: rtPortalPulse 1200ms ease-in-out infinite;
+  }
+
+  .rt-portal-loading-title {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 24px;
+    line-height: 1.25;
+    font-weight: 800;
+  }
+
+  .rt-portal-loading-sub {
+    margin: 0;
+    color: #cbd5e1;
+    font-size: 16px;
+    line-height: 1.45;
+    font-weight: 600;
+  }
+
+  @keyframes rtPortalSpin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes rtPortalPulse {
+    0%, 100% {
+      transform: scale(0.96);
+      opacity: 0.82;
+    }
+    50% {
+      transform: scale(1.04);
+      opacity: 1;
+    }
+  }
 </style>
 
 <div class="rt-portal-fullscreen">
+  <div class="rt-portal-loading is-hidden" id="rtPortalLoading" role="status" aria-live="polite">
+    <div class="rt-portal-loading-card">
+      <div class="rt-portal-spinner" aria-hidden="true">
+        <img src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+      </div>
+      <p class="rt-portal-loading-title" id="rtPortalLoadingTitle">Loading portal…</p>
+      <p class="rt-portal-loading-sub">One moment while Red Threads opens your workspace.</p>
+    </div>
+  </div>
+
   <iframe
     id="rtPortalFrame"
     title="Red Threads Portal"
@@ -82,6 +194,37 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
     }
 
     var iframe = document.getElementById("rtPortalFrame");
+    var loading = document.getElementById("rtPortalLoading");
+    var loadingTitle = document.getElementById("rtPortalLoadingTitle");
+    var shouldShowLoading = !!(token || checkoutResult || stripeSessionId);
+
+    if (shouldShowLoading && loading) {
+      if (loadingTitle && token) {
+        loadingTitle.textContent = "Loading project…";
+      }
+
+      loading.classList.remove("is-hidden");
+    }
+
+    function hideLoading() {
+      if (!loading || !shouldShowLoading) {
+        return;
+      }
+
+      loading.classList.add("is-hidden");
+
+      window.setTimeout(function () {
+        if (loading && loading.parentNode) {
+          loading.parentNode.removeChild(loading);
+        }
+      }, 260);
+    }
+
+    if (shouldShowLoading) {
+      iframe.addEventListener("load", hideLoading);
+
+      window.setTimeout(hideLoading, 16000);
+    }
 
     iframe.src = iframeParams.toString()
       ? APP_URL + "?" + iframeParams.toString()
@@ -96,4 +239,6 @@ Raw Apps Script token links remain supported separately by the Apps Script web a
 2. Load `https://www.redthreads.com/portal?t=<token>` and confirm the tokenized project loads inside the iframe.
 3. Load `https://www.redthreads.com/portal?t=<token>&checkoutResult=success&stripeSessionId=<session_id>` and confirm all three parameters are present on the iframe URL.
 4. Confirm a paid/locked project lands on the Invoice/Summary tab.
-5. Confirm there is no visible wrapper loading overlay and no dependency on a parent/iframe `postMessage` token bridge.
+5. Confirm the branded loading overlay does not appear for plain `https://www.redthreads.com/portal`.
+6. Confirm the branded loading overlay appears for tokenized/checkout-return URLs, then disappears once the iframe loads.
+7. Confirm there is no dependency on a parent/iframe `postMessage` token bridge.
