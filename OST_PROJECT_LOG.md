@@ -45,3 +45,14 @@ Append-only project memory for decisions, session summaries, validation results,
 - Decisions: badge displays `DEV 1` in the top-right corner of the Apps Script app; Stripe-hosted pages are out of scope.
 - Current-state updates: GitHub merge completed; Apps Script push/version/deploy blocked because `clasp push`, `clasp deployments`, and `clasp versions` returned `Requested entity was not found`.
 - Follow-ups: increment the badge and append a log entry on each future shipped app revision.
+
+## 2026-05-27 - Mainline Full Ship Workflow Alignment
+
+- Mode: Produce final code.
+- Branch/commit/PR: `main`.
+- Goal: align portal workflow more closely with merch-store pricing full-ship practice.
+- Files changed: workflow docs, validation scripts, GitHub workflow/template, README.
+- Validation: `npm run validate`, `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, `git diff --check`.
+- Decisions: dev badge Full ship exposed too much branch/PR friction; owner-directed runtime Full ships now default to direct `main` plus Apps Script deployment; PRs are optional exceptions.
+- Current-state updates: no runtime files changed; no Apps Script deployment run for this docs/tooling workflow update.
+- Follow-ups: clasp binding/account still needs repair before Apps Script live deployment can complete from this environment.

@@ -1,3 +1,5 @@
+PRs are optional in this repo. Owner-directed runtime Full ships and normal docs/tooling updates default to direct `main` commits when the working tree is clean and validation passes. Use this template only when the owner explicitly asks for a PR or when repo protection/risk requires review.
+
 ## Mode
 
 - [ ] Architect

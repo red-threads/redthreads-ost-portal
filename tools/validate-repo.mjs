@@ -122,7 +122,9 @@ function stripAnchorAndQuery(target) {
 }
 
 const errors = [];
-const allowRuntimeChanges = process.env.VALIDATE_ALLOW_RUNTIME_CHANGES === '1';
+const allowRuntimeChanges =
+  process.env.VALIDATE_ALLOW_RUNTIME_CHANGES === '1' ||
+  process.argv.includes('--allow-runtime');
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) {

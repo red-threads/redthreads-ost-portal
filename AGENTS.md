@@ -72,6 +72,10 @@ Private lifecycle captures belong in `testcases/lifecycle-fixtures/private/`; on
 - Docs/tooling-only changes do not require `clasp push`, `clasp version`, or `clasp deploy`.
 - Runtime changes require explicit deployment intent before Full ship.
 - Full ship means validate, commit, push, `clasp push`, version, deploy to the existing deployment ID, smoke-test, and log the result.
+- Owner-directed runtime edits and Full ship requests use direct `main` by default when repo identity is confirmed, the active branch is `main`, the working tree has no unrelated changes, validation passes, and no destructive or high-risk operation is involved.
+- Do not create a branch or PR unless the owner explicitly asks for one, repo protection requires one, or the change is high-risk architecture/review work.
+- Mainline Full ship means: confirm repo and clean `main`, fast-forward safely, apply the focused runtime change, update the dev badge/revision and `OST_PROJECT_LOG.md` when applicable, run runtime validation, commit directly to `main`, push `main`, run `clasp push`/version/deploy to the existing deployment ID, smoke-test, and update current-state/logs with success or blocker.
+- If clasp returns `Requested entity was not found`, stop and log the blocker. Do not create a new deployment ID, alter `.clasp.json`, or change Script Properties unless explicitly instructed.
 
 ## Working Rules
 

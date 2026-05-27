@@ -31,6 +31,12 @@ Last aligned: 2026-05-27.
 - `TaxForm3372Manifest.html` is referenced in project context but absent from tracked runtime.
 - Named lifecycle helpers such as `buildPortalOrderSummary_`, `derivePortalLifecycle_`, and dashboard projection helpers are absent from tracked runtime.
 
+## Workflow
+
+- Current preferred workflow is mainline-first for owner-directed docs/tooling, runtime edits, and Full ship requests.
+- Branch/PR workflow is optional and should be used only when explicitly requested, required by repo protection, or appropriate for high-risk architecture/review work.
+- GitHub source can update successfully, but Apps Script live deployment remains blocked from the current local clasp binding/account until access is repaired.
+
 ## Known Follow-Ups
 
 - Current `Index.html` contains ACH promo copy, while project context says ACH is deferred/hidden unless explicitly re-enabled. Treat as runtime follow-up.

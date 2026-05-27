@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "validate": "node tools/validate-repo.mjs"
+    "validate": "node tools/validate-repo.mjs",
+    "validate:docs": "node tools/validate-repo.mjs",
+    "validate:runtime": "node tools/validate-repo.mjs --allow-runtime"
   }
 }

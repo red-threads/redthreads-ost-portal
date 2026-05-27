@@ -11,57 +11,74 @@ git branch --show-current
 git log --oneline -5
 ```
 
-## Docs/Tooling Validation
+For mainline work, ensure the active branch is `main` and fast-forward before editing:
 
 ```bash
+git pull --ff-only
+```
+
+## Mainline Docs/Tooling Workflow
+
+Use this for owner-directed docs, tooling, workflow, validation, and repo-guidance updates.
+
+```bash
+git status --short --branch
+git branch --show-current
+git pull --ff-only
 npm run validate
-node --check tools/validate-repo.mjs
-jq empty apps-script/src/appsscript.json apps-script/src/.clasp.json schemas/snapshot_v2_0_0.schema.json testcases/golden_sample_v2_1pj_min.json package.json
 git diff --check
-```
-
-Read-only clasp checks may be useful, but do not block docs/tooling work if the current local binding returns `Requested entity was not found`:
-
-```bash
-clasp deployments
-clasp versions
-```
-
-## Git And PR Flow
-
-```bash
-git switch -c codex/<short-task-name>
 git add <intended-files>
 git diff --cached --stat
-git diff --cached --check
 git commit -m "<type>: <summary>"
-git push -u origin <branch>
+git push origin main
 ```
 
-Stage only intended files. Never stage private fixture data or unrelated user changes.
+Do not run clasp for docs/tooling-only changes.
 
-## Runtime Pass
+## Mainline Runtime Workflow
 
-Use a runtime pass only when the task explicitly names runtime files. Run validation with runtime changes enabled, plus targeted browser or Apps Script checks for the changed behavior.
+Use this for owner-directed Apps Script runtime edits when the owner has not asked for PR review.
 
 ```bash
-VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate
+git status --short --branch
+git branch --show-current
+git pull --ff-only
+npm run validate:runtime
+git diff --check
+git add <intended-files>
+git diff --cached --stat
+git commit -m "<type>: <summary>"
+git push origin main
 ```
 
-Update `docs/CURRENT_BUILD_STATE.md` if repo/live reality changes and append a short entry to `OST_PROJECT_LOG.md`.
+Update `OST_PROJECT_LOG.md` for shipped dev revisions or meaningful runtime state changes.
 
-## Full Ship
+## Mainline Full Ship Workflow
 
-Full ship requires explicit owner approval and runtime changes that need deployment.
+Use this when the owner says `ship it`, `full ship`, `make it live`, or otherwise asks for the Apps Script runtime change to go live.
 
 ```bash
-npm run validate
-clasp push
+git status --short --branch
+git branch --show-current
+git pull --ff-only
+npm run validate:runtime
+git diff --check
+git add <intended-files>
+git diff --cached --stat
+git commit -m "<type>: <summary>"
+git push origin main
+
+cd apps-script/src
+clasp status
+clasp push --force
 clasp version "Short release note"
-clasp deploy --deploymentId <existing-deployment-id> --versionNumber <version>
+clasp deploy --deploymentId AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw --description "Short release note"
+clasp deployments
 ```
 
-Smoke-test:
+If this repo's clasp syntax requires `--versionNumber`, document the exact working command after a successful verified deployment. Do not guess or create a new deployment ID.
+
+Smoke-test after deployment:
 
 - Direct `/exec` auth shell or login path.
 - Direct `/exec?t=<token>` loads exactly one EXPORT_LOG row.
@@ -73,3 +90,35 @@ Smoke-test:
 - Stripe success, cancel, abandoned checkout, and stale-tab protection when payment runtime changed.
 
 Record version, deployment ID, smoke result, and known issues in `OST_PROJECT_LOG.md`.
+
+## Optional Branch/PR Workflow
+
+Branches and PRs are exceptions, not the default. Use them only when the owner explicitly asks for review, repo protection prevents direct `main`, the work is high-risk architecture/refactor work, or the task is review-only.
+
+```bash
+git switch -c codex/<short-task-name>
+git add <intended-files>
+git diff --cached --stat
+git diff --cached --check
+git commit -m "<type>: <summary>"
+git push -u origin <branch>
+```
+
+Do not let GitHub push/PR status block Apps Script deployment when the owner has requested a mainline Full ship and local validation has passed.
+
+## Apps Script Deployment Blocker Handling
+
+If any clasp deployment command returns `Requested entity was not found`:
+
+- Stop the Apps Script deployment flow.
+- Do not create a new Apps Script deployment ID.
+- Do not alter `.clasp.json`.
+- Do not change Script Properties.
+- Log the blocker in `OST_PROJECT_LOG.md` and `docs/CURRENT_BUILD_STATE.md`.
+- Report that GitHub source may be updated while Apps Script live deployment remains blocked until binding/account access is repaired.
+
+## Final Response Requirements
+
+For mainline docs/tooling updates, report branch, files changed, commit SHA, push status, validation results, confirmation that no runtime files changed, and confirmation that no clasp deploy ran.
+
+For Full ship runtime updates, also report clasp push/version/deploy results, deployment ID/version if successful, smoke-test result, and any deployment blocker.

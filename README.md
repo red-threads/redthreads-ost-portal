@@ -10,6 +10,8 @@ Google Apps Script HtmlService portal for Red Threads OST estimate/order workflo
 - `docs/RUNBOOK.md` - validation, Git/GitHub, runtime, and Full ship commands.
 - `docs/CONTEXT_INDEX.md` - tiny map of the remaining reference docs.
 
+Normal owner-directed work is mainline-first unless explicitly routed through PR review.
+
 ## Current V2 Load Contract
 
 Data flow:
