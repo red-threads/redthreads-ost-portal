@@ -19,11 +19,14 @@ jobs:
           node-version: 24
 
       - name: Validate repo
-        if: github.event_name != 'pull_request'
+        if: ${{ github.event_name != 'pull_request' }}
         run: npm run validate
 
       - name: Validate pull request
-        if: github.event_name == 'pull_request'
-        env:
-          VALIDATE_ALLOW_RUNTIME_CHANGES: ${{ contains(github.event.pull_request.body, 'Runtime files changed: yes') && '1' || '' }}
-        run: npm run validate
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          if grep -q 'Runtime files changed: yes' "$GITHUB_EVENT_PATH"; then
+            VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate
+          else
+            npm run validate
+          fi
