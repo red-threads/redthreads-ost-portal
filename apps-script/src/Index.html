@@ -28,6 +28,24 @@
     a{color:var(--link);text-decoration:underline}
     a:hover{color:var(--red)}
     .wrap{max-width:1260px;margin:18px auto;padding:0 14px}
+    .devRevisionBadge{
+      position:fixed;
+      top:8px;
+      right:8px;
+      z-index:10080;
+      padding:5px 8px;
+      border:1px solid rgba(17,17,17,.55);
+      border-radius:999px;
+      background:#facc15;
+      color:#111;
+      font-size:10px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      pointer-events:none;
+      box-shadow:0 2px 8px rgba(0,0,0,.18);
+    }
 
     /* Sticky header */
     .stickyHeader{
@@ -2022,6 +2040,7 @@
   </style>
 </head>
 <body>
+  <div class="devRevisionBadge" aria-label="Development revision 1">DEV 1</div>
   <div class="portalPageShell" id="portalPageShell">
   <div class="stickyHeader portalHeader" id="stickyHeader">
     <div class="headerExpanded" id="headerExpanded">

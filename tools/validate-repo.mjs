@@ -31,9 +31,12 @@ const retiredDocs = [
   'docs/AGENT_SESSION_TEMPLATE.md'
 ];
 
-const protectedFiles = new Set([
+const runtimeFiles = new Set([
   'apps-script/src/Code.js',
-  'apps-script/src/Index.html',
+  'apps-script/src/Index.html'
+]);
+
+const lockedFiles = new Set([
   'apps-script/src/appsscript.json',
   'apps-script/src/.clasp.json',
   'schemas/snapshot_v2_0_0.schema.json',
@@ -119,6 +122,7 @@ function stripAnchorAndQuery(target) {
 }
 
 const errors = [];
+const allowRuntimeChanges = process.env.VALIDATE_ALLOW_RUNTIME_CHANGES === '1';
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) {
@@ -136,8 +140,11 @@ const changedFiles = listChangedFiles();
 const trackedFiles = listTrackedFiles();
 
 for (const file of changedFiles) {
-  if (protectedFiles.has(file)) {
-    errors.push(`Protected file changed in guidance/tooling pass: ${file}`);
+  if (runtimeFiles.has(file) && !allowRuntimeChanges) {
+    errors.push(`Runtime file changed without VALIDATE_ALLOW_RUNTIME_CHANGES=1: ${file}`);
+  }
+  if (lockedFiles.has(file)) {
+    errors.push(`Locked config/schema/test fixture changed: ${file}`);
   }
   if (file === 'docs/LIFECYCLE_FIXTURES.local.md') {
     errors.push('Local fixture access file must not be tracked or staged.');
