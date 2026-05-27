@@ -7,3 +7,14 @@ data/
 *.csv
 *.jsonl
 EXPORT_LOG*
+
+# Local/private portal data and browser captures.
+.playwright-mcp/
+assets/
+bound-google-sheet/
+docs/LIFECYCLE_FIXTURES.local.md
+testcases/lifecycle-fixtures/private/*
+
+# Safe shared docs and placeholders.
+!docs/EXPORT_LOG_WIDE_SCHEMA.md
+!testcases/lifecycle-fixtures/private/.keep
