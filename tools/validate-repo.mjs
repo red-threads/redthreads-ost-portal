@@ -97,6 +97,13 @@ function listChangedFiles() {
   return [...files].filter(Boolean);
 }
 
+function listTrackedFiles() {
+  return git(['ls-files'])
+    .split('\n')
+    .map((file) => file.trim())
+    .filter(Boolean);
+}
+
 function isTextCandidate(file) {
   return file === '.gitignore' || ['.md', '.json', '.mjs', '.js', '.html', '.txt', '.yml', '.yaml'].includes(extname(file));
 }
@@ -126,6 +133,7 @@ for (const file of retiredDocs) {
 }
 
 const changedFiles = listChangedFiles();
+const trackedFiles = listTrackedFiles();
 
 for (const file of changedFiles) {
   if (protectedFiles.has(file)) {
@@ -147,7 +155,7 @@ for (const [file, text] of requiredMentions) {
   }
 }
 
-for (const file of changedFiles) {
+for (const file of trackedFiles) {
   if (!existsSync(file) || !isTextCandidate(file)) continue;
   const body = readFileSync(file, 'utf8');
   for (const pattern of privatePatterns) {
