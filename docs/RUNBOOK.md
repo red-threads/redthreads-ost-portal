@@ -78,11 +78,11 @@ cd apps-script/src
 clasp status
 clasp push --force
 clasp version "Short release note"
-clasp deploy --deploymentId AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw --description "Short release note"
+clasp deploy --deploymentId AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw --versionNumber <created-version-number> --description "Short release note"
 clasp deployments
 ```
 
-If this repo's clasp syntax requires `--versionNumber`, document the exact working command after a successful verified deployment. Do not guess or create a new deployment ID.
+Verified deployment syntax on 2026-05-27 used `--versionNumber` with the existing stable deployment ID. Do not guess or create a new deployment ID.
 
 Smoke-test after deployment:
 

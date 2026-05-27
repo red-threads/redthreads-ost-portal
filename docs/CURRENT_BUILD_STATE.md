@@ -28,14 +28,14 @@ Last aligned: 2026-05-27.
 - Browser-verified Apps Script project URL: `https://script.google.com/u/0/home/projects/1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU/edit`.
 - `clasp pull` against the verified live project succeeded on 2026-05-27 and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`.
 - After the binding repair, `clasp deployments` and `clasp versions` can read the live project.
-- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently observed at version 825, `Flatten PO submit loading card`.
+- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 826, `Dev Revision 1 badge`.
 - The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
 
 ## Blocked Or Unverified
 
-- Apps Script push/version/deploy still must be re-run after the live-source alignment commit to confirm end-to-end deployment from this environment.
-- Smoke testing of the stable public URL still needs to confirm the `DEV 1` badge is visible after deployment.
 - The live-pulled server source had a checked-in Team Mode default credential; the repo copy now requires the Team Mode password to come from Apps Script Script Properties instead. Confirm that property before relying on Team Mode in production.
+- Public stable URL smoke test confirmed the deployed HTML contains `DEV 1` and `devRevisionBadge`.
+- Full lifecycle/payment fixture regression was not run during this source-alignment/dev-badge Full ship.
 
 ## Workflow
 
