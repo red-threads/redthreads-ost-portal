@@ -1,38 +1,26 @@
-# Red Threads OST Portal (Apps Script) - V2
+# Red Threads OST Portal
 
-## What this is
+Google Apps Script HtmlService portal for Red Threads OST estimate/order workflows.
 
-A Google Apps Script HTMLService web app that renders an estimate snapshot stored in a Google Sheet tab `EXPORT_LOG`.
+## Start Here
+
+- `AGENTS.md` - canonical agent rules and protected surfaces.
+- `docs/CURRENT_BUILD_STATE.md` - current repo/build reality and known mismatches.
+- `OST_PROJECT_LOG.md` - append-only session and decision history.
+- `docs/RUNBOOK.md` - validation, Git/GitHub, runtime, and Full ship commands.
+- `docs/CONTEXT_INDEX.md` - tiny map of the remaining reference docs.
+
+## Current V2 Load Contract
 
 Data flow:
-Calculator -> Make.com -> `EXPORT_LOG` (wide row) -> Portal loads via `?t=<token>` -> parses `snapshotJson` -> renders V2.
+Calculator -> Make.com -> `EXPORT_LOG` wide row -> portal loads `?t=<token>` -> parses immutable `snapshotJson` -> renders V2.
 
-## V2 Load Contract (Locked)
+Token lookup is by EXPORT_LOG Column A only. A token is not a project number.
 
-- Portal URL param: `t`
-  - Example: `...?t=<token>`
-- Lookup: match `EXPORT_LOG` Column A (`token`) to `t`.
-- Read the matching row and parse:
-  - `snapshotJson` (immutable) -> render
-  - `portalStateJson` (mutable) -> hide/show + quantities state
-
-## Snapshot Contract (Locked)
-
-Top-level:
+Top-level snapshot shape:
 
 ```json
 { "meta": { "...": "..." }, "printJobs": [] }
 ```
 
-## Shared Context
-
-Start here before changing the repo:
-
-- `AGENTS.md` - operating rules for Codex, ChatGPT Atlas, GitHub inspection, and owner handoffs.
-- `docs/CONTEXT_INDEX.md` - map of canonical docs, runtime files, validation, and local-only context.
-- `docs/CURRENT_BUILD_STATE.md` - current repo/build alignment notes and known contradictions.
-- `OST_PROJECT_LOG.md` - durable project memory and historical architecture decisions.
-- `docs/VALIDATION.md` - commands for docs/tooling validation and future launch-readiness checks.
-- `docs/FULL_SHIP_RUNBOOK.md` - full runtime ship process when code changes require Apps Script deployment.
-
-This repository is the shared source of truth. Do not rely on pasted chat snippets when repo files or GitHub history can answer the question.
+For the locked EXPORT_LOG column order, see `docs/EXPORT_LOG_WIDE_SCHEMA.md`.

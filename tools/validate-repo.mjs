@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname, extname, join, normalize } from 'node:path';
 
 const requiredFiles = [
   'AGENTS.md',
@@ -7,24 +8,30 @@ const requiredFiles = [
   'README.md',
   'docs/CONTEXT_INDEX.md',
   'docs/CURRENT_BUILD_STATE.md',
-  'docs/DECISION_LOG.md',
-  'docs/ATLAS_REVIEW_GUIDE.md',
-  'docs/CODEX_GITHUB_CLI_WORKFLOW.md',
-  'docs/DEPLOYMENT_NOTES.md',
-  'docs/INTEGRATION_REGISTRY.md',
-  'docs/AGENT_SESSION_TEMPLATE.md',
-  'docs/FULL_SHIP_RUNBOOK.md',
-  'docs/VALIDATION.md',
-  'docs/LIFECYCLE_FIXTURES.local.example.md',
+  'docs/RUNBOOK.md',
   'docs/EXPORT_LOG_WIDE_SCHEMA.md',
-  'docs/CODEX_RULES.md',
+  'docs/LIFECYCLE_FIXTURES.local.example.md',
   'testcases/lifecycle-fixtures/README.md',
   'testcases/lifecycle-fixtures/private/.keep',
+  '.github/pull_request_template.md',
+  '.github/workflows/validate.yml',
   'package.json',
   'tools/validate-repo.mjs'
 ];
 
-const forbiddenChanged = new Set([
+const retiredDocs = [
+  'docs/CODEX_RULES.md',
+  'docs/DECISION_LOG.md',
+  'docs/ATLAS_REVIEW_GUIDE.md',
+  'docs/CODEX_GITHUB_CLI_WORKFLOW.md',
+  'docs/DEPLOYMENT_NOTES.md',
+  'docs/FULL_SHIP_RUNBOOK.md',
+  'docs/VALIDATION.md',
+  'docs/INTEGRATION_REGISTRY.md',
+  'docs/AGENT_SESSION_TEMPLATE.md'
+];
+
+const protectedFiles = new Set([
   'apps-script/src/Code.js',
   'apps-script/src/Index.html',
   'apps-script/src/appsscript.json',
@@ -34,12 +41,12 @@ const forbiddenChanged = new Set([
 ]);
 
 const requiredMentions = [
-  ['AGENTS.md', 'MODE'],
+  ['AGENTS.md', 'Where Information Belongs'],
+  ['AGENTS.md', 'Do not copy the same rule into multiple docs'],
   ['docs/CURRENT_BUILD_STATE.md', 'printJobs.minItems: 0'],
-  ['docs/DECISION_LOG.md', 'Duplicate skuKey'],
-  ['docs/DEPLOYMENT_NOTES.md', 'Do not run `clasp push`'],
-  ['docs/VALIDATION.md', 'npm run validate'],
-  ['docs/INTEGRATION_REGISTRY.md', 'Do not add secrets']
+  ['OST_PROJECT_LOG.md', 'Session Entry Template'],
+  ['docs/RUNBOOK.md', 'Full Ship'],
+  ['docs/CONTEXT_INDEX.md', 'Core reading set']
 ];
 
 const privatePatterns = [
@@ -49,27 +56,80 @@ const privatePatterns = [
   /sk_(live|test)_[A-Za-z0-9]+/i
 ];
 
-function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
+const linkCheckedFiles = [
+  'README.md',
+  'AGENTS.md',
+  'OST_PROJECT_LOG.md',
+  'docs/CONTEXT_INDEX.md',
+  'docs/CURRENT_BUILD_STATE.md',
+  'docs/RUNBOOK.md'
+];
+
+function git(args, options = {}) {
+  return execFileSync('git', args, { encoding: 'utf8', ...options }).trim();
+}
+
+function tryGit(args) {
+  try {
+    return git(args);
+  } catch {
+    return '';
+  }
+}
+
+function listChangedFiles() {
+  const files = new Set();
+  const status = tryGit(['status', '--porcelain']);
+  for (const line of status.split('\n').filter(Boolean)) {
+    files.add(line.slice(3).trim().replace(/^"|"$/g, ''));
+  }
+
+  const baseRef = process.env.GITHUB_BASE_REF
+    ? `origin/${process.env.GITHUB_BASE_REF}`
+    : (process.env.VALIDATE_BASE_REF || '');
+  if (baseRef) {
+    const diff = tryGit(['diff', '--name-only', `${baseRef}...HEAD`]);
+    for (const file of diff.split('\n').filter(Boolean)) {
+      files.add(file.trim());
+    }
+  }
+
+  return [...files].filter(Boolean);
+}
+
+function isTextCandidate(file) {
+  return file === '.gitignore' || ['.md', '.json', '.mjs', '.js', '.html', '.txt', '.yml', '.yaml'].includes(extname(file));
+}
+
+function isRelativeDocLink(target) {
+  return !target.startsWith('#') &&
+    !/^[a-z][a-z0-9+.-]*:/i.test(target) &&
+    !target.startsWith('mailto:');
+}
+
+function stripAnchorAndQuery(target) {
+  return target.split('#')[0].split('?')[0];
 }
 
 const errors = [];
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) {
-    errors.push(`Missing required file: ${file}`);
+    errors.push(`Missing required canonical file: ${file}`);
   }
 }
 
-const status = git(['status', '--porcelain']);
-const changedFiles = status
-  .split('\n')
-  .filter(Boolean)
-  .map((line) => line.slice(3).trim().replace(/^"|"$/g, ''));
+for (const file of retiredDocs) {
+  if (existsSync(file)) {
+    errors.push(`Retired duplicate doc should not exist: ${file}`);
+  }
+}
+
+const changedFiles = listChangedFiles();
 
 for (const file of changedFiles) {
-  if (forbiddenChanged.has(file)) {
-    errors.push(`Forbidden docs/tooling-pass change detected: ${file}`);
+  if (protectedFiles.has(file)) {
+    errors.push(`Protected file changed in guidance/tooling pass: ${file}`);
   }
   if (file === 'docs/LIFECYCLE_FIXTURES.local.md') {
     errors.push('Local fixture access file must not be tracked or staged.');
@@ -88,12 +148,32 @@ for (const [file, text] of requiredMentions) {
 }
 
 for (const file of changedFiles) {
-  if (!existsSync(file) || file.startsWith('.git/')) continue;
-  if (!(/\.(md|json|mjs|js|html|txt|gitignore)$/.test(file) || file === '.gitignore')) continue;
+  if (!existsSync(file) || !isTextCandidate(file)) continue;
   const body = readFileSync(file, 'utf8');
   for (const pattern of privatePatterns) {
     if (pattern.test(body)) {
       errors.push(`Potential private token/secret pattern found in ${file}`);
+    }
+  }
+}
+
+const markdownLinkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
+for (const file of linkCheckedFiles) {
+  if (!existsSync(file)) continue;
+  const body = readFileSync(file, 'utf8');
+  let match;
+  while ((match = markdownLinkPattern.exec(body)) !== null) {
+    const target = (match[1] || '').trim();
+    if (!target || !isRelativeDocLink(target)) continue;
+    const cleanTarget = stripAnchorAndQuery(target);
+    if (!cleanTarget || cleanTarget.includes('*')) continue;
+    const resolved = normalize(join(dirname(file), cleanTarget));
+    if (!existsSync(resolved)) {
+      errors.push(`${file} references missing local file: ${target}`);
+      continue;
+    }
+    if (!statSync(resolved).isFile()) {
+      errors.push(`${file} local reference is not a file: ${target}`);
     }
   }
 }

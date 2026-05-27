@@ -1,43 +1,36 @@
 # OST Project Log
 
-Canonical project memory for the Red Threads OST Portal. This file records durable architecture context, repo-state alignment, and follow-up risks so agents do not rely on scattered chat memory.
+Append-only project memory for decisions, session summaries, validation results, and follow-ups. Keep entries short and link to commits/PRs when available.
+
+## Session Entry Template
+
+```md
+## YYYY-MM-DD - Short Title
+
+- Mode:
+- Branch/commit/PR:
+- Goal:
+- Files changed:
+- Validation:
+- Decisions:
+- Current-state updates:
+- Follow-ups:
+```
 
 ## 2026-05-27 - Build Alignment Reset
 
-Task class: docs/tooling, shared-agent visibility, repo workflow hardening, build alignment, context reset.
+- Mode: Produce final code.
+- Branch/commit/PR: `codex/build-alignment-repo-visibility`, commit `f61f03d`.
+- Goal: create shared repo visibility for Codex, Atlas, GitHub inspection, and owner workflow.
+- Files changed: docs/tooling/fixture hygiene only.
+- Validation: `npm run validate`, `node --check tools/validate-repo.mjs`, `jq empty ...`, `git diff --check`.
+- Decisions: docs/tooling-only changes do not require `clasp push`, `clasp version`, or `clasp deploy`; duplicate `skuKey` values are allowed and must not be treated as unique.
+- Current-state updates: local clasp deployment/version verification is blocked with `Requested entity was not found`; current tracked runtime appears behind fuller portal architecture context.
+- Follow-ups: ACH copy is a runtime follow-up; schema `printJobs.minItems: 0` mismatch needs a separate schema/contract correction task.
 
-Repo-verified facts:
-- Repository: `red-threads/redthreads-ost-portal`.
-- Local path: `/Users/Josiah/Documents/GitHub/redthreads-ost-portal`.
-- Runtime root: `apps-script/src/`.
-- Current tracked runtime files: `Code.js`, `Index.html`, `appsscript.json`, `.clasp.json`.
-- Current tracked portal is a V2 Apps Script estimate renderer backed by `EXPORT_LOG`.
-- `Code.js` contains the current Portal DB Sheet ID as a hardcoded required sheet ID.
-- `.clasp.json` contains script ID `1C9ohEZC8rbGMWVfvyW_jzWjzt8AZAdrS8Idy8kLbi2O7VZ6VoPmQ0cp9`.
+## 2026-05-27 - Lean Guidance Consolidation
 
-Prompt/historical facts to preserve until repo-verification catches up:
-- Stable Apps Script deployment ID is expected to be `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
-- Stable public Apps Script URL is expected to be `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec`.
-- Public branded wrapper URL is `https://www.redthreads.com/portal`.
-- Historical calculator sheet ID: `1STzkJjn5WRoBqa5H1KdxAbn4-JCab9DCX4FuZt5HImc`.
-- Historical Make scenario: `4062378`.
-
-Current architecture memory:
-- V2 snapshot contract is locked.
-- Calculator remains pricing authority.
-- Portal reads immutable `snapshotJson`; it must not recompute pricing authority.
-- Direct token access and authenticated shell/dashboard access are both permanent in the intended architecture.
-- Dashboard should load metadata only; project load is where snapshot parsing belongs.
-- Hosted Stripe Checkout is the active MVP card payment path in the fuller architecture.
-- Cloud Run is the Stripe webhook trust boundary in the fuller architecture.
-- PORTAL_ORDERS and PORTAL_ACCOUNTS are durable operational layers in the fuller architecture.
-- ACH is deferred/hidden unless explicitly re-enabled.
-- Team/admin controls must not be broadened without explicit scope.
-- Lifecycle fixture baselines are required before lifecycle deletion/refactor work.
-
-Open alignment risks:
-- Current tracked runtime does not yet show the fuller dashboard/order/Stripe lifecycle architecture named in the prompt.
-- `TaxForm3372Manifest.html` is not present in tracked runtime.
-- Current `.clasp.json` binding cannot verify deployments from this environment.
-- Current `Index.html` contains ACH promo copy; treat as runtime follow-up, not a docs/tooling edit.
-- Snapshot schema allows zero print jobs while docs/prompt say supported V2 family is 1-4 PrintJobs.
+- Mode: Produce final code.
+- Branch/commit/PR: `codex/build-alignment-repo-visibility`.
+- Goal: reduce rule drift by consolidating behavior rules into `AGENTS.md`, current facts into `docs/CURRENT_BUILD_STATE.md`, decisions/session history into this log, and commands into `docs/RUNBOOK.md`.
+- Decisions: delete duplicated docs instead of keeping pointer stubs; add PR template and GitHub Actions validation.
