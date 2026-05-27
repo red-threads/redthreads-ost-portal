@@ -38,10 +38,10 @@ Append-only project memory for decisions, session summaries, validation results,
 ## 2026-05-27 - Dev Revision 1 Badge
 
 - Mode: Full ship.
-- Branch/commit/PR: `codex/dev-badge-rev1`.
+- Branch/commit/PR: `codex/dev-badge-rev1`, PR #3, merge commit `093f929`.
 - Goal: add a visible in-app dev badge for TestFlight-style build verification.
 - Files changed: `apps-script/src/Index.html`, `OST_PROJECT_LOG.md`, runtime validation tooling/runbook workflow support.
-- Validation: `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `node --check tools/validate-repo.mjs`, `jq empty ...`, `git diff --check`.
+- Validation: `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `node --check tools/validate-repo.mjs`, `jq empty ...`, `git diff --check`, GitHub PR validation passed.
 - Decisions: badge displays `DEV 1` in the top-right corner of the Apps Script app; Stripe-hosted pages are out of scope.
-- Current-state updates: runtime change requires GitHub push and Apps Script Full ship.
+- Current-state updates: GitHub merge completed; Apps Script push/version/deploy blocked because `clasp push`, `clasp deployments`, and `clasp versions` returned `Requested entity was not found`.
 - Follow-ups: increment the badge and append a log entry on each future shipped app revision.
