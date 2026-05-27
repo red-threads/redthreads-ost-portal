@@ -7,12 +7,12 @@ Last aligned: 2026-05-27.
 - Repository: `red-threads/redthreads-ost-portal`.
 - Local path: `/Users/Josiah/Documents/GitHub/redthreads-ost-portal`.
 - Runtime root: `apps-script/src/`.
-- Tracked runtime files: `Code.js`, `Index.html`, `appsscript.json`, `.clasp.json`.
-- Current tracked app is a V2 Apps Script estimate portal that loads EXPORT_LOG rows by token and renders `snapshotJson`.
+- Tracked runtime files: `Code.js`, `Index.html`, `TaxForm3372Manifest.html`, `appsscript.json`, `.clasp.json`.
+- Current tracked app has been pulled from the live Apps Script project and includes the fuller portal architecture: auth shell, dashboard/order lifecycle surfaces, Stripe checkout routing, Team Mode lanes, and tax-form manifest support.
 - Portal DB Sheet ID appears in `Code.js`: `16KrxpEv8s-U5gjLX-DZK25GbrnkeKbjgInngie8Ce_c`.
-- `.clasp.json` contains script ID `1C9ohEZC8rbGMWVfvyW_jzWjzt8AZAdrS8Idy8kLbi2O7VZ6VoPmQ0cp9`.
+- `.clasp.json` now points to the live Apps Script project ID verified in Apps Script: `1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU`.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
-- `package.json` exposes `npm run validate`.
+- `package.json` exposes `npm run validate`, `npm run validate:runtime`, and `npm run validate:binding`.
 
 ## Prompt/Historical
 
@@ -23,14 +23,19 @@ Last aligned: 2026-05-27.
 - Historical Make scenario: `4062378`.
 - Fuller intended architecture includes PORTAL_ORDERS, PORTAL_ACCOUNTS, USERS, USER_SESSIONS, hosted Stripe Checkout, Cloud Run webhook forwarding, Gmail notifications, QuickBooks, and Pipedrive.
 
+## Live Apps Script Alignment
+
+- Browser-verified Apps Script project URL: `https://script.google.com/u/0/home/projects/1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU/edit`.
+- `clasp pull` against the verified live project succeeded on 2026-05-27 and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`.
+- After the binding repair, `clasp deployments` and `clasp versions` can read the live project.
+- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently observed at version 825, `Flatten PO submit loading card`.
+- The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
+
 ## Blocked Or Unverified
 
-- `clasp deployments` and `clasp versions` returned `Requested entity was not found` from the current local binding/account on 2026-05-27.
-- `clasp push` for Dev Revision 1 also returned `Requested entity was not found` on 2026-05-27, so no Apps Script version/deploy was created from this environment.
-- A Dev Revision 1 re-ship attempt on 2026-05-27 confirmed `clasp status` can list local source files, but `clasp deployments`, `clasp versions`, and `clasp push --force` still return `Requested entity was not found`.
-- The fuller dashboard/order/Stripe/lifecycle architecture described in project context is not present in tracked runtime.
-- `TaxForm3372Manifest.html` is referenced in project context but absent from tracked runtime.
-- Named lifecycle helpers such as `buildPortalOrderSummary_`, `derivePortalLifecycle_`, and dashboard projection helpers are absent from tracked runtime.
+- Apps Script push/version/deploy still must be re-run after the live-source alignment commit to confirm end-to-end deployment from this environment.
+- Smoke testing of the stable public URL still needs to confirm the `DEV 1` badge is visible after deployment.
+- The live-pulled server source had a checked-in Team Mode default credential; the repo copy now requires the Team Mode password to come from Apps Script Script Properties instead. Confirm that property before relying on Team Mode in production.
 
 ## Workflow
 

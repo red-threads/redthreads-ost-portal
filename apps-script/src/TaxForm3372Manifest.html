@@ -1,0 +1,1443 @@
+<script type="application/json" id="taxForm3372ManifestData">
+{
+  "schemaVersion": "1.0.0",
+  "documentId": "mi-tax-form-3372",
+  "documentVersion": "3372-rev-02-25",
+  "title": "Michigan Sales and Use Tax Certificate of Exemption",
+  "source": {
+    "jurisdiction": "MI",
+    "agency": "Michigan Department of Treasury",
+    "formNumber": "3372",
+    "revision": "02-25",
+    "officialPdfUrl": "https://www.michigan.gov/-/media/Project/Websites/taxes/Forms/SUW/3372.pdf?rev=ac6cc85e6c4f41fb8212b9811ed94656",
+    "drivePdf": {
+      "driveFileId": "1YFX3fr9KQezRY_zkPrI8_A-qTlNnOxTc",
+      "viewUrl": "https://drive.google.com/file/d/1YFX3fr9KQezRY_zkPrI8_A-qTlNnOxTc/view"
+    },
+    "pageDimensionsPts": {
+      "width": 612,
+      "height": 792
+    },
+    "pageImages": [
+      {
+        "page": 1,
+        "driveFileId": "15mx_j0YXlnfdBFkQdc_xpeH8XIXusyf3",
+        "viewUrl": "https://drive.google.com/file/d/15mx_j0YXlnfdBFkQdc_xpeH8XIXusyf3/view"
+      },
+      {
+        "page": 2,
+        "driveFileId": "1GYkbUhqaD7t4yDUy8t8FrwhMS0IJqH1l",
+        "viewUrl": "https://drive.google.com/file/d/1GYkbUhqaD7t4yDUy8t8FrwhMS0IJqH1l/view"
+      }
+    ],
+    "fieldGeometrySource": "Page 1 AcroForm widget rectangles from the official PDF, with a small number of portal-only composite fields approximated for MVP."
+  },
+  "ui": {
+    "coordinateSystem": {
+      "type": "normalized",
+      "origin": "top-left",
+      "xRange": [
+        0,
+        1
+      ],
+      "yRange": [
+        0,
+        1
+      ]
+    },
+    "defaultZoomMode": "fit-width",
+    "interactivePages": [
+      1
+    ],
+    "readOnlyPages": [
+      2
+    ]
+  },
+  "validation": {
+    "requireAllMandatoryFields": true,
+    "signatureRequiredForElectronic": false,
+    "page2ReadOnly": true,
+    "dateFormat": "MM/DD/YYYY",
+    "preserveHiddenFieldValues": true
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "section1",
+        "section": "SECTION 1",
+        "title": "Type of Purchase",
+        "help": "Choose how this certificate should apply, then complete any matching order or expiration details that appear.",
+        "focus": {
+          "x": 0.063,
+          "y": 0.145,
+          "w": 0.88,
+          "h": 0.165
+        }
+      },
+      {
+        "id": "section2",
+        "section": "SECTION 2",
+        "title": "Items Covered",
+        "help": "Tell us whether this certificate covers all purchases or only certain items, and describe limited items when needed.",
+        "focus": {
+          "x": 0.058,
+          "y": 0.314,
+          "w": 0.875,
+          "h": 0.102
+        }
+      },
+      {
+        "id": "section3",
+        "section": "SECTION 3",
+        "title": "Basis for Exemption Claim",
+        "help": "Choose the exemption basis that fits your organization. Some choices open one extra detail field right on the certificate.",
+        "focus": {
+          "x": 0.056,
+          "y": 0.386,
+          "w": 0.877,
+          "h": 0.338
+        }
+      },
+      {
+        "id": "section4",
+        "section": "SECTION 4",
+        "title": "Certification",
+        "help": "Enter the business and signer details, then add an optional signature for a more complete certificate preview.",
+        "focus": {
+          "x": 0.063,
+          "y": 0.733,
+          "w": 0.88,
+          "h": 0.213
+        }
+      },
+      {
+        "id": "review",
+        "title": "Review",
+        "help": "Review the completed certificate and make any last changes before the submission and document actions are wired in.",
+        "focus": {
+          "x": 0.063,
+          "y": 0.145,
+          "w": 0.88,
+          "h": 0.802
+        }
+      }
+    ]
+  },
+  "pages": [
+    {
+      "page": 1,
+      "role": "interactive",
+      "readonly": false,
+      "sourceImage": {
+        "driveFileId": "15mx_j0YXlnfdBFkQdc_xpeH8XIXusyf3",
+        "viewUrl": "https://drive.google.com/file/d/15mx_j0YXlnfdBFkQdc_xpeH8XIXusyf3/view"
+      },
+      "fields": [
+        {
+          "id": "purchase_type",
+          "page": 1,
+          "section": "SECTION 1",
+          "type": "radio",
+          "label": "Type of Purchase",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.112,
+            "y": 0.157,
+            "w": 0.828,
+            "h": 0.068
+          },
+          "binding": {
+            "path": "section1.purchaseType"
+          },
+          "ui": {
+            "variant": "radio-list",
+            "optionStyle": "checkbox-hitbox",
+            "options": [
+              {
+                "value": "one_time",
+                "label": "A. One-Time Purchase",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.157,
+                  "w": 0.22,
+                  "h": 0.032
+                },
+                "controlCoords": {
+                  "x": 0.1185,
+                  "y": 0.1634,
+                  "w": 0.0215,
+                  "h": 0.0149
+                },
+                "flatten": {
+                  "widgetName": " One Time Purchase checkbox"
+                }
+              },
+              {
+                "value": "blanket_expiring",
+                "label": "C. Blanket Certificate",
+                "coords": {
+                  "x": 0.505,
+                  "y": 0.157,
+                  "w": 0.29,
+                  "h": 0.032
+                },
+                "controlCoords": {
+                  "x": 0.5111,
+                  "y": 0.1624,
+                  "w": 0.0221,
+                  "h": 0.0166
+                },
+                "flatten": {
+                  "widgetName": " Blanket Certificate"
+                }
+              },
+              {
+                "value": "blanket_recurring",
+                "label": "B. Blanket Certificate. Recurring Business Relationship",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.2,
+                  "w": 0.44,
+                  "h": 0.032
+                },
+                "controlCoords": {
+                  "x": 0.119,
+                  "y": 0.2077,
+                  "w": 0.0221,
+                  "h": 0.0166
+                },
+                "flatten": {
+                  "widgetName": " Recurring Business Relationship"
+                }
+              }
+            ]
+          },
+          "flatten": {
+            "strategy": "pdf-checkbox-group",
+            "clearUnselectedWidgets": true
+          }
+        },
+        {
+          "id": "order_or_invoice_number",
+          "page": 1,
+          "section": "SECTION 1",
+          "type": "text",
+          "label": "Order or Invoice Number",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.3139,
+            "y": 0.1721,
+            "w": 0.1529,
+            "h": 0.0202
+          },
+          "binding": {
+            "path": "section1.orderOrInvoiceNumber"
+          },
+          "ui": {
+            "placeholder": "Enter order or invoice number",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " One Time Purchase Order or Invoice Number"
+          }
+        },
+        {
+          "id": "blanket_expiration_date",
+          "page": 1,
+          "section": "SECTION 1",
+          "type": "date",
+          "label": "Expiration Date (maximum of four years)",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.7927,
+            "y": 0.173,
+            "w": 0.1233,
+            "h": 0.0183
+          },
+          "binding": {
+            "path": "section1.blanketExpirationDate"
+          },
+          "ui": {
+            "placeholder": "MM/DD/YYYY",
+            "format": "MM/DD/YYYY"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " Blanket Certificate Expiration date (max of four years)"
+          }
+        },
+        {
+          "id": "seller_name_address",
+          "page": 1,
+          "section": "SECTION 1",
+          "type": "text",
+          "label": "Seller's Name and Address",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.0711,
+            "y": 0.2797,
+            "w": 0.8698,
+            "h": 0.0202
+          },
+          "binding": {
+            "path": "section1.sellerNameAddress"
+          },
+          "ui": {
+            "placeholder": "Seller legal name and mailing address",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Seller's Name and Address"
+          }
+        },
+        {
+          "id": "items_covered",
+          "page": 1,
+          "section": "SECTION 2",
+          "type": "radio",
+          "label": "Items Covered by This Certificate",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.112,
+            "y": 0.338,
+            "w": 0.826,
+            "h": 0.045
+          },
+          "binding": {
+            "path": "section2.itemsCovered"
+          },
+          "ui": {
+            "variant": "radio-list",
+            "optionStyle": "checkbox-hitbox",
+            "options": [
+              {
+                "value": "all_items",
+                "label": "1. All items purchased.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.338,
+                  "w": 0.25,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1197,
+                  "y": 0.3431,
+                  "w": 0.0194,
+                  "h": 0.0158
+                },
+                "flatten": {
+                  "widgetName": " All items purchased"
+                }
+              },
+              {
+                "value": "limited_items",
+                "label": "2. Limited to the following items:",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.357,
+                  "w": 0.36,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1197,
+                  "y": 0.3624,
+                  "w": 0.0194,
+                  "h": 0.0158
+                },
+                "flatten": {
+                  "widgetName": " Limited to the following items"
+                }
+              }
+            ]
+          },
+          "flatten": {
+            "strategy": "pdf-checkbox-group",
+            "clearUnselectedWidgets": true
+          }
+        },
+        {
+          "id": "limited_items_description",
+          "page": 1,
+          "section": "SECTION 2",
+          "type": "text",
+          "label": "Limited to the following items",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.3235,
+            "y": 0.3598,
+            "w": 0.6137,
+            "h": 0.0183
+          },
+          "binding": {
+            "path": "section2.limitedItemsDescription"
+          },
+          "ui": {
+            "placeholder": "Describe the items covered by the exemption",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " List of the items covered by this certificate"
+          }
+        },
+        {
+          "id": "exemption_basis",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "radio",
+          "label": "Basis for Exemption Claim",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.112,
+            "y": 0.423,
+            "w": 0.831,
+            "h": 0.299
+          },
+          "binding": {
+            "path": "section3.exemptionBasis"
+          },
+          "ui": {
+            "variant": "radio-list",
+            "optionStyle": "checkbox-hitbox",
+            "options": [
+              {
+                "value": "for_lease",
+                "code": "1",
+                "label": "1. For Lease.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.422,
+                  "w": 0.72,
+                  "h": 0.036
+                },
+                "controlCoords": {
+                  "x": 0.1193,
+                  "y": 0.4249,
+                  "w": 0.0207,
+                  "h": 0.0166
+                },
+                "flatten": {
+                  "widgetName": " Basis for Exemption Claim: For Lease checkbox"
+                }
+              },
+              {
+                "value": "for_resale_at_retail",
+                "code": "2",
+                "label": "2. For Resale at Retail.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.454,
+                  "w": 0.53,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1193,
+                  "y": 0.4574,
+                  "w": 0.0207,
+                  "h": 0.0166
+                },
+                "flatten": {
+                  "widgetName": " Basis for Exemption Claim: For Reseale at retail"
+                }
+              },
+              {
+                "value": "direct_pay",
+                "code": "3",
+                "label": "3. Direct Pay.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.474,
+                  "w": 0.831,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1194,
+                  "y": 0.477,
+                  "w": 0.0206,
+                  "h": 0.0156
+                },
+                "flatten": {
+                  "widgetName": " Basis for Exemption: Direct Pay Checkbox"
+                }
+              },
+              {
+                "value": "agricultural_production",
+                "code": "4",
+                "label": "4. Agricultural Production.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.515,
+                  "w": 0.35,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1195,
+                  "y": 0.5187,
+                  "w": 0.0205,
+                  "h": 0.0175
+                },
+                "flatten": {
+                  "widgetName": " Agricultural Production Checkbox"
+                }
+              },
+              {
+                "value": "government_entity",
+                "code": "5",
+                "label": "5. Government Entity, Nonprofit School, Nonprofit Hospital, Church or House of Religious Worship.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.535,
+                  "w": 0.831,
+                  "h": 0.04
+                },
+                "controlCoords": {
+                  "x": 0.1193,
+                  "y": 0.5383,
+                  "w": 0.0214,
+                  "h": 0.0155
+                },
+                "flatten": {
+                  "widgetName": " Government Entity, Nonprofit School, Nonprofit hospital, Church or house of religious worship (circle organization)"
+                }
+              },
+              {
+                "value": "contractor",
+                "code": "6",
+                "label": "6. Contractor.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.568,
+                  "w": 0.72,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1193,
+                  "y": 0.5719,
+                  "w": 0.0207,
+                  "h": 0.0174
+                },
+                "flatten": {
+                  "widgetName": " Contractor (provide form 3520)"
+                }
+              },
+              {
+                "value": "for_resale_at_wholesale",
+                "code": "7",
+                "label": "7. For Resale at Wholesale.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.588,
+                  "w": 0.36,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1194,
+                  "y": 0.5918,
+                  "w": 0.0196,
+                  "h": 0.0156
+                },
+                "flatten": {
+                  "widgetName": " For resale at warehouse"
+                }
+              },
+              {
+                "value": "industrial_processing",
+                "code": "8",
+                "label": "8. Industrial Processing.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.607,
+                  "w": 0.36,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1206,
+                  "y": 0.6098,
+                  "w": 0.0184,
+                  "h": 0.0164
+                },
+                "flatten": {
+                  "widgetName": " Industrial Processing"
+                }
+              },
+              {
+                "value": "nonprofit_501c",
+                "code": "9",
+                "label": "9. Nonprofit Internal Revenue Code Section 501(c)(3), 501(c)(4), or 501(c)(19) Exempt Organization.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.625,
+                  "w": 0.831,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1203,
+                  "y": 0.6276,
+                  "w": 0.0185,
+                  "h": 0.0159
+                },
+                "flatten": {
+                  "widgetName": " Nonprofit internal revenue code section 501(c)(3), 501(c)(4), or 501(c)(19) exempt organization"
+                }
+              },
+              {
+                "value": "nonprofit_authorized_letter",
+                "code": "10",
+                "label": "10. Nonprofit Organization with an authorized letter issued by Michigan Department of Treasury prior to July 17, 1998 (sales tax) or June 13, 1994 (use tax).",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.644,
+                  "w": 0.831,
+                  "h": 0.04
+                },
+                "controlCoords": {
+                  "x": 0.1195,
+                  "y": 0.6483,
+                  "w": 0.0193,
+                  "h": 0.0158
+                },
+                "flatten": {
+                  "widgetName": " Nonprofit organization with an authorized letter issued by Michigan Department of Treasury prior to July 17, 1998 (sales tax) or June 13, 1994 (use Tax)"
+                }
+              },
+              {
+                "value": "rolling_stock",
+                "code": "11",
+                "label": "11. Rolling Stock purchased by an Interstate Motor Carrier.",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.683,
+                  "w": 0.56,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1198,
+                  "y": 0.685,
+                  "w": 0.0193,
+                  "h": 0.0158
+                },
+                "flatten": {
+                  "widgetName": " Rolling Stock purchased by an interstate motor carrier"
+                }
+              },
+              {
+                "value": "other",
+                "code": "12",
+                "label": "12. Other (explain):",
+                "coords": {
+                  "x": 0.112,
+                  "y": 0.701,
+                  "w": 0.831,
+                  "h": 0.024
+                },
+                "controlCoords": {
+                  "x": 0.1199,
+                  "y": 0.7042,
+                  "w": 0.0193,
+                  "h": 0.0158
+                },
+                "flatten": {
+                  "widgetName": " Other"
+                }
+              }
+            ]
+          },
+          "flatten": {
+            "strategy": "pdf-checkbox-group",
+            "clearUnselectedWidgets": true
+          }
+        },
+        {
+          "id": "lease_registration_number",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "text",
+          "label": "Sales tax license or use tax registration number",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.6053,
+            "y": 0.4335,
+            "w": 0.2251,
+            "h": 0.0186
+          },
+          "binding": {
+            "path": "section3.leaseRegistrationNumber"
+          },
+          "ui": {
+            "placeholder": "Enter license or registration number",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " Basis for Exemption Claim: limited to the following items checkbox"
+          }
+        },
+        {
+          "id": "resale_retail_license_number",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "text",
+          "label": "Sales Tax License Number",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.4671,
+            "y": 0.4563,
+            "w": 0.1657,
+            "h": 0.0169
+          },
+          "binding": {
+            "path": "section3.resaleRetailLicenseNumber"
+          },
+          "ui": {
+            "placeholder": "Enter sales tax license number",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " Enter Sales Tax Number"
+          }
+        },
+        {
+          "id": "direct_pay_account_number",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "text",
+          "label": "Direct Pay account number",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.81,
+            "y": 0.4759,
+            "w": 0.1328,
+            "h": 0.0169
+          },
+          "binding": {
+            "path": "section3.directPayAccountNumber"
+          },
+          "ui": {
+            "placeholder": "Enter account number",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " Basis for Exemption: Direct Pay Account Number Authorized to pay use tax direectly to Michigan Treasury"
+          }
+        },
+        {
+          "id": "agricultural_percentage",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "text",
+          "label": "Agricultural Production percentage",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.3926,
+            "y": 0.5174,
+            "w": 0.0408,
+            "h": 0.0152
+          },
+          "binding": {
+            "path": "section3.agriculturalPercentage"
+          },
+          "ui": {
+            "placeholder": "0-100",
+            "inputMode": "numeric",
+            "suffix": "%"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Agricultural Production percentage"
+          }
+        },
+        {
+          "id": "government_entity_type",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "select",
+          "label": "Type of organization",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.624,
+            "y": 0.545,
+            "w": 0.27,
+            "h": 0.022
+          },
+          "binding": {
+            "path": "section3.governmentEntityType"
+          },
+          "ui": {
+            "placeholder": "Select organization type",
+            "renderStyle": "inline-chip-select",
+            "placementNote": "Approximate portal overlay anchored to the '(circle type of organization)' phrase on option 5.",
+            "options": [
+              {
+                "value": "u_s_or_its_instrumentalities",
+                "label": "U.S. or its instrumentalities"
+              },
+              {
+                "value": "state_of_michigan",
+                "label": "State of Michigan"
+              },
+              {
+                "value": "political_subdivision",
+                "label": "Political subdivision"
+              },
+              {
+                "value": "nonprofit_school",
+                "label": "Nonprofit School"
+              },
+              {
+                "value": "nonprofit_hospital",
+                "label": "Nonprofit Hospital"
+              },
+              {
+                "value": "church_or_house_of_religious_worship",
+                "label": "Church or House of Religious Worship"
+              }
+            ]
+          },
+          "flatten": {
+            "strategy": "manual-overlay",
+            "targetRegion": {
+              "x": 0.624,
+              "y": 0.545,
+              "w": 0.27,
+              "h": 0.022
+            },
+            "note": "No dedicated PDF widget exists for the circled organization type. Later flattening should render the selected organization into or alongside option 5."
+          }
+        },
+        {
+          "id": "industrial_processing_percentage",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "text",
+          "label": "Industrial Processing percentage",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.3836,
+            "y": 0.6101,
+            "w": 0.0408,
+            "h": 0.0152
+          },
+          "binding": {
+            "path": "section3.industrialProcessingPercentage"
+          },
+          "ui": {
+            "placeholder": "0-100",
+            "inputMode": "numeric",
+            "suffix": "%"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " Industrial processing percentage"
+          }
+        },
+        {
+          "id": "other_exemption_explanation",
+          "page": 1,
+          "section": "SECTION 3",
+          "type": "text",
+          "label": "Other (explain)",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.238,
+            "y": 0.7019,
+            "w": 0.7056,
+            "h": 0.0185
+          },
+          "binding": {
+            "path": "section3.otherExemptionExplanation"
+          },
+          "ui": {
+            "placeholder": "Explain the exemption basis",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": " Other Explain"
+          }
+        },
+        {
+          "id": "business_name",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "text",
+          "label": "Business Name",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.0693,
+            "y": 0.8168,
+            "w": 0.6549,
+            "h": 0.0218
+          },
+          "binding": {
+            "path": "section4.businessName"
+          },
+          "ui": {
+            "placeholder": "Enter business name",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Business Name"
+          }
+        },
+        {
+          "id": "type_of_business_code",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "select",
+          "label": "Type of Business (see codes on page 2)",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.7311,
+            "y": 0.8168,
+            "w": 0.098,
+            "h": 0.0218
+          },
+          "binding": {
+            "path": "section4.typeOfBusinessCode"
+          },
+          "ui": {
+            "placeholder": "Code",
+            "options": [
+              {
+                "value": "01",
+                "label": "01 Accommodations"
+              },
+              {
+                "value": "02",
+                "label": "02 Agricultural"
+              },
+              {
+                "value": "03",
+                "label": "03 Construction"
+              },
+              {
+                "value": "04",
+                "label": "04 Manufacturing"
+              },
+              {
+                "value": "05",
+                "label": "05 Government"
+              },
+              {
+                "value": "06",
+                "label": "06 Rental or leasing"
+              },
+              {
+                "value": "07",
+                "label": "07 Retail"
+              },
+              {
+                "value": "08",
+                "label": "08 Church"
+              },
+              {
+                "value": "09",
+                "label": "09 Transportation"
+              },
+              {
+                "value": "10",
+                "label": "10 Utilities"
+              },
+              {
+                "value": "11",
+                "label": "11 Wholesale"
+              },
+              {
+                "value": "12",
+                "label": "12 Advertising, newspaper"
+              },
+              {
+                "value": "13",
+                "label": "13 Non-Profit Hospital"
+              },
+              {
+                "value": "14",
+                "label": "14 Non-Profit Educational"
+              },
+              {
+                "value": "15",
+                "label": "15 Non-Profit 501(c)(3), 501(c)(4), or 501(c)(19)"
+              },
+              {
+                "value": "16",
+                "label": "16 Other"
+              }
+            ]
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Type of Business (see codes on page 2)"
+          }
+        },
+        {
+          "id": "type_of_business_other_text",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "text",
+          "label": "Other business type",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.835,
+            "y": 0.8168,
+            "w": 0.102,
+            "h": 0.0218
+          },
+          "binding": {
+            "path": "section4.typeOfBusinessOtherText"
+          },
+          "ui": {
+            "placeholder": "Enter business type when code 16 is selected",
+            "inputMode": "text",
+            "placementNote": "Approximate split of the original Type of Business cell so code and free text can coexist in the portal."
+          },
+          "flatten": {
+            "strategy": "manual-overlay",
+            "targetRegion": {
+              "x": 0.835,
+              "y": 0.8168,
+              "w": 0.102,
+              "h": 0.0218
+            },
+            "note": "When type_of_business_code is 16, render the free-text description into the remaining Type of Business cell width."
+          }
+        },
+        {
+          "id": "business_address",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "text",
+          "label": "Business Address",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.0693,
+            "y": 0.8473,
+            "w": 0.4157,
+            "h": 0.0218
+          },
+          "binding": {
+            "path": "section4.businessAddress"
+          },
+          "ui": {
+            "placeholder": "Enter business address",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Business Address"
+          }
+        },
+        {
+          "id": "city_state_zip",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "text",
+          "label": "City, State, ZIP Code",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.5019,
+            "y": 0.8477,
+            "w": 0.4313,
+            "h": 0.021
+          },
+          "binding": {
+            "path": "section4.cityStateZip"
+          },
+          "ui": {
+            "placeholder": "Enter city, state, and ZIP code",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Business City, State, ZIP Code"
+          }
+        },
+        {
+          "id": "business_phone",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "text",
+          "label": "Business Telephone Number (include area code)",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.0693,
+            "y": 0.8775,
+            "w": 0.4162,
+            "h": 0.0214
+          },
+          "binding": {
+            "path": "section4.businessPhone"
+          },
+          "ui": {
+            "placeholder": "Enter business phone number",
+            "inputMode": "tel"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Business Telephone Number (include area code)"
+          }
+        },
+        {
+          "id": "printed_name",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "text",
+          "label": "Name (Print or Type)",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.5019,
+            "y": 0.8768,
+            "w": 0.4314,
+            "h": 0.0222
+          },
+          "binding": {
+            "path": "section4.printedName"
+          },
+          "ui": {
+            "placeholder": "Enter printed name",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Name (Print or Type)"
+          }
+        },
+        {
+          "id": "title",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "text",
+          "label": "Title",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.4959,
+            "y": 0.9153,
+            "w": 0.2675,
+            "h": 0.0189
+          },
+          "binding": {
+            "path": "section4.title"
+          },
+          "ui": {
+            "placeholder": "Enter title",
+            "inputMode": "text"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Title"
+          }
+        },
+        {
+          "id": "date_signed",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "date",
+          "label": "Date Signed",
+          "required": true,
+          "readonly": false,
+          "coords": {
+            "x": 0.7759,
+            "y": 0.9115,
+            "w": 0.1641,
+            "h": 0.0223
+          },
+          "binding": {
+            "path": "section4.dateSigned"
+          },
+          "ui": {
+            "placeholder": "MM/DD/YYYY",
+            "format": "MM/DD/YYYY"
+          },
+          "flatten": {
+            "strategy": "pdf-acroform",
+            "widgetName": "Date Signed"
+          }
+        },
+        {
+          "id": "signature_mark",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "signature",
+          "label": "Signature",
+          "required": false,
+          "readonly": false,
+          "coords": {
+            "x": 0.0693,
+            "y": 0.9125,
+            "w": 0.412,
+            "h": 0.023
+          },
+          "binding": {
+            "path": "section4.signatureMark"
+          },
+          "ui": {
+            "portalOnly": true,
+            "helpText": "Draw a signature if you want the completed certificate to feel signed before the submission tools are connected.",
+            "placementNote": "Approximate signature line placement for the in-portal guided experience."
+          },
+          "flatten": {
+            "strategy": "manual-overlay",
+            "targetRegion": {
+              "x": 0.0693,
+              "y": 0.9125,
+              "w": 0.412,
+              "h": 0.023
+            },
+            "note": "Render the signature image into the signature line area for the portal-guided preview."
+          }
+        },
+        {
+          "id": "certification_acknowledgment",
+          "page": 1,
+          "section": "SECTION 4",
+          "type": "checkbox",
+          "label": "I acknowledge the certification statement above is true and complete.",
+          "required": false,
+          "readonly": true,
+          "coords": {
+            "x": 0.0705,
+            "y": 0.7895,
+            "w": 0.315,
+            "h": 0.024
+          },
+          "binding": {
+            "path": "section4.certificationAcknowledgment"
+          },
+          "ui": {
+            "portalOnly": true,
+            "helpText": "Electronic-format certificates do not require a handwritten signature, but the purchaser still needs to acknowledge the certification language."
+          },
+          "flatten": {
+            "strategy": "none",
+            "note": "Portal-only validation field. Do not stamp onto the PDF for electronic-format submissions."
+          }
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "role": "reference",
+      "readonly": true,
+      "sourceImage": {
+        "driveFileId": "1GYkbUhqaD7t4yDUy8t8FrwhMS0IJqH1l",
+        "viewUrl": "https://drive.google.com/file/d/1GYkbUhqaD7t4yDUy8t8FrwhMS0IJqH1l/view"
+      },
+      "fields": []
+    }
+  ],
+  "rules": [
+    {
+      "id": "purchase_type_one_time_order_number",
+      "type": "conditional",
+      "when": {
+        "field": "purchase_type",
+        "equals": "one_time"
+      },
+      "effects": [
+        {
+          "target": "order_or_invoice_number",
+          "visible": true,
+          "required": true
+        }
+      ],
+      "otherwise": [
+        {
+          "target": "order_or_invoice_number",
+          "visible": false,
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "purchase_type_blanket_expiring_date",
+      "type": "conditional",
+      "when": {
+        "field": "purchase_type",
+        "equals": "blanket_expiring"
+      },
+      "effects": [
+        {
+          "target": "blanket_expiration_date",
+          "visible": true,
+          "required": true
+        }
+      ],
+      "otherwise": [
+        {
+          "target": "blanket_expiration_date",
+          "visible": false,
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "items_covered_limited_description",
+      "type": "conditional",
+      "when": {
+        "field": "items_covered",
+        "equals": "limited_items"
+      },
+      "effects": [
+        {
+          "target": "limited_items_description",
+          "visible": true,
+          "required": true
+        }
+      ],
+      "otherwise": [
+        {
+          "target": "limited_items_description",
+          "visible": false,
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "exemption_basis_companion_fields",
+      "type": "conditional-map",
+      "field": "exemption_basis",
+      "map": {
+        "for_lease": [
+          {
+            "target": "lease_registration_number",
+            "visible": true,
+            "required": true
+          }
+        ],
+        "for_resale_at_retail": [
+          {
+            "target": "resale_retail_license_number",
+            "visible": true,
+            "required": true
+          }
+        ],
+        "direct_pay": [
+          {
+            "target": "direct_pay_account_number",
+            "visible": true,
+            "required": true
+          }
+        ],
+        "agricultural_production": [
+          {
+            "target": "agricultural_percentage",
+            "visible": true,
+            "required": true
+          }
+        ],
+        "industrial_processing": [
+          {
+            "target": "industrial_processing_percentage",
+            "visible": true,
+            "required": true
+          }
+        ],
+        "other": [
+          {
+            "target": "other_exemption_explanation",
+            "visible": true,
+            "required": true
+          }
+        ]
+      },
+      "otherwise": [
+        {
+          "target": "lease_registration_number",
+          "visible": false,
+          "required": false
+        },
+        {
+          "target": "resale_retail_license_number",
+          "visible": false,
+          "required": false
+        },
+        {
+          "target": "direct_pay_account_number",
+          "visible": false,
+          "required": false
+        },
+        {
+          "target": "agricultural_percentage",
+          "visible": false,
+          "required": false
+        },
+        {
+          "target": "government_entity_type",
+          "visible": false,
+          "required": false
+        },
+        {
+          "target": "industrial_processing_percentage",
+          "visible": false,
+          "required": false
+        },
+        {
+          "target": "other_exemption_explanation",
+          "visible": false,
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "type_of_business_other_text_only_for_code_16",
+      "type": "conditional",
+      "when": {
+        "field": "type_of_business_code",
+        "equals": "16"
+      },
+      "effects": [
+        {
+          "target": "type_of_business_other_text",
+          "visible": true,
+          "required": true
+        }
+      ],
+      "otherwise": [
+        {
+          "target": "type_of_business_other_text",
+          "visible": false,
+          "required": false
+        }
+      ]
+    }
+  ],
+  "output": {
+    "saveDraftValuesJson": true,
+    "flattenToCompletedPdf": true,
+    "allowCompletedUpload": true,
+    "orgLevelDocument": true,
+    "interactivePageOnly": true,
+    "electronicSignatureRepresentation": {
+      "signatureRequiredForElectronic": false,
+      "reusePrintedNameFieldId": "printed_name",
+      "acknowledgmentFieldId": "certification_acknowledgment"
+    }
+  }
+}
+</script>

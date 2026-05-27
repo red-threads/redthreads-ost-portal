@@ -6,6 +6,7 @@
   "scripts": {
     "validate": "node tools/validate-repo.mjs",
     "validate:docs": "node tools/validate-repo.mjs",
-    "validate:runtime": "node tools/validate-repo.mjs --allow-runtime"
+    "validate:runtime": "node tools/validate-repo.mjs --allow-runtime",
+    "validate:binding": "node tools/validate-repo.mjs --allow-runtime --allow-clasp-binding"
   }
 }

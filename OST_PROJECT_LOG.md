@@ -67,3 +67,14 @@ Append-only project memory for decisions, session summaries, validation results,
 - Decisions: no new runtime edit was needed because `apps-script/src/Index.html` already contains `DEV 1`.
 - Current-state updates: `clasp status` can list local Apps Script source files, but `clasp deployments`, `clasp versions`, and `clasp push --force` all returned `Requested entity was not found`; no Apps Script version/deploy was run.
 - Follow-ups: repair the current local clasp binding/account access before Apps Script live deployment can complete from this environment.
+
+## 2026-05-27 - Live Apps Script Source Alignment
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: repair the repo/live Apps Script mismatch, preserve the live source of truth locally, and re-ship the `DEV 1` badge.
+- Files changed: `.clasp.json`, live-pulled Apps Script runtime source, `TaxForm3372Manifest.html`, validation tooling, runbook/current-state/log docs.
+- Validation: pending final validation after live-source pull and badge reapply.
+- Decisions: verified the live Apps Script project ID from the Apps Script editor, updated the local clasp binding to that project, ran `clasp pull` before any push, and removed the checked-in Team Mode default credential so the repo does not store that value.
+- Current-state updates: `clasp pull` succeeded and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`; `DEV 1` was reapplied on top of the live `Index.html`.
+- Follow-ups: confirm the Team Mode password is configured in Apps Script Script Properties, complete validation, commit/push to `main`, run `clasp push`/version/deploy to the existing stable deployment ID, smoke-test, and append deployment results.

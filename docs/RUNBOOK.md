@@ -53,6 +53,12 @@ git push origin main
 
 Update `OST_PROJECT_LOG.md` for shipped dev revisions or meaningful runtime state changes.
 
+If an owner-approved runtime task also repairs the local Apps Script binding after verifying the live Script ID from Apps Script itself, run the binding-aware validator:
+
+```bash
+npm run validate:binding
+```
+
 ## Mainline Full Ship Workflow
 
 Use this when the owner says `ship it`, `full ship`, `make it live`, or otherwise asks for the Apps Script runtime change to go live.
@@ -112,7 +118,7 @@ If any clasp deployment command returns `Requested entity was not found`:
 
 - Stop the Apps Script deployment flow.
 - Do not create a new Apps Script deployment ID.
-- Do not alter `.clasp.json`.
+- Do not alter `.clasp.json` unless the owner explicitly directs a binding repair after the live Apps Script project ID is verified from Apps Script itself.
 - Do not change Script Properties.
 - Log the blocker in `OST_PROJECT_LOG.md` and `docs/CURRENT_BUILD_STATE.md`.
 - Report that GitHub source may be updated while Apps Script live deployment remains blocked until binding/account access is repaired.

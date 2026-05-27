@@ -6,6 +6,7 @@ const requiredFiles = [
   'AGENTS.md',
   'OST_PROJECT_LOG.md',
   'README.md',
+  'apps-script/src/TaxForm3372Manifest.html',
   'docs/CONTEXT_INDEX.md',
   'docs/CURRENT_BUILD_STATE.md',
   'docs/RUNBOOK.md',
@@ -33,12 +34,14 @@ const retiredDocs = [
 
 const runtimeFiles = new Set([
   'apps-script/src/Code.js',
-  'apps-script/src/Index.html'
+  'apps-script/src/Index.html',
+  'apps-script/src/TaxForm3372Manifest.html'
 ]);
+
+const claspBindingFile = 'apps-script/src/.clasp.json';
 
 const lockedFiles = new Set([
   'apps-script/src/appsscript.json',
-  'apps-script/src/.clasp.json',
   'schemas/snapshot_v2_0_0.schema.json',
   'testcases/golden_sample_v2_1pj_min.json'
 ]);
@@ -54,6 +57,7 @@ const requiredMentions = [
 
 const privatePatterns = [
   /script\.google\.com\/macros\/s\/[^/\s]+\/exec\?t=/i,
+  /DEFAULT_TEAM_MODE_PASSWORD\s*=\s*['"][^'"]+['"]/,
   /stripe_(live|test)_[A-Za-z0-9]+/i,
   /whsec_[A-Za-z0-9]+/i,
   /sk_(live|test)_[A-Za-z0-9]+/i
@@ -125,6 +129,9 @@ const errors = [];
 const allowRuntimeChanges =
   process.env.VALIDATE_ALLOW_RUNTIME_CHANGES === '1' ||
   process.argv.includes('--allow-runtime');
+const allowClaspBindingChange =
+  process.env.VALIDATE_ALLOW_CLASP_BINDING === '1' ||
+  process.argv.includes('--allow-clasp-binding');
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) {
@@ -144,6 +151,9 @@ const trackedFiles = listTrackedFiles();
 for (const file of changedFiles) {
   if (runtimeFiles.has(file) && !allowRuntimeChanges) {
     errors.push(`Runtime file changed without VALIDATE_ALLOW_RUNTIME_CHANGES=1: ${file}`);
+  }
+  if (file === claspBindingFile && !allowClaspBindingChange) {
+    errors.push(`Apps Script binding changed without VALIDATE_ALLOW_CLASP_BINDING=1: ${file}`);
   }
   if (lockedFiles.has(file)) {
     errors.push(`Locked config/schema/test fixture changed: ${file}`);

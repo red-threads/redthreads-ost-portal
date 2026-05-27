@@ -53,7 +53,7 @@ Do not copy the same rule into multiple docs. Link to the canonical source inste
 
 Do not edit these unless the task explicitly names them:
 
-- Runtime: `apps-script/src/Code.js`, `apps-script/src/Index.html`.
+- Runtime: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `apps-script/src/TaxForm3372Manifest.html`.
 - Apps Script config: `apps-script/src/appsscript.json`, `apps-script/src/.clasp.json`.
 - Schema/contract files: `schemas/*`, unless a schema/contract task is approved.
 - Production Sheet data, Apps Script Script Properties, GitHub settings/secrets, Stripe live config, Cloud Run services, Make scenarios, QuickBooks/Pipedrive/Gmail behavior, and Team Mode permissions.
@@ -76,6 +76,7 @@ Private lifecycle captures belong in `testcases/lifecycle-fixtures/private/`; on
 - Do not create a branch or PR unless the owner explicitly asks for one, repo protection requires one, or the change is high-risk architecture/review work.
 - Mainline Full ship means: confirm repo and clean `main`, fast-forward safely, apply the focused runtime change, update the dev badge/revision and `OST_PROJECT_LOG.md` when applicable, run runtime validation, commit directly to `main`, push `main`, run `clasp push`/version/deploy to the existing deployment ID, smoke-test, and update current-state/logs with success or blocker.
 - If clasp returns `Requested entity was not found`, stop and log the blocker. Do not create a new deployment ID, alter `.clasp.json`, or change Script Properties unless explicitly instructed.
+- If the owner explicitly instructs a binding repair, verify the live Apps Script project ID from Apps Script itself, run `clasp pull` before any push, validate with `npm run validate:binding`, and log the repo/live-source alignment.
 
 ## Working Rules
 
