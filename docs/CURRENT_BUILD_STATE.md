@@ -27,6 +27,7 @@ Last aligned: 2026-05-27.
 
 - `clasp deployments` and `clasp versions` returned `Requested entity was not found` from the current local binding/account on 2026-05-27.
 - `clasp push` for Dev Revision 1 also returned `Requested entity was not found` on 2026-05-27, so no Apps Script version/deploy was created from this environment.
+- A Dev Revision 1 re-ship attempt on 2026-05-27 confirmed `clasp status` can list local source files, but `clasp deployments`, `clasp versions`, and `clasp push --force` still return `Requested entity was not found`.
 - The fuller dashboard/order/Stripe/lifecycle architecture described in project context is not present in tracked runtime.
 - `TaxForm3372Manifest.html` is referenced in project context but absent from tracked runtime.
 - Named lifecycle helpers such as `buildPortalOrderSummary_`, `derivePortalLifecycle_`, and dashboard projection helpers are absent from tracked runtime.
