@@ -42,7 +42,13 @@ Stage only intended files. Never stage private fixture data or unrelated user ch
 
 ## Runtime Pass
 
-Use a runtime pass only when the task explicitly names runtime files. Run the docs/tooling validation plus targeted browser or Apps Script checks for the changed behavior. Update `docs/CURRENT_BUILD_STATE.md` if repo/live reality changes and append a short entry to `OST_PROJECT_LOG.md`.
+Use a runtime pass only when the task explicitly names runtime files. Run validation with runtime changes enabled, plus targeted browser or Apps Script checks for the changed behavior.
+
+```bash
+VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate
+```
+
+Update `docs/CURRENT_BUILD_STATE.md` if repo/live reality changes and append a short entry to `OST_PROJECT_LOG.md`.
 
 ## Full Ship
 
