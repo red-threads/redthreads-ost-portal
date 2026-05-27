@@ -12,6 +12,7 @@ const requiredFiles = [
   'docs/RUNBOOK.md',
   'docs/EXPORT_LOG_WIDE_SCHEMA.md',
   'docs/LIFECYCLE_FIXTURES.local.example.md',
+  'web/squarespace-portal-code-block.html',
   'testcases/lifecycle-fixtures/README.md',
   'testcases/lifecycle-fixtures/private/.keep',
   '.github/pull_request_template.md',

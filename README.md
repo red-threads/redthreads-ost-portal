@@ -26,3 +26,7 @@ Top-level snapshot shape:
 ```
 
 For the locked EXPORT_LOG column order, see `docs/EXPORT_LOG_WIDE_SCHEMA.md`.
+
+## Squarespace Wrapper
+
+The active Squarespace `/portal` code block is tracked at `web/squarespace-portal-code-block.html`.

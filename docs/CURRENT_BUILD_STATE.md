@@ -13,12 +13,14 @@ Last aligned: 2026-05-27.
 - `.clasp.json` now points to the live Apps Script project ID verified in Apps Script: `1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU`.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
 - `package.json` exposes `npm run validate`, `npm run validate:runtime`, and `npm run validate:binding`.
+- Active Squarespace `/portal` iframe wrapper code is tracked at `web/squarespace-portal-code-block.html`.
 
 ## Prompt/Historical
 
 - Expected stable Apps Script deployment ID: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
 - Expected stable public Apps Script URL: `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec`.
 - Public branded wrapper URL: `https://www.redthreads.com/portal`.
+- Squarespace wrapper forwards `t`, `checkoutResult`, and `stripeSessionId` into the Apps Script iframe.
 - Historical calculator sheet ID: `1STzkJjn5WRoBqa5H1KdxAbn4-JCab9DCX4FuZt5HImc`.
 - Historical Make scenario: `4062378`.
 - Fuller intended architecture includes PORTAL_ORDERS, PORTAL_ACCOUNTS, USERS, USER_SESSIONS, hosted Stripe Checkout, Cloud Run webhook forwarding, Gmail notifications, QuickBooks, and Pipedrive.

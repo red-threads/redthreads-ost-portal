@@ -10,6 +10,7 @@ Core reading set:
 Narrow references:
 
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` - locked EXPORT_LOG wide schema.
+- `web/squarespace-portal-code-block.html` - active Squarespace `/portal` iframe wrapper code.
 - `schemas/snapshot_v2_0_0.schema.json` - V2 snapshot schema.
 - `docs/LIFECYCLE_FIXTURES.local.example.md` - local fixture access template.
 - `testcases/lifecycle-fixtures/README.md` - lifecycle fixture family and private capture hygiene.

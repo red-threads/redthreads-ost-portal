@@ -78,3 +78,14 @@ Append-only project memory for decisions, session summaries, validation results,
 - Decisions: verified the live Apps Script project ID from the Apps Script editor, updated the local clasp binding to that project, ran `clasp pull` before any push, and removed the checked-in Team Mode default credential so the repo does not store that value.
 - Current-state updates: `clasp pull` succeeded and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`; `DEV 1` was reapplied on top of the live `Index.html`; `clasp push --force` succeeded; Apps Script version `826` was created and deployed to the existing stable deployment ID; public stable URL contains `DEV 1` and `devRevisionBadge`.
 - Follow-ups: confirm the Team Mode password is configured in Apps Script Script Properties before relying on Team Mode; full lifecycle/payment fixture regression was not run in this badge/source-alignment pass.
+
+## 2026-05-27 - Squarespace Portal Wrapper Tracking
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: make the active Squarespace `/portal` iframe wrapper part of the shared GitHub source of truth.
+- Files changed: `web/squarespace-portal-code-block.html`, `README.md`, `docs/CONTEXT_INDEX.md`, `docs/CURRENT_BUILD_STATE.md`, validation tooling, project log.
+- Validation: `npm run validate`, `node --check tools/validate-repo.mjs`, `git diff --check`, wrapper passthrough marker check.
+- Decisions: store the wrapper as a tracked web integration artifact; keep Apps Script deployment untouched because this change is repo/Squarespace source tracking only.
+- Current-state updates: wrapper forwards `t`, `checkoutResult`, and `stripeSessionId` to the stable Apps Script deployment.
+- Follow-ups: if Squarespace code changes in the website editor, update this file in the same change so GitHub remains canonical.

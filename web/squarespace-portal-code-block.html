@@ -1,0 +1,210 @@
+<!-- /portal PAGE Code Block - Fullscreen Apps Script + branded token passthrough + loading state -->
+<style>
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .rt-portal-fullscreen {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 999999;
+    background: #000;
+  }
+
+  .rt-portal-fullscreen iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: transparent;
+  }
+
+  .rt-portal-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 42%, rgba(225, 29, 72, 0.18), transparent 34rem), rgba(0, 0, 0, 0.86);
+    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    transition: opacity 220ms ease, visibility 220ms ease;
+    z-index: 2;
+  }
+
+  .rt-portal-loading.is-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .rt-portal-loading-card {
+    width: min(420px, calc(100vw - 48px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 28px 24px;
+    text-align: center;
+  }
+
+  .rt-portal-spinner {
+    width: 72px;
+    height: 72px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    filter: drop-shadow(0 0 16px rgba(225, 29, 72, 0.36));
+  }
+
+  .rt-portal-spinner::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: conic-gradient(
+      from 210deg,
+      rgba(225, 29, 72, 0.16) 0deg,
+      rgba(225, 29, 72, 0.28) 78deg,
+      rgba(244, 63, 94, 0.96) 78deg,
+      rgba(244, 63, 94, 0.96) 186deg,
+      rgba(225, 29, 72, 0.16) 186deg,
+      rgba(225, 29, 72, 0.16) 360deg
+    );
+    -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+    mask: radial-gradient(circle, transparent 58%, #000 60%);
+    animation: rtPortalSpin 1180ms linear infinite;
+  }
+
+  .rt-portal-spinner img {
+    position: relative;
+    z-index: 1;
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    animation: rtPortalPulse 1200ms ease-in-out infinite;
+  }
+
+  .rt-portal-loading-title {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 24px;
+    line-height: 1.25;
+    font-weight: 800;
+  }
+
+  .rt-portal-loading-sub {
+    margin: 0;
+    color: #cbd5e1;
+    font-size: 16px;
+    line-height: 1.45;
+    font-weight: 600;
+  }
+
+  @keyframes rtPortalSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes rtPortalPulse {
+    0%,
+    100% {
+      transform: scale(0.96);
+      opacity: 0.82;
+    }
+
+    50% {
+      transform: scale(1.04);
+      opacity: 1;
+    }
+  }
+</style>
+
+<div class="rt-portal-fullscreen">
+  <div class="rt-portal-loading is-hidden" id="rtPortalLoading" role="status" aria-live="polite">
+    <div class="rt-portal-loading-card">
+      <div class="rt-portal-spinner" aria-hidden="true">
+        <img src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+      </div>
+      <p class="rt-portal-loading-title" id="rtPortalLoadingTitle">Loading portal...</p>
+      <p class="rt-portal-loading-sub">One moment while Red Threads opens your workspace.</p>
+    </div>
+  </div>
+
+  <iframe
+    id="rtPortalFrame"
+    title="Red Threads Portal"
+    allow="clipboard-read; clipboard-write"
+    referrerpolicy="strict-origin-when-cross-origin"
+    loading="eager"
+  ></iframe>
+</div>
+
+<script>
+  (function () {
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    var APP_URL = "https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec";
+    var queryParams = new URLSearchParams(window.location.search);
+    var iframeParams = new URLSearchParams();
+    var token = queryParams.get("t");
+    var checkoutResult = queryParams.get("checkoutResult");
+    var stripeSessionId = queryParams.get("stripeSessionId");
+
+    if (token) {
+      iframeParams.set("t", token);
+    }
+
+    if (checkoutResult) {
+      iframeParams.set("checkoutResult", checkoutResult);
+    }
+
+    if (stripeSessionId) {
+      iframeParams.set("stripeSessionId", stripeSessionId);
+    }
+
+    var iframe = document.getElementById("rtPortalFrame");
+    var loading = document.getElementById("rtPortalLoading");
+    var loadingTitle = document.getElementById("rtPortalLoadingTitle");
+    var shouldShowLoading = !!(token || checkoutResult || stripeSessionId);
+
+    if (shouldShowLoading && loading) {
+      if (loadingTitle && token) {
+        loadingTitle.textContent = "Loading project...";
+      }
+
+      loading.classList.remove("is-hidden");
+    }
+
+    function hideLoading() {
+      if (!loading || !shouldShowLoading) {
+        return;
+      }
+
+      loading.classList.add("is-hidden");
+      window.setTimeout(function () {
+        if (loading && loading.parentNode) {
+          loading.parentNode.removeChild(loading);
+        }
+      }, 260);
+    }
+
+    if (shouldShowLoading) {
+      iframe.addEventListener("load", hideLoading);
+      window.setTimeout(hideLoading, 16000);
+    }
+
+    iframe.src = iframeParams.toString() ? APP_URL + "?" + iframeParams.toString() : APP_URL;
+  })();
+</script>
