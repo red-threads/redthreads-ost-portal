@@ -297,8 +297,10 @@
     .portalMobileLinkTools{
       width:100%;
       display:grid;
-      gap:10px;
+      justify-items:center;
+      gap:9px;
       margin-top:4px;
+      min-width:0;
     }
     .portalMobileLinkTools[hidden]{
       display:none;
@@ -314,17 +316,19 @@
     }
     .portalMobileCurrentLink{
       width:100%;
-      min-height:44px;
-      border:1px solid rgba(255,255,255,.2);
-      border-radius:12px;
-      padding:10px 12px;
-      background:rgba(15,23,42,.82);
-      color:rgba(255,255,255,.92);
-      font-size:13px;
+      max-width:100%;
+      margin:0;
+      overflow:hidden;
+      color:rgba(255,255,255,.82);
+      font-size:14px;
       line-height:1.35;
-      font-weight:600;
+      font-weight:700;
+      text-align:center;
+      text-overflow:ellipsis;
+      white-space:nowrap;
     }
     .portalMobileCopyLinkBtn{
+      width:min(100%, 320px);
       min-height:44px;
       border:1px solid rgba(225,29,72,.42);
       border-radius:999px;
@@ -16336,14 +16340,14 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 13">13</div>
+  <div class="devRevisionBadge" aria-label="Development revision 14">14</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
       <p class="portalMobileBlockMessage">The Red Threads portal is not optimized for mobile use. Please access this portal on a computer.</p>
       <div class="portalMobileLinkTools" id="portalMobileLinkTools" hidden>
         <p class="portalMobileCopyLabel">Portal link</p>
-        <input id="portalMobileCurrentLink" class="portalMobileCurrentLink" type="text" readonly>
+        <p id="portalMobileCurrentLink" class="portalMobileCurrentLink" aria-label="Portal link"></p>
         <button id="portalMobileCopyLinkBtn" class="portalMobileCopyLinkBtn" type="button">Copy link</button>
         <p id="portalMobileCopyStatus" class="portalMobileCopyStatus" aria-live="polite"></p>
       </div>
@@ -17566,12 +17570,7 @@
   }
 
   function fallbackPortalMobileCopy_(){
-    const input = document.getElementById('portalMobileCurrentLink');
-    if (input) {
-      input.focus();
-      input.select();
-    }
-    setPortalMobileCopyStatus_('Copy this link and open it on your computer.');
+    setPortalMobileCopyStatus_('Copy the link from your browser address bar and open it on your computer.');
   }
 
   function syncPortalMobileBlock_(){
@@ -17585,8 +17584,12 @@
 
     const currentLink = getPortalMobileCurrentLink_();
     const tools = document.getElementById('portalMobileLinkTools');
-    const input = document.getElementById('portalMobileCurrentLink');
-    if (input) input.value = currentLink;
+    const linkDisplay = document.getElementById('portalMobileCurrentLink');
+    if (linkDisplay) {
+      linkDisplay.textContent = currentLink;
+      linkDisplay.dataset.fullLink = currentLink;
+      linkDisplay.title = currentLink;
+    }
     if (tools) tools.hidden = !currentLink;
   }
 
@@ -17594,8 +17597,8 @@
     const button = document.getElementById('portalMobileCopyLinkBtn');
     if (button) {
       button.addEventListener('click', function(){
-        const input = document.getElementById('portalMobileCurrentLink');
-        const value = input && input.value ? input.value : getPortalMobileCurrentLink_();
+        const linkDisplay = document.getElementById('portalMobileCurrentLink');
+        const value = linkDisplay && linkDisplay.dataset.fullLink ? linkDisplay.dataset.fullLink : getPortalMobileCurrentLink_();
         if (!value) {
           fallbackPortalMobileCopy_();
           return;

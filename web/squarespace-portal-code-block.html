@@ -77,8 +77,10 @@
   .rt-portal-mobile-copy-wrap {
     width: 100%;
     display: grid;
-    gap: 10px;
+    justify-items: center;
+    gap: 9px;
     margin-top: 4px;
+    min-width: 0;
   }
 
   .rt-portal-mobile-copy-wrap[hidden] {
@@ -97,16 +99,18 @@
 
   .rt-portal-mobile-link {
     width: 100%;
-    min-height: 44px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 12px;
-    padding: 10px 12px;
-    background: rgba(15, 23, 42, 0.82);
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
     color: rgba(255, 255, 255, 0.92);
-    font: 600 13px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font: 700 14px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .rt-portal-mobile-copy-button {
+    width: min(100%, 320px);
     min-height: 44px;
     border: 1px solid rgba(225, 29, 72, 0.42);
     border-radius: 999px;
@@ -238,7 +242,7 @@
       <p class="rt-portal-mobile-message">The Red Threads portal is not optimized for mobile use. Please access this portal on a computer.</p>
       <div class="rt-portal-mobile-copy-wrap" id="rtPortalMobileCopyWrap" hidden>
         <p class="rt-portal-mobile-copy-label">Portal link</p>
-        <input class="rt-portal-mobile-link" id="rtPortalMobileLink" type="text" readonly>
+        <p class="rt-portal-mobile-link" id="rtPortalMobileLink" aria-label="Portal link"></p>
         <button class="rt-portal-mobile-copy-button" id="rtPortalMobileCopyButton" type="button">Copy link</button>
         <p class="rt-portal-mobile-copy-status" id="rtPortalMobileCopyStatus" aria-live="polite"></p>
       </div>
@@ -312,20 +316,17 @@
     }
 
     function fallbackCopyLink() {
-      if (mobileLink) {
-        mobileLink.focus();
-        mobileLink.select();
-      }
-
       if (mobileCopyStatus) {
-        mobileCopyStatus.textContent = "Copy this link and open it on your computer.";
+        mobileCopyStatus.textContent = "Copy the link from your browser address bar and open it on your computer.";
       }
     }
 
     function syncMobileCopyLink() {
       var currentLink = getCurrentPortalLink();
       if (mobileLink) {
-        mobileLink.value = currentLink;
+        mobileLink.textContent = currentLink;
+        mobileLink.dataset.fullLink = currentLink;
+        mobileLink.title = currentLink;
       }
 
       if (mobileCopyWrap) {
@@ -473,7 +474,7 @@
 
     if (mobileCopyButton) {
       mobileCopyButton.addEventListener("click", function () {
-        var value = mobileLink ? mobileLink.value : getCurrentPortalLink();
+        var value = mobileLink && mobileLink.dataset.fullLink ? mobileLink.dataset.fullLink : getCurrentPortalLink();
         if (!value) {
           fallbackCopyLink();
           return;

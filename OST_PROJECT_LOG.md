@@ -276,3 +276,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Block mobile portal access"` created version `838`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `838`.
 - Smoke tests: public stable Apps Script HTML contains `Development revision 13`, `portalMobileBlock`, `RT_PORTAL_MOBILE_BLOCK_QUERY`, and the mobile-block copy; stale `Development revision 12` is absent. Desktop wrapper base and tokenized wrapper load the normal login/project views at wide width. Narrow wrapper and direct Apps Script routes show the mobile block with copy-link controls after the Apps Script iframe loads.
 - Follow-ups: apply the updated `web/squarespace-portal-code-block.html` in Squarespace so the public wrapper blocks before assigning iframe `src`; until then the deployed app-level guard still blocks narrow Portal access after iframe load.
+
+## 2026-05-28 - Mobile Block Link Display Cleanup
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: remove the boxed mobile-block URL field and prevent long tokenized Portal links from extending beyond the mobile frame.
+- Files changed: `apps-script/src/Index.html`, `web/squarespace-portal-code-block.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Behavior preservation: no `Code.js`, Stripe payload, order persistence, webhook logic, lifecycle state, schema, Apps Script config, Sheet contract, or payment data logic changed.
+- Implementation: replaced the visible read-only URL input with centered plain text using single-line `text-overflow: ellipsis`; copy buttons still copy the full URL from `data-full-link`.
+- Dev revision: incremented badge to `14`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, `git diff --check`, and wrapper script parsing passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Clean mobile portal link display"` created version `839`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `839`.
+- Smoke tests: public stable Apps Script HTML contains `Development revision 14`, `portalMobileCurrentLink`, the updated copy fallback, and ellipsis styling; stale `Development revision 13` is absent. Local wrapper visual smoke at `390px` confirmed the mobile block is visible, iframe loading is skipped, the long link remains inside the frame, and CSS ellipsis is active.
+- Follow-ups: apply the updated `web/squarespace-portal-code-block.html` in Squarespace so the public wrapper gets the same pre-iframe link-display cleanup.
