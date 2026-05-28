@@ -178,3 +178,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Clear checkout loader on browser restore"` created version `832`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `832`.
 - Smoke tests: public stable Apps Script URL contains `Development revision 7`, `rtCheckoutNavigationActiveV1`, and `clearCheckoutLoaderForNavigationRestore_`; stale `Development revision 6` is absent.
 - Follow-ups: run a tokenized browser Back smoke separately without recording live tokens to verify the restored project page no longer shows the checkout loader.
+
+## 2026-05-28 - Checkout Modal State Restore On Back
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: when returning from same-window Stripe Checkout with browser Back or Stripe Back, hide the checkout status section and restore the order modal to the pre-click selection state.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no `Code.js` changes; checkout amounts, line items, metadata, return URLs, webhook handling, and persistence flows were not changed.
+- Decisions: incremented the badge to `8`; kept the existing `Secure payment opened` code path for failure/recovery contexts; added a restore-only helper that clears checkout body/meta/fallback controls and switches the order-flow modal back to fulfillment mode while preserving selected delivery/payment choices.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Restore checkout modal state on back"` created version `833`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `833`.
+- Smoke tests: public stable Apps Script URL contains `Development revision 8` and `restoreOrderFlowSelectionAfterCheckoutNavigation_`; stale `Development revision 7` is absent.
+- Follow-ups: run a tokenized browser Back smoke separately without recording live tokens to verify the restored project page shows the selection state and no checkout status copy.

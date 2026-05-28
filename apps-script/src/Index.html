@@ -16226,7 +16226,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 7">7</div>
+  <div class="devRevisionBadge" aria-label="Development revision 8">8</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -21390,6 +21390,9 @@
     const cleared = clearPortalCheckoutNavigationActive_({
       restore: opts.restore === true
     });
+    if (cleared && opts.restore === true) {
+      restoreOrderFlowSelectionAfterCheckoutNavigation_();
+    }
     if (cleared) {
       console.info('[RT-CHECKOUT-TIMING]', {
         phase: 'checkout_loader_cleared',
@@ -33833,6 +33836,17 @@
       orderFlowCheckoutOpenLink.href = ORDER_FLOW_CHECKOUT_URL || '#';
       orderFlowCheckoutOpenLink.hidden = !ORDER_FLOW_CHECKOUT_URL || !!opts.launched;
     }
+  }
+
+  function restoreOrderFlowSelectionAfterCheckoutNavigation_(){
+    if (!orderFlowBackdrop || orderFlowBackdrop.hidden) return;
+    if (orderFlowCheckoutBody) orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
+    if (orderFlowCheckoutMeta) orderFlowCheckoutMeta.textContent = '';
+    resetOrderFlowCheckoutLaunchState();
+    setOrderFlowStatePill('Checkout');
+    setOrderFlowMode('fulfillment');
+    renderOrderFlowFulfillmentSection();
+    renderOrderFlowSummaryCard();
   }
 
   async function copyOrderFlowCheckoutLink(){
