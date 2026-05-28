@@ -103,3 +103,15 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp push --force` pushed 4 files; `clasp version "Use same-window Stripe checkout navigation"` created version `827`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `827`.
 - Smoke tests: public stable Apps Script URL contains `DEV 2`, `RT_PORTAL_ROUTE_REPLACE`, `RT_PORTAL_NAVIGATE`, and `navigateToPortalStripeCheckout_`; live Squarespace `/portal` still needs the updated tracked wrapper snippet applied before wrapper fallback route/navigation handlers are live.
 - Follow-ups: run tokenized project and real/test checkout smoke with a safe fixture token; do not record live tokens in this log.
+
+## 2026-05-28 - Dev Revision 3 Badge Restyle
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, implementation commit `792b158`.
+- Goal: move the revision badge to the bottom-left window corner, remove the `DEV` letters, and restyle it as a Red Threads glass badge.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Decisions: badge now displays only `3`, uses a red/dark glass treatment, and remains pointer-transparent.
+- Validation: `git pull --ff-only`, `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp push --force` pushed 4 files; `clasp version "Restyle dev revision badge"` created version `828`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `828`.
+- Smoke tests: public stable Apps Script URL contains `Development revision 3`, bottom-left badge CSS, and no stale `DEV 2` label; live `/portal` wrapper shows the fullscreen iframe and route/navigation handlers after the Squarespace snippet correction.
+- Follow-ups: run tokenized project checkout smoke separately; do not record live tokens in this log.

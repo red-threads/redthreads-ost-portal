@@ -9,7 +9,7 @@ Last aligned: 2026-05-28.
 - Runtime root: `apps-script/src/`.
 - Tracked runtime files: `Code.js`, `Index.html`, `TaxForm3372Manifest.html`, `appsscript.json`, `.clasp.json`.
 - Current tracked app has been pulled from the live Apps Script project and includes the fuller portal architecture: auth shell, dashboard/order lifecycle surfaces, Stripe checkout routing, Team Mode lanes, and tax-form manifest support.
-- Apps Script runtime now includes `DEV 2` and same-window Stripe Checkout launch helpers for order flow and locked-summary payment flows.
+- Apps Script runtime now includes same-window Stripe Checkout launch helpers and a bottom-left glass Red Threads revision badge showing `3`.
 - Portal DB Sheet ID appears in `Code.js`: `16KrxpEv8s-U5gjLX-DZK25GbrnkeKbjgInngie8Ce_c`.
 - `.clasp.json` now points to the live Apps Script project ID verified in Apps Script: `1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU`.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
@@ -31,15 +31,15 @@ Last aligned: 2026-05-28.
 - Browser-verified Apps Script project URL: `https://script.google.com/u/0/home/projects/1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU/edit`.
 - `clasp pull` against the verified live project succeeded on 2026-05-27 and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`.
 - After the binding repair, `clasp deployments` and `clasp versions` can read the live project.
-- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 827, `Use same-window Stripe checkout navigation`.
+- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 828, `Restyle dev revision badge`.
 - The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
 
 ## Blocked Or Unverified
 
 - The live-pulled server source had a checked-in Team Mode default credential; the repo copy now requires the Team Mode password to come from Apps Script Script Properties instead. Confirm that property before relying on Team Mode in production.
-- Public stable URL smoke test confirmed the deployed HTML contains `DEV 2`, `RT_PORTAL_ROUTE_REPLACE`, `RT_PORTAL_NAVIGATE`, and `navigateToPortalStripeCheckout_`.
-- Full lifecycle/payment fixture regression was not run during the same-window checkout navigation Full ship.
-- Live Squarespace `/portal` inspection on 2026-05-28 did not yet show the new `RT_PORTAL_ROUTE_REPLACE` / `RT_PORTAL_NAVIGATE` wrapper handlers; apply the tracked `web/squarespace-portal-code-block.html` snippet in Squarespace to make wrapper fallback navigation and parent URL replacement live.
+- Public stable URL smoke test confirmed the deployed HTML contains `Development revision 3`, bottom-left badge CSS, and no stale `DEV 2` label.
+- Full lifecycle/payment fixture regression was not run during the dev badge restyle Full ship.
+- Live Squarespace `/portal` inspection on 2026-05-28 showed the fullscreen iframe and `RT_PORTAL_ROUTE_REPLACE` / `RT_PORTAL_NAVIGATE` wrapper handlers present after the Squarespace snippet was corrected.
 
 ## Workflow
 
