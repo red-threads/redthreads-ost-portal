@@ -165,3 +165,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Use global checkout loading overlay"` created version `831`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `831`.
 - Smoke tests: public stable Apps Script URL contains `Development revision 6`, `showPortalCheckoutPreparationLoader_`, and `z-index: 10300`; stale `Development revision 5` and modal-local `orderFlowCheckoutLoading` markers are absent.
 - Follow-ups: run a tokenized card checkout smoke separately without recording live tokens to verify the visual transition and same-window Stripe navigation end to end.
+
+## 2026-05-28 - Checkout Loader Browser Restore Cleanup
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: prevent the Stripe preparation loader from remaining visible when the user returns to the project with browser Back after same-window Stripe Checkout navigation.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no `Code.js` changes; checkout amounts, line items, metadata, return URLs, webhook handling, and persistence flows were not changed.
+- Decisions: incremented the badge to `7`; added a checkout-navigation active flag without storing token or customer data; clear the global loader and re-enable order-flow controls on `pagehide`, `pageshow`, focus, and visibility restore when returning from Stripe navigation.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Clear checkout loader on browser restore"` created version `832`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `832`.
+- Smoke tests: public stable Apps Script URL contains `Development revision 7`, `rtCheckoutNavigationActiveV1`, and `clearCheckoutLoaderForNavigationRestore_`; stale `Development revision 6` is absent.
+- Follow-ups: run a tokenized browser Back smoke separately without recording live tokens to verify the restored project page no longer shows the checkout loader.

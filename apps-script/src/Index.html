@@ -16226,7 +16226,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 6">6</div>
+  <div class="devRevisionBadge" aria-label="Development revision 7">7</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -17411,6 +17411,7 @@
   const AUTH_PORTAL_BOOT_INTENT_KEY = 'rtAuthPortalBootIntentV1';
   const AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY = 'rtAuthDirectOpenTokenV1';
   const RT_LOADER_PENDING_KEY = 'rtLoaderPendingV1';
+  const RT_CHECKOUT_NAVIGATION_ACTIVE_KEY = 'rtCheckoutNavigationActiveV1';
   const SENDER_IMAGES = {
     josiah: 'https://logos.redthreads.work/CALC_PORTAL/JOSIAH_HEADSHOT.png',
     navia: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES_NAVIA.png',
@@ -20057,6 +20058,7 @@
   let AUTH_SESSION_ID = '';
   let PARENT_CHECKOUT_RETURN_RESULT = '';
   let PARENT_STRIPE_SESSION_ID = '';
+  let PORTAL_CHECKOUT_NAVIGATION_ACTIVE = false;
   let DASHBOARD_CONTEXT_MODE = 'session';
   let DASHBOARD_CONTEXT_TOKEN = '';
   let CHAT_MESSAGES = [];
@@ -21239,6 +21241,34 @@
     }
   }
 
+  function markPortalCheckoutNavigationActive_(){
+    PORTAL_CHECKOUT_NAVIGATION_ACTIVE = true;
+    try { sessionStorage.setItem(RT_CHECKOUT_NAVIGATION_ACTIVE_KEY, '1'); } catch (_) {}
+  }
+
+  function hasPortalCheckoutNavigationActive_(){
+    if (PORTAL_CHECKOUT_NAVIGATION_ACTIVE) return true;
+    try {
+      return sessionStorage.getItem(RT_CHECKOUT_NAVIGATION_ACTIVE_KEY) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function clearPortalCheckoutNavigationActive_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const wasActive = hasPortalCheckoutNavigationActive_();
+    PORTAL_CHECKOUT_NAVIGATION_ACTIVE = false;
+    try { sessionStorage.removeItem(RT_CHECKOUT_NAVIGATION_ACTIVE_KEY); } catch (_) {}
+    if (wasActive || opts.force === true) {
+      rtHideLoader();
+      if (opts.restore === true) {
+        setOrderFlowButtonsBusy(false);
+      }
+    }
+    return wasActive;
+  }
+
   function navigateToPortalStripeCheckout_(checkoutUrl, options){
     const targetUrl = String(checkoutUrl || '').trim();
     if (!targetUrl) return false;
@@ -21246,6 +21276,8 @@
     const opts = (options && typeof options === 'object') ? options : {};
     const token = String(opts.token || getActivePortalProjectToken_()).trim();
     if (token) replaceCurrentPortalProjectRoute_(token);
+    const navigatesToStripe = isStripeCheckoutUrl_(targetUrl);
+    if (navigatesToStripe) markPortalCheckoutNavigationActive_();
 
     let topNavigationAttempted = false;
     try {
@@ -21255,7 +21287,7 @@
       }
     } catch (_) {}
 
-    if (isStripeCheckoutUrl_(targetUrl) && postPortalMessageToTop_({
+    if (navigatesToStripe && postPortalMessageToTop_({
       source: 'redthreads-portal',
       type: RT_PORTAL_EVENT_NAVIGATE,
       url: targetUrl,
@@ -21272,6 +21304,7 @@
       window.location.assign(targetUrl);
       return true;
     } catch (err) {
+      if (navigatesToStripe) clearPortalCheckoutNavigationActive_();
       console.warn('Stripe checkout same-window navigation failed.', err);
       return false;
     }
@@ -21350,6 +21383,19 @@
     if (!ov) return;
     ov.classList.remove('is-on');
     ov.setAttribute('aria-hidden', 'true');
+  }
+
+  function clearCheckoutLoaderForNavigationRestore_(reason, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const cleared = clearPortalCheckoutNavigationActive_({
+      restore: opts.restore === true
+    });
+    if (cleared) {
+      console.info('[RT-CHECKOUT-TIMING]', {
+        phase: 'checkout_loader_cleared',
+        reason: String(reason || 'navigation-restore')
+      });
+    }
   }
 
   function rtSetPendingLoaderState(title, sub){
@@ -41719,8 +41765,12 @@
     });
 
     window.addEventListener('beforeunload', beforeUnloadGuard);
+    window.addEventListener('pagehide', () => {
+      clearCheckoutLoaderForNavigationRestore_('pagehide', { restore: true });
+    });
     window.addEventListener('resize', syncHeaderUtilityOffset);
     window.addEventListener('focus', () => {
+      clearCheckoutLoaderForNavigationRestore_('window-focus', { restore: true });
       schedulePostPaymentHydrationCheck_('window-focus');
       if (shouldRefreshPurchaseOrderEmailJobStatus_()) {
         refreshPurchaseOrderEmailJobStatus_().catch(err => {
@@ -41729,6 +41779,7 @@
       }
     });
     window.addEventListener('pageshow', () => {
+      clearCheckoutLoaderForNavigationRestore_('pageshow', { restore: true });
       schedulePostPaymentHydrationCheck_('pageshow');
       if (shouldRefreshPurchaseOrderEmailJobStatus_()) {
         refreshPurchaseOrderEmailJobStatus_().catch(err => {
@@ -41737,7 +41788,11 @@
       }
     });
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden === true) return;
+      if (document.hidden === true) {
+        clearCheckoutLoaderForNavigationRestore_('visibility-hidden', { restore: true });
+        return;
+      }
+      clearCheckoutLoaderForNavigationRestore_('visibility-visible', { restore: true });
       schedulePostPaymentHydrationCheck_('visibilitychange');
       if (shouldRefreshPurchaseOrderEmailJobStatus_()) {
         refreshPurchaseOrderEmailJobStatus_().catch(err => {
