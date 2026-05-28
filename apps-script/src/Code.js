@@ -4772,25 +4772,110 @@ function getAccountStatus(payload) {
 
 /* ---------------- Order Action Gateway + Validation Services ---------------- */
 
-function buildOrderActionContext_(payload) {
+function buildCheckoutTimingExtra_(extra) {
+  const source = (extra && typeof extra === 'object') ? extra : {};
+  const allowed = [
+    'ok',
+    'stage',
+    'method',
+    'paymentMethodSelected',
+    'checkoutReady',
+    'hasCheckoutUrl',
+    'configured',
+    'statusCode',
+    'code'
+  ];
+  const out = {};
+  allowed.forEach(function(key) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) return;
+    const value = source[key];
+    if (typeof value === 'boolean' || typeof value === 'number') {
+      out[key] = value;
+      return;
+    }
+    if (typeof value === 'string') {
+      out[key] = trimString_(value).slice(0, 80);
+    }
+  });
+  return out;
+}
+
+function createCheckoutTimingTrace_(label) {
+  const startedAt = Date.now();
+  return {
+    label: trimString_(label) || 'checkout',
+    startedAt: startedAt,
+    lastAt: startedAt,
+    marks: [],
+    mark: function(name, extra) {
+      const now = Date.now();
+      const mark = Object.assign({
+        name: trimString_(name),
+        elapsedMs: now - startedAt,
+        deltaMs: now - this.lastAt
+      }, buildCheckoutTimingExtra_(extra));
+      this.lastAt = now;
+      this.marks.push(mark);
+      return mark;
+    }
+  };
+}
+
+function markCheckoutTiming_(timing, name, extra) {
+  if (!timing || typeof timing.mark !== 'function') return null;
+  return timing.mark(name, extra);
+}
+
+function buildCheckoutTimingPayload_(timing, extra) {
+  if (!timing || !Array.isArray(timing.marks)) return null;
+  return Object.assign({
+    label: trimString_(timing.label) || 'checkout',
+    totalMs: Date.now() - Number(timing.startedAt || Date.now()),
+    marks: timing.marks.slice(0, 80)
+  }, buildCheckoutTimingExtra_(extra));
+}
+
+function attachCheckoutTiming_(response, timing, extra) {
+  const base = (response && typeof response === 'object') ? Object.assign({}, response) : {};
+  const timingPayload = buildCheckoutTimingPayload_(timing, extra);
+  if (!timingPayload) return base;
+  base.checkoutTiming = timingPayload;
+  try {
+    console.log('[RT-CHECKOUT-TIMING-SERVER] ' + JSON.stringify(timingPayload));
+  } catch (_) {}
+  return base;
+}
+
+function buildOrderActionContext_(payload, timing) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   const token = trimString_(p.token);
   if (!token) throw new Error('Missing token.');
 
+  markCheckoutTiming_(timing, 'config_start');
   const cfg = getConfig_();
+  markCheckoutTiming_(timing, 'config_end');
+  markCheckoutTiming_(timing, 'spreadsheet_open_start');
   const ss = SpreadsheetApp.openById(cfg.sheetId);
+  markCheckoutTiming_(timing, 'spreadsheet_open_end');
+  markCheckoutTiming_(timing, 'portal_infrastructure_start');
   const infra = ensurePortalInfrastructure_(ss, cfg);
+  markCheckoutTiming_(timing, 'portal_infrastructure_end');
+  markCheckoutTiming_(timing, 'token_row_lookup_start');
   const rowInfo = findRowByToken_(infra.exportSheet, token);
+  markCheckoutTiming_(timing, 'token_row_lookup_end', { ok: !!rowInfo });
   if (!rowInfo) throw new Error('Token not found.');
 
   const row = rowInfo.rowObjNormalized;
+  markCheckoutTiming_(timing, 'snapshot_parse_start');
   const snapshot = safeJsonParse_(row.snapshotjson, {});
+  markCheckoutTiming_(timing, 'snapshot_parse_end');
   const mergedIdentity = mergeAccountIdentity_(deriveOrgContextFromRow_(row), {
     personEmail: p.personEmail,
     personName: p.personName,
     orgId: p.orgId,
     orgName: p.orgName
   });
+  markCheckoutTiming_(timing, 'account_resolution_start');
   const accountInfo = createPortalAccountIfMissing_(Object.assign({}, mergedIdentity, {
     cfg: cfg,
     ss: ss,
@@ -4800,6 +4885,8 @@ function buildOrderActionContext_(payload) {
     summary: buildEphemeralAccountSummary_(mergedIdentity, cfg),
     rowInfo: null
   };
+  markCheckoutTiming_(timing, 'account_resolution_end');
+  markCheckoutTiming_(timing, 'portal_state_normalize_start');
   const storedPortalState = safeJsonParse_(row.portalstatejson, {}) || {};
   const portalStateInput = Object.prototype.hasOwnProperty.call(p, 'portalState')
     ? parsePortalStateInput_(p.portalState)
@@ -4809,6 +4896,8 @@ function buildOrderActionContext_(payload) {
     ? writePurchaseOrderDraftIntoPortalState_(portalStateInput, storedPurchaseOrderDraft)
     : portalStateInput;
   const portalState = normalizePortalStateForOrderAction_(mergedPortalStateInput, snapshot);
+  markCheckoutTiming_(timing, 'portal_state_normalize_end');
+  markCheckoutTiming_(timing, 'order_draft_build_start');
   const orderDraft = buildOrderDraftFromSnapshotAndPortalState_({
     token: token,
     rowInfo: rowInfo,
@@ -4818,6 +4907,7 @@ function buildOrderActionContext_(payload) {
     accountSummary: accountInfo.summary,
     currency: cfg.stripePriceCurrency
   });
+  markCheckoutTiming_(timing, 'order_draft_build_end');
 
   return {
     payload: p,
@@ -4829,7 +4919,8 @@ function buildOrderActionContext_(payload) {
     snapshot: snapshot,
     portalState: portalState,
     accountInfo: accountInfo,
-    orderDraft: orderDraft
+    orderDraft: orderDraft,
+    timing: timing || null
   };
 }
 
@@ -5021,9 +5112,13 @@ function overridePortalPayloadState_(portalPayload, portalState) {
 
 // Current sequencing is intentionally preserved here so the next hardening slice
 // can change persistence timing and failure handling with smaller, clearer seams.
-function buildPreparedOrderActionContext_(payload) {
-  const ctx = buildOrderActionContext_(payload);
+function buildPreparedOrderActionContext_(payload, timing) {
+  markCheckoutTiming_(timing, 'context_build_start');
+  const ctx = buildOrderActionContext_(payload, timing);
+  markCheckoutTiming_(timing, 'context_build_end');
+  markCheckoutTiming_(timing, 'portal_state_persistence_start');
   persistLatestPortalStateForOrderAction_(ctx);
+  markCheckoutTiming_(timing, 'portal_state_persistence_end');
   return ctx;
 }
 
@@ -5730,13 +5825,24 @@ function appendClientLifecycleAuditMessageToPortalState_(portalState, messageTex
 }
 
 function createCheckoutAttempt(payload) {
+  const timing = createCheckoutTimingTrace_('createCheckoutAttempt');
+  markCheckoutTiming_(timing, 'request_received');
   try {
-    const ctx = buildPreparedOrderActionContext_(payload);
+    const ctx = buildPreparedOrderActionContext_(payload, timing);
+    markCheckoutTiming_(timing, 'order_access_validation_start');
     const orderFlowAccessError = validateEditableOrderInitiationForAction_(ctx, {
       allowCheckoutStartedRetry: true
     });
-    if (orderFlowAccessError) return orderFlowAccessError;
+    markCheckoutTiming_(timing, 'order_access_validation_end', { ok: !orderFlowAccessError });
+    if (orderFlowAccessError) {
+      return attachCheckoutTiming_(orderFlowAccessError, timing, {
+        ok: false,
+        stage: 'order_access_validation',
+        paymentMethodSelected: trimString_(ctx.payload && ctx.payload.paymentMethodSelected).toLowerCase()
+      });
+    }
     if (readPurchaseOrderDraftFromPortalState_(ctx.portalState)) {
+      markCheckoutTiming_(timing, 'purchase_order_draft_clear_start');
       persistContextPortalState_(ctx, clearPurchaseOrderDraftFromPortalState_(ctx.portalState), {
         locked: false,
         currentOrderState: ORDER_STATES.draft,
@@ -5744,41 +5850,86 @@ function createCheckoutAttempt(payload) {
         currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
         currentPaymentMethod: ''
       });
+      markCheckoutTiming_(timing, 'purchase_order_draft_clear_end');
     }
+    markCheckoutTiming_(timing, 'payment_method_validation_start');
     const paymentMethodSelected = trimString_(ctx.payload.paymentMethodSelected).toLowerCase();
     if (paymentMethodSelected !== PAYMENT_METHODS.card && paymentMethodSelected !== PAYMENT_METHODS.ach) {
-      return { ok: false, error: 'Unsupported payment method.' };
+      markCheckoutTiming_(timing, 'payment_method_validation_end', { ok: false, paymentMethodSelected: paymentMethodSelected });
+      return attachCheckoutTiming_({ ok: false, error: 'Unsupported payment method.' }, timing, {
+        ok: false,
+        stage: 'payment_method_validation',
+        paymentMethodSelected: paymentMethodSelected
+      });
     }
+    markCheckoutTiming_(timing, 'payment_method_validation_end', { ok: true, paymentMethodSelected: paymentMethodSelected });
+    markCheckoutTiming_(timing, 'order_validation_start', { paymentMethodSelected: paymentMethodSelected });
     const validationError = validateOrderPlacementForAction_(ctx, { requirePositiveCheckoutTotal: true });
-    if (validationError) return validationError;
+    markCheckoutTiming_(timing, 'order_validation_end', { ok: !validationError, paymentMethodSelected: paymentMethodSelected });
+    if (validationError) {
+      return attachCheckoutTiming_(validationError, timing, {
+        ok: false,
+        stage: 'order_validation',
+        paymentMethodSelected: paymentMethodSelected
+      });
+    }
 
+    markCheckoutTiming_(timing, 'checkout_identity_build_start');
     const checkoutIdentity = buildCheckoutAttemptIdentity_();
+    markCheckoutTiming_(timing, 'checkout_identity_build_end');
+    markCheckoutTiming_(timing, 'stripe_session_start', { paymentMethodSelected: paymentMethodSelected });
+    const stripeOptions = buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkoutIdentity);
+    stripeOptions.timing = timing;
     const stripe = createStripeCheckoutSession_(
       ctx.orderDraft,
-      buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkoutIdentity)
+      stripeOptions
     );
+    markCheckoutTiming_(timing, 'stripe_session_end', {
+      ok: !!(stripe && stripe.ok === true),
+      paymentMethodSelected: paymentMethodSelected,
+      hasCheckoutUrl: !!(stripe && trimString_(stripe.checkoutUrl || stripe.url))
+    });
     if (!hasUsableCheckoutSession_(stripe)) {
-      return buildCheckoutAttemptFailureResponse_(stripe);
+      return attachCheckoutTiming_(buildCheckoutAttemptFailureResponse_(stripe), timing, {
+        ok: false,
+        stage: 'stripe_session',
+        paymentMethodSelected: paymentMethodSelected,
+        configured: !!(stripe && stripe.configured === true),
+        statusCode: Number(stripe && stripe.statusCode || 0) || 0,
+        code: trimString_(stripe && stripe.code)
+      });
     }
 
+    markCheckoutTiming_(timing, 'persistence_snapshot_start');
     const pointerSnapshot = snapshotExportOrderPointers_(ctx.rowInfo);
+    markCheckoutTiming_(timing, 'persistence_snapshot_end');
     let created = null;
     let exportRowInfo = null;
     let orderSummary = null;
     try {
+      markCheckoutTiming_(timing, 'portal_orders_write_start');
       created = createPortalOrder_(
         buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe)
       );
+      markCheckoutTiming_(timing, 'portal_orders_create_end');
       const finalOrderInfo = updateCheckoutAttemptOrderWithStripeSession_(ctx, created, stripe);
+      markCheckoutTiming_(timing, 'portal_orders_write_end');
+      markCheckoutTiming_(timing, 'order_summary_build_start');
       orderSummary = buildPortalOrderSummary_(finalOrderInfo.rowObjNormalized);
+      markCheckoutTiming_(timing, 'order_summary_build_end');
+      markCheckoutTiming_(timing, 'export_log_pointer_write_start');
       exportRowInfo = writeCheckoutAttemptPointers_(ctx, orderSummary, paymentMethodSelected, checkoutIdentity.checkoutAttemptId);
+      markCheckoutTiming_(timing, 'export_log_pointer_write_end');
       try {
+        markCheckoutTiming_(timing, 'supersede_unpaid_orders_start');
         supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
           excludeOrderId: checkoutIdentity.orderId,
           revisionReason: 'checkout_attempt_superseded',
           notes: 'Superseded by a newer hosted Stripe Checkout attempt.'
         });
+        markCheckoutTiming_(timing, 'supersede_unpaid_orders_end', { ok: true });
       } catch (supersedeErr) {
+        markCheckoutTiming_(timing, 'supersede_unpaid_orders_end', { ok: false });
         console.log('[RT-CHECKOUT-SUPERSEDE] ' + JSON.stringify({
           ok: false,
           token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
@@ -5788,27 +5939,51 @@ function createCheckoutAttempt(payload) {
         }));
       }
     } catch (persistErr) {
+      markCheckoutTiming_(timing, 'critical_persistence_recovery_start');
       restoreExportOrderPointers_(ctx, pointerSnapshot);
       rollbackCheckoutAttemptOrder_(
         ctx,
         resolveCreatedCheckoutOrderForRollback_(ctx, created, checkoutIdentity),
         'checkout_activation_failed'
       );
-      return buildCheckoutAttemptFailureResponse_(
+      markCheckoutTiming_(timing, 'critical_persistence_recovery_end');
+      return attachCheckoutTiming_(buildCheckoutAttemptFailureResponse_(
         stripe,
         {
           code: 'checkout_persistence_failed',
           error: 'Secure payment could not start. Please try again or contact Red Threads.',
           warnings: [String((persistErr && persistErr.message) || persistErr)]
         }
-      );
+      ), timing, {
+        ok: false,
+        stage: 'critical_persistence',
+        paymentMethodSelected: paymentMethodSelected
+      });
     }
 
+    markCheckoutTiming_(timing, 'response_hydration_start');
     const portalPayload = buildOrderActionPortalPayload_(ctx, exportRowInfo);
+    markCheckoutTiming_(timing, 'response_hydration_end', { ok: !!portalPayload });
 
-    return buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutIdentity.checkoutAttemptId, stripe, portalPayload);
+    markCheckoutTiming_(timing, 'response_build_start');
+    const response = buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutIdentity.checkoutAttemptId, stripe, portalPayload);
+    markCheckoutTiming_(timing, 'response_build_end', {
+      ok: true,
+      checkoutReady: response && response.checkoutReady === true,
+      paymentMethodSelected: paymentMethodSelected
+    });
+    return attachCheckoutTiming_(response, timing, {
+      ok: true,
+      stage: 'complete',
+      paymentMethodSelected: paymentMethodSelected,
+      checkoutReady: response && response.checkoutReady === true,
+      hasCheckoutUrl: !!(stripe && trimString_(stripe.checkoutUrl || stripe.url))
+    });
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    return attachCheckoutTiming_({ ok: false, error: String((err && err.message) || err) }, timing, {
+      ok: false,
+      stage: 'exception'
+    });
   }
 }
 
@@ -14513,29 +14688,56 @@ function getPurchaseOrderEmailJobStatus(payload) {
   }
 }
 
-function createLockedOrderPaymentCheckout_(payload) {
+function createLockedOrderPaymentCheckout_(payload, timing) {
+  markCheckoutTiming_(timing, 'request_received');
   const p = (payload && typeof payload === 'object') ? payload : {};
   const method = trimString_(p.paymentMethodSelected).toLowerCase();
   if (method !== PAYMENT_METHODS.card && method !== PAYMENT_METHODS.ach) {
-    return { ok: false, error: 'Unsupported payment method.' };
+    return attachCheckoutTiming_({ ok: false, error: 'Unsupported payment method.' }, timing, {
+      ok: false,
+      stage: 'payment_method_validation',
+      paymentMethodSelected: method
+    });
   }
-  const ctx = buildOrderActionContext_(payload);
+  markCheckoutTiming_(timing, 'context_build_start', { paymentMethodSelected: method });
+  const ctx = buildOrderActionContext_(payload, timing);
+  markCheckoutTiming_(timing, 'context_build_end', { paymentMethodSelected: method });
+  markCheckoutTiming_(timing, 'latest_order_lookup_start', { paymentMethodSelected: method });
   const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
     cfg: ctx.cfg,
     ss: ctx.ss,
     ordersSheet: ctx.infra.ordersSheet
   });
+  markCheckoutTiming_(timing, 'latest_order_lookup_end', { ok: !!latestOrder, paymentMethodSelected: method });
   if (!latestOrder) {
-    return { ok: false, error: 'Locked order not found.' };
+    return attachCheckoutTiming_({ ok: false, error: 'Locked order not found.' }, timing, {
+      ok: false,
+      stage: 'latest_order_lookup',
+      paymentMethodSelected: method
+    });
   }
+  markCheckoutTiming_(timing, 'locked_order_validation_start', { paymentMethodSelected: method });
   const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
   if (trimString_(latestSummary.portalLockState).toLowerCase() !== PORTAL_LOCK_STATES.locked) {
-    return { ok: false, error: 'This order is not locked yet.' };
+    markCheckoutTiming_(timing, 'locked_order_validation_end', { ok: false, paymentMethodSelected: method });
+    return attachCheckoutTiming_({ ok: false, error: 'This order is not locked yet.' }, timing, {
+      ok: false,
+      stage: 'locked_order_validation',
+      paymentMethodSelected: method
+    });
   }
   if (trimString_(latestSummary.paidAt)) {
-    return { ok: false, error: 'This order is already marked paid.' };
+    markCheckoutTiming_(timing, 'locked_order_validation_end', { ok: false, paymentMethodSelected: method });
+    return attachCheckoutTiming_({ ok: false, error: 'This order is already marked paid.' }, timing, {
+      ok: false,
+      stage: 'locked_order_validation',
+      paymentMethodSelected: method
+    });
   }
+  markCheckoutTiming_(timing, 'locked_order_validation_end', { ok: true, paymentMethodSelected: method });
+  markCheckoutTiming_(timing, 'checkout_identity_build_start');
   const checkoutAttemptId = newPortalId_('chk');
+  markCheckoutTiming_(timing, 'checkout_identity_build_end');
   const orderDraft = Object.assign(
     {},
     safeJsonParse_(latestOrder.rowObjNormalized.orderdraftjson, {}) || {},
@@ -14544,17 +14746,32 @@ function createLockedOrderPaymentCheckout_(payload) {
       paymentMethodSelected: method
     }
   );
+  markCheckoutTiming_(timing, 'stripe_session_start', { paymentMethodSelected: method });
   const stripe = createStripeCheckoutSession_(orderDraft, {
     cfg: ctx.cfg,
     paymentMethodSelected: method,
     checkoutAttemptId: checkoutAttemptId,
     orderId: trimString_(latestOrder.rowObjNormalized.orderid),
     returnUrl: buildPortalSummaryUrl_(ctx.orderDraft.token),
-    suppressShippingAddressCollection: true
+    suppressShippingAddressCollection: true,
+    timing: timing
+  });
+  markCheckoutTiming_(timing, 'stripe_session_end', {
+    ok: !!(stripe && stripe.ok === true),
+    paymentMethodSelected: method,
+    hasCheckoutUrl: !!(stripe && trimString_(stripe.checkoutUrl || stripe.url))
   });
   if (!hasUsableCheckoutSession_(stripe)) {
-    return buildCheckoutAttemptFailureResponse_(stripe);
+    return attachCheckoutTiming_(buildCheckoutAttemptFailureResponse_(stripe), timing, {
+      ok: false,
+      stage: 'stripe_session',
+      paymentMethodSelected: method,
+      configured: !!(stripe && stripe.configured === true),
+      statusCode: Number(stripe && stripe.statusCode || 0) || 0,
+      code: trimString_(stripe && stripe.code)
+    });
   }
+  markCheckoutTiming_(timing, 'portal_orders_write_start', { paymentMethodSelected: method });
   const chargedOrderDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(orderDraft, stripe);
   const updatedOrder = updatePortalOrderState_({
     cfg: ctx.cfg,
@@ -14571,7 +14788,11 @@ function createLockedOrderPaymentCheckout_(payload) {
     stripeAmountTotalCents: chargedOrderDraft.stripeAmountTotalCents,
     orderDraft: chargedOrderDraft
   });
+  markCheckoutTiming_(timing, 'portal_orders_write_end', { paymentMethodSelected: method });
+  markCheckoutTiming_(timing, 'order_summary_build_start');
   const orderSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  markCheckoutTiming_(timing, 'order_summary_build_end');
+  markCheckoutTiming_(timing, 'export_log_pointer_write_start', { paymentMethodSelected: method });
   const exportRowInfo = writeCurrentOrderPointersToExportLog_({
     cfg: ctx.cfg,
     ss: ctx.ss,
@@ -14580,22 +14801,39 @@ function createLockedOrderPaymentCheckout_(payload) {
     orderSummary: orderSummary,
     accountSummary: ctx.accountInfo.summary
   });
-  return finalizeOrderActionResponse_({
+  markCheckoutTiming_(timing, 'export_log_pointer_write_end', { paymentMethodSelected: method });
+  markCheckoutTiming_(timing, 'response_hydration_start');
+  const portalPayload = buildOrderActionPortalPayload_(ctx, exportRowInfo);
+  markCheckoutTiming_(timing, 'response_hydration_end', { ok: !!portalPayload });
+  markCheckoutTiming_(timing, 'response_build_start');
+  const response = finalizeOrderActionResponse_({
     ok: true,
     checkoutReady: true,
     checkoutUrl: trimString_(stripe.checkoutUrl || stripe.url),
     stripe: stripe,
     accountSummary: ctx.accountInfo.summary,
     orderSummary: orderSummary,
-    portalPayload: buildOrderActionPortalPayload_(ctx, exportRowInfo)
+    portalPayload: portalPayload
   }, ctx, exportRowInfo);
+  markCheckoutTiming_(timing, 'response_build_end', { ok: true, checkoutReady: true, paymentMethodSelected: method });
+  return attachCheckoutTiming_(response, timing, {
+    ok: true,
+    stage: 'complete',
+    paymentMethodSelected: method,
+    checkoutReady: true,
+    hasCheckoutUrl: true
+  });
 }
 
 function createLockedOrderPaymentCheckout(payload) {
+  const timing = createCheckoutTimingTrace_('createLockedOrderPaymentCheckout');
   try {
-    return createLockedOrderPaymentCheckout_(payload);
+    return createLockedOrderPaymentCheckout_(payload, timing);
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    return attachCheckoutTiming_({ ok: false, error: String((err && err.message) || err) }, timing, {
+      ok: false,
+      stage: 'exception'
+    });
   }
 }
 
@@ -16296,8 +16534,11 @@ function buildStripeCheckoutSessionRequest_(orderDraft, options) {
 
 function createStripeCheckoutSession_(orderDraft, options) {
   const opts = (options && typeof options === 'object') ? options : {};
+  const timing = opts.timing || null;
   const cfg = opts.cfg || getConfig_();
+  markCheckoutTiming_(timing, 'stripe_total_validation_start');
   const grandTotal = roundMoney_(toFiniteNumber_(orderDraft && orderDraft.amountGrandTotal, 0));
+  markCheckoutTiming_(timing, 'stripe_total_validation_end', { ok: grandTotal > 0 });
   if (grandTotal <= 0) {
     return {
       ok: false,
@@ -16322,9 +16563,13 @@ function createStripeCheckoutSession_(orderDraft, options) {
     };
   }
 
+  markCheckoutTiming_(timing, 'stripe_payload_build_start');
   const sessionRequestData = buildStripeCheckoutSessionRequestData_(orderDraft, opts);
   const lineItemDiagnostics = summarizeStripeCheckoutLineItemsForLog_(sessionRequestData.checkoutLineItems);
   const hasAnyImages = lineItemDiagnostics.some((item) => item.hasImage === true);
+  markCheckoutTiming_(timing, 'stripe_payload_build_end', {
+    method: trimString_(opts.paymentMethodSelected)
+  });
   console.log('[RT-STRIPE-CHECKOUT-PAYLOAD] ' + JSON.stringify({
     ok: true,
     paymentMethodSelected: trimString_(opts.paymentMethodSelected),
@@ -16337,19 +16582,27 @@ function createStripeCheckoutSession_(orderDraft, options) {
     lineItems: lineItemDiagnostics
   }));
 
-  const response = UrlFetchApp.fetch('https://api.stripe.com/v1/checkout/sessions', {
-    method: 'post',
-    payload: sessionRequestData.payload,
-    headers: {
-      Authorization: 'Bearer ' + cfg.stripeSecretKey,
-      'Stripe-Version': sessionRequestData.stripeVersion
-    },
-    muteHttpExceptions: true
-  });
+  markCheckoutTiming_(timing, 'stripe_api_call_start');
+  let response;
+  try {
+    response = UrlFetchApp.fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'post',
+      payload: sessionRequestData.payload,
+      headers: {
+        Authorization: 'Bearer ' + cfg.stripeSecretKey,
+        'Stripe-Version': sessionRequestData.stripeVersion
+      },
+      muteHttpExceptions: true
+    });
+  } finally {
+    markCheckoutTiming_(timing, 'stripe_api_call_end');
+  }
   const statusCode = Number(response.getResponseCode() || 0);
+  markCheckoutTiming_(timing, 'stripe_api_response_parse_start', { statusCode: statusCode });
   const responseHeaders = response.getAllHeaders() || {};
   const responseStripeVersion = getHttpHeaderValue_(responseHeaders, 'Stripe-Version');
   const body = safeJsonParse_(response.getContentText(), null);
+  markCheckoutTiming_(timing, 'stripe_api_response_parse_end', { statusCode: statusCode });
   if (statusCode < 200 || statusCode >= 300 || !body || typeof body !== 'object') {
     console.log('[RT-STRIPE-CHECKOUT] ' + JSON.stringify({
       ok: false,

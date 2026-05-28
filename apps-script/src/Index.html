@@ -16226,7 +16226,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 8">8</div>
+  <div class="devRevisionBadge" aria-label="Development revision 9">9</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -21399,6 +21399,69 @@
         reason: String(reason || 'navigation-restore')
       });
     }
+  }
+
+  function nowCheckoutTimingMs_(){
+    try {
+      if (window.performance && typeof window.performance.now === 'function') {
+        return window.performance.now();
+      }
+    } catch (_) {}
+    return Date.now();
+  }
+
+  function createClientCheckoutTimingTrace_(label, method){
+    const now = nowCheckoutTimingMs_();
+    return {
+      label: String(label || 'checkout'),
+      method: String(method || '').trim().toLowerCase(),
+      startedAt: now,
+      lastAt: now,
+      marks: []
+    };
+  }
+
+  function markClientCheckoutTiming_(trace, name, extra){
+    if (!trace || !Array.isArray(trace.marks)) return null;
+    const now = nowCheckoutTimingMs_();
+    const mark = Object.assign({
+      name: String(name || ''),
+      elapsedMs: Math.round(now - trace.startedAt),
+      deltaMs: Math.round(now - trace.lastAt)
+    }, (extra && typeof extra === 'object') ? extra : {});
+    trace.lastAt = now;
+    trace.marks.push(mark);
+    return mark;
+  }
+
+  function summarizeServerCheckoutTiming_(resp){
+    const timing = resp && resp.checkoutTiming && typeof resp.checkoutTiming === 'object'
+      ? resp.checkoutTiming
+      : null;
+    if (!timing) return null;
+    return {
+      label: String(timing.label || ''),
+      totalMs: Number(timing.totalMs || 0) || 0,
+      ok: timing.ok === true,
+      stage: String(timing.stage || ''),
+      marks: Array.isArray(timing.marks) ? timing.marks.map(mark => ({
+        name: String(mark && mark.name || ''),
+        elapsedMs: Number(mark && mark.elapsedMs || 0) || 0,
+        deltaMs: Number(mark && mark.deltaMs || 0) || 0
+      })) : []
+    };
+  }
+
+  function logClientCheckoutTiming_(trace, phase, extra){
+    if (!trace) return;
+    const payload = Object.assign({
+      phase: String(phase || ''),
+      label: String(trace.label || 'checkout'),
+      method: String(trace.method || ''),
+      elapsedMs: Math.round(nowCheckoutTimingMs_() - trace.startedAt),
+      marks: Array.isArray(trace.marks) ? trace.marks.slice() : []
+    }, (extra && typeof extra === 'object') ? extra : {});
+    console.info('[RT-CHECKOUT-TIMING]', payload);
   }
 
   function rtSetPendingLoaderState(title, sub){
@@ -34451,6 +34514,7 @@
     if (maybeBlockOrderFlow()) return;
     const normalizedMethod = String(method || '').trim().toLowerCase();
     const checkoutStartedAt = Date.now();
+    const checkoutTiming = createClientCheckoutTimingTrace_('createCheckoutAttempt', normalizedMethod);
     if (normalizedMethod === PAYMENT_METHODS.ach && !isClientAchPaymentEnabled_()) {
       showNotice('ACH bank payments are not available in the portal yet.', 'err', { persist: true });
       ORDER_FLOW_SELECTED_METHOD = '';
@@ -34467,26 +34531,37 @@
     setOrderFlowStatePill('Checkout');
     resetOrderFlowCheckoutLaunchState();
     setOrderFlowCheckoutLoadingState(normalizedMethod);
-    console.info('[RT-CHECKOUT-TIMING]', {
-      phase: 'checkout_click',
-      method: normalizedMethod,
-      elapsedMs: 0
-    });
+    markClientCheckoutTiming_(checkoutTiming, 'checkout_click');
+    logClientCheckoutTiming_(checkoutTiming, 'checkout_click');
     try {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_loader_painted');
+      markClientCheckoutTiming_(checkoutTiming, 'summary_options_update_start');
       setSummaryOptions({ creditCardFeeEnabled: normalizedMethod === 'card' });
+      markClientCheckoutTiming_(checkoutTiming, 'summary_options_update_end');
+      markClientCheckoutTiming_(checkoutTiming, 'client_state_capture_start');
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+      markClientCheckoutTiming_(checkoutTiming, 'client_state_capture_end');
+      markClientCheckoutTiming_(checkoutTiming, 'client_payload_serialize_start');
+      const clickedPortalStateJson = JSON.stringify(clickedPortalState);
+      markClientCheckoutTiming_(checkoutTiming, 'client_payload_serialize_end', {
+        bytes: clickedPortalStateJson.length
+      });
+      markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_start');
       const resp = await callServer('createCheckoutAttempt', {
         token: CURRENT_TOKEN,
         paymentMethodSelected: normalizedMethod,
-        portalState: JSON.stringify(clickedPortalState)
+        portalState: clickedPortalStateJson
       });
-      console.info('[RT-CHECKOUT-TIMING]', {
-        phase: 'checkout_session_response',
-        method: normalizedMethod,
-        elapsedMs: Date.now() - checkoutStartedAt,
+      markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_end', {
         ok: !!(resp && resp.ok === true),
         checkoutReady: !!(resp && resp.checkoutReady === true)
+      });
+      logClientCheckoutTiming_(checkoutTiming, 'checkout_session_response', {
+        elapsedMs: Date.now() - checkoutStartedAt,
+        ok: !!(resp && resp.ok === true),
+        checkoutReady: !!(resp && resp.checkoutReady === true),
+        serverTiming: summarizeServerCheckoutTiming_(resp)
       });
       if (!resp || resp.ok !== true) {
         hidePortalCheckoutPreparationLoader_();
@@ -34497,7 +34572,11 @@
         })) return;
         throw new Error(String((resp && resp.error) || 'Unable to create checkout attempt.'));
       }
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_url_extract_start');
       const checkoutUrl = String((resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '').trim();
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_url_extract_end', {
+        hasCheckoutUrl: !!checkoutUrl
+      });
       if (!resp.checkoutReady || !checkoutUrl) {
         hidePortalCheckoutPreparationLoader_();
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
@@ -34510,12 +34589,15 @@
         );
         return;
       }
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_start');
       const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
-      console.info('[RT-CHECKOUT-TIMING]', {
-        phase: 'checkout_navigation_attempt',
-        method: normalizedMethod,
-        elapsedMs: Date.now() - checkoutStartedAt,
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_end', {
         launched: launched
+      });
+      logClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_attempt', {
+        elapsedMs: Date.now() - checkoutStartedAt,
+        launched: launched,
+        serverTiming: summarizeServerCheckoutTiming_(resp)
       });
       if (!launched) {
         hidePortalCheckoutPreparationLoader_();
@@ -37756,6 +37838,7 @@
   async function startLockedSummaryPaymentCheckout_(method){
     const paymentMethodSelected = String(method || '').trim().toLowerCase();
     const checkoutStartedAt = Date.now();
+    const checkoutTiming = createClientCheckoutTimingTrace_('createLockedOrderPaymentCheckout', paymentMethodSelected);
     if (paymentMethodSelected !== 'card' && paymentMethodSelected !== 'ach') {
       throw new Error('Unsupported payment method.');
     }
@@ -37771,34 +37854,41 @@
     setSummaryShareBusyAction_(paymentMethodSelected === 'card' ? 'pay_card' : 'pay_ach');
     showPortalCheckoutPreparationLoader_(paymentMethodSelected);
     let launched = false;
-    console.info('[RT-CHECKOUT-TIMING]', {
-      phase: 'locked_checkout_click',
-      method: paymentMethodSelected,
-      elapsedMs: 0
-    });
+    markClientCheckoutTiming_(checkoutTiming, 'locked_checkout_click');
+    logClientCheckoutTiming_(checkoutTiming, 'locked_checkout_click');
     try {
+      markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_start');
       const resp = await callServer('createLockedOrderPaymentCheckout', {
         token: CURRENT_TOKEN,
         paymentMethodSelected: paymentMethodSelected
       });
-      console.info('[RT-CHECKOUT-TIMING]', {
-        phase: 'locked_checkout_session_response',
-        method: paymentMethodSelected,
-        elapsedMs: Date.now() - checkoutStartedAt,
+      markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_end', {
         ok: !!(resp && resp.ok === true)
+      });
+      logClientCheckoutTiming_(checkoutTiming, 'locked_checkout_session_response', {
+        elapsedMs: Date.now() - checkoutStartedAt,
+        ok: !!(resp && resp.ok === true),
+        serverTiming: summarizeServerCheckoutTiming_(resp)
       });
       if (!resp || resp.ok !== true || !String(resp.checkoutUrl || '').trim()) {
         hidePortalCheckoutPreparationLoader_();
         syncOrderFlowLifecycleFromResponse_(resp);
         throw new Error(String((resp && resp.error) || 'Unable to prepare payment.'));
       }
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_url_extract_start');
       const checkoutUrl = String((resp.checkoutUrl || (resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '')).trim();
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_url_extract_end', {
+        hasCheckoutUrl: !!checkoutUrl
+      });
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_start');
       launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
-      console.info('[RT-CHECKOUT-TIMING]', {
-        phase: 'locked_checkout_navigation_attempt',
-        method: paymentMethodSelected,
-        elapsedMs: Date.now() - checkoutStartedAt,
+      markClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_end', {
         launched: launched
+      });
+      logClientCheckoutTiming_(checkoutTiming, 'locked_checkout_navigation_attempt', {
+        elapsedMs: Date.now() - checkoutStartedAt,
+        launched: launched,
+        serverTiming: summarizeServerCheckoutTiming_(resp)
       });
       if (!launched) {
         syncOrderFlowLifecycleFromResponse_(resp);

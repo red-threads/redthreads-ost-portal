@@ -191,3 +191,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Restore checkout modal state on back"` created version `833`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `833`.
 - Smoke tests: public stable Apps Script URL contains `Development revision 8` and `restoreOrderFlowSelectionAfterCheckoutNavigation_`; stale `Development revision 7` is absent.
 - Follow-ups: run a tokenized browser Back smoke separately without recording live tokens to verify the restored project page shows the selection state and no checkout status copy.
+
+## 2026-05-28 - Checkout Launch Timing Instrumentation
+
+- Mode: Full ship, Stage 1 instrumentation.
+- Branch/commit/PR: `main`.
+- Goal: measure checkout launch delay without changing commercial Stripe payloads, order validation, webhook correlation, or durable payment/order state.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no amount, line item, metadata, tax, shipping, card fee, payment method, checkout eligibility, return URL, webhook, or persistence schema fields were changed. The Stripe session options now carry an internal timing object that is not written into the Stripe request payload.
+- Client timing added: checkout click, loader paint, summary option update, client state capture, client payload serialization, `google.script.run` round trip, checkout URL extraction, and same-window navigation attempt.
+- Server timing added: config, spreadsheet open, portal infrastructure, token row lookup, snapshot parse, account resolution, portal state normalization/persistence, order validation, Stripe payload build, Stripe API call/parse, PORTAL_ORDERS write, EXPORT_LOG pointer write, response hydration, and response build.
+- Decision: this stage is instrumentation only. The server still returns the hydrated portal payload before returning `checkoutUrl`; no optimization was applied until timing data is collected.
+- Dev revision: incremented badge to `9`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Instrument checkout launch timing"` created version `834`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `834`.
+- Smoke tests: public stable Apps Script URL contains `Development revision 9`, `checkoutTiming`, and `client_state_capture_start`; stale `Development revision 8` is absent. Server-only timing markers emit during checkout calls and are not visible in public HTML.
+- Timing baseline: not run during this ship because a real tokenized checkout attempt creates order/payment artifacts. Collect timings from the next controlled checkout attempt without committing live tokens.
