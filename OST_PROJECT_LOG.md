@@ -89,3 +89,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Decisions: store the wrapper as a tracked web integration artifact; keep Apps Script deployment untouched because this change is repo/Squarespace source tracking only.
 - Current-state updates: wrapper forwards `t`, `checkoutResult`, and `stripeSessionId` to the stable Apps Script deployment.
 - Follow-ups: if Squarespace code changes in the website editor, update this file in the same change so GitHub remains canonical.
+
+## 2026-05-28 - Same-Window Stripe Checkout Navigation
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, implementation commit `1fff2c6`.
+- Goal: mirror the Merch Store desktop/fallback same-window Stripe Checkout navigation pattern in the Portal without changing commercial Stripe payload construction.
+- Merch Store inspection: `Index.html` uses `navigateToStripeCheckout()` -> `navigateToTopUrl()` with top-window navigation and `RT_MERCH_PRICING_NAVIGATE` postMessage fallback; `cloud-run/merch-store-checkout-api/server.js` launcher uses `window.location.replace()` but current Merch mobile intentionally remains a new-tab exception.
+- Files changed: `apps-script/src/Index.html`, `web/squarespace-portal-code-block.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no `Code.js` changes; inspected and preserved `createCheckoutAttempt`, `createLockedOrderPaymentCheckout_`, `buildCheckoutAttemptStripeOptions_`, `buildStripeCheckoutSessionRequestData_`, `createStripeCheckoutSession_`, `buildStripeReturnBaseUrl_`, and `buildStripeCheckoutReturnUrl_`.
+- Decisions: incremented the badge to `DEV 2`; removed pre-opened/new-tab checkout launch as the primary path; added child route replacement and same-window Stripe navigation helpers; added wrapper handlers for `RT_PORTAL_ROUTE_REPLACE` and `RT_PORTAL_NAVIGATE`.
+- Validation: `git pull --ff-only`, `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp push --force` pushed 4 files; `clasp version "Use same-window Stripe checkout navigation"` created version `827`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `827`.
+- Smoke tests: public stable Apps Script URL contains `DEV 2`, `RT_PORTAL_ROUTE_REPLACE`, `RT_PORTAL_NAVIGATE`, and `navigateToPortalStripeCheckout_`; live Squarespace `/portal` still needs the updated tracked wrapper snippet applied before wrapper fallback route/navigation handlers are live.
+- Follow-ups: run tokenized project and real/test checkout smoke with a safe fixture token; do not record live tokens in this log.
