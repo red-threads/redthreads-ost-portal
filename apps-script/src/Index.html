@@ -214,21 +214,26 @@
     a:hover{color:var(--red)}
     .devRevisionBadge{
       position:fixed;
-      top:8px;
-      right:8px;
+      left:12px;
+      bottom:12px;
       z-index:10140;
-      padding:5px 8px;
-      border:1px solid rgba(17,17,17,.55);
+      min-width:28px;
+      height:28px;
+      display:grid;
+      place-items:center;
+      padding:0 9px;
+      border:1px solid rgba(255,255,255,.22);
       border-radius:999px;
-      background:#facc15;
-      color:#111;
-      font-size:10px;
+      background:linear-gradient(145deg, rgba(225,29,72,.82), rgba(15,23,42,.76));
+      color:rgba(255,255,255,.94);
+      font-size:11px;
       line-height:1;
       font-weight:900;
-      letter-spacing:.08em;
-      text-transform:uppercase;
+      letter-spacing:0;
       pointer-events:none;
-      box-shadow:0 2px 8px rgba(0,0,0,.18);
+      box-shadow:0 10px 26px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.26), 0 0 0 1px rgba(225,29,72,.18);
+      backdrop-filter:blur(14px) saturate(140%);
+      -webkit-backdrop-filter:blur(14px) saturate(140%);
     }
     button, input, select, textarea{
       font:inherit;
@@ -16215,7 +16220,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 2">DEV 2</div>
+  <div class="devRevisionBadge" aria-label="Development revision 3">3</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
