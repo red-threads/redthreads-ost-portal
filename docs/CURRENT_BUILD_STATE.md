@@ -9,7 +9,7 @@ Last aligned: 2026-05-28.
 - Runtime root: `apps-script/src/`.
 - Tracked runtime files: `Code.js`, `Index.html`, `TaxForm3372Manifest.html`, `appsscript.json`, `.clasp.json`.
 - Current tracked app has been pulled from the live Apps Script project and includes the fuller portal architecture: auth shell, dashboard/order lifecycle surfaces, Stripe checkout routing, Team Mode lanes, and tax-form manifest support.
-- Apps Script runtime now includes same-window Stripe Checkout launch helpers and a bottom-left glass Red Threads revision badge showing `3`.
+- Tracked runtime source now includes same-window Stripe Checkout launch helpers, an in-modal checkout transition loader, checkout timing logs, and a bottom-left glass Red Threads revision badge showing `4`.
 - Portal DB Sheet ID appears in `Code.js`: `16KrxpEv8s-U5gjLX-DZK25GbrnkeKbjgInngie8Ce_c`.
 - `.clasp.json` now points to the live Apps Script project ID verified in Apps Script: `1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU`.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
@@ -30,22 +30,23 @@ Last aligned: 2026-05-28.
 
 - Browser-verified Apps Script project URL: `https://script.google.com/u/0/home/projects/1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU/edit`.
 - `clasp pull` against the verified live project succeeded on 2026-05-27 and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`.
-- After the binding repair, `clasp deployments` and `clasp versions` can read the live project.
+- After the binding repair, `clasp push --force` can update the live Apps Script source project.
 - Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 828, `Restyle dev revision badge`.
+- The checkout transition loader source was pushed to Apps Script on 2026-05-28, but `clasp version "Show checkout transition loader"` returned `Requested entity was not found`; the stable deployment was not advanced past version 828.
 - The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
 
 ## Blocked Or Unverified
 
 - The live-pulled server source had a checked-in Team Mode default credential; the repo copy now requires the Team Mode password to come from Apps Script Script Properties instead. Confirm that property before relying on Team Mode in production.
-- Public stable URL smoke test confirmed the deployed HTML contains `Development revision 3`, bottom-left badge CSS, and no stale `DEV 2` label.
-- Full lifecycle/payment fixture regression was not run during the dev badge restyle Full ship.
+- Public stable URL smoke test confirmed the deployed HTML contains `Development revision 3`, bottom-left badge CSS, and no stale `DEV 2` label; the checkout transition loader / revision `4` source is not confirmed live on the stable deployment because version/deploy was blocked.
+- Full lifecycle/payment fixture regression was not run during the checkout transition loader Full ship attempt.
 - Live Squarespace `/portal` inspection on 2026-05-28 showed the fullscreen iframe and `RT_PORTAL_ROUTE_REPLACE` / `RT_PORTAL_NAVIGATE` wrapper handlers present after the Squarespace snippet was corrected.
 
 ## Workflow
 
 - Current preferred workflow is mainline-first for owner-directed docs/tooling, runtime edits, and Full ship requests.
 - Branch/PR workflow is optional and should be used only when explicitly requested, required by repo protection, or appropriate for high-risk architecture/review work.
-- GitHub source updates and Apps Script push/version/deploy currently work from the repaired local clasp binding.
+- GitHub source updates and Apps Script source push currently work from the repaired local clasp binding; Apps Script version/deploy is blocked until the current `Requested entity was not found` response from `clasp version` is resolved.
 
 ## Known Follow-Ups
 

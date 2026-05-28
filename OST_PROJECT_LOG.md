@@ -115,3 +115,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp push --force` pushed 4 files; `clasp version "Restyle dev revision badge"` created version `828`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `828`.
 - Smoke tests: public stable Apps Script URL contains `Development revision 3`, bottom-left badge CSS, and no stale `DEV 2` label; live `/portal` wrapper shows the fullscreen iframe and route/navigation handlers after the Squarespace snippet correction.
 - Follow-ups: run tokenized project checkout smoke separately; do not record live tokens in this log.
+
+## 2026-05-28 - Checkout Transition Loader Attempt
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, implementation commit `ff3b86a`.
+- Goal: reduce perceived wait after `Place Order` by showing an immediate in-modal checkout loader, logging non-PII checkout timing, and navigating to Stripe as soon as a checkout URL is returned.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no `Code.js` changes; checkout amounts, line items, metadata, return URLs, webhook handling, and persistence flows were not changed.
+- Decisions: incremented the badge to `4`; kept pre-created Stripe sessions out of scope because that would create order/payment side effects before explicit order intent; kept fallback controls for blocked navigation.
+- Validation: `git pull --ff-only`, `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: GitHub push succeeded and `clasp push --force` pushed 4 files to the Apps Script source project; `clasp version "Show checkout transition loader"` returned `Requested entity was not found`, so no version or stable deployment update was completed.
+- Smoke tests: stable public deployment was not smoke-tested for this change because version/deploy was blocked; the stable deployment remains at version `828` until the clasp version blocker is resolved.
+- Follow-ups: resolve the `clasp version` access/entity blocker, deploy the already-pushed source or a fresh validated commit to the existing stable deployment ID, then run tokenized checkout smoke without recording live tokens.
