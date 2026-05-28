@@ -290,3 +290,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Clean mobile portal link display"` created version `839`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `839`.
 - Smoke tests: public stable Apps Script HTML contains `Development revision 14`, `portalMobileCurrentLink`, the updated copy fallback, and ellipsis styling; stale `Development revision 13` is absent. Local wrapper visual smoke at `390px` confirmed the mobile block is visible, iframe loading is skipped, the long link remains inside the frame, and CSS ellipsis is active.
 - Follow-ups: apply the updated `web/squarespace-portal-code-block.html` in Squarespace so the public wrapper gets the same pre-iframe link-display cleanup.
+
+## 2026-05-28 - Checkout Unsaved Prompt Suppression
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: prevent the browser-native unsaved-changes prompt from appearing after changed quantities are persisted into a newly created Stripe Checkout session.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Behavior preservation: no `Code.js`, Stripe payload, order persistence, webhook logic, lifecycle state, schema, Apps Script config, Sheet contract, Squarespace wrapper, or payment data logic changed.
+- Implementation: `beforeUnloadGuard` now exits while the portal is already performing an approved Stripe checkout navigation, and the normal checkout path resets the dirty baseline after a successful checkout response returns a valid checkout URL.
+- Expected behavior: if a user changes quantities, starts checkout, and the server creates a valid Stripe session, same-window Stripe navigation should not trigger the native browser unsaved-changes prompt. Normal accidental reload/leave protection remains active outside checkout navigation.
+- Dev revision: incremented badge to `15`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Suppress checkout unload prompt"` created version `840`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `840`.
+- Smoke tests: public stable Apps Script HTML contains `Development revision 15` and the checkout-aware unload guard; stale `Development revision 14` is absent.
+- Follow-ups: manually re-test the exact browser-side Back from Stripe -> edit quantities -> Place Order sequence through the branded wrapper and confirm the native prompt no longer appears.
