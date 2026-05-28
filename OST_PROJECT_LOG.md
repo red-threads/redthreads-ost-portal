@@ -152,3 +152,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed the runtime source; `clasp version "Show fullscreen checkout loader"` created version `830`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `830`.
 - Smoke tests: public stable Apps Script URL contains `Development revision 5`, fullscreen loader markers, and no stale `Development revision 4` label.
 - Follow-ups: run a tokenized card checkout smoke separately without recording live tokens to verify the visual transition and same-window Stripe navigation end to end.
+
+## 2026-05-28 - Global Checkout Loading Overlay
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: replace the scrollable/modal-contained checkout loader with the same global project-entry loading overlay style during Stripe Checkout preparation.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no `Code.js` changes; checkout amounts, line items, metadata, return URLs, webhook handling, and persistence flows were not changed.
+- Decisions: incremented the badge to `6`; removed the order-flow-specific checkout loader markup and CSS; raised the shared `rtLoadingOverlay` above modal layers; routed order-flow checkout preparation and locked-summary payment preparation through the global loader; kept fallback checkout controls only for failed automatic navigation.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Use global checkout loading overlay"` created version `831`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `831`.
+- Smoke tests: public stable Apps Script URL contains `Development revision 6`, `showPortalCheckoutPreparationLoader_`, and `z-index: 10300`; stale `Development revision 5` and modal-local `orderFlowCheckoutLoading` markers are absent.
+- Follow-ups: run a tokenized card checkout smoke separately without recording live tokens to verify the visual transition and same-window Stripe navigation end to end.

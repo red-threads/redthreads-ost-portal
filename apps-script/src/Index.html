@@ -2188,7 +2188,7 @@
       background: var(--c-loader-bg);
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
-      z-index: 9999;
+      z-index: 10300;
       pointer-events: none;
     }
 
@@ -13544,84 +13544,6 @@
       line-height:1.5;
       white-space:pre-wrap;
     }
-    .orderFlowCheckoutLoading{
-      position:fixed;
-      inset:0;
-      z-index:10220;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap:18px;
-      margin:0;
-      padding:24px;
-      text-align:center;
-      background:
-        radial-gradient(circle at 50% 42%, rgba(225,29,72,.22), transparent 34rem),
-        rgba(0,0,0,.86);
-      backdrop-filter:blur(10px) saturate(130%);
-      -webkit-backdrop-filter:blur(10px) saturate(130%);
-      pointer-events:auto;
-    }
-    .orderFlowCheckoutLoading[hidden]{
-      display:none !important;
-    }
-    .orderFlowCheckoutSpinner{
-      width:72px;
-      height:72px;
-      position:relative;
-      display:grid;
-      place-items:center;
-      filter:drop-shadow(0 0 14px rgba(225,29,72,.34));
-    }
-    .orderFlowCheckoutSpinner::before{
-      content:'';
-      position:absolute;
-      inset:0;
-      border-radius:999px;
-      background:
-        conic-gradient(from 210deg,
-          rgba(225,29,72,.18) 0deg,
-          rgba(225,29,72,.26) 78deg,
-          rgba(244,63,94,.95) 78deg,
-          rgba(244,63,94,.95) 186deg,
-          rgba(225,29,72,.18) 186deg,
-          rgba(225,29,72,.18) 360deg);
-      -webkit-mask:radial-gradient(circle, transparent 58%, #000 60%);
-      mask:radial-gradient(circle, transparent 58%, #000 60%);
-      animation:rtSpin 1180ms linear infinite;
-    }
-    .orderFlowCheckoutSpinnerIcon{
-      position:relative;
-      z-index:1;
-      width:37px;
-      height:37px;
-      object-fit:contain;
-      user-select:none;
-      -webkit-user-drag:none;
-      animation:rtPulse 1200ms ease-in-out infinite;
-      filter:drop-shadow(0 1px 4px rgba(0,0,0,.18));
-    }
-    .orderFlowCheckoutLoadingText{
-      width:min(460px, calc(100vw - 48px));
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-      padding:0;
-      max-width:42ch;
-    }
-    .orderFlowCheckoutLoadingTitle{
-      color:var(--rt-text);
-      font-size:26px;
-      line-height:1.2;
-      font-weight:900;
-    }
-    .orderFlowCheckoutLoadingSub{
-      color:var(--rt-muted);
-      font-size:16px;
-      line-height:1.4;
-      font-weight:700;
-    }
     .orderFlowBtn{
       min-height:42px;
       border-radius:12px;
@@ -16304,7 +16226,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 5">5</div>
+  <div class="devRevisionBadge" aria-label="Development revision 6">6</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -17269,15 +17191,6 @@
         </div>
       </div>
       <div id="orderFlowCheckoutSection" hidden>
-        <div class="orderFlowCheckoutLoading" id="orderFlowCheckoutLoading" role="status" aria-live="polite" hidden>
-          <div class="orderFlowCheckoutSpinner" aria-hidden="true">
-            <img class="orderFlowCheckoutSpinnerIcon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
-          </div>
-          <div class="orderFlowCheckoutLoadingText">
-            <div class="orderFlowCheckoutLoadingTitle">Preparing secure payment...</div>
-            <div class="orderFlowCheckoutLoadingSub" id="orderFlowCheckoutLoadingSub">Saving your order and creating Stripe Checkout. This can take a few seconds.</div>
-          </div>
-        </div>
         <p class="orderFlowBody" id="orderFlowCheckoutBody">Creating your checkout session...</p>
         <div class="orderFlowInfoCard">
           <div class="orderFlowCheckoutMeta" id="orderFlowCheckoutMeta"></div>
@@ -19994,8 +19907,6 @@
   const orderFlowBlockingSection = document.getElementById('orderFlowBlockingSection');
   const orderFlowBlockingAlert = document.getElementById('orderFlowBlockingAlert');
   const orderFlowCheckoutSection = document.getElementById('orderFlowCheckoutSection');
-  const orderFlowCheckoutLoading = document.getElementById('orderFlowCheckoutLoading');
-  const orderFlowCheckoutLoadingSub = document.getElementById('orderFlowCheckoutLoadingSub');
   const orderFlowResultSection = document.getElementById('orderFlowResultSection');
   const orderFlowBackBtn = document.getElementById('orderFlowBackBtn');
   const orderFlowCheckBtn = document.getElementById('orderFlowCheckBtn');
@@ -33803,10 +33714,7 @@
 
   function resetOrderFlowCheckoutLaunchState(){
     ORDER_FLOW_CHECKOUT_URL = '';
-    if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
-    if (orderFlowCheckoutLoadingSub) {
-      orderFlowCheckoutLoadingSub.textContent = 'Saving your order and creating Stripe Checkout. This can take a few seconds.';
-    }
+    hidePortalCheckoutPreparationLoader_();
     if (orderFlowCheckoutHint) {
       orderFlowCheckoutHint.hidden = true;
       orderFlowCheckoutHint.textContent = 'If secure payment does not open automatically, use the button below to continue in this window.';
@@ -33819,18 +33727,27 @@
     }
   }
 
+  function showPortalCheckoutPreparationLoader_(method){
+    const normalizedMethod = String(method || '').trim().toLowerCase();
+    const title = normalizedMethod === 'ach'
+      ? 'Preparing secure ACH payment...'
+      : 'Preparing secure payment...';
+    rtShowLoader(title, 'Saving your order and creating Stripe Checkout. This can take a few seconds.');
+  }
+
+  function hidePortalCheckoutPreparationLoader_(){
+    rtHideLoader();
+  }
+
   function setOrderFlowCheckoutLoadingState(method){
     ORDER_FLOW_CHECKOUT_URL = '';
-    if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = false;
+    showPortalCheckoutPreparationLoader_(method);
     if (orderFlowCheckoutBody) orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
     if (orderFlowCheckoutMeta) {
       const methodLabel = String(method || '').trim().toLowerCase() === 'ach'
         ? 'ACH Checkout'
         : 'Stripe Checkout';
       orderFlowCheckoutMeta.textContent = methodLabel + ' is being created now.';
-    }
-    if (orderFlowCheckoutLoadingSub) {
-      orderFlowCheckoutLoadingSub.textContent = 'Saving your order and creating Stripe Checkout. This can take a few seconds.';
     }
     if (orderFlowCheckoutHint) orderFlowCheckoutHint.hidden = true;
     if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = true;
@@ -33843,7 +33760,7 @@
   function setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, options){
     const opts = (options && typeof options === 'object') ? options : {};
     ORDER_FLOW_CHECKOUT_URL = String(checkoutUrl || '').trim();
-    if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
+    if (!opts.launched) hidePortalCheckoutPreparationLoader_();
     if (orderFlowCheckoutBody) {
       orderFlowCheckoutBody.textContent = opts.launched ? 'Secure payment opened' : 'Secure payment ready';
     }
@@ -33897,6 +33814,7 @@
       showNotice('Secure payment link is not available yet.', 'err');
       return false;
     }
+    rtShowLoader('Opening secure payment...', 'Taking you to Stripe Checkout in this window.');
     if (navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN })) {
       if (orderFlowCheckoutHint) {
         orderFlowCheckoutHint.hidden = false;
@@ -33908,6 +33826,7 @@
       showNotice('Opening secure payment in this window.', 'ok');
       return true;
     }
+    rtHideLoader();
     console.warn('Stripe checkout same-window navigation was blocked.');
     if (orderFlowCheckoutHint) {
       orderFlowCheckoutHint.hidden = false;
@@ -34488,7 +34407,6 @@
     setOrderFlowStatePill('Checkout');
     resetOrderFlowCheckoutLaunchState();
     setOrderFlowCheckoutLoadingState(normalizedMethod);
-    setOrderFlowMode('checkout');
     console.info('[RT-CHECKOUT-TIMING]', {
       phase: 'checkout_click',
       method: normalizedMethod,
@@ -34511,7 +34429,7 @@
         checkoutReady: !!(resp && resp.checkoutReady === true)
       });
       if (!resp || resp.ok !== true) {
-        if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
+        hidePortalCheckoutPreparationLoader_();
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         if (handleOrderFlowActionError(resp, {
           surface: 'checkout',
@@ -34521,7 +34439,7 @@
       }
       const checkoutUrl = String((resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '').trim();
       if (!resp.checkoutReady || !checkoutUrl) {
-        if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
+        hidePortalCheckoutPreparationLoader_();
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         console.warn('Stripe checkout URL missing from createCheckoutAttempt response.', resp);
         showOrderFlowResult(
@@ -34540,7 +34458,7 @@
         launched: launched
       });
       if (!launched) {
-        if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
+        hidePortalCheckoutPreparationLoader_();
         console.warn('Stripe checkout same-window navigation failed before session launch.');
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, { launched: false });
@@ -34557,7 +34475,7 @@
       setOrderFlowMode('checkout');
       showNotice('Opening secure payment in this window.', 'ok');
     } catch (err) {
-      if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
+      hidePortalCheckoutPreparationLoader_();
       showNotice(String((err && err.message) || err), 'err');
       setOrderFlowStatePill('Checkout');
       setOrderFlowMode('checkout');
@@ -37791,9 +37709,8 @@
       throw new Error('This order is already marked paid.');
     }
     setSummaryShareBusyAction_(paymentMethodSelected === 'card' ? 'pay_card' : 'pay_ach');
-    rtShowLoader('Preparing payment', paymentMethodSelected === 'card'
-      ? 'Building your secure credit card checkout.'
-      : 'Building your secure ACH checkout.');
+    showPortalCheckoutPreparationLoader_(paymentMethodSelected);
+    let launched = false;
     console.info('[RT-CHECKOUT-TIMING]', {
       phase: 'locked_checkout_click',
       method: paymentMethodSelected,
@@ -37811,11 +37728,12 @@
         ok: !!(resp && resp.ok === true)
       });
       if (!resp || resp.ok !== true || !String(resp.checkoutUrl || '').trim()) {
+        hidePortalCheckoutPreparationLoader_();
         syncOrderFlowLifecycleFromResponse_(resp);
         throw new Error(String((resp && resp.error) || 'Unable to prepare payment.'));
       }
       const checkoutUrl = String((resp.checkoutUrl || (resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '')).trim();
-      const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
+      launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
       console.info('[RT-CHECKOUT-TIMING]', {
         phase: 'locked_checkout_navigation_attempt',
         method: paymentMethodSelected,
@@ -37840,7 +37758,7 @@
     } catch (err) {
       throw err;
     } finally {
-      rtHideLoader();
+      if (!launched) hidePortalCheckoutPreparationLoader_();
       SUMMARY_SHARE_BUSY_ACTION = '';
       rerenderSummaryEstimateControls_();
     }
