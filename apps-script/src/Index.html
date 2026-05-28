@@ -16226,7 +16226,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 11">11</div>
+  <div class="devRevisionBadge" aria-label="Development revision 12">12</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -21475,6 +21475,93 @@
     console.info('[RT-CHECKOUT-TIMING]', payload);
     try {
       console.info('[RT-CHECKOUT-TIMING-JSON] ' + JSON.stringify(payload));
+    } catch (_) {}
+  }
+
+  function getClientCheckoutTimingMark_(trace, name){
+    const marks = trace && Array.isArray(trace.marks) ? trace.marks : [];
+    const target = String(name || '');
+    for (let i = 0; i < marks.length; i += 1) {
+      if (String(marks[i] && marks[i].name || '') === target) return marks[i];
+    }
+    return null;
+  }
+
+  function getClientCheckoutTimingElapsed_(trace, name){
+    const mark = getClientCheckoutTimingMark_(trace, name);
+    const value = Number(mark && mark.elapsedMs);
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  }
+
+  function getClientCheckoutTimingDuration_(trace, startName, endName){
+    const start = getClientCheckoutTimingMark_(trace, startName);
+    const end = getClientCheckoutTimingMark_(trace, endName);
+    const startMs = Number(start && start.elapsedMs);
+    const endMs = Number(end && end.elapsedMs);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return 0;
+    return Math.max(0, Math.round(endMs - startMs));
+  }
+
+  function logClientCheckoutTimingSummary_(trace, options){
+    if (!trace) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    const loaderPaintMs = getClientCheckoutTimingDuration_(trace, 'handler_start', 'checkout_loader_painted')
+      || getClientCheckoutTimingDuration_(trace, 'handler_start', 'checkout_loader_state_set');
+    const totalClickToNavigation = getClientCheckoutTimingDuration_(trace, 'handler_start', 'checkout_navigation_end')
+      || getClientCheckoutTimingElapsed_(trace, 'checkout_navigation_end');
+    const parts = [
+      'label=' + encodeURIComponent(String(trace.label || 'checkout')),
+      'method=' + encodeURIComponent(String(trace.method || '')),
+      'clickToLoader=' + loaderPaintMs,
+      'clientCapture=' + getClientCheckoutTimingDuration_(trace, 'client_state_capture_start', 'client_state_capture_end'),
+      'payloadBuild=' + getClientCheckoutTimingDuration_(trace, 'client_payload_serialize_start', 'client_payload_serialize_end'),
+      'serverRoundTrip=' + getClientCheckoutTimingDuration_(trace, 'google_script_run_round_trip_start', 'google_script_run_round_trip_end'),
+      'responseToUrl=' + getClientCheckoutTimingDuration_(trace, 'google_script_run_round_trip_end', 'checkout_url_extract_end'),
+      'navigationAssign=' + getClientCheckoutTimingDuration_(trace, 'checkout_navigation_start', 'checkout_navigation_end'),
+      'totalClickToNavigation=' + totalClickToNavigation,
+      'launched=' + (opts.launched === true ? 'true' : 'false'),
+      'checkoutReady=' + (opts.checkoutReady === true ? 'true' : 'false'),
+      'token=redacted'
+    ];
+    try {
+      console.info('[RT-CHECKOUT-TIMING-CLIENT-SUMMARY] ' + parts.join(' '));
+    } catch (_) {}
+  }
+
+  function logClientCheckoutLeaveTiming_(trace, reason){
+    if (!trace || trace.checkoutLeaveTimingLogged === true) return;
+    trace.checkoutLeaveTimingLogged = true;
+    const total = Math.max(0, Math.round(nowCheckoutTimingMs_() - Number(trace.startedAt || nowCheckoutTimingMs_())));
+    const navigationEnd = getClientCheckoutTimingElapsed_(trace, 'checkout_navigation_end')
+      || getClientCheckoutTimingElapsed_(trace, 'checkout_navigation_start');
+    const parts = [
+      'label=' + encodeURIComponent(String(trace.label || 'checkout')),
+      'method=' + encodeURIComponent(String(trace.method || '')),
+      'reason=' + encodeURIComponent(String(reason || 'pagehide')),
+      'totalClickToPagehide=' + total,
+      'navigationAssignToPagehide=' + Math.max(0, total - navigationEnd),
+      'token=redacted'
+    ];
+    try {
+      console.info('[RT-CHECKOUT-TIMING-CLIENT-LEAVE] ' + parts.join(' '));
+    } catch (_) {}
+  }
+
+  function registerClientCheckoutLeaveTiming_(trace){
+    if (!trace || trace.checkoutLeaveTimingRegistered === true) return;
+    trace.checkoutLeaveTimingRegistered = true;
+    try {
+      window.addEventListener('pagehide', () => {
+        logClientCheckoutLeaveTiming_(trace, 'pagehide');
+      }, { once: true });
+    } catch (_) {}
+    try {
+      const onVisibilityChange = () => {
+        if (document.visibilityState !== 'hidden') return;
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        logClientCheckoutLeaveTiming_(trace, 'visibilitychange');
+      };
+      document.addEventListener('visibilitychange', onVisibilityChange);
     } catch (_) {}
   }
 
@@ -34525,19 +34612,38 @@
 
   async function startOrderFlowCheckout(method){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
-    if (maybeBlockOrderFlow()) return;
     const normalizedMethod = String(method || '').trim().toLowerCase();
     const checkoutStartedAt = Date.now();
     const checkoutTiming = createClientCheckoutTimingTrace_('createCheckoutAttempt', normalizedMethod);
+    markClientCheckoutTiming_(checkoutTiming, 'handler_start');
+    markClientCheckoutTiming_(checkoutTiming, 'preflight_start');
+    if (maybeBlockOrderFlow()) {
+      markClientCheckoutTiming_(checkoutTiming, 'preflight_end', { ok: false });
+      logClientCheckoutTimingSummary_(checkoutTiming, {
+        launched: false,
+        checkoutReady: false
+      });
+      logClientCheckoutTiming_(checkoutTiming, 'checkout_preflight_blocked');
+      return;
+    }
+    markClientCheckoutTiming_(checkoutTiming, 'preflight_end', { ok: true });
     if (normalizedMethod === PAYMENT_METHODS.ach && !isClientAchPaymentEnabled_()) {
       showNotice('ACH bank payments are not available in the portal yet.', 'err', { persist: true });
       ORDER_FLOW_SELECTED_METHOD = '';
       renderOrderFlowFulfillmentSection();
+      logClientCheckoutTimingSummary_(checkoutTiming, {
+        launched: false,
+        checkoutReady: false
+      });
       return;
     }
     if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
       setOrderFlowStatePill('Fulfillment');
       setOrderFlowMode('fulfillment');
+      logClientCheckoutTimingSummary_(checkoutTiming, {
+        launched: false,
+        checkoutReady: false
+      });
       return;
     }
     setOrderFlowButtonsBusy(true);
@@ -34545,6 +34651,7 @@
     setOrderFlowStatePill('Checkout');
     resetOrderFlowCheckoutLaunchState();
     setOrderFlowCheckoutLoadingState(normalizedMethod);
+    markClientCheckoutTiming_(checkoutTiming, 'checkout_loader_state_set');
     markClientCheckoutTiming_(checkoutTiming, 'checkout_click');
     logClientCheckoutTiming_(checkoutTiming, 'checkout_click');
     try {
@@ -34580,6 +34687,10 @@
       if (!resp || resp.ok !== true) {
         hidePortalCheckoutPreparationLoader_();
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
+        logClientCheckoutTimingSummary_(checkoutTiming, {
+          launched: false,
+          checkoutReady: !!(resp && resp.checkoutReady === true)
+        });
         if (handleOrderFlowActionError(resp, {
           surface: 'checkout',
           fallbackMessage: 'Unable to create checkout attempt.'
@@ -34594,6 +34705,10 @@
       if (!resp.checkoutReady || !checkoutUrl) {
         hidePortalCheckoutPreparationLoader_();
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
+        logClientCheckoutTimingSummary_(checkoutTiming, {
+          launched: false,
+          checkoutReady: !!(resp && resp.checkoutReady === true)
+        });
         console.warn('Stripe checkout URL missing from createCheckoutAttempt response.', resp);
         showOrderFlowResult(
           'Checkout Unavailable',
@@ -34604,9 +34719,14 @@
         return;
       }
       markClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_start');
+      registerClientCheckoutLeaveTiming_(checkoutTiming);
       const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
       markClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_end', {
         launched: launched
+      });
+      logClientCheckoutTimingSummary_(checkoutTiming, {
+        launched: launched,
+        checkoutReady: !!(resp && resp.checkoutReady === true)
       });
       logClientCheckoutTiming_(checkoutTiming, 'checkout_navigation_attempt', {
         elapsedMs: Date.now() - checkoutStartedAt,
@@ -34632,6 +34752,10 @@
       showNotice('Opening secure payment in this window.', 'ok');
     } catch (err) {
       hidePortalCheckoutPreparationLoader_();
+      logClientCheckoutTimingSummary_(checkoutTiming, {
+        launched: false,
+        checkoutReady: false
+      });
       showNotice(String((err && err.message) || err), 'err');
       setOrderFlowStatePill('Checkout');
       setOrderFlowMode('checkout');

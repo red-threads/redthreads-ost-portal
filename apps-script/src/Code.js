@@ -4843,6 +4843,68 @@ function buildCheckoutTimingPayload_(timing, extra) {
   }, buildCheckoutTimingExtra_(extra));
 }
 
+function formatCheckoutTimingDuration_(value) {
+  const n = Number(value);
+  return isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+function findCheckoutTimingMark_(timingPayload, name) {
+  const marks = timingPayload && Array.isArray(timingPayload.marks) ? timingPayload.marks : [];
+  const target = trimString_(name);
+  for (let i = 0; i < marks.length; i += 1) {
+    if (trimString_(marks[i] && marks[i].name) === target) return marks[i];
+  }
+  return null;
+}
+
+function getCheckoutTimingDuration_(timingPayload, startName, endName) {
+  const start = findCheckoutTimingMark_(timingPayload, startName);
+  const end = findCheckoutTimingMark_(timingPayload, endName);
+  const startMs = Number(start && start.elapsedMs);
+  const endMs = Number(end && end.elapsedMs);
+  if (!isFinite(startMs) || !isFinite(endMs)) return 0;
+  return formatCheckoutTimingDuration_(endMs - startMs);
+}
+
+function sumCheckoutTimingDurations_(timingPayload, pairs) {
+  const list = Array.isArray(pairs) ? pairs : [];
+  return list.reduce(function(total, pair) {
+    if (!Array.isArray(pair) || pair.length < 2) return total;
+    return total + getCheckoutTimingDuration_(timingPayload, pair[0], pair[1]);
+  }, 0);
+}
+
+function buildCheckoutTimingServerSummaryLine_(timingPayload) {
+  const hydrationSkipped = !!(timingPayload && timingPayload.hydrationSkipped === true);
+  const validationMs = sumCheckoutTimingDurations_(timingPayload, [
+    ['order_access_validation_start', 'order_access_validation_end'],
+    ['payment_method_validation_start', 'payment_method_validation_end'],
+    ['order_validation_start', 'order_validation_end'],
+    ['stripe_total_validation_start', 'stripe_total_validation_end']
+  ]);
+  const hydrationMs = hydrationSkipped
+    ? 0
+    : getCheckoutTimingDuration_(timingPayload, 'response_hydration_start', 'response_hydration_end');
+  const parts = [
+    'total=' + formatCheckoutTimingDuration_(timingPayload && timingPayload.totalMs),
+    'config=' + getCheckoutTimingDuration_(timingPayload, 'config_start', 'config_end'),
+    'spreadsheetOpen=' + getCheckoutTimingDuration_(timingPayload, 'spreadsheet_open_start', 'spreadsheet_open_end'),
+    'infra=' + getCheckoutTimingDuration_(timingPayload, 'portal_infrastructure_start', 'portal_infrastructure_end'),
+    'tokenLookup=' + getCheckoutTimingDuration_(timingPayload, 'token_row_lookup_start', 'token_row_lookup_end'),
+    'statePersist=' + getCheckoutTimingDuration_(timingPayload, 'portal_state_persistence_start', 'portal_state_persistence_end'),
+    'validation=' + validationMs,
+    'stripePayload=' + getCheckoutTimingDuration_(timingPayload, 'stripe_payload_build_start', 'stripe_payload_build_end'),
+    'stripeApi=' + getCheckoutTimingDuration_(timingPayload, 'stripe_api_call_start', 'stripe_api_call_end'),
+    'orderWrite=' + getCheckoutTimingDuration_(timingPayload, 'portal_orders_write_start', 'portal_orders_write_end'),
+    'exportPointerWrite=' + getCheckoutTimingDuration_(timingPayload, 'export_log_pointer_write_start', 'export_log_pointer_write_end'),
+    'supersede=' + getCheckoutTimingDuration_(timingPayload, 'supersede_unpaid_orders_start', 'supersede_unpaid_orders_end'),
+    'hydration=' + hydrationMs,
+    'fastResponse=' + (timingPayload && timingPayload.fastCheckoutResponse === true ? 'true' : 'false'),
+    'hydrationSkipped=' + (hydrationSkipped ? 'true' : 'false')
+  ];
+  return '[RT-CHECKOUT-TIMING-SERVER-SUMMARY] ' + parts.join(' ');
+}
+
 function attachCheckoutTiming_(response, timing, extra) {
   const base = (response && typeof response === 'object') ? Object.assign({}, response) : {};
   const timingPayload = buildCheckoutTimingPayload_(timing, extra);
@@ -4850,6 +4912,9 @@ function attachCheckoutTiming_(response, timing, extra) {
   base.checkoutTiming = timingPayload;
   try {
     console.log('[RT-CHECKOUT-TIMING-SERVER] ' + JSON.stringify(timingPayload));
+  } catch (_) {}
+  try {
+    console.log(buildCheckoutTimingServerSummaryLine_(timingPayload));
   } catch (_) {}
   return base;
 }

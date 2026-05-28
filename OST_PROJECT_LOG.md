@@ -243,3 +243,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Public smoke: stable Apps Script HTML contains `Development revision 11` and `supersedeOptimized`; stale `Development revision 10` is absent.
 - Post-ship timing: Apps Script executions showed version 836 `createCheckoutAttempt` runs, including a 12.177 s completed execution after deployment. A disposable/test checkout artifact was created and not paid. Detailed server timing JSON was not recovered because `clasp logs` lacks the configured GCP project ID and the executions UI did not expose parseable log details through the available inspection path.
 - Follow-ups: configure reliable Apps Script log access or capture browser console timing from the same signed-in tab before making Stage 3B decisions. Do not defer supersede or narrow to pointer-only cleanup until lifecycle/currentness behavior is reviewed with fixture evidence.
+
+## 2026-05-28 - Stage 3B0 Checkout Timing Observability
+
+- Mode: Full ship, Stage 3B0 instrumentation.
+- Branch/commit/PR: `main`.
+- Goal: resolve the discrepancy between server timing, Apps Script execution duration, and perceived checkout delay by adding flat, copyable timing summary lines.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Behavior preservation: no checkout behavior, Stripe payload, order persistence, webhook logic, lifecycle state, schema, or Squarespace wrapper navigation changes were made.
+- Client instrumentation: added `[RT-CHECKOUT-TIMING-CLIENT-SUMMARY]` and `[RT-CHECKOUT-TIMING-CLIENT-LEAVE]`, moved normal checkout trace creation to handler start, and marked preflight, loader state, loader paint, state capture, payload serialization, `google.script.run`, checkout URL extraction, navigation assignment, and total click-to-navigation.
+- Server instrumentation: kept detailed `[RT-CHECKOUT-TIMING-SERVER]` JSON and added `[RT-CHECKOUT-TIMING-SERVER-SUMMARY]` with flat durations for config, spreadsheet open, infrastructure, token lookup, state persistence, validation, Stripe payload build, Stripe API, PORTAL_ORDERS write, EXPORT_LOG pointer write, supersede, hydration, fast response, and hydration skipped.
+- Dev revision: incremented badge to `12`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Add flat checkout timing summaries"` created version `837`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `837`.
+- Public smoke: stable Apps Script HTML contains `Development revision 12`, `[RT-CHECKOUT-TIMING-CLIENT-SUMMARY]`, and `[RT-CHECKOUT-TIMING-CLIENT-LEAVE]`; stale `Development revision 11` is absent.
+- Controlled timing smoke: a disposable/test checkout attempt was created and not paid. Client flat summary reported `clickToLoader=19`, `clientCapture=2`, `payloadBuild=0`, `serverRoundTrip=12276`, `responseToUrl=0`, `navigationAssign=7`, and `totalClickToNavigation=12352`. Returned server timing reported `totalMs=8236`, `stripeApi=938`, `orderWrite=404`, `exportPointerWrite=603`, `supersede=619`, and `hydrationSkipped=true`.
+- Smoke limitation: Playwright automation against the direct Apps Script page logged `launched=true` but did not actually leave the sandbox for Stripe. Manual same-window navigation through the branded wrapper should be rechecked; no false paid state was observed after the automated attempt.
+- Log access: `clasp logs --json` is still blocked by missing GCP project ID, so server flat summary retrieval from Apps Script logs remains a tooling follow-up.
