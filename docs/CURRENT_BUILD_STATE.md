@@ -9,12 +9,12 @@ Last aligned: 2026-05-28.
 - Runtime root: `apps-script/src/`.
 - Tracked runtime files: `Code.js`, `Index.html`, `TaxForm3372Manifest.html`, `appsscript.json`, `.clasp.json`.
 - Current tracked app has been pulled from the live Apps Script project and includes the fuller portal architecture: auth shell, dashboard/order lifecycle surfaces, Stripe checkout routing, Team Mode lanes, and tax-form manifest support.
-- Tracked runtime source now includes same-window Stripe Checkout launch helpers, a global project-entry-style checkout transition overlay with browser-back state restoration, structured checkout launch timing instrumentation with flat copyable client/server summary lines, a fast normal-checkout response path that skips noncritical response hydration before Stripe navigation, optimized competing-unpaid-order supersede row writes with timing counters, and a bottom-left glass Red Threads revision badge showing `12`.
+- Tracked runtime source now includes same-window Stripe Checkout launch helpers, a global project-entry-style checkout transition overlay with browser-back state restoration, structured checkout launch timing instrumentation with flat copyable client/server summary lines, a fast normal-checkout response path that skips noncritical response hydration before Stripe navigation, optimized competing-unpaid-order supersede row writes with timing counters, desktop-only mobile-blocking UI, and a bottom-left glass Red Threads revision badge showing `13`.
 - Portal DB Sheet ID appears in `Code.js`: `16KrxpEv8s-U5gjLX-DZK25GbrnkeKbjgInngie8Ce_c`.
 - `.clasp.json` now points to the live Apps Script project ID verified in Apps Script: `1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU`.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
 - `package.json` exposes `npm run validate`, `npm run validate:runtime`, and `npm run validate:binding`.
-- Active Squarespace `/portal` iframe wrapper code is tracked at `web/squarespace-portal-code-block.html`; the repo copy now includes route replacement and same-window Stripe navigation message handlers.
+- Active Squarespace `/portal` iframe wrapper code is tracked at `web/squarespace-portal-code-block.html`; the repo copy now includes route replacement, same-window Stripe navigation message handlers, and a pre-iframe mobile block that prevents iframe loading under `900px`.
 
 ## Prompt/Historical
 
@@ -31,21 +31,23 @@ Last aligned: 2026-05-28.
 - Browser-verified Apps Script project URL: `https://script.google.com/u/0/home/projects/1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU/edit`.
 - `clasp pull` against the verified live project succeeded on 2026-05-27 and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`.
 - After the binding repair, `clasp push --force`, `clasp version`, and `clasp deploy` can update the live Apps Script source and stable deployment when commands are run sequentially and retried if needed.
-- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 837, `Add flat checkout timing summaries`.
+- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 838, `Block mobile portal access`.
 - Stage 3A checkout performance work was deployed to the stable Apps Script deployment on 2026-05-28 after sequential `clasp push`, `clasp version`, and `clasp deploy` commands completed. The normal Place Order card checkout path still performs validation, Stripe session creation, PORTAL_ORDERS write, EXPORT_LOG pointer write, and competing unpaid order supersede before returning `checkoutUrl`, but supersede now writes each known candidate row once and returns row info from the in-memory updated values.
 - Stage 3B0 checkout timing observability was deployed to the stable Apps Script deployment on 2026-05-28 as version 837. This was instrumentation only: checkout behavior, Stripe payloads, order persistence, webhook logic, lifecycle state, schema, and Squarespace wrapper navigation were not changed. Browser console output now includes `[RT-CHECKOUT-TIMING-CLIENT-SUMMARY]`; Apps Script server logs now include `[RT-CHECKOUT-TIMING-SERVER-SUMMARY]`.
+- Desktop-only mobile blocking was deployed to the stable Apps Script deployment on 2026-05-28 as version 838. This is UI/access guard only: Stripe payloads, order persistence, webhook logic, lifecycle state, schema, Apps Script config, and `Code.js` were not changed. Direct Apps Script and iframe-rendered Portal views under `900px` now show the Red Threads mobile block with copy-link controls.
 - The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
 
 ## Blocked Or Unverified
 
 - The live-pulled server source had a checked-in Team Mode default credential; the repo copy now requires the Team Mode password to come from Apps Script Script Properties instead. Confirm that property before relying on Team Mode in production.
-- Public stable URL smoke test confirmed the deployed HTML contains `Development revision 12`, `[RT-CHECKOUT-TIMING-CLIENT-SUMMARY]`, and `[RT-CHECKOUT-TIMING-CLIENT-LEAVE]`; stale `Development revision 11` is absent. Server timing markers emit during checkout server calls and are not visible in the public HTML payload.
+- Public stable URL smoke test confirmed the deployed HTML contains `Development revision 13`, `portalMobileBlock`, `RT_PORTAL_MOBILE_BLOCK_QUERY`, and the mobile-block copy. Stale `Development revision 12` is absent.
 - Stage 2 controlled checkout timing on a disposable/test project confirmed `fastCheckoutResponse: true` and `hydrationSkipped: true`. Response hydration no longer blocks normal Stripe navigation; the observed click-to-navigation time was 18,258 ms, with server total 15,960 ms, `google.script.run` round trip 18,189 ms, Stripe API call 710 ms, PORTAL_ORDERS write 262 ms, EXPORT_LOG pointer write 514 ms, and competing unpaid order supersede 7,412 ms.
 - Stage 3A post-ship inspection in the Apps Script executions view showed version 836 `createCheckoutAttempt` executions, including a 12.177 s completed execution after deployment. A disposable/test checkout artifact was created and no payment was completed. Detailed server timing JSON was not retrievable through `clasp logs` because the GCP project ID is not configured, and the Apps Script executions UI did not expose parseable log details through the available inspection path.
 - Stage 3B0 controlled smoke on a disposable/test project produced the client flat line: `clickToLoader=19`, `clientCapture=2`, `payloadBuild=0`, `serverRoundTrip=12276`, `responseToUrl=0`, `navigationAssign=7`, `totalClickToNavigation=12352`, `launched=true`, `checkoutReady=true`. The response timing object reported server `totalMs=8236`, `stripeApi=938`, `orderWrite=404`, `exportPointerWrite=603`, `supersede=619`, and `hydrationSkipped=true`. The automation environment did not leave the Apps Script sandbox for Stripe despite `launched=true`, so same-window visual navigation should be rechecked manually through the branded wrapper; no payment was completed and no false paid state was observed.
 - `clasp logs --json` is still blocked by missing GCP project ID, so the flat server summary line is deployed but was not retrieved through clasp during Stage 3B0.
 - Full lifecycle/payment fixture regression was not run during the Stage 3A checkout performance Full ship.
 - Live Squarespace `/portal` inspection on 2026-05-28 showed the fullscreen iframe and `RT_PORTAL_ROUTE_REPLACE` / `RT_PORTAL_NAVIGATE` wrapper handlers present after the Squarespace snippet was corrected.
+- The repo wrapper has the pre-iframe mobile block, but Squarespace must be manually updated from `web/squarespace-portal-code-block.html` for that wrapper-layer block to be live. Until then, the deployed Apps Script app-level block handles narrow wrapper access after the iframe loads.
 
 ## Workflow
 

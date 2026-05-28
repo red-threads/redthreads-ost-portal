@@ -260,3 +260,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Controlled timing smoke: a disposable/test checkout attempt was created and not paid. Client flat summary reported `clickToLoader=19`, `clientCapture=2`, `payloadBuild=0`, `serverRoundTrip=12276`, `responseToUrl=0`, `navigationAssign=7`, and `totalClickToNavigation=12352`. Returned server timing reported `totalMs=8236`, `stripeApi=938`, `orderWrite=404`, `exportPointerWrite=603`, `supersede=619`, and `hydrationSkipped=true`.
 - Smoke limitation: Playwright automation against the direct Apps Script page logged `launched=true` but did not actually leave the sandbox for Stripe. Manual same-window navigation through the branded wrapper should be rechecked; no false paid state was observed after the automated attempt.
 - Log access: `clasp logs --json` is still blocked by missing GCP project ID, so server flat summary retrieval from Apps Script logs remains a tooling follow-up.
+
+## 2026-05-28 - Desktop-Only Mobile Block
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: block phone and narrow-display Portal access with a branded Red Threads screen instead of making the Portal mobile responsive.
+- Files changed: `apps-script/src/Index.html`, `web/squarespace-portal-code-block.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Behavior preservation: no `Code.js`, Stripe payload, order persistence, webhook logic, lifecycle state, schema, Apps Script config, Sheet contract, or payment data logic changed.
+- Implementation: added the app-level mobile block to all Apps Script views and the wrapper-level pre-iframe mobile block to the tracked Squarespace code block.
+- Breakpoint: `window.matchMedia("(max-width: 899px)")`; widths `900px+` remain allowed for desktop and wide tablet/landscape use.
+- Mobile UI: black fullscreen screen, Red Threads `SMALL_ICON.png`, exact desktop-use message, and copy-link controls using the current URL with clipboard fallback.
+- Dev revision: incremented badge to `13`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, `git diff --check`, and wrapper script parsing passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Block mobile portal access"` created version `838`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `838`.
+- Smoke tests: public stable Apps Script HTML contains `Development revision 13`, `portalMobileBlock`, `RT_PORTAL_MOBILE_BLOCK_QUERY`, and the mobile-block copy; stale `Development revision 12` is absent. Desktop wrapper base and tokenized wrapper load the normal login/project views at wide width. Narrow wrapper and direct Apps Script routes show the mobile block with copy-link controls after the Apps Script iframe loads.
+- Follow-ups: apply the updated `web/squarespace-portal-code-block.html` in Squarespace so the public wrapper blocks before assigning iframe `src`; until then the deployed app-level guard still blocks narrow Portal access after iframe load.

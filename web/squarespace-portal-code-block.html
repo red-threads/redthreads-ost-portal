@@ -26,6 +26,107 @@
     background: transparent;
   }
 
+  .rt-portal-fullscreen iframe.is-hidden {
+    display: none;
+  }
+
+  .rt-portal-mobile-block {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 72px 24px 32px;
+    background: #000;
+    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-align: center;
+    z-index: 4;
+  }
+
+  .rt-portal-mobile-block.is-hidden {
+    display: none;
+  }
+
+  .rt-portal-mobile-card {
+    width: min(420px, calc(100vw - 48px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .rt-portal-mobile-logo {
+    width: 68px;
+    height: 68px;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    filter: drop-shadow(0 0 18px rgba(225, 29, 72, 0.3));
+  }
+
+  .rt-portal-mobile-message {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 20px;
+    line-height: 1.38;
+    font-weight: 800;
+  }
+
+  .rt-portal-mobile-copy-wrap {
+    width: 100%;
+    display: grid;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .rt-portal-mobile-copy-wrap[hidden] {
+    display: none;
+  }
+
+  .rt-portal-mobile-copy-label {
+    margin: 0;
+    color: #cbd5e1;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .rt-portal-mobile-link {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: rgba(15, 23, 42, 0.82);
+    color: rgba(255, 255, 255, 0.92);
+    font: 600 13px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .rt-portal-mobile-copy-button {
+    min-height: 44px;
+    border: 1px solid rgba(225, 29, 72, 0.42);
+    border-radius: 999px;
+    padding: 10px 18px;
+    background: linear-gradient(135deg, #e11d48, #be123c);
+    color: #fff;
+    font: 900 14px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    cursor: pointer;
+    box-shadow: 0 18px 36px rgba(225, 29, 72, 0.22);
+  }
+
+  .rt-portal-mobile-copy-status {
+    min-height: 18px;
+    margin: 0;
+    color: #cbd5e1;
+    font-size: 13px;
+    line-height: 1.35;
+    font-weight: 700;
+  }
+
   .rt-portal-loading {
     position: absolute;
     inset: 0;
@@ -131,6 +232,19 @@
 </style>
 
 <div class="rt-portal-fullscreen">
+  <div class="rt-portal-mobile-block is-hidden" id="rtPortalMobileBlock" role="status" aria-live="polite">
+    <div class="rt-portal-mobile-card">
+      <img class="rt-portal-mobile-logo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads">
+      <p class="rt-portal-mobile-message">The Red Threads portal is not optimized for mobile use. Please access this portal on a computer.</p>
+      <div class="rt-portal-mobile-copy-wrap" id="rtPortalMobileCopyWrap" hidden>
+        <p class="rt-portal-mobile-copy-label">Portal link</p>
+        <input class="rt-portal-mobile-link" id="rtPortalMobileLink" type="text" readonly>
+        <button class="rt-portal-mobile-copy-button" id="rtPortalMobileCopyButton" type="button">Copy link</button>
+        <p class="rt-portal-mobile-copy-status" id="rtPortalMobileCopyStatus" aria-live="polite"></p>
+      </div>
+    </div>
+  </div>
+
   <div class="rt-portal-loading is-hidden" id="rtPortalLoading" role="status" aria-live="polite">
     <div class="rt-portal-loading-card">
       <div class="rt-portal-spinner" aria-hidden="true">
@@ -161,6 +275,7 @@
     var token = queryParams.get("t");
     var checkoutResult = queryParams.get("checkoutResult");
     var stripeSessionId = queryParams.get("stripeSessionId");
+    var MOBILE_BLOCK_QUERY = "(max-width: 899px)";
 
     if (token) {
       iframeParams.set("t", token);
@@ -177,14 +292,97 @@
     var iframe = document.getElementById("rtPortalFrame");
     var loading = document.getElementById("rtPortalLoading");
     var loadingTitle = document.getElementById("rtPortalLoadingTitle");
+    var mobileBlock = document.getElementById("rtPortalMobileBlock");
+    var mobileCopyWrap = document.getElementById("rtPortalMobileCopyWrap");
+    var mobileLink = document.getElementById("rtPortalMobileLink");
+    var mobileCopyButton = document.getElementById("rtPortalMobileCopyButton");
+    var mobileCopyStatus = document.getElementById("rtPortalMobileCopyStatus");
     var shouldShowLoading = !!(token || checkoutResult || stripeSessionId);
 
-    if (shouldShowLoading && loading) {
-      if (loadingTitle && token) {
-        loadingTitle.textContent = "Loading project...";
+    function isMobileBlocked() {
+      return !!(window.matchMedia && window.matchMedia(MOBILE_BLOCK_QUERY).matches);
+    }
+
+    function getCurrentPortalLink() {
+      try {
+        return String(window.location.href || "");
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function fallbackCopyLink() {
+      if (mobileLink) {
+        mobileLink.focus();
+        mobileLink.select();
       }
 
-      loading.classList.remove("is-hidden");
+      if (mobileCopyStatus) {
+        mobileCopyStatus.textContent = "Copy this link and open it on your computer.";
+      }
+    }
+
+    function syncMobileCopyLink() {
+      var currentLink = getCurrentPortalLink();
+      if (mobileLink) {
+        mobileLink.value = currentLink;
+      }
+
+      if (mobileCopyWrap) {
+        mobileCopyWrap.hidden = !currentLink;
+      }
+
+      if (mobileCopyStatus) {
+        mobileCopyStatus.textContent = "";
+      }
+    }
+
+    function showMobileBlock() {
+      syncMobileCopyLink();
+      if (mobileBlock) {
+        mobileBlock.classList.remove("is-hidden");
+      }
+
+      if (loading) {
+        loading.classList.add("is-hidden");
+      }
+
+      if (iframe) {
+        iframe.classList.add("is-hidden");
+      }
+    }
+
+    function hideMobileBlock() {
+      if (mobileBlock) {
+        mobileBlock.classList.add("is-hidden");
+      }
+
+      if (iframe) {
+        iframe.classList.remove("is-hidden");
+      }
+    }
+
+    function startPortalFrame() {
+      if (!iframe || iframe.dataset.rtPortalStarted === "1") {
+        return;
+      }
+
+      iframe.dataset.rtPortalStarted = "1";
+
+      if (shouldShowLoading && loading) {
+        if (loadingTitle && token) {
+          loadingTitle.textContent = "Loading project...";
+        }
+
+        loading.classList.remove("is-hidden");
+      }
+
+      if (shouldShowLoading) {
+        iframe.addEventListener("load", hideLoading);
+        window.setTimeout(hideLoading, 16000);
+      }
+
+      iframe.src = iframeParams.toString() ? APP_URL + "?" + iframeParams.toString() : APP_URL;
     }
 
     function hideLoading() {
@@ -200,9 +398,14 @@
       }, 260);
     }
 
-    if (shouldShowLoading) {
-      iframe.addEventListener("load", hideLoading);
-      window.setTimeout(hideLoading, 16000);
+    function syncMobileBlock() {
+      if (isMobileBlocked()) {
+        showMobileBlock();
+        return;
+      }
+
+      hideMobileBlock();
+      startPortalFrame();
     }
 
     function isAllowedAppsScriptOrigin(origin) {
@@ -268,6 +471,28 @@
       }
     });
 
-    iframe.src = iframeParams.toString() ? APP_URL + "?" + iframeParams.toString() : APP_URL;
+    if (mobileCopyButton) {
+      mobileCopyButton.addEventListener("click", function () {
+        var value = mobileLink ? mobileLink.value : getCurrentPortalLink();
+        if (!value) {
+          fallbackCopyLink();
+          return;
+        }
+
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          navigator.clipboard.writeText(value).then(function () {
+            if (mobileCopyStatus) {
+              mobileCopyStatus.textContent = "Link copied.";
+            }
+          }).catch(fallbackCopyLink);
+          return;
+        }
+
+        fallbackCopyLink();
+      });
+    }
+
+    window.addEventListener("resize", syncMobileBlock);
+    syncMobileBlock();
   })();
 </script>

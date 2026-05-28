@@ -13,6 +13,16 @@
       }catch(_){}
     })();
   </script>
+  <script>
+    (function(){
+      try {
+        window.RT_PORTAL_MOBILE_BLOCK_QUERY = '(max-width: 899px)';
+        if (window.matchMedia && window.matchMedia(window.RT_PORTAL_MOBILE_BLOCK_QUERY).matches) {
+          document.documentElement.classList.add('isPortalMobileBlockedEarly');
+        }
+      } catch (_) {}
+    })();
+  </script>
   <style>
     /* ============================================================
        DESIGN TOKENS — CANONICAL (Single Source of Truth)
@@ -234,6 +244,106 @@
       box-shadow:0 10px 26px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.26), 0 0 0 1px rgba(225,29,72,.18);
       backdrop-filter:blur(14px) saturate(140%);
       -webkit-backdrop-filter:blur(14px) saturate(140%);
+    }
+    html.isPortalMobileBlockedEarly,
+    body.isPortalMobileBlocked{
+      overflow:hidden !important;
+      background:#000 !important;
+    }
+    html.isPortalMobileBlockedEarly body > :not(#portalMobileBlock),
+    body.isPortalMobileBlocked > :not(#portalMobileBlock){
+      display:none !important;
+    }
+    .portalMobileBlock{
+      position:fixed;
+      inset:0;
+      z-index:2147483000;
+      display:none;
+      align-items:flex-start;
+      justify-content:center;
+      min-height:100vh;
+      padding:72px 24px 32px;
+      background:#000;
+      color:#fff;
+      font-family:var(--font-sans);
+      text-align:center;
+    }
+    html.isPortalMobileBlockedEarly .portalMobileBlock,
+    body.isPortalMobileBlocked .portalMobileBlock{
+      display:flex;
+    }
+    .portalMobileBlockCard{
+      width:min(420px, calc(100vw - 48px));
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:18px;
+    }
+    .portalMobileBlockLogo{
+      width:68px;
+      height:68px;
+      object-fit:contain;
+      user-select:none;
+      -webkit-user-drag:none;
+      filter:drop-shadow(0 0 18px rgba(225,29,72,.3));
+    }
+    .portalMobileBlockMessage{
+      margin:0;
+      color:#f8fafc;
+      font-size:20px;
+      line-height:1.38;
+      font-weight:800;
+    }
+    .portalMobileLinkTools{
+      width:100%;
+      display:grid;
+      gap:10px;
+      margin-top:4px;
+    }
+    .portalMobileLinkTools[hidden]{
+      display:none;
+    }
+    .portalMobileCopyLabel{
+      margin:0;
+      color:#cbd5e1;
+      font-size:12px;
+      line-height:1.2;
+      font-weight:800;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .portalMobileCurrentLink{
+      width:100%;
+      min-height:44px;
+      border:1px solid rgba(255,255,255,.2);
+      border-radius:12px;
+      padding:10px 12px;
+      background:rgba(15,23,42,.82);
+      color:rgba(255,255,255,.92);
+      font-size:13px;
+      line-height:1.35;
+      font-weight:600;
+    }
+    .portalMobileCopyLinkBtn{
+      min-height:44px;
+      border:1px solid rgba(225,29,72,.42);
+      border-radius:999px;
+      padding:10px 18px;
+      background:linear-gradient(135deg, #e11d48, #be123c);
+      color:#fff;
+      font-size:14px;
+      line-height:1;
+      font-weight:900;
+      cursor:pointer;
+      box-shadow:0 18px 36px rgba(225,29,72,.22);
+    }
+    .portalMobileCopyStatus{
+      min-height:18px;
+      margin:0;
+      color:#cbd5e1;
+      font-size:13px;
+      line-height:1.35;
+      font-weight:700;
     }
     button, input, select, textarea{
       font:inherit;
@@ -16226,7 +16336,19 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 12">12</div>
+  <div class="devRevisionBadge" aria-label="Development revision 13">13</div>
+  <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
+    <div class="portalMobileBlockCard">
+      <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
+      <p class="portalMobileBlockMessage">The Red Threads portal is not optimized for mobile use. Please access this portal on a computer.</p>
+      <div class="portalMobileLinkTools" id="portalMobileLinkTools" hidden>
+        <p class="portalMobileCopyLabel">Portal link</p>
+        <input id="portalMobileCurrentLink" class="portalMobileCurrentLink" type="text" readonly>
+        <button id="portalMobileCopyLinkBtn" class="portalMobileCopyLinkBtn" type="button">Copy link</button>
+        <p id="portalMobileCopyStatus" class="portalMobileCopyStatus" aria-live="polite"></p>
+      </div>
+    </div>
+  </div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -17420,6 +17542,78 @@
     tommy: 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png',
     'red threads customer service': 'https://logos.redthreads.work/CALC_PORTAL/HEADER_IMAGES-02.png'
   };
+  const PORTAL_MOBILE_BLOCK_QUERY = window.RT_PORTAL_MOBILE_BLOCK_QUERY || '(max-width: 899px)';
+
+  function isPortalMobileBlockedViewport_(){
+    try {
+      return !!(window.matchMedia && window.matchMedia(PORTAL_MOBILE_BLOCK_QUERY).matches);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function getPortalMobileCurrentLink_(){
+    try {
+      return String(window.location.href || '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function setPortalMobileCopyStatus_(message){
+    const status = document.getElementById('portalMobileCopyStatus');
+    if (status) status.textContent = String(message || '');
+  }
+
+  function fallbackPortalMobileCopy_(){
+    const input = document.getElementById('portalMobileCurrentLink');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+    setPortalMobileCopyStatus_('Copy this link and open it on your computer.');
+  }
+
+  function syncPortalMobileBlock_(){
+    const blocked = isPortalMobileBlockedViewport_();
+    document.documentElement.classList.toggle('isPortalMobileBlockedEarly', blocked);
+    if (document.body) {
+      document.body.classList.toggle('isPortalMobileBlocked', blocked);
+    }
+
+    if (!blocked) return;
+
+    const currentLink = getPortalMobileCurrentLink_();
+    const tools = document.getElementById('portalMobileLinkTools');
+    const input = document.getElementById('portalMobileCurrentLink');
+    if (input) input.value = currentLink;
+    if (tools) tools.hidden = !currentLink;
+  }
+
+  function setupPortalMobileBlock_(){
+    const button = document.getElementById('portalMobileCopyLinkBtn');
+    if (button) {
+      button.addEventListener('click', function(){
+        const input = document.getElementById('portalMobileCurrentLink');
+        const value = input && input.value ? input.value : getPortalMobileCurrentLink_();
+        if (!value) {
+          fallbackPortalMobileCopy_();
+          return;
+        }
+        if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(value).then(function(){
+            setPortalMobileCopyStatus_('Link copied.');
+          }).catch(fallbackPortalMobileCopy_);
+          return;
+        }
+        fallbackPortalMobileCopy_();
+      });
+    }
+    syncPortalMobileBlock_();
+  }
+
+  window.addEventListener('resize', syncPortalMobileBlock_);
+  document.addEventListener('DOMContentLoaded', setupPortalMobileBlock_);
 
   function safeJsonParse(maybeJson, fallback) {
     try {
