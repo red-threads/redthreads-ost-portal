@@ -16215,7 +16215,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 1">DEV 1</div>
+  <div class="devRevisionBadge" aria-label="Development revision 2">DEV 2</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -17184,11 +17184,11 @@
         <div class="orderFlowInfoCard">
           <div class="orderFlowCheckoutMeta" id="orderFlowCheckoutMeta"></div>
         </div>
-        <p class="orderFlowBody" id="orderFlowCheckoutHint" hidden>Continue to open Stripe Checkout in a secure tab. Return here after payment.</p>
+        <p class="orderFlowBody" id="orderFlowCheckoutHint" hidden>Continue to open Stripe Checkout in this window. Return with the browser Back button if needed.</p>
         <div class="orderFlowInlineActions" id="orderFlowCheckoutActions" hidden>
           <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowCheckoutLaunchBtn" type="button">Open secure payment</button>
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutCopyBtn" type="button">Copy payment link</button>
-          <a class="orderFlowBtn orderFlowBtnBack orderFlowInlineLink" id="orderFlowCheckoutOpenLink" href="#" target="_blank" rel="noopener noreferrer">Open in new tab again</a>
+          <a class="orderFlowBtn orderFlowBtnBack orderFlowInlineLink" id="orderFlowCheckoutOpenLink" href="#" target="_top">Continue secure payment</a>
         </div>
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutBackBtn" type="button">Back</button>
@@ -19241,13 +19241,13 @@
       if (hasUnsavedSnapshotChanges()) {
         return {
           badge: 'Draft Updated',
-          text: 'This draft changed after the last secure checkout was created. Use Place Order to generate a fresh payment tab for the current totals.',
+          text: 'This draft changed after the last secure checkout was created. Use Place Order to generate a fresh payment session for the current totals.',
           meta: updatedAt ? ('Last checkout updated ' + updatedAt) : ''
         };
       }
       return {
         badge: 'Checkout Started',
-        text: 'A secure checkout has been created for this draft. Continue in the secure tab, or use Place Order to reopen payment.',
+        text: 'A secure checkout has been created for this draft. Use Place Order to reopen payment in this window.',
         meta: updatedAt ? ('Updated ' + updatedAt) : ''
       };
     }
@@ -20098,7 +20098,6 @@
   let ORDER_FLOW_SELECTED_METHOD = '';
   let ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
   let ORDER_FLOW_CHECKOUT_URL = '';
-  let ORDER_FLOW_CHECKOUT_WINDOW = null;
   let ORDER_FLOW_RESULT_KIND = 'info';
   let ORDER_FLOW_REQUEST_IN_FLIGHT = false;
   let ORDER_FLOW_FULFILLMENT_ERROR = false;
@@ -20185,6 +20184,8 @@
   const RT_PORTAL_EVENT_READY = 'RT_PORTAL_READY';
   const RT_PORTAL_EVENT_PING = 'RT_PORTAL_PING';
   const RT_PORTAL_EVENT_LOAD_TOKEN = 'RT_PORTAL_LOAD_TOKEN';
+  const RT_PORTAL_EVENT_ROUTE_REPLACE = 'RT_PORTAL_ROUTE_REPLACE';
+  const RT_PORTAL_EVENT_NAVIGATE = 'RT_PORTAL_NAVIGATE';
   const TEAM_MODE_UNLOCK_STORAGE_PREFIX = 'rtTeamModeUnlocked';
   const TEAM_MODE_AUTH_STORAGE_PREFIX = 'rtTeamModeAuth';
   const TEAM_MODE_SENDER_STORAGE_PREFIX = 'rtTeamModeSender';
@@ -21160,6 +21161,109 @@
   function buildExternalPortalProjectUrl_(token){
     const cleanToken = String(token || '').trim();
     return cleanToken ? ('https://www.redthreads.com/portal?t=' + encodeURIComponent(cleanToken)) : '';
+  }
+
+  function getActivePortalProjectToken_(){
+    return String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim();
+  }
+
+  function buildPortalRouteParams_(token, extraParams){
+    const params = {};
+    const cleanToken = String(token || '').trim();
+    const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
+    if (cleanToken) params.t = cleanToken;
+    if (extra.checkoutResult === 'success' || extra.checkoutResult === 'cancel') {
+      params.checkoutResult = extra.checkoutResult;
+    }
+    if (extra.stripeSessionId) {
+      params.stripeSessionId = String(extra.stripeSessionId || '').trim();
+    }
+    return params;
+  }
+
+  function buildPortalRouteReplaceMessage_(token, extraParams){
+    const params = buildPortalRouteParams_(token, extraParams);
+    return {
+      source: 'redthreads-portal',
+      type: RT_PORTAL_EVENT_ROUTE_REPLACE,
+      params: params,
+      payload: {
+        params: params
+      }
+    };
+  }
+
+  function replaceCurrentPortalProjectRoute_(token, extraParams){
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) return false;
+
+    const params = buildPortalRouteParams_(cleanToken, extraParams);
+    const messageSent = postPortalMessageToTop_(buildPortalRouteReplaceMessage_(cleanToken, extraParams));
+
+    try {
+      if (window.history && window.location && typeof window.history.replaceState === 'function') {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('token');
+        ['t', 'checkoutResult', 'stripeSessionId'].forEach(key => {
+          if (Object.prototype.hasOwnProperty.call(params, key) && params[key]) {
+            url.searchParams.set(key, params[key]);
+          } else {
+            url.searchParams.delete(key);
+          }
+        });
+        const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
+        window.history.replaceState({ token: cleanToken }, document.title, nextUrl);
+      }
+    } catch (_) {}
+
+    return messageSent;
+  }
+
+  function isStripeCheckoutUrl_(url){
+    try {
+      const parsed = new URL(String(url || '').trim());
+      return parsed.protocol === 'https:' && parsed.hostname === 'checkout.stripe.com';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function navigateToPortalStripeCheckout_(checkoutUrl, options){
+    const targetUrl = String(checkoutUrl || '').trim();
+    if (!targetUrl) return false;
+
+    const opts = (options && typeof options === 'object') ? options : {};
+    const token = String(opts.token || getActivePortalProjectToken_()).trim();
+    if (token) replaceCurrentPortalProjectRoute_(token);
+
+    let topNavigationAttempted = false;
+    try {
+      if (window.top && window.top !== window) {
+        window.top.location.href = targetUrl;
+        topNavigationAttempted = true;
+      }
+    } catch (_) {}
+
+    if (isStripeCheckoutUrl_(targetUrl) && postPortalMessageToTop_({
+      source: 'redthreads-portal',
+      type: RT_PORTAL_EVENT_NAVIGATE,
+      url: targetUrl,
+      payload: {
+        url: targetUrl
+      }
+    })) {
+      return true;
+    }
+
+    if (topNavigationAttempted) return true;
+
+    try {
+      window.location.assign(targetUrl);
+      return true;
+    } catch (err) {
+      console.warn('Stripe checkout same-window navigation failed.', err);
+      return false;
+    }
   }
 
   function isPlainLeftClick_(event){
@@ -33598,12 +33702,9 @@
 
   function resetOrderFlowCheckoutLaunchState(){
     ORDER_FLOW_CHECKOUT_URL = '';
-    if (ORDER_FLOW_CHECKOUT_WINDOW && ORDER_FLOW_CHECKOUT_WINDOW.closed) {
-      ORDER_FLOW_CHECKOUT_WINDOW = null;
-    }
     if (orderFlowCheckoutHint) {
       orderFlowCheckoutHint.hidden = true;
-      orderFlowCheckoutHint.textContent = 'If a secure tab does not open automatically, use the button below to continue payment.';
+      orderFlowCheckoutHint.textContent = 'If secure payment does not open automatically, use the button below to continue in this window.';
     }
     if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = true;
     if (orderFlowCheckoutLaunchBtn) orderFlowCheckoutLaunchBtn.textContent = 'Open secure payment';
@@ -33622,8 +33723,8 @@
     if (orderFlowCheckoutMeta) {
       orderFlowCheckoutMeta.textContent = [
         opts.launched
-          ? 'Stripe Checkout opened in a secure tab. Return here after payment.'
-          : 'Your secure Stripe Checkout is ready. Click below to continue payment in a secure tab.',
+          ? 'Stripe Checkout is opening in this window.'
+          : 'Your secure Stripe Checkout is ready. Click below to continue payment in this window.',
         resp.stripe && resp.stripe.sessionId ? ('Session ID: ' + resp.stripe.sessionId) : '',
         resp.orderSummary && resp.orderSummary.checkoutAttemptId ? ('Checkout Attempt: ' + resp.orderSummary.checkoutAttemptId) : '',
         method === 'ach'
@@ -33634,184 +33735,13 @@
     if (orderFlowCheckoutHint) {
       orderFlowCheckoutHint.hidden = false;
       orderFlowCheckoutHint.textContent = opts.launched
-        ? 'Return here after payment. If the secure tab did not open, use the payment button below.'
-        : 'If a secure tab does not open automatically, use the payment button below.';
+        ? 'If Stripe does not open automatically, use the payment button below.'
+        : 'If secure payment does not open automatically, use the payment button below.';
     }
     if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = !!opts.launched && !opts.showActions;
     if (orderFlowCheckoutOpenLink) {
       orderFlowCheckoutOpenLink.href = ORDER_FLOW_CHECKOUT_URL || '#';
       orderFlowCheckoutOpenLink.hidden = !ORDER_FLOW_CHECKOUT_URL || !!opts.launched;
-    }
-  }
-
-  function buildPendingOrderFlowCheckoutWindowHtml(){
-    return [
-      '<!doctype html>',
-      '<html lang="en">',
-      '<head>',
-      '<meta charset="utf-8">',
-      '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      '<title>Red Threads Checkout</title>',
-      '<style>',
-      '  :root{',
-      '    --rt-bg:#05060a;',
-      '    --rt-glass:rgba(255,255,255,0.08);',
-      '    --rt-glassBorder:rgba(255,255,255,0.16);',
-      '    --rt-text:rgba(255,255,255,0.92);',
-      '    --rt-muted:rgba(255,255,255,0.72);',
-      '    --rt-red:#e11d48;',
-      '    --rt-redBright:#f43f5e;',
-      '    --rt-panel:rgba(16,16,24,0.9);',
-      '  }',
-      '  *{box-sizing:border-box;}',
-      '  html,body{height:100%;}',
-      '  html{background:var(--rt-bg);}',
-      '  body{',
-      '    margin:0;',
-      '    min-height:100vh;',
-      '    display:flex;',
-      '    align-items:center;',
-      '    justify-content:center;',
-      '    padding:24px;',
-      '    background:',
-      '      radial-gradient(circle at 50% 12%, rgba(143,24,50,.18) 0%, rgba(143,24,50,0) 30%),',
-      '      radial-gradient(circle at 50% 78%, rgba(226,38,76,.08) 0%, rgba(226,38,76,0) 38%),',
-      '      linear-gradient(180deg, #0a0b12 0%, #06070c 42%, #04050a 100%);',
-      '    color:var(--rt-text);',
-      '    font:600 16px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
-      '    overflow:hidden;',
-      '  }',
-      '  body::before{',
-      '    content:"";',
-      '    position:fixed;',
-      '    inset:-18%;',
-      '    background:',
-      '      radial-gradient(circle at 50% 30%, rgba(225,29,72,.16) 0%, rgba(225,29,72,0) 36%),',
-      '      radial-gradient(circle at 20% 80%, rgba(103,16,42,.12) 0%, rgba(103,16,42,0) 28%),',
-      '      radial-gradient(circle at 80% 82%, rgba(103,16,42,.10) 0%, rgba(103,16,42,0) 26%);',
-      '    pointer-events:none;',
-      '  }',
-      '  body::after{',
-      '    content:"";',
-      '    position:fixed;',
-      '    inset:0;',
-      '    background-image:linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.016) 1px, transparent 1px);',
-      '    background-size:36px 36px;',
-      '    opacity:.12;',
-      '    pointer-events:none;',
-      '    mix-blend-mode:screen;',
-      '  }',
-      '  .rt-payment-shell{',
-      '    position:relative;',
-      '    width:min(620px, calc(100vw - 48px));',
-      '    padding:38px 30px 34px;',
-      '    border:1px solid var(--rt-glassBorder);',
-      '    border-radius:24px;',
-      '    background:linear-gradient(170deg, rgba(15,16,24,.94) 0%, rgba(7,8,13,.92) 100%);',
-      '    box-shadow:0 26px 60px rgba(0,0,0,.58), inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px rgba(225,29,72,.05);',
-      '    backdrop-filter:blur(18px) saturate(130%);',
-      '    -webkit-backdrop-filter:blur(18px) saturate(130%);',
-      '    text-align:center;',
-      '    animation:rtPopIn 160ms ease-out forwards;',
-      '    transform:translateY(8px) scale(.98);',
-      '    opacity:0;',
-      '  }',
-      '  .rt-spinner{',
-      '    width:72px;',
-      '    height:72px;',
-      '    margin:0 auto 22px;',
-      '    position:relative;',
-      '    display:grid;',
-      '    place-items:center;',
-      '    filter:drop-shadow(0 0 16px rgba(225,29,72,.36));',
-      '  }',
-      '  .rt-spinner::before{',
-      '    content:"";',
-      '    position:absolute;',
-      '    inset:0;',
-      '    border-radius:999px;',
-      '    background:',
-      '      conic-gradient(from 210deg,',
-      '        rgba(225,29,72,.18) 0deg,',
-      '        rgba(225,29,72,.26) 78deg,',
-      '        rgba(244,63,94,.95) 78deg,',
-      '        rgba(244,63,94,.95) 186deg,',
-      '        rgba(225,29,72,.18) 186deg,',
-      '        rgba(225,29,72,.18) 360deg);',
-      '    -webkit-mask:radial-gradient(circle, transparent 58%, #000 60%);',
-      '    mask:radial-gradient(circle, transparent 58%, #000 60%);',
-      '    animation:rtSpin 1180ms linear infinite;',
-      '  }',
-      '  .rt-spinner-icon{',
-      '    position:relative;',
-      '    z-index:1;',
-      '    width:37px;',
-      '    height:37px;',
-      '    object-fit:contain;',
-      '    user-select:none;',
-      '    -webkit-user-drag:none;',
-      '    animation:rtPulse 1200ms ease-in-out infinite;',
-      '    filter:drop-shadow(0 1px 4px rgba(0,0,0,.18));',
-      '  }',
-      '  .rt-copy-stack{',
-      '    display:grid;',
-      '    gap:10px;',
-      '    justify-items:center;',
-      '  }',
-      '  .rt-payment-title{',
-      '    margin:0;',
-      '    font-size:40px;',
-      '    line-height:1.02;',
-      '    font-weight:900;',
-      '    letter-spacing:-.03em;',
-      '    color:var(--rt-text);',
-      '  }',
-      '  .rt-payment-sub{',
-      '    margin:0 auto;',
-      '    max-width:28ch;',
-      '    color:var(--rt-muted);',
-      '    font-size:18px;',
-      '    line-height:1.4;',
-      '  }',
-      '  @keyframes rtPopIn{',
-      '    to{transform:translateY(0) scale(1);opacity:1;}',
-      '  }',
-      '  @keyframes rtSpin{',
-      '    to{transform:rotate(360deg);}',
-      '  }',
-      '  @keyframes rtPulse{',
-      '    0%,100%{opacity:.36;transform:scale(.92);}',
-      '    50%{opacity:1;transform:scale(1);}',
-      '  }',
-      '</style>',
-      '</head>',
-      '<body>',
-      '  <div class="rt-payment-shell" role="status" aria-live="polite">',
-      '    <div class="rt-spinner" aria-hidden="true"><img class="rt-spinner-icon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt=""></div>',
-      '    <div class="rt-copy-stack">',
-      '      <h1 class="rt-payment-title">Loading Checkout...</h1>',
-      '      <p class="rt-payment-sub">Sit tight, the secure Red Threads checkout screen will be up soon.</p>',
-      '    </div>',
-      '  </div>',
-      '</body>',
-      '</html>'
-    ].join('');
-  }
-
-  function openPendingOrderFlowCheckoutWindow(){
-    try {
-      const popup = window.open('', '_blank');
-      if (!popup) return null;
-      try { popup.opener = null; } catch (_) {}
-      try {
-        popup.document.title = 'Red Threads Checkout';
-        popup.document.open();
-        popup.document.write(buildPendingOrderFlowCheckoutWindowHtml());
-        popup.document.close();
-      } catch (_) {}
-      return popup;
-    } catch (_) {
-      return null;
     }
   }
 
@@ -33840,30 +33770,28 @@
       showNotice('Secure payment link is not available yet.', 'err');
       return false;
     }
-    const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-    if (popup) {
-      try { popup.opener = null; } catch (_) {}
+    if (navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN })) {
       if (orderFlowCheckoutHint) {
         orderFlowCheckoutHint.hidden = false;
-        orderFlowCheckoutHint.textContent = 'Secure payment opened in a new tab. Return here after payment.';
+        orderFlowCheckoutHint.textContent = 'Opening secure payment in this window.';
       }
       if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = false;
       if (orderFlowCheckoutOpenLink) orderFlowCheckoutOpenLink.hidden = true;
-      console.info('Stripe checkout launch path: fallback-button');
-      showNotice('Secure payment opened in a new tab.', 'ok');
+      console.info('Stripe checkout launch path: same-window-fallback-button');
+      showNotice('Opening secure payment in this window.', 'ok');
       return true;
     }
-    console.warn('Stripe checkout popup/new tab was blocked.');
+    console.warn('Stripe checkout same-window navigation was blocked.');
     if (orderFlowCheckoutHint) {
       orderFlowCheckoutHint.hidden = false;
-      orderFlowCheckoutHint.textContent = 'A new tab was blocked. Use the payment button below to continue in a secure tab.';
+      orderFlowCheckoutHint.textContent = 'Automatic navigation was blocked. Use the payment button below to continue in this window.';
     }
     if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = false;
     if (orderFlowCheckoutOpenLink) {
       orderFlowCheckoutOpenLink.href = checkoutUrl;
       orderFlowCheckoutOpenLink.hidden = false;
     }
-    showNotice('Your browser blocked the new tab. Use the payment button in the modal to continue.', 'err');
+    showNotice('Automatic checkout navigation was blocked. Use the payment button in the modal to continue.', 'err');
     return false;
   }
 
@@ -34226,10 +34154,6 @@
     renderOrderFlowSummaryCard();
     if (orderFlowCheckoutBody) orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
     if (orderFlowCheckoutMeta) orderFlowCheckoutMeta.textContent = '';
-    if (ORDER_FLOW_CHECKOUT_WINDOW && !ORDER_FLOW_CHECKOUT_WINDOW.closed && !ORDER_FLOW_CHECKOUT_URL) {
-      try { ORDER_FLOW_CHECKOUT_WINDOW.close(); } catch (_) {}
-    }
-    ORDER_FLOW_CHECKOUT_WINDOW = null;
     resetOrderFlowCheckoutLaunchState();
     if (orderFlowResultIcon) {
       orderFlowResultIcon.textContent = '✓';
@@ -34432,10 +34356,7 @@
       return;
     }
     setSummaryOptions({ creditCardFeeEnabled: normalizedMethod === 'card' });
-    const paymentLabel = normalizedMethod === 'ach' ? 'ACH bank payment' : 'card payment';
     const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
-    const pendingWindow = openPendingOrderFlowCheckoutWindow();
-    ORDER_FLOW_CHECKOUT_WINDOW = pendingWindow;
     setOrderFlowButtonsBusy(true);
     closeIntroModal();
     setOrderFlowStatePill('Checkout');
@@ -34448,9 +34369,6 @@
         portalState: JSON.stringify(clickedPortalState)
       });
       if (!resp || resp.ok !== true) {
-        if (pendingWindow && !pendingWindow.closed) {
-          try { pendingWindow.close(); } catch (_) {}
-        }
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         if (handleOrderFlowActionError(resp, {
           surface: 'checkout',
@@ -34462,9 +34380,6 @@
       const checkoutUrl = String((resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '').trim();
       if (!resp.checkoutReady || !checkoutUrl) {
         console.warn('Stripe checkout URL missing from createCheckoutAttempt response.', resp);
-        if (pendingWindow && !pendingWindow.closed) {
-          try { pendingWindow.close(); } catch (_) {}
-        }
         showOrderFlowResult(
           'Checkout Unavailable',
           'Your order draft and checkout attempt were saved, but secure payment could not start. Please try again or contact Red Threads.',
@@ -34473,26 +34388,13 @@
         );
         return;
       }
-      let launched = false;
-      if (pendingWindow && !pendingWindow.closed) {
-        try {
-          pendingWindow.location.replace(checkoutUrl);
-          launched = true;
-          console.info('Stripe checkout launch path: pending-window');
-        } catch (err) {
-          console.warn('Stripe checkout pending window navigation failed.', err);
-        }
-      }
+      const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
       if (!launched) {
-        console.warn('Stripe checkout popup/new tab was blocked before session launch.');
-        if (pendingWindow && !pendingWindow.closed) {
-          try { pendingWindow.close(); } catch (_) {}
-        }
-        ORDER_FLOW_CHECKOUT_WINDOW = null;
+        console.warn('Stripe checkout same-window navigation failed before session launch.');
         setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, { launched: false });
         setOrderFlowStatePill('Checkout');
         setOrderFlowMode('fulfillment');
-        showNotice('Your browser blocked the payment tab. Allow pop-ups, then click Place Order again to continue.', 'err');
+        showNotice('Secure payment is ready. Use the payment button to continue in this window.', 'err');
         return;
       }
       setOrderFlowCheckoutReadyState(resp, normalizedMethod, checkoutUrl, {
@@ -34501,11 +34403,8 @@
       });
       setOrderFlowStatePill('Checkout');
       setOrderFlowMode('fulfillment');
-      showNotice('Secure payment opened in a new tab.', 'ok');
+      showNotice('Opening secure payment in this window.', 'ok');
     } catch (err) {
-      if (pendingWindow && !pendingWindow.closed) {
-        try { pendingWindow.close(); } catch (_) {}
-      }
       showNotice(String((err && err.message) || err), 'err');
       setOrderFlowStatePill('Checkout');
       setOrderFlowMode('fulfillment');
@@ -37737,7 +37636,6 @@
     if (!isLockedSummaryPaymentPending_()) {
       throw new Error('This order is already marked paid.');
     }
-    const pendingWindow = openPendingOrderFlowCheckoutWindow();
     setSummaryShareBusyAction_(paymentMethodSelected === 'card' ? 'pay_card' : 'pay_ach');
     rtShowLoader('Preparing payment', paymentMethodSelected === 'card'
       ? 'Building your secure credit card checkout.'
@@ -37753,30 +37651,8 @@
       }
       syncOrderFlowLifecycleFromResponse_(resp);
       const checkoutUrl = String((resp.checkoutUrl || (resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '')).trim();
-      let launched = false;
-      if (pendingWindow && !pendingWindow.closed) {
-        try {
-          pendingWindow.location.replace(checkoutUrl);
-          launched = true;
-          console.info('Locked summary Stripe checkout launch path: pending-window');
-        } catch (err) {
-          console.warn('Locked summary Stripe checkout pending window navigation failed.', err);
-        }
-      }
+      const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
       if (!launched) {
-        try {
-          const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-          if (popup) {
-            try { popup.opener = null; } catch (_) {}
-            launched = true;
-            console.info('Locked summary Stripe checkout launch path: fallback-window-open');
-          }
-        } catch (_) {}
-      }
-      if (!launched) {
-        if (pendingWindow && !pendingWindow.closed) {
-          try { pendingWindow.close(); } catch (_) {}
-        }
         try {
           if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
             await navigator.clipboard.writeText(checkoutUrl);
@@ -37789,11 +37665,8 @@
         }
         return;
       }
-      showNotice('Secure payment opened in a new tab.', 'ok');
+      showNotice('Opening secure payment in this window.', 'ok');
     } catch (err) {
-      if (pendingWindow && !pendingWindow.closed) {
-        try { pendingWindow.close(); } catch (_) {}
-      }
       throw err;
     } finally {
       rtHideLoader();
@@ -41829,6 +41702,7 @@
     renderPortalStatusBanner();
     renderPortal();
     handleCheckoutReturnNotice();
+    if (CURRENT_TOKEN) replaceCurrentPortalProjectRoute_(CURRENT_TOKEN);
     if (
       checkoutReturnResult === 'success'
       && (!hasStrongPaidFinalizedSignal_(VM) || !hasPostCheckoutChargedTotalSignal_(VM))
@@ -41945,12 +41819,6 @@
       debugLog('TOKEN_BOOT:no-session-home-disabled');
     }
 
-    if (!isEmbeddedPortalContext_()) {
-      try {
-        if (!window.location.search || window.location.search.indexOf('t=') === -1) return;
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } catch (_) {}
-    }
   }
 
   document.addEventListener('DOMContentLoaded', init);

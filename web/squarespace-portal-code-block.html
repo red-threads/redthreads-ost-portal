@@ -1,4 +1,4 @@
-<!-- /portal PAGE Code Block - Fullscreen Apps Script + branded token passthrough + loading state -->
+<!-- /portal PAGE Code Block - Fullscreen Apps Script + branded token passthrough + route sync + same-window checkout -->
 <style>
   html,
   body {
@@ -204,6 +204,69 @@
       iframe.addEventListener("load", hideLoading);
       window.setTimeout(hideLoading, 16000);
     }
+
+    function isAllowedAppsScriptOrigin(origin) {
+      if (origin === "https://script.google.com") return true;
+      if (origin === "https://script.googleusercontent.com") return true;
+      return /^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/i.test(String(origin || ""));
+    }
+
+    function isAllowedStripeCheckoutUrl(url) {
+      try {
+        var parsed = new URL(String(url || ""));
+        return parsed.protocol === "https:" && parsed.hostname === "checkout.stripe.com";
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function getPortalMessageParams(data) {
+      var payload = data && typeof data.payload === "object" ? data.payload : {};
+      var params = data && typeof data.params === "object" ? data.params : payload.params || {};
+      return params && typeof params === "object" ? params : {};
+    }
+
+    function replacePortalRoute(params) {
+      var nextParams = new URLSearchParams(window.location.search);
+      var tokenValue = params.t || params.token || "";
+      var checkoutValue = params.checkoutResult || "";
+      var sessionValue = params.stripeSessionId || "";
+
+      if (tokenValue) {
+        nextParams.set("t", String(tokenValue));
+      }
+
+      if (checkoutValue === "success" || checkoutValue === "cancel") {
+        nextParams.set("checkoutResult", checkoutValue);
+      } else {
+        nextParams.delete("checkoutResult");
+      }
+
+      if (sessionValue) {
+        nextParams.set("stripeSessionId", String(sessionValue));
+      } else {
+        nextParams.delete("stripeSessionId");
+      }
+
+      var nextUrl = window.location.pathname + (nextParams.toString() ? "?" + nextParams.toString() : "");
+      window.history.replaceState({}, "", nextUrl);
+    }
+
+    window.addEventListener("message", function (event) {
+      if (!event || !isAllowedAppsScriptOrigin(event.origin)) return;
+      var data = event.data;
+      if (!data || typeof data !== "object") return;
+      if (data.source !== "redthreads-portal") return;
+
+      if (data.type === "RT_PORTAL_ROUTE_REPLACE") {
+        replacePortalRoute(getPortalMessageParams(data));
+        return;
+      }
+
+      if (data.type === "RT_PORTAL_NAVIGATE" && isAllowedStripeCheckoutUrl(data.url)) {
+        window.location.assign(String(data.url));
+      }
+    });
 
     iframe.src = iframeParams.toString() ? APP_URL + "?" + iframeParams.toString() : APP_URL;
   })();
