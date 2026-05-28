@@ -139,3 +139,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Smoke tests: public stable Apps Script URL contains `Development revision 4`, `orderFlowCheckoutLoading`, and `RT-CHECKOUT-TIMING`, and no stale `Development revision 3` label.
 - Decisions: Full ship workflow is now Apps Script-first; run each `clasp` command sequentially, wait for completion, retry failed push/version/deploy commands before declaring a blocker, then log/current-state and push GitHub last.
 - Follow-ups: run tokenized checkout smoke separately without recording live tokens.
+
+## 2026-05-28 - Fullscreen Checkout Loader
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: replace the in-modal checkout transition loader with a true fullscreen overlay so `Place Order` immediately shows a centered branded loading state while Stripe Checkout is being prepared.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no `Code.js` changes; checkout amounts, line items, metadata, return URLs, webhook handling, and persistence flows were not changed.
+- Decisions: incremented the badge to `5`; kept the existing checkout session creation flow intact; made the checkout loader fixed, viewport-filling, pointer-blocking, and centered above the order modal; forced hidden checkout fallback/action rows to stay hidden while the loading overlay is active.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed the runtime source; `clasp version "Show fullscreen checkout loader"` created version `830`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `830`.
+- Smoke tests: public stable Apps Script URL contains `Development revision 5`, fullscreen loader markers, and no stale `Development revision 4` label.
+- Follow-ups: run a tokenized card checkout smoke separately without recording live tokens to verify the visual transition and same-window Stripe navigation end to end.
