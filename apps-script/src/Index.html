@@ -16226,7 +16226,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 9">9</div>
+  <div class="devRevisionBadge" aria-label="Development revision 10">10</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -21444,10 +21444,15 @@
       totalMs: Number(timing.totalMs || 0) || 0,
       ok: timing.ok === true,
       stage: String(timing.stage || ''),
+      fastCheckoutResponse: timing.fastCheckoutResponse === true,
+      hydrationSkipped: timing.hydrationSkipped === true,
       marks: Array.isArray(timing.marks) ? timing.marks.map(mark => ({
         name: String(mark && mark.name || ''),
         elapsedMs: Number(mark && mark.elapsedMs || 0) || 0,
-        deltaMs: Number(mark && mark.deltaMs || 0) || 0
+        deltaMs: Number(mark && mark.deltaMs || 0) || 0,
+        ok: mark && Object.prototype.hasOwnProperty.call(mark, 'ok') ? mark.ok === true : undefined,
+        fastCheckoutResponse: mark && mark.fastCheckoutResponse === true,
+        hydrationSkipped: mark && mark.hydrationSkipped === true
       })) : []
     };
   }
@@ -21462,6 +21467,9 @@
       marks: Array.isArray(trace.marks) ? trace.marks.slice() : []
     }, (extra && typeof extra === 'object') ? extra : {});
     console.info('[RT-CHECKOUT-TIMING]', payload);
+    try {
+      console.info('[RT-CHECKOUT-TIMING-JSON] ' + JSON.stringify(payload));
+    } catch (_) {}
   }
 
   function rtSetPendingLoaderState(title, sub){

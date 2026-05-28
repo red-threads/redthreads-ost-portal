@@ -207,3 +207,21 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Instrument checkout launch timing"` created version `834`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `834`.
 - Smoke tests: public stable Apps Script URL contains `Development revision 9`, `checkoutTiming`, and `client_state_capture_start`; stale `Development revision 8` is absent. Server-only timing markers emit during checkout calls and are not visible in public HTML.
 - Timing baseline: not run during this ship because a real tokenized checkout attempt creates order/payment artifacts. Collect timings from the next controlled checkout attempt without committing live tokens.
+
+## 2026-05-28 - Stage 2 Fast Checkout Response
+
+- Mode: Full ship, Stage 2 performance.
+- Branch/commit/PR: `main`.
+- Goal: reduce Place Order to Stripe Checkout delay by skipping noncritical response hydration before normal same-window Stripe navigation.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no amount, line item, metadata, tax, shipping, card fee, payment method, return URL, webhook, or persistence schema fields were changed. The existing Stripe Checkout session creation path remains the payment authority.
+- Critical work kept before response: portal state persistence, order validation, Stripe Checkout Session creation, PORTAL_ORDERS write, EXPORT_LOG pointer write, and competing unpaid order supersede.
+- Decision: added `buildCheckoutFastAttemptResponse_()` for the successful normal checkout path. This response includes checkout URL, checkout attempt ID, order ID, Stripe session ID, payment method, existing Stripe summary, order/account summaries needed by fallback code, and timing data. It does not call `buildOrderActionPortalPayload_()` or `refreshPortalPayloadForToken_()` before normal Stripe navigation.
+- Instrumentation: kept Stage 1 timing and added `fastCheckoutResponse: true`, `hydrationSkipped: true`, and parseable `[RT-CHECKOUT-TIMING-JSON]` browser logs.
+- Dev revision: incremented badge to `10`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Fast checkout response skips hydration"` created version `835`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `835`.
+- Public smoke: stable Apps Script HTML contains `Development revision 10`, `fastCheckoutResponse`, and `[RT-CHECKOUT-TIMING-JSON]`; stale `Development revision 9` is absent.
+- Controlled timing result: a disposable/test checkout attempt opened Stripe in the same window and was not paid. Browser timing reported click-to-navigation 18,258 ms and `google.script.run` round trip 18,189 ms. Server timing reported total 15,960 ms, Stripe API call 710 ms, PORTAL_ORDERS write 262 ms, EXPORT_LOG pointer write 514 ms, competing unpaid order supersede 7,412 ms, and response hydration skipped at 0 ms blocking cost.
+- Before/after: Stage 1 baseline was `google.script.run` 19,761 ms, server total 16,960 ms, Stripe API call 804 ms, PORTAL_ORDERS write 203 ms, EXPORT_LOG pointer write 617 ms, competing unpaid order supersede 5,895 ms, and response hydration 3,539 ms. Stage 2 removed hydration from the blocking path, but the observed gain was partly masked by slower competing unpaid order supersede in the test sample.
+- Follow-ups: Stage 3 should investigate competing unpaid order supersede and portal infrastructure timing without deferring lifecycle-critical work until the correctness boundary is explicitly reviewed.

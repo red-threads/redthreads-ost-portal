@@ -4781,6 +4781,8 @@ function buildCheckoutTimingExtra_(extra) {
     'paymentMethodSelected',
     'checkoutReady',
     'hasCheckoutUrl',
+    'fastCheckoutResponse',
+    'hydrationSkipped',
     'configured',
     'statusCode',
     'code'
@@ -5314,6 +5316,33 @@ function buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutAttemptId, str
     portalPayload: portalPayload,
     warnings: stripe.ok ? [] : [String(stripe.error || 'Stripe checkout is not configured.')]
   }, ctx);
+}
+
+function buildCheckoutFastAttemptResponse_(ctx, orderSummary, checkoutIdentity, stripe, paymentMethodSelected) {
+  const stripeResult = (stripe && typeof stripe === 'object') ? stripe : {};
+  const identity = (checkoutIdentity && typeof checkoutIdentity === 'object') ? checkoutIdentity : {};
+  const checkoutAttemptId = trimString_(identity.checkoutAttemptId);
+  const orderId = trimString_(identity.orderId || (orderSummary && orderSummary.orderId));
+  const checkoutUrl = trimString_(stripeResult.checkoutUrl || stripeResult.url);
+  return {
+    ok: true,
+    checkoutReady: stripeResult.ok === true && !!checkoutUrl,
+    fastCheckoutResponse: true,
+    hydrationSkipped: true,
+    checkoutUrl: checkoutUrl,
+    checkoutAttemptId: checkoutAttemptId,
+    orderId: orderId,
+    stripeSessionId: trimString_(stripeResult.sessionId),
+    paymentMethod: trimString_(paymentMethodSelected),
+    paymentMethodSelected: trimString_(paymentMethodSelected),
+    accountSummary: ctx.accountInfo.summary,
+    orderSummary: Object.assign({}, orderSummary, {
+      checkoutAttemptId: checkoutAttemptId,
+      orderId: orderId
+    }),
+    stripe: stripeResult,
+    warnings: stripeResult.ok ? [] : [String(stripeResult.error || 'Stripe checkout is not configured.')]
+  };
 }
 
 function buildCheckoutAttemptFailureResponse_(stripe, options) {
@@ -5961,23 +5990,29 @@ function createCheckoutAttempt(payload) {
       });
     }
 
-    markCheckoutTiming_(timing, 'response_hydration_start');
-    const portalPayload = buildOrderActionPortalPayload_(ctx, exportRowInfo);
-    markCheckoutTiming_(timing, 'response_hydration_end', { ok: !!portalPayload });
+    markCheckoutTiming_(timing, 'response_hydration_skipped', {
+      ok: true,
+      fastCheckoutResponse: true,
+      hydrationSkipped: true
+    });
 
     markCheckoutTiming_(timing, 'response_build_start');
-    const response = buildCheckoutAttemptResponse_(ctx, orderSummary, checkoutIdentity.checkoutAttemptId, stripe, portalPayload);
+    const response = buildCheckoutFastAttemptResponse_(ctx, orderSummary, checkoutIdentity, stripe, paymentMethodSelected);
     markCheckoutTiming_(timing, 'response_build_end', {
       ok: true,
       checkoutReady: response && response.checkoutReady === true,
-      paymentMethodSelected: paymentMethodSelected
+      paymentMethodSelected: paymentMethodSelected,
+      fastCheckoutResponse: true,
+      hydrationSkipped: true
     });
     return attachCheckoutTiming_(response, timing, {
       ok: true,
       stage: 'complete',
       paymentMethodSelected: paymentMethodSelected,
       checkoutReady: response && response.checkoutReady === true,
-      hasCheckoutUrl: !!(stripe && trimString_(stripe.checkoutUrl || stripe.url))
+      hasCheckoutUrl: !!(stripe && trimString_(stripe.checkoutUrl || stripe.url)),
+      fastCheckoutResponse: true,
+      hydrationSkipped: true
     });
   } catch (err) {
     return attachCheckoutTiming_({ ok: false, error: String((err && err.message) || err) }, timing, {

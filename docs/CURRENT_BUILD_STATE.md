@@ -9,7 +9,7 @@ Last aligned: 2026-05-28.
 - Runtime root: `apps-script/src/`.
 - Tracked runtime files: `Code.js`, `Index.html`, `TaxForm3372Manifest.html`, `appsscript.json`, `.clasp.json`.
 - Current tracked app has been pulled from the live Apps Script project and includes the fuller portal architecture: auth shell, dashboard/order lifecycle surfaces, Stripe checkout routing, Team Mode lanes, and tax-form manifest support.
-- Tracked runtime source now includes same-window Stripe Checkout launch helpers, a global project-entry-style checkout transition overlay with browser-back state restoration, structured checkout launch timing instrumentation, and a bottom-left glass Red Threads revision badge showing `9`.
+- Tracked runtime source now includes same-window Stripe Checkout launch helpers, a global project-entry-style checkout transition overlay with browser-back state restoration, structured checkout launch timing instrumentation, a fast normal-checkout response path that skips noncritical response hydration before Stripe navigation, and a bottom-left glass Red Threads revision badge showing `10`.
 - Portal DB Sheet ID appears in `Code.js`: `16KrxpEv8s-U5gjLX-DZK25GbrnkeKbjgInngie8Ce_c`.
 - `.clasp.json` now points to the live Apps Script project ID verified in Apps Script: `1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU`.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
@@ -31,15 +31,16 @@ Last aligned: 2026-05-28.
 - Browser-verified Apps Script project URL: `https://script.google.com/u/0/home/projects/1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU/edit`.
 - `clasp pull` against the verified live project succeeded on 2026-05-27 and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`.
 - After the binding repair, `clasp push --force`, `clasp version`, and `clasp deploy` can update the live Apps Script source and stable deployment when commands are run sequentially and retried if needed.
-- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 834, `Instrument checkout launch timing`.
-- Checkout launch timing instrumentation was deployed to the stable Apps Script deployment on 2026-05-28 after sequential `clasp push`, `clasp version`, and `clasp deploy` commands completed.
+- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 835, `Fast checkout response skips hydration`.
+- Stage 2 checkout performance work was deployed to the stable Apps Script deployment on 2026-05-28 after sequential `clasp push`, `clasp version`, and `clasp deploy` commands completed. The normal Place Order card checkout path now returns a minimal checkout response after validation, Stripe session creation, PORTAL_ORDERS write, EXPORT_LOG pointer write, and competing unpaid order supersede complete.
 - The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
 
 ## Blocked Or Unverified
 
 - The live-pulled server source had a checked-in Team Mode default credential; the repo copy now requires the Team Mode password to come from Apps Script Script Properties instead. Confirm that property before relying on Team Mode in production.
-- Public stable URL smoke test confirmed the deployed HTML contains `Development revision 9`, client checkout timing markers, and no stale `Development revision 8` label. Server timing markers emit during checkout server calls and are not visible in the public HTML payload.
-- Full lifecycle/payment fixture regression was not run during the checkout modal browser-back restoration Full ship.
+- Public stable URL smoke test confirmed the deployed HTML contains `Development revision 10`, fast-checkout client timing JSON markers, and no stale `Development revision 9` label. Server timing markers emit during checkout server calls and are not visible in the public HTML payload.
+- Post-ship controlled checkout timing on a disposable/test project confirmed `fastCheckoutResponse: true` and `hydrationSkipped: true`. Response hydration no longer blocks normal Stripe navigation; the observed click-to-navigation time was 18,258 ms, with server total 15,960 ms, `google.script.run` round trip 18,189 ms, Stripe API call 710 ms, PORTAL_ORDERS write 262 ms, EXPORT_LOG pointer write 514 ms, and competing unpaid order supersede 7,412 ms.
+- Full lifecycle/payment fixture regression was not run during the Stage 2 checkout performance Full ship.
 - Live Squarespace `/portal` inspection on 2026-05-28 showed the fullscreen iframe and `RT_PORTAL_ROUTE_REPLACE` / `RT_PORTAL_NAVIGATE` wrapper handlers present after the Squarespace snippet was corrected.
 
 ## Workflow
