@@ -13538,6 +13538,73 @@
       line-height:1.5;
       white-space:pre-wrap;
     }
+    .orderFlowCheckoutLoading{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      margin:8px auto 4px;
+      padding:18px 16px;
+      text-align:center;
+    }
+    .orderFlowCheckoutLoading[hidden]{
+      display:none !important;
+    }
+    .orderFlowCheckoutSpinner{
+      width:72px;
+      height:72px;
+      position:relative;
+      display:grid;
+      place-items:center;
+      filter:drop-shadow(0 0 14px rgba(225,29,72,.34));
+    }
+    .orderFlowCheckoutSpinner::before{
+      content:'';
+      position:absolute;
+      inset:0;
+      border-radius:999px;
+      background:
+        conic-gradient(from 210deg,
+          rgba(225,29,72,.18) 0deg,
+          rgba(225,29,72,.26) 78deg,
+          rgba(244,63,94,.95) 78deg,
+          rgba(244,63,94,.95) 186deg,
+          rgba(225,29,72,.18) 186deg,
+          rgba(225,29,72,.18) 360deg);
+      -webkit-mask:radial-gradient(circle, transparent 58%, #000 60%);
+      mask:radial-gradient(circle, transparent 58%, #000 60%);
+      animation:rtSpin 1180ms linear infinite;
+    }
+    .orderFlowCheckoutSpinnerIcon{
+      position:relative;
+      z-index:1;
+      width:37px;
+      height:37px;
+      object-fit:contain;
+      user-select:none;
+      -webkit-user-drag:none;
+      animation:rtPulse 1200ms ease-in-out infinite;
+      filter:drop-shadow(0 1px 4px rgba(0,0,0,.18));
+    }
+    .orderFlowCheckoutLoadingText{
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      max-width:42ch;
+    }
+    .orderFlowCheckoutLoadingTitle{
+      color:var(--rt-text);
+      font-size:22px;
+      line-height:1.2;
+      font-weight:900;
+    }
+    .orderFlowCheckoutLoadingSub{
+      color:var(--rt-muted);
+      font-size:15px;
+      line-height:1.4;
+      font-weight:700;
+    }
     .orderFlowBtn{
       min-height:42px;
       border-radius:12px;
@@ -16220,7 +16287,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 3">3</div>
+  <div class="devRevisionBadge" aria-label="Development revision 4">4</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -17185,6 +17252,15 @@
         </div>
       </div>
       <div id="orderFlowCheckoutSection" hidden>
+        <div class="orderFlowCheckoutLoading" id="orderFlowCheckoutLoading" role="status" aria-live="polite" hidden>
+          <div class="orderFlowCheckoutSpinner" aria-hidden="true">
+            <img class="orderFlowCheckoutSpinnerIcon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+          </div>
+          <div class="orderFlowCheckoutLoadingText">
+            <div class="orderFlowCheckoutLoadingTitle">Preparing secure payment...</div>
+            <div class="orderFlowCheckoutLoadingSub" id="orderFlowCheckoutLoadingSub">Saving your order and creating Stripe Checkout. This can take a few seconds.</div>
+          </div>
+        </div>
         <p class="orderFlowBody" id="orderFlowCheckoutBody">Creating your checkout session...</p>
         <div class="orderFlowInfoCard">
           <div class="orderFlowCheckoutMeta" id="orderFlowCheckoutMeta"></div>
@@ -19901,6 +19977,8 @@
   const orderFlowBlockingSection = document.getElementById('orderFlowBlockingSection');
   const orderFlowBlockingAlert = document.getElementById('orderFlowBlockingAlert');
   const orderFlowCheckoutSection = document.getElementById('orderFlowCheckoutSection');
+  const orderFlowCheckoutLoading = document.getElementById('orderFlowCheckoutLoading');
+  const orderFlowCheckoutLoadingSub = document.getElementById('orderFlowCheckoutLoadingSub');
   const orderFlowResultSection = document.getElementById('orderFlowResultSection');
   const orderFlowBackBtn = document.getElementById('orderFlowBackBtn');
   const orderFlowCheckBtn = document.getElementById('orderFlowCheckBtn');
@@ -33697,6 +33775,7 @@
       orderFlowManualViewerSubmitBtn,
       orderFlowPoConfirmBtn,
       orderFlowSubmitTermsBtn,
+      orderFlowCheckoutBackBtn,
       orderFlowCheckoutLaunchBtn,
       orderFlowCheckoutCopyBtn
     ].forEach(btn => {
@@ -33707,6 +33786,10 @@
 
   function resetOrderFlowCheckoutLaunchState(){
     ORDER_FLOW_CHECKOUT_URL = '';
+    if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
+    if (orderFlowCheckoutLoadingSub) {
+      orderFlowCheckoutLoadingSub.textContent = 'Saving your order and creating Stripe Checkout. This can take a few seconds.';
+    }
     if (orderFlowCheckoutHint) {
       orderFlowCheckoutHint.hidden = true;
       orderFlowCheckoutHint.textContent = 'If secure payment does not open automatically, use the button below to continue in this window.';
@@ -33719,9 +33802,31 @@
     }
   }
 
+  function setOrderFlowCheckoutLoadingState(method){
+    ORDER_FLOW_CHECKOUT_URL = '';
+    if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = false;
+    if (orderFlowCheckoutBody) orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
+    if (orderFlowCheckoutMeta) {
+      const methodLabel = String(method || '').trim().toLowerCase() === 'ach'
+        ? 'ACH Checkout'
+        : 'Stripe Checkout';
+      orderFlowCheckoutMeta.textContent = methodLabel + ' is being created now.';
+    }
+    if (orderFlowCheckoutLoadingSub) {
+      orderFlowCheckoutLoadingSub.textContent = 'Saving your order and creating Stripe Checkout. This can take a few seconds.';
+    }
+    if (orderFlowCheckoutHint) orderFlowCheckoutHint.hidden = true;
+    if (orderFlowCheckoutActions) orderFlowCheckoutActions.hidden = true;
+    if (orderFlowCheckoutOpenLink) {
+      orderFlowCheckoutOpenLink.href = '#';
+      orderFlowCheckoutOpenLink.hidden = true;
+    }
+  }
+
   function setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, options){
     const opts = (options && typeof options === 'object') ? options : {};
     ORDER_FLOW_CHECKOUT_URL = String(checkoutUrl || '').trim();
+    if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
     if (orderFlowCheckoutBody) {
       orderFlowCheckoutBody.textContent = opts.launched ? 'Secure payment opened' : 'Secure payment ready';
     }
@@ -34349,6 +34454,7 @@
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
     if (maybeBlockOrderFlow()) return;
     const normalizedMethod = String(method || '').trim().toLowerCase();
+    const checkoutStartedAt = Date.now();
     if (normalizedMethod === PAYMENT_METHODS.ach && !isClientAchPaymentEnabled_()) {
       showNotice('ACH bank payments are not available in the portal yet.', 'err', { persist: true });
       ORDER_FLOW_SELECTED_METHOD = '';
@@ -34360,20 +34466,35 @@
       setOrderFlowMode('fulfillment');
       return;
     }
-    setSummaryOptions({ creditCardFeeEnabled: normalizedMethod === 'card' });
-    const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
     setOrderFlowButtonsBusy(true);
     closeIntroModal();
     setOrderFlowStatePill('Checkout');
-    setOrderFlowMode('fulfillment');
     resetOrderFlowCheckoutLaunchState();
+    setOrderFlowCheckoutLoadingState(normalizedMethod);
+    setOrderFlowMode('checkout');
+    console.info('[RT-CHECKOUT-TIMING]', {
+      phase: 'checkout_click',
+      method: normalizedMethod,
+      elapsedMs: 0
+    });
     try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      setSummaryOptions({ creditCardFeeEnabled: normalizedMethod === 'card' });
+      const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const resp = await callServer('createCheckoutAttempt', {
         token: CURRENT_TOKEN,
         paymentMethodSelected: normalizedMethod,
         portalState: JSON.stringify(clickedPortalState)
       });
+      console.info('[RT-CHECKOUT-TIMING]', {
+        phase: 'checkout_session_response',
+        method: normalizedMethod,
+        elapsedMs: Date.now() - checkoutStartedAt,
+        ok: !!(resp && resp.ok === true),
+        checkoutReady: !!(resp && resp.checkoutReady === true)
+      });
       if (!resp || resp.ok !== true) {
+        if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
         syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         if (handleOrderFlowActionError(resp, {
           surface: 'checkout',
@@ -34381,9 +34502,10 @@
         })) return;
         throw new Error(String((resp && resp.error) || 'Unable to create checkout attempt.'));
       }
-      syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
       const checkoutUrl = String((resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '').trim();
       if (!resp.checkoutReady || !checkoutUrl) {
+        if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
+        syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         console.warn('Stripe checkout URL missing from createCheckoutAttempt response.', resp);
         showOrderFlowResult(
           'Checkout Unavailable',
@@ -34394,11 +34516,19 @@
         return;
       }
       const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
+      console.info('[RT-CHECKOUT-TIMING]', {
+        phase: 'checkout_navigation_attempt',
+        method: normalizedMethod,
+        elapsedMs: Date.now() - checkoutStartedAt,
+        launched: launched
+      });
       if (!launched) {
+        if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
         console.warn('Stripe checkout same-window navigation failed before session launch.');
+        syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
         setOrderFlowCheckoutReadyState(resp, method, checkoutUrl, { launched: false });
         setOrderFlowStatePill('Checkout');
-        setOrderFlowMode('fulfillment');
+        setOrderFlowMode('checkout');
         showNotice('Secure payment is ready. Use the payment button to continue in this window.', 'err');
         return;
       }
@@ -34407,12 +34537,13 @@
         showActions: false
       });
       setOrderFlowStatePill('Checkout');
-      setOrderFlowMode('fulfillment');
+      setOrderFlowMode('checkout');
       showNotice('Opening secure payment in this window.', 'ok');
     } catch (err) {
+      if (orderFlowCheckoutLoading) orderFlowCheckoutLoading.hidden = true;
       showNotice(String((err && err.message) || err), 'err');
       setOrderFlowStatePill('Checkout');
-      setOrderFlowMode('fulfillment');
+      setOrderFlowMode('checkout');
     } finally {
       setOrderFlowButtonsBusy(false);
     }
@@ -37629,6 +37760,7 @@
 
   async function startLockedSummaryPaymentCheckout_(method){
     const paymentMethodSelected = String(method || '').trim().toLowerCase();
+    const checkoutStartedAt = Date.now();
     if (paymentMethodSelected !== 'card' && paymentMethodSelected !== 'ach') {
       throw new Error('Unsupported payment method.');
     }
@@ -37645,19 +37777,36 @@
     rtShowLoader('Preparing payment', paymentMethodSelected === 'card'
       ? 'Building your secure credit card checkout.'
       : 'Building your secure ACH checkout.');
+    console.info('[RT-CHECKOUT-TIMING]', {
+      phase: 'locked_checkout_click',
+      method: paymentMethodSelected,
+      elapsedMs: 0
+    });
     try {
       const resp = await callServer('createLockedOrderPaymentCheckout', {
         token: CURRENT_TOKEN,
         paymentMethodSelected: paymentMethodSelected
       });
+      console.info('[RT-CHECKOUT-TIMING]', {
+        phase: 'locked_checkout_session_response',
+        method: paymentMethodSelected,
+        elapsedMs: Date.now() - checkoutStartedAt,
+        ok: !!(resp && resp.ok === true)
+      });
       if (!resp || resp.ok !== true || !String(resp.checkoutUrl || '').trim()) {
         syncOrderFlowLifecycleFromResponse_(resp);
         throw new Error(String((resp && resp.error) || 'Unable to prepare payment.'));
       }
-      syncOrderFlowLifecycleFromResponse_(resp);
       const checkoutUrl = String((resp.checkoutUrl || (resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '')).trim();
       const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN });
+      console.info('[RT-CHECKOUT-TIMING]', {
+        phase: 'locked_checkout_navigation_attempt',
+        method: paymentMethodSelected,
+        elapsedMs: Date.now() - checkoutStartedAt,
+        launched: launched
+      });
       if (!launched) {
+        syncOrderFlowLifecycleFromResponse_(resp);
         try {
           if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
             await navigator.clipboard.writeText(checkoutUrl);
