@@ -305,3 +305,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Suppress checkout unload prompt"` created version `840`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `840`.
 - Smoke tests: public stable Apps Script HTML contains `Development revision 15` and the checkout-aware unload guard; stale `Development revision 14` is absent.
 - Follow-ups: manually re-test the exact browser-side Back from Stripe -> edit quantities -> Place Order sequence through the branded wrapper and confirm the native prompt no longer appears.
+
+## 2026-05-28 - ACH Checkout Selection Enabled
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: re-enable ACH bank transfer as a selectable payment method in the Portal checkout flow.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: enabled the existing shared ACH gate in server and client runtime code, updated checkout button copy to `Pay now: ACH Bank Transfer`, and incremented the dev badge to `16`.
+- Payment behavior: the existing Stripe Checkout ACH path remains in place and uses `payment_method_types[0]=us_bank_account` with automatic bank verification. No amount, line item, metadata, return URL, webhook, currentness guard, schema, or Sheet contract logic was changed.
+- Expected behavior: ACH appears in the order checkout flow and locked invoice payment controls. Card checkout remains available and still applies the card fee; ACH follows the existing async payment confirmation path.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Enable ACH checkout selection"` created version `841`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `841`.
+- Smoke tests: public stable Apps Script HTML contains `Development revision 16` and `Pay now: ACH Bank Transfer`; stale `Development revision 15` is absent. Browser automation confirmed the deployed direct Apps Script page source contains revision `16` and ACH button copy, but did not complete an in-app ACH checkout attempt.
+- Follow-ups: run one controlled ACH Stripe test checkout through the branded wrapper using Stripe test bank details; verify pending state, async success/failure webhook handling, and no false paid state before client pilot use.

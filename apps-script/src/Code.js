@@ -261,7 +261,7 @@ const PAYMENT_METHODS = {
   cash: 'cash',
   purchase_order: 'purchase_order'
 };
-const ACH_CLIENT_PAYMENT_ENABLED = false;
+const ACH_CLIENT_PAYMENT_ENABLED = true;
 
 const FULFILLMENT_METHODS = {
   shipping: 'shipping',
