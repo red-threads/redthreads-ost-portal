@@ -37,7 +37,7 @@ Do not run clasp for docs/tooling-only changes.
 
 ## Mainline Runtime Workflow
 
-Use this for owner-directed Apps Script runtime edits when the owner has not asked for PR review.
+Use this for owner-directed Apps Script runtime edits when the owner has not asked for PR review and has not asked to make the change live. If the owner asks to ship, full ship, make live, or deploy, use the Full Ship workflow instead.
 
 ```bash
 git status --short --branch
@@ -69,10 +69,6 @@ git branch --show-current
 git pull --ff-only
 npm run validate:runtime
 git diff --check
-git add <intended-files>
-git diff --cached --stat
-git commit -m "<type>: <summary>"
-git push origin main
 
 cd apps-script/src
 clasp status
@@ -80,9 +76,21 @@ clasp push --force
 clasp version "Short release note"
 clasp deploy --deploymentId AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw --versionNumber <created-version-number> --description "Short release note"
 clasp deployments
+
+cd ../..
+# Smoke-test the stable deployment before GitHub push.
+# Then update OST_PROJECT_LOG.md and docs/CURRENT_BUILD_STATE.md with the result.
+npm run validate:runtime
+git diff --check
+git add <intended-files>
+git diff --cached --stat
+git commit -m "<type>: <summary>"
+git push origin main
 ```
 
 Verified deployment syntax on 2026-05-27 used `--versionNumber` with the existing stable deployment ID. Do not guess or create a new deployment ID.
+
+Apps Script is first in Full ship. Do not run `git push origin main` until `clasp push`, version creation, deploy, deployment verification, and smoke test have finished or a blocker has been logged. Run each `clasp` command sequentially and wait for its exit status before starting the next command.
 
 Smoke-test after deployment:
 
@@ -114,14 +122,16 @@ Do not let GitHub push/PR status block Apps Script deployment when the owner has
 
 ## Apps Script Deployment Blocker Handling
 
-If any clasp deployment command returns `Requested entity was not found`:
+If any `clasp push`, `clasp version`, or `clasp deploy` command fails:
 
-- Stop the Apps Script deployment flow.
+- Wait a few seconds and retry the same command once before declaring a blocker.
+- If the retry succeeds, continue the ordered Apps Script-first sequence.
+- If repeated retries fail, stop the Apps Script deployment flow.
 - Do not create a new Apps Script deployment ID.
 - Do not alter `.clasp.json` unless the owner explicitly directs a binding repair after the live Apps Script project ID is verified from Apps Script itself.
 - Do not change Script Properties.
 - Log the blocker in `OST_PROJECT_LOG.md` and `docs/CURRENT_BUILD_STATE.md`.
-- Report that GitHub source may be updated while Apps Script live deployment remains blocked until binding/account access is repaired.
+- Push GitHub only after the blocker is logged, so GitHub reflects the true live deployment state.
 
 ## Final Response Requirements
 

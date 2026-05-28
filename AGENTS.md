@@ -27,7 +27,7 @@ Do not copy the same rule into multiple docs. Link to the canonical source inste
 - MODE: Produce final code - implement production-ready code and commit changes.
 - MODE: Baton pass - write a handoff for the next agent/session.
 - MODE: QA reviewer - inspect diffs, live behavior, fixture results, and deployment readiness without making code changes.
-- MODE: Full ship - runtime changes must be committed, pushed, clasp-pushed, versioned, deployed to the existing deployment ID, and smoke-tested.
+- MODE: Full ship - runtime changes must be validated, pushed/versioned/deployed in Apps Script first, smoke-tested, logged, then committed/pushed to GitHub.
 - MODE: Plan - inspect first, propose a plan, and wait for approval before editing.
 
 ## Source Of Truth
@@ -71,11 +71,12 @@ Private lifecycle captures belong in `testcases/lifecycle-fixtures/private/`; on
 
 - Docs/tooling-only changes do not require `clasp push`, `clasp version`, or `clasp deploy`.
 - Runtime changes require explicit deployment intent before Full ship.
-- Full ship means validate, commit, push, `clasp push`, version, deploy to the existing deployment ID, smoke-test, and log the result.
+- Full ship means validate locally, run the Apps Script push/version/deploy sequence to the existing deployment ID, smoke-test, log the result, then commit and push GitHub.
 - Owner-directed runtime edits and Full ship requests use direct `main` by default when repo identity is confirmed, the active branch is `main`, the working tree has no unrelated changes, validation passes, and no destructive or high-risk operation is involved.
 - Do not create a branch or PR unless the owner explicitly asks for one, repo protection requires one, or the change is high-risk architecture/review work.
-- Mainline Full ship means: confirm repo and clean `main`, fast-forward safely, apply the focused runtime change, update the dev badge/revision and `OST_PROJECT_LOG.md` when applicable, run runtime validation, commit directly to `main`, push `main`, run `clasp push`/version/deploy to the existing deployment ID, smoke-test, and update current-state/logs with success or blocker.
-- If clasp returns `Requested entity was not found`, stop and log the blocker. Do not create a new deployment ID, alter `.clasp.json`, or change Script Properties unless explicitly instructed.
+- Mainline Full ship means: confirm repo and clean `main`, fast-forward safely, apply the focused runtime change, update the dev badge/revision when applicable, run runtime validation, then run Apps Script first: `clasp status`, `clasp push --force`, `clasp version`, `clasp deploy` to the existing deployment ID, `clasp deployments`, and smoke-test. Only after the Apps Script result is known should `OST_PROJECT_LOG.md`, `docs/CURRENT_BUILD_STATE.md`, local commit(s), and `git push origin main` be completed.
+- Run Apps Script ship commands sequentially and wait for each command to exit before starting the next one. Do not parallelize `clasp` commands.
+- If a `clasp` push/version/deploy command fails, retry the same command after a short wait before declaring a blocker. If the retry succeeds, continue the ordered sequence. If repeated retries fail, stop and log the blocker. Do not create a new deployment ID, alter `.clasp.json`, or change Script Properties unless explicitly instructed.
 - If the owner explicitly instructs a binding repair, verify the live Apps Script project ID from Apps Script itself, run `clasp pull` before any push, validate with `npm run validate:binding`, and log the repo/live-source alignment.
 
 ## Working Rules

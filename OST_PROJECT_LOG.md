@@ -128,3 +128,14 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: GitHub push succeeded and `clasp push --force` pushed 4 files to the Apps Script source project; `clasp version "Show checkout transition loader"` returned `Requested entity was not found`, so no version or stable deployment update was completed.
 - Smoke tests: stable public deployment was not smoke-tested for this change because version/deploy was blocked; the stable deployment remains at version `828` until the clasp version blocker is resolved.
 - Follow-ups: resolve the `clasp version` access/entity blocker, deploy the already-pushed source or a fresh validated commit to the existing stable deployment ID, then run tokenized checkout smoke without recording live tokens.
+
+## 2026-05-28 - Checkout Loader Reship And Apps Script-First Rule
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, runtime implementation commit `ff3b86a`.
+- Goal: reship the checkout transition loader to the stable Apps Script deployment, then update repo workflow rules so future Full ships run Apps Script before GitHub push.
+- Files changed: `AGENTS.md`, `docs/RUNBOOK.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Deployment: `clasp status` succeeded; `clasp push --force` reported the script was already up to date; retrying `clasp version "Show checkout transition loader"` created version `829`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `829`.
+- Smoke tests: public stable Apps Script URL contains `Development revision 4`, `orderFlowCheckoutLoading`, and `RT-CHECKOUT-TIMING`, and no stale `Development revision 3` label.
+- Decisions: Full ship workflow is now Apps Script-first; run each `clasp` command sequentially, wait for completion, retry failed push/version/deploy commands before declaring a blocker, then log/current-state and push GitHub last.
+- Follow-ups: run tokenized checkout smoke separately without recording live tokens.
