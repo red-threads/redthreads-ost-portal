@@ -225,3 +225,21 @@ Append-only project memory for decisions, session summaries, validation results,
 - Controlled timing result: a disposable/test checkout attempt opened Stripe in the same window and was not paid. Browser timing reported click-to-navigation 18,258 ms and `google.script.run` round trip 18,189 ms. Server timing reported total 15,960 ms, Stripe API call 710 ms, PORTAL_ORDERS write 262 ms, EXPORT_LOG pointer write 514 ms, competing unpaid order supersede 7,412 ms, and response hydration skipped at 0 ms blocking cost.
 - Before/after: Stage 1 baseline was `google.script.run` 19,761 ms, server total 16,960 ms, Stripe API call 804 ms, PORTAL_ORDERS write 203 ms, EXPORT_LOG pointer write 617 ms, competing unpaid order supersede 5,895 ms, and response hydration 3,539 ms. Stage 2 removed hydration from the blocking path, but the observed gain was partly masked by slower competing unpaid order supersede in the test sample.
 - Follow-ups: Stage 3 should investigate competing unpaid order supersede and portal infrastructure timing without deferring lifecycle-critical work until the correctness boundary is explicitly reviewed.
+
+## 2026-05-28 - Stage 3A Supersede Write Optimization
+
+- Mode: Full ship, Stage 3A performance.
+- Branch/commit/PR: `main`.
+- Goal: reduce the competing unpaid order supersede phase without changing candidate scope, lifecycle semantics, payment authority, webhook reconciliation, or Stripe checkout payloads.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Stripe payload preservation: no amount, line item, metadata, tax, shipping, card fee, payment method, return URL, webhook, schema, or Sheet column contract changed.
+- Critical pre-response work preserved: portal state persistence, order validation, Stripe Checkout Session creation, PORTAL_ORDERS write, EXPORT_LOG pointer write, and competing unpaid order supersede all still complete before `checkoutUrl` is returned.
+- Implementation: extracted the PORTAL_ORDERS update-map builder from `updatePortalOrderState_()`, added a known-row fast write path for supersede, writes each supersedable token-scoped candidate row once with `setValues([rowVals])`, and returns row info from the in-memory updated values instead of rereading each row.
+- Candidate scope preserved: token-scoped PORTAL_ORDERS rows only, excluding the newly created order, using the existing supersedable-row filter.
+- Instrumentation: added supersede timing markers for optimized status, matched rows, candidate rows, updated rows, skipped rows, and write duration.
+- Dev revision: incremented badge to `11`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Optimize unpaid order supersede writes"` created version `836`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `836`.
+- Public smoke: stable Apps Script HTML contains `Development revision 11` and `supersedeOptimized`; stale `Development revision 10` is absent.
+- Post-ship timing: Apps Script executions showed version 836 `createCheckoutAttempt` runs, including a 12.177 s completed execution after deployment. A disposable/test checkout artifact was created and not paid. Detailed server timing JSON was not recovered because `clasp logs` lacks the configured GCP project ID and the executions UI did not expose parseable log details through the available inspection path.
+- Follow-ups: configure reliable Apps Script log access or capture browser console timing from the same signed-in tab before making Stage 3B decisions. Do not defer supersede or narrow to pointer-only cleanup until lifecycle/currentness behavior is reviewed with fixture evidence.

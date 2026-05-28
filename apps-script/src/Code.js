@@ -4783,6 +4783,12 @@ function buildCheckoutTimingExtra_(extra) {
     'hasCheckoutUrl',
     'fastCheckoutResponse',
     'hydrationSkipped',
+    'supersedeOptimized',
+    'matchedRows',
+    'candidateRows',
+    'updatedRows',
+    'skippedRows',
+    'writeMs',
     'configured',
     'statusCode',
     'code'
@@ -5648,10 +5654,139 @@ function isSupersedableOrderRowForPaymentPathSwitch_(orderInfo) {
   );
 }
 
+function buildSupersedeResult_(updatedRows, stats) {
+  const rows = Array.isArray(updatedRows) ? updatedRows : [];
+  rows.stats = Object.assign({
+    supersedeOptimized: true,
+    matchedRows: 0,
+    candidateRows: 0,
+    updatedRows: rows.length,
+    skippedRows: 0,
+    writeMs: 0
+  }, (stats && typeof stats === 'object') ? stats : {});
+  return rows;
+}
+
+function buildSupersededPaymentPathOrderStateOptions_(currentDraft, opts) {
+  const options = (opts && typeof opts === 'object') ? opts : {};
+  return {
+    checkoutAttemptId: '',
+    portalLockState: PORTAL_LOCK_STATES.editable,
+    orderState: ORDER_STATES.draft,
+    paymentMethodSelected: '',
+    paymentState: PAYMENT_STATES.not_started,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    stripeSessionId: '',
+    stripePaymentIntentId: '',
+    invoiceNumber: '',
+    invoicePdfUrl: '',
+    invoiceSentToEmail: '',
+    invoiceSentAt: '',
+    poNumber: '',
+    poDocumentUrl: '',
+    poSubmittedBy: '',
+    poSubmittedAt: '',
+    paidAt: '',
+    authorizedToProduceAt: '',
+    lockedAt: '',
+    paymentReceivedManuallyBy: '',
+    paymentReceivedManuallyAt: '',
+    orderDraft: buildInactivePreOrderDraftForSupersededOrder_(currentDraft),
+    revisionReason: trimString_(options.revisionReason) || 'payment_method_superseded',
+    notes: trimString_(options.notes) || 'Superseded by a new payment-method selection.'
+  };
+}
+
+function buildPortalOrderStateUpdates_(options) {
+  const source = (options && typeof options === 'object') ? options : {};
+  const updates = {
+    lastUpdatedAt: trimString_(source.nowIso) || nowIso_()
+  };
+  [
+    'checkoutAttemptId',
+    'portalLockState',
+    'orderState',
+    'paymentMethodSelected',
+    'paymentState',
+    'productionAuthorizationState',
+    'stripeSessionId',
+    'stripePaymentIntentId',
+    'amountCardFee',
+    'amountChargedTax',
+    'amountChargedTotal',
+    'stripeAmountSubtotalCents',
+    'stripeAmountTotalCents',
+    'invoiceNumber',
+    'invoicePdfUrl',
+    'invoiceSentToEmail',
+    'invoiceSentAt',
+    'poNumber',
+    'poDocumentUrl',
+    'poSubmittedBy',
+    'poSubmittedAt',
+    'paidAt',
+    'authorizedToProduceAt',
+    'lockedAt',
+    'paymentReceivedManuallyBy',
+    'paymentReceivedManuallyAt',
+    'revisionReason',
+    'notes'
+  ].forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) return;
+    updates[key] = source[key];
+  });
+  if (Object.prototype.hasOwnProperty.call(source, 'clientReapprovalRequired')) {
+    updates.clientReapprovalRequired = boolFromCell_(source.clientReapprovalRequired);
+  }
+  if (source.orderDraft) {
+    updates.orderDraftJson = JSON.stringify(source.orderDraft);
+    if (Object.prototype.hasOwnProperty.call(source.orderDraft, 'amountTax')) updates.amountTax = roundMoney_(source.orderDraft.amountTax);
+    if (Object.prototype.hasOwnProperty.call(source.orderDraft, 'amountGrandTotal')) updates.amountGrandTotal = roundMoney_(source.orderDraft.amountGrandTotal);
+    if (Object.prototype.hasOwnProperty.call(source.orderDraft, 'amountCardFee')) updates.amountCardFee = roundMoney_(source.orderDraft.amountCardFee);
+    if (Object.prototype.hasOwnProperty.call(source.orderDraft, 'amountChargedTax')) updates.amountChargedTax = roundMoney_(source.orderDraft.amountChargedTax);
+    if (Object.prototype.hasOwnProperty.call(source.orderDraft, 'amountChargedTotal')) updates.amountChargedTotal = roundMoney_(source.orderDraft.amountChargedTotal);
+    if (Object.prototype.hasOwnProperty.call(source.orderDraft, 'stripeAmountSubtotalCents')) updates.stripeAmountSubtotalCents = Math.max(0, parseInt(String(source.orderDraft.stripeAmountSubtotalCents || 0), 10) || 0);
+    if (Object.prototype.hasOwnProperty.call(source.orderDraft, 'stripeAmountTotalCents')) updates.stripeAmountTotalCents = Math.max(0, parseInt(String(source.orderDraft.stripeAmountTotalCents || 0), 10) || 0);
+  }
+  return updates;
+}
+
+function buildOrderRowValuesWithUpdates_(orderInfo, updates) {
+  const info = (orderInfo && typeof orderInfo === 'object') ? orderInfo : {};
+  const colMap = info.colMap || {};
+  const width = Object.keys(colMap).reduce(function(max, key) {
+    return Math.max(max, Number(colMap[key]) || 0);
+  }, 0);
+  const header = new Array(width).fill('');
+  const rowVals = new Array(width).fill('');
+  Object.keys(info.rowObj || {}).forEach(function(rawKey) {
+    const col = colMap[normalizeHeaderKey_(rawKey)] || colMap[rawKey];
+    if (!col) return;
+    header[col - 1] = rawKey;
+    rowVals[col - 1] = info.rowObj[rawKey];
+  });
+  Object.keys(updates || {}).forEach(function(headerKey) {
+    const col = colMap[normalizeHeaderKey_(headerKey)] || colMap[headerKey];
+    if (!col) return;
+    rowVals[col - 1] = updates[headerKey];
+  });
+  return {
+    header: header,
+    rowVals: rowVals
+  };
+}
+
+function updateKnownPortalOrderStateFast_(ordersSheet, orderInfo, options) {
+  const updates = buildPortalOrderStateUpdates_(options);
+  const rowData = buildOrderRowValuesWithUpdates_(orderInfo, updates);
+  ordersSheet.getRange(orderInfo.row, 1, 1, rowData.rowVals.length).setValues([rowData.rowVals]);
+  return buildRowInfoFromSheet_(ordersSheet, orderInfo.row, rowData.header, rowData.rowVals);
+}
+
 function supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
-  if (!token) return [];
+  if (!token) return buildSupersedeResult_([], { supersedeOptimized: true });
   const excludedOrderIds = new Set(
     (Array.isArray(opts.excludeOrderIds) ? opts.excludeOrderIds : [opts.excludeOrderId])
       .map(function(orderId) { return trimString_(orderId); })
@@ -5662,46 +5797,42 @@ function supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, options) {
     ss: ctx.ss,
     ordersSheet: ctx.infra.ordersSheet
   });
-  const reason = trimString_(opts.revisionReason) || 'payment_method_superseded';
-  const updatedRows = [];
+  const candidates = [];
+  const stats = {
+    supersedeOptimized: true,
+    matchedRows: rows.length,
+    candidateRows: 0,
+    updatedRows: 0,
+    skippedRows: 0,
+    writeMs: 0
+  };
   rows.forEach(function(orderInfo) {
     const orderId = trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid);
-    if (orderId && excludedOrderIds.has(orderId)) return;
-    if (!isSupersedableOrderRowForPaymentPathSwitch_(orderInfo)) return;
+    if (orderId && excludedOrderIds.has(orderId)) {
+      stats.skippedRows += 1;
+      return;
+    }
+    if (!isSupersedableOrderRowForPaymentPathSwitch_(orderInfo)) {
+      stats.skippedRows += 1;
+      return;
+    }
+    candidates.push(orderInfo);
+  });
+  stats.candidateRows = candidates.length;
+  const updatedRows = [];
+  const writeStartedAt = Date.now();
+  candidates.forEach(function(orderInfo) {
     const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
-    const updated = updatePortalOrderState_({
-      cfg: ctx.cfg,
-      ss: ctx.ss,
-      infra: ctx.infra,
-      orderRowInfo: orderInfo,
-      checkoutAttemptId: '',
-      portalLockState: PORTAL_LOCK_STATES.editable,
-      orderState: ORDER_STATES.draft,
-      paymentMethodSelected: '',
-      paymentState: PAYMENT_STATES.not_started,
-      productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-      stripeSessionId: '',
-      stripePaymentIntentId: '',
-      invoiceNumber: '',
-      invoicePdfUrl: '',
-      invoiceSentToEmail: '',
-      invoiceSentAt: '',
-      poNumber: '',
-      poDocumentUrl: '',
-      poSubmittedBy: '',
-      poSubmittedAt: '',
-      paidAt: '',
-      authorizedToProduceAt: '',
-      lockedAt: '',
-      paymentReceivedManuallyBy: '',
-      paymentReceivedManuallyAt: '',
-      orderDraft: buildInactivePreOrderDraftForSupersededOrder_(currentDraft),
-      revisionReason: reason,
-      notes: trimString_(opts.notes) || 'Superseded by a new payment-method selection.'
-    });
+    const updated = updateKnownPortalOrderStateFast_(
+      ctx.infra.ordersSheet,
+      orderInfo,
+      buildSupersededPaymentPathOrderStateOptions_(currentDraft, opts)
+    );
     updatedRows.push(updated);
   });
-  return updatedRows;
+  stats.writeMs = Date.now() - writeStartedAt;
+  stats.updatedRows = updatedRows.length;
+  return buildSupersedeResult_(updatedRows, stats);
 }
 
 function persistContextPortalState_(ctx, portalState, options) {
@@ -5951,12 +6082,17 @@ function createCheckoutAttempt(payload) {
       markCheckoutTiming_(timing, 'export_log_pointer_write_end');
       try {
         markCheckoutTiming_(timing, 'supersede_unpaid_orders_start');
-        supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
+        const supersededRows = supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
           excludeOrderId: checkoutIdentity.orderId,
           revisionReason: 'checkout_attempt_superseded',
           notes: 'Superseded by a newer hosted Stripe Checkout attempt.'
         });
-        markCheckoutTiming_(timing, 'supersede_unpaid_orders_end', { ok: true });
+        markCheckoutTiming_(timing, 'supersede_unpaid_orders_end', Object.assign({
+          ok: true
+        }, supersededRows && supersededRows.stats ? supersededRows.stats : {
+          supersedeOptimized: true,
+          updatedRows: Array.isArray(supersededRows) ? supersededRows.length : 0
+        }));
       } catch (supersedeErr) {
         markCheckoutTiming_(timing, 'supersede_unpaid_orders_end', { ok: false });
         console.log('[RT-CHECKOUT-SUPERSEDE] ' + JSON.stringify({
@@ -12322,56 +12458,7 @@ function updatePortalOrderState_(opts) {
   if (!orderInfo) {
     throw new Error('Order not found.');
   }
-  const now = trimString_(options.nowIso) || nowIso_();
-  const updates = {
-    lastUpdatedAt: now
-  };
-  [
-    'checkoutAttemptId',
-    'portalLockState',
-    'orderState',
-    'paymentMethodSelected',
-    'paymentState',
-    'productionAuthorizationState',
-    'stripeSessionId',
-    'stripePaymentIntentId',
-    'amountCardFee',
-    'amountChargedTax',
-    'amountChargedTotal',
-    'stripeAmountSubtotalCents',
-    'stripeAmountTotalCents',
-    'invoiceNumber',
-    'invoicePdfUrl',
-    'invoiceSentToEmail',
-    'invoiceSentAt',
-    'poNumber',
-    'poDocumentUrl',
-    'poSubmittedBy',
-    'poSubmittedAt',
-    'paidAt',
-    'authorizedToProduceAt',
-    'lockedAt',
-    'paymentReceivedManuallyBy',
-    'paymentReceivedManuallyAt',
-    'revisionReason',
-    'notes'
-  ].forEach((key) => {
-    if (!Object.prototype.hasOwnProperty.call(options, key)) return;
-    updates[key] = options[key];
-  });
-  if (Object.prototype.hasOwnProperty.call(options, 'clientReapprovalRequired')) {
-    updates.clientReapprovalRequired = boolFromCell_(options.clientReapprovalRequired);
-  }
-  if (options.orderDraft) {
-    updates.orderDraftJson = JSON.stringify(options.orderDraft);
-    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountTax')) updates.amountTax = roundMoney_(options.orderDraft.amountTax);
-    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountGrandTotal')) updates.amountGrandTotal = roundMoney_(options.orderDraft.amountGrandTotal);
-    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountCardFee')) updates.amountCardFee = roundMoney_(options.orderDraft.amountCardFee);
-    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountChargedTax')) updates.amountChargedTax = roundMoney_(options.orderDraft.amountChargedTax);
-    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'amountChargedTotal')) updates.amountChargedTotal = roundMoney_(options.orderDraft.amountChargedTotal);
-    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'stripeAmountSubtotalCents')) updates.stripeAmountSubtotalCents = Math.max(0, parseInt(String(options.orderDraft.stripeAmountSubtotalCents || 0), 10) || 0);
-    if (Object.prototype.hasOwnProperty.call(options.orderDraft, 'stripeAmountTotalCents')) updates.stripeAmountTotalCents = Math.max(0, parseInt(String(options.orderDraft.stripeAmountTotalCents || 0), 10) || 0);
-  }
+  const updates = buildPortalOrderStateUpdates_(options);
   setRowValuesByHeaderMap_(ordersSheet, orderInfo.row, orderInfo.colMap, updates);
   return buildRowInfoFromSheet_(ordersSheet, orderInfo.row);
 }

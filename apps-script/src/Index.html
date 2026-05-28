@@ -16226,7 +16226,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 10">10</div>
+  <div class="devRevisionBadge" aria-label="Development revision 11">11</div>
   <section class="rt-view authShell" id="loginView">
     <a
       class="loginHomeBtn"
@@ -21452,7 +21452,13 @@
         deltaMs: Number(mark && mark.deltaMs || 0) || 0,
         ok: mark && Object.prototype.hasOwnProperty.call(mark, 'ok') ? mark.ok === true : undefined,
         fastCheckoutResponse: mark && mark.fastCheckoutResponse === true,
-        hydrationSkipped: mark && mark.hydrationSkipped === true
+        hydrationSkipped: mark && mark.hydrationSkipped === true,
+        supersedeOptimized: mark && mark.supersedeOptimized === true,
+        matchedRows: Number(mark && mark.matchedRows || 0) || 0,
+        candidateRows: Number(mark && mark.candidateRows || 0) || 0,
+        updatedRows: Number(mark && mark.updatedRows || 0) || 0,
+        skippedRows: Number(mark && mark.skippedRows || 0) || 0,
+        writeMs: Number(mark && mark.writeMs || 0) || 0
       })) : []
     };
   }
