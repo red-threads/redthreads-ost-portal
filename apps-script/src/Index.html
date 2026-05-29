@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 16">16</div>
+  <div class="devRevisionBadge" aria-label="Development revision 17">17</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19720,8 +19720,12 @@
   }
 
   function handleCheckoutReturnNotice(){
+    const result = getCheckoutReturnResult_();
     const notice = describeCheckoutReturnNotice();
     if (!notice) return;
+    if (result === 'success' || result === 'cancel') {
+      SUPPRESS_NEXT_AUTO_INTRO = true;
+    }
     showNotice(notice.message, notice.type || 'ok');
     clearConsumedCheckoutReturnParams();
   }
@@ -42297,9 +42301,9 @@
         showLoading: !hasStrongPaidFinalizedSignal_(VM)
       });
     }
-    const suppressIntroForIntent = SUMMARY_DEEPLINK_REQUEST || PO_RESUME_REQUEST || isAwaitingPurchaseOrderPortal_() || !!PAY_NOW_METHOD || SUPPRESS_NEXT_AUTO_INTRO;
+    const suppressIntroForIntent = !!checkoutReturnResult || SUMMARY_DEEPLINK_REQUEST || PO_RESUME_REQUEST || isAwaitingPurchaseOrderPortal_() || !!PAY_NOW_METHOD || SUPPRESS_NEXT_AUTO_INTRO;
     SUPPRESS_NEXT_AUTO_INTRO = false;
-    if (!IS_TEAM && !checkoutReturnResult && !suppressIntroForIntent && shouldAutoShowIntro()) initIntro();
+    if (!IS_TEAM && !suppressIntroForIntent && shouldAutoShowIntro()) initIntro();
     wireEvents();
     syncTeamModeUi();
     notifyPortalReady({ reason: 'snapshot-ready' });

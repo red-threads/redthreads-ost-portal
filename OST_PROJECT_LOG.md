@@ -319,3 +319,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Enable ACH checkout selection"` created version `841`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `841`.
 - Smoke tests: public stable Apps Script HTML contains `Development revision 16` and `Pay now: ACH Bank Transfer`; stale `Development revision 15` is absent. Browser automation confirmed the deployed direct Apps Script page source contains revision `16` and ACH button copy, but did not complete an in-app ACH checkout attempt.
 - Follow-ups: run one controlled ACH Stripe test checkout through the branded wrapper using Stripe test bank details; verify pending state, async success/failure webhook handling, and no false paid state before client pilot use.
+
+## 2026-05-29 - Checkout Return Welcome Modal Suppression
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: prevent the welcome intro modal from auto-opening after a user returns from Stripe through Stripe's cancel/back route.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Behavior preservation: no `Code.js`, Stripe payload, return URL, order persistence, webhook logic, lifecycle state, schema, Apps Script config, Sheet contract, Squarespace wrapper, or payment data logic changed.
+- Implementation: `handleCheckoutReturnNotice()` now marks `SUPPRESS_NEXT_AUTO_INTRO` when `checkoutResult=success` or `checkoutResult=cancel` is detected before consuming URL params, and `startPortalApp()` treats the captured checkout return result as an explicit intro-suppression reason.
+- Expected behavior: the checkout return notice still appears and the URL still cleans back to the tokenized project URL, but the welcome modal does not auto-open after Stripe cancel/back or success return.
+- Dev revision: incremented badge to `17`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Suppress checkout return welcome modal"` created version `842`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `842`.
+- Smoke tests: public stable Apps Script HTML contains `Development revision 17` and checkout-return intro suppression symbols; stale `Development revision 16` is absent.
+- Follow-ups: manually re-test Stripe cancel/back from the branded wrapper and confirm the URL cleans to `/portal?t=<token>` without showing the welcome modal.
