@@ -1,0 +1,106 @@
+{
+  "schema": "./schema.json",
+  "fixtures": [
+    {
+      "fixtureId": "ach-first-time-checkout-created",
+      "description": "Synthetic ACH hosted Checkout session was created and payment has not completed.",
+      "scenario": {
+        "paymentMethodSelected": "ach",
+        "paymentState": "checkout_created",
+        "orderState": "payment_in_progress",
+        "productionAuthorizationState": "not_authorized",
+        "achVerificationStatus": "",
+        "achPendingProductionApproved": false,
+        "latestStripeEventType": "checkout.session.created"
+      },
+      "expected": {
+        "clientLabel": "ACH checkout started",
+        "paid": false,
+        "productionAuthorized": false,
+        "retryAvailable": false,
+        "teamActionRequired": false
+      }
+    },
+    {
+      "fixtureId": "ach-processing-normal-account",
+      "description": "Synthetic ACH payment is processing for a normal account.",
+      "scenario": {
+        "paymentMethodSelected": "ach",
+        "paymentState": "pending",
+        "orderState": "awaiting_payment_confirmation",
+        "productionAuthorizationState": "not_authorized",
+        "achVerificationStatus": "processing",
+        "achPendingProductionApproved": false,
+        "latestStripeEventType": "payment_intent.processing"
+      },
+      "expected": {
+        "clientLabel": "Order placed - ACH payment initiated",
+        "paid": false,
+        "productionAuthorized": false,
+        "retryAvailable": false,
+        "teamActionRequired": false
+      }
+    },
+    {
+      "fixtureId": "ach-processing-approved-account",
+      "description": "Synthetic ACH payment is processing and production is approved during settlement.",
+      "scenario": {
+        "paymentMethodSelected": "ach",
+        "paymentState": "pending",
+        "orderState": "ready_for_production",
+        "productionAuthorizationState": "authorized",
+        "achVerificationStatus": "processing",
+        "achPendingProductionApproved": true,
+        "latestStripeEventType": "payment_intent.processing"
+      },
+      "expected": {
+        "clientLabel": "ACH payment processing. Production approved.",
+        "paid": false,
+        "productionAuthorized": true,
+        "retryAvailable": false,
+        "teamActionRequired": false
+      }
+    },
+    {
+      "fixtureId": "ach-payment-succeeded",
+      "description": "Synthetic ACH payment succeeded.",
+      "scenario": {
+        "paymentMethodSelected": "ach",
+        "paymentState": "paid",
+        "orderState": "ready_for_production",
+        "productionAuthorizationState": "authorized",
+        "achVerificationStatus": "succeeded",
+        "achPendingProductionApproved": false,
+        "latestStripeEventType": "payment_intent.succeeded"
+      },
+      "expected": {
+        "clientLabel": "Payment received",
+        "paid": true,
+        "productionAuthorized": true,
+        "retryAvailable": false,
+        "teamActionRequired": false
+      }
+    },
+    {
+      "fixtureId": "ach-payment-failed",
+      "description": "Synthetic ACH payment failed before production authorization.",
+      "scenario": {
+        "paymentMethodSelected": "ach",
+        "paymentState": "failed",
+        "orderState": "awaiting_payment_confirmation",
+        "productionAuthorizationState": "not_authorized",
+        "achVerificationStatus": "verification_failed",
+        "achPendingProductionApproved": false,
+        "latestStripeEventType": "payment_intent.payment_failed"
+      },
+      "expected": {
+        "clientLabel": "Action needed - ACH payment failed",
+        "paid": false,
+        "productionAuthorized": false,
+        "retryAvailable": true,
+        "teamActionRequired": false
+      }
+    }
+  ]
+}
+

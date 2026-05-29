@@ -14,14 +14,23 @@ Last aligned: 2026-05-29.
 - `.clasp.json` now points to the live Apps Script project ID verified in Apps Script: `1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU`.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
 - `package.json` exposes `npm run validate`, `npm run validate:runtime`, and `npm run validate:binding`.
-- Active Squarespace `/portal` iframe wrapper code is tracked at `web/squarespace-portal-code-block.html`; the repo copy now includes route replacement, same-window Stripe navigation message handlers, and a pre-iframe mobile block with a centered ellipsized copy-link display that prevents iframe loading under `900px`.
+- Active Squarespace `/portal` iframe wrapper code is tracked at `web/squarespace-portal-code-block.html`; the repo copy now includes route replacement, same-window Stripe navigation message handlers, `setupResult` passthrough for ACH setup returns, and a pre-iframe mobile block with a centered ellipsized copy-link display that prevents iframe loading under `900px`.
+
+## Local ACH V1 Working Tree
+
+- ACH V1 infrastructure is implemented locally but is not deployed, committed, or live.
+- Local runtime changes add `STRIPE_ACH_ENABLED` gating, Stripe Customer persistence on `PORTAL_ACCOUNTS`, hosted ACH payment Checkout with Customer, hosted dashboard bank setup, safe saved-bank summaries, ACH pending-production approval controls, ACH lifecycle copy, and Stripe webhook idempotency through `PORTAL_STRIPE_EVENTS`.
+- Local sheet infrastructure now ensures ACH account headers, ACH order headers, and `PORTAL_STRIPE_EVENTS` through existing infrastructure helpers.
+- Local wrapper code now forwards `setupResult` alongside `t`, `checkoutResult`, and `stripeSessionId`; Squarespace production still requires a manual code-block update after deployment.
+- Local docs now include `docs/ACH_STRIPE_PORTAL_ARCHITECTURE.md`, `docs/ACH_SMOKE_TEST_PLAN.md`, `docs/ACH_SCRIPT_PROPERTIES.md`, and synthetic ACH fixture metadata under `testcases/ach-fixtures/`.
+- Validation for the local ACH V1 working tree passed on 2026-05-29: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, JSON syntax checks for ACH fixture files, `npm run validate:runtime`, and `git diff --check`.
 
 ## Prompt/Historical
 
 - Expected stable Apps Script deployment ID: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
 - Expected stable public Apps Script URL: `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec`.
 - Public branded wrapper URL: `https://www.redthreads.com/portal`.
-- Squarespace wrapper forwards `t`, `checkoutResult`, and `stripeSessionId` into the Apps Script iframe.
+- Live Squarespace wrapper was last verified forwarding `t`, `checkoutResult`, and `stripeSessionId` into the Apps Script iframe. The repo wrapper now additionally forwards `setupResult`, but that is not live until the Squarespace code block is manually updated.
 - Historical calculator sheet ID: `1STzkJjn5WRoBqa5H1KdxAbn4-JCab9DCX4FuZt5HImc`.
 - Historical Make scenario: `4062378`.
 - Fuller intended architecture includes PORTAL_ORDERS, PORTAL_ACCOUNTS, USERS, USER_SESSIONS, hosted Stripe Checkout, Cloud Run webhook forwarding, Gmail notifications, QuickBooks, and Pipedrive.
@@ -40,6 +49,7 @@ Last aligned: 2026-05-29.
 - ACH checkout selection was deployed to the stable Apps Script deployment on 2026-05-28 as version 841. The existing ACH Checkout Session path is now exposed in the order checkout flow and locked invoice payment controls by enabling the shared ACH client gate. ACH sessions continue to use Stripe Checkout with `us_bank_account`; async webhook/currentness handling remains unchanged.
 - Checkout-return welcome modal suppression was deployed to the stable Apps Script deployment on 2026-05-29 as version 842. When Stripe returns with `checkoutResult=success` or `checkoutResult=cancel`, the app now preserves that return intent for intro suppression before consuming and removing the checkout URL params.
 - Checkout-return request metadata was deployed to the stable Apps Script deployment on 2026-05-29 as version 843. `doGet(e)` now passes safe `checkoutResult` and `stripeSessionId` request-route metadata into the rendered Portal VM so the initial app boot can suppress the welcome intro before URL cleanup or parent iframe messaging completes.
+- ACH V1 infrastructure has not been pushed, versioned, or deployed to the stable Apps Script deployment. The current stable deployment remains version 843 until an explicit Full ship is authorized.
 - The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
 
 ## Blocked Or Unverified
@@ -53,6 +63,8 @@ Last aligned: 2026-05-29.
 - Full lifecycle/payment fixture regression was not run during the Stage 3A checkout performance Full ship.
 - Live Squarespace `/portal` inspection on 2026-05-28 showed the fullscreen iframe and `RT_PORTAL_ROUTE_REPLACE` / `RT_PORTAL_NAVIGATE` wrapper handlers present after the Squarespace snippet was corrected.
 - The repo wrapper has the cleaned pre-iframe mobile block, but Squarespace must be manually updated from `web/squarespace-portal-code-block.html` for that wrapper-layer block to be live. Until then, the deployed Apps Script app-level block handles narrow wrapper access after the iframe loads.
+- ACH V1 live smoke is not run. It requires Script Properties, Stripe Dashboard ACH setup, Cloud Run webhook subscriptions, Apps Script deployment, and the manual Squarespace wrapper update.
+- Targeted ACH sensitive-data search found only redaction/safety/documentation references plus pre-existing tax form direct-pay fields outside the ACH storage path; no new ACH storage path writes full bank account numbers, routing numbers, microdeposit values, or raw Financial Connections data.
 
 ## Workflow
 
@@ -63,5 +75,5 @@ Last aligned: 2026-05-29.
 
 ## Known Follow-Ups
 
-- ACH checkout is now explicitly re-enabled. Run a controlled ACH test checkout with Stripe test bank details before relying on it in a client pilot.
+- ACH V1 is locally implemented and safely gated by `STRIPE_ACH_ENABLED`. Run the documented controlled ACH smoke plan before relying on it in a client pilot.
 - `schemas/snapshot_v2_0_0.schema.json` allows `printJobs.minItems: 0`, while current project docs/prompt say the supported V2 family is 1-4 PrintJobs. Do not change the schema without a separate schema/contract correction task.
