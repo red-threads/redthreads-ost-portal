@@ -6477,6 +6477,23 @@ function createCheckoutAttempt(payload) {
         paymentMethodSelected: paymentMethodSelected
       });
     }
+    if (paymentMethodSelected === PAYMENT_METHODS.ach && ctx.cfg.stripeAchEnabled !== true) {
+      markCheckoutTiming_(timing, 'payment_method_validation_end', {
+        ok: false,
+        paymentMethodSelected: paymentMethodSelected,
+        code: 'ach_checkout_disabled'
+      });
+      return attachCheckoutTiming_({
+        ok: false,
+        code: 'ach_checkout_disabled',
+        error: 'ACH bank payments are not currently available.'
+      }, timing, {
+        ok: false,
+        stage: 'payment_method_validation',
+        paymentMethodSelected: paymentMethodSelected,
+        code: 'ach_checkout_disabled'
+      });
+    }
     markCheckoutTiming_(timing, 'payment_method_validation_end', { ok: true, paymentMethodSelected: paymentMethodSelected });
     if (paymentMethodSelected === PAYMENT_METHODS.ach) {
       const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
@@ -11265,29 +11282,43 @@ function processForwardedStripeWebhookPayload_(payload, options) {
 
   const ss = SpreadsheetApp.openById(cfg.sheetId);
   const infra = ensurePortalInfrastructure_(ss, cfg);
-  const eventAudit = beginPortalStripeEventAudit_(eventPayload, {
-    cfg: cfg,
-    ss: ss,
-    infra: infra
-  });
-  if (eventAudit && eventAudit.duplicateProcessed === true) {
-    logStripeWebhookIngress_({
-      route: trimString_(opts.route).toLowerCase(),
-      authPassed: authPassed,
-      eventId: summary.eventId,
-      eventType: summary.eventType,
-      duplicateProcessed: true
-    });
-    return {
-      ok: true,
-      webhookProcessed: true,
-      duplicate: true,
-      eventType: summary.eventType || ''
-    };
-  }
-
+  const lock = LockService.getScriptLock();
+  let lockAcquired = false;
+  let eventAudit = null;
   let result;
   try {
+    lockAcquired = lock.tryLock(30000);
+    if (!lockAcquired) {
+      return {
+        ok: false,
+        webhookProcessed: false,
+        error: 'Stripe webhook processing lock unavailable.',
+        eventId: summary.eventId || '',
+        eventType: summary.eventType || '',
+        token: summary.token || '',
+        checkoutAttemptId: summary.checkoutAttemptId || ''
+      };
+    }
+    eventAudit = beginPortalStripeEventAudit_(eventPayload, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+    if (eventAudit && eventAudit.duplicateProcessed === true) {
+      logStripeWebhookIngress_({
+        route: trimString_(opts.route).toLowerCase(),
+        authPassed: authPassed,
+        eventId: summary.eventId,
+        eventType: summary.eventType,
+        duplicateProcessed: true
+      });
+      return {
+        ok: true,
+        webhookProcessed: true,
+        duplicate: true,
+        eventType: summary.eventType || ''
+      };
+    }
     result = processStripeEventPayload_(eventPayload, {
       cfg: cfg,
       ss: ss,
@@ -11299,10 +11330,10 @@ function processForwardedStripeWebhookPayload_(payload, options) {
       result && result.ok === false ? PORTAL_STRIPE_EVENT_STATUSES.failed : PORTAL_STRIPE_EVENT_STATUSES.processed,
       result && result.ok === false ? trimString_(result.error || result.code) : '',
       {
-      cfg: cfg,
-      ss: ss,
-      infra: infra
-    });
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
   } catch (err) {
     completePortalStripeEventAudit_(eventAudit, PORTAL_STRIPE_EVENT_STATUSES.failed, String((err && err.message) || err), {
       cfg: cfg,
@@ -11310,6 +11341,12 @@ function processForwardedStripeWebhookPayload_(payload, options) {
       infra: infra
     });
     throw err;
+  } finally {
+    if (lockAcquired) {
+      try {
+        lock.releaseLock();
+      } catch (_) {}
+    }
   }
 
   logStripeWebhookIngress_({

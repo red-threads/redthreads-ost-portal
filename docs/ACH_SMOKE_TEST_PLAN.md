@@ -53,7 +53,7 @@ The second command should show only redaction, safety, or documentation referenc
 16. Dashboard Payment Methods Add Bank launches hosted setup.
 17. Setup success stores a safe saved bank summary.
 18. Saved bank appears in Dashboard and ACH checkout copy.
-19. Replayed webhook event ID does not duplicate side effects.
+19. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
 20. Stale tab cannot overwrite paid, failed, locked, or superseded state.
 21. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 
