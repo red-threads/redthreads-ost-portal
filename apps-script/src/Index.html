@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 17">17</div>
+  <div class="devRevisionBadge" aria-label="Development revision 18">18</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20218,8 +20218,13 @@
 
   let CURRENT_TOKEN = '';
   const URL_QUERY_PARAMS = new URLSearchParams(window.location.search || '');
+  const VM_REQUEST_ROUTE_META = (VM && VM.requestRoute && typeof VM.requestRoute === 'object') ? VM.requestRoute : {};
+  function normalizeCheckoutReturnResultValue_(value){
+    const normalized = String(value || '').trim().toLowerCase();
+    return (normalized === 'success' || normalized === 'cancel') ? normalized : '';
+  }
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
-  const CHECKOUT_RETURN_RESULT = String(URL_QUERY_PARAMS.get('checkoutResult') || '').trim().toLowerCase();
+  const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
   const TEAM_REVIEW_REQUEST = String(URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
   const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1';
   const ACCOUNT_DOC_DEEPLINK_TYPE = String(URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();

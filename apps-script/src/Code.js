@@ -434,8 +434,9 @@ function doGet(e) {
       (e && e.parameter && (e.parameter.t || e.parameter.token))
         ? String(e.parameter.t || e.parameter.token).trim()
         : '';
+    const routeMeta = buildPortalRequestRouteMeta_(e);
     if (!token) {
-      const tpl = createIndexTemplate_(buildAuthShellVm_());
+      const tpl = createIndexTemplate_(attachPortalRequestRouteMetaToVm_(buildAuthShellVm_(), routeMeta));
       return tpl.evaluate()
         .setTitle('Red Threads Estimate Portal')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -511,7 +512,7 @@ function doGet(e) {
       );
     }
 
-    const tpl = createIndexTemplate_(built.vm);
+    const tpl = createIndexTemplate_(attachPortalRequestRouteMetaToVm_(built.vm, routeMeta));
 
     return tpl.evaluate()
       .setTitle('Red Threads Estimate Portal')
@@ -519,6 +520,32 @@ function doGet(e) {
   } catch (err) {
     return renderMessage_('Runtime error', String((err && err.message) || err));
   }
+}
+
+function buildPortalRequestRouteMeta_(e) {
+  const params = (e && e.parameter && typeof e.parameter === 'object') ? e.parameter : {};
+  const rawCheckoutResult = String(params.checkoutResult || '').trim().toLowerCase();
+  const checkoutResult = (rawCheckoutResult === 'success' || rawCheckoutResult === 'cancel')
+    ? rawCheckoutResult
+    : '';
+  return {
+    checkoutResult: checkoutResult,
+    stripeSessionId: String(params.stripeSessionId || '').trim()
+  };
+}
+
+function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
+  const payload = (vm && typeof vm === 'object') ? vm : {};
+  const meta = (routeMeta && typeof routeMeta === 'object') ? routeMeta : {};
+  const rawCheckoutResult = String(meta.checkoutResult || '').trim().toLowerCase();
+  const checkoutResult = (rawCheckoutResult === 'success' || rawCheckoutResult === 'cancel')
+    ? rawCheckoutResult
+    : '';
+  payload.requestRoute = {
+    checkoutResult: checkoutResult,
+    stripeSessionId: String(meta.stripeSessionId || '').trim()
+  };
+  return payload;
 }
 
 function createIndexTemplate_(vm) {

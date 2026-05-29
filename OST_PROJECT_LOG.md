@@ -334,3 +334,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Suppress checkout return welcome modal"` created version `842`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `842`.
 - Smoke tests: public stable Apps Script HTML contains `Development revision 17` and checkout-return intro suppression symbols; stale `Development revision 16` is absent.
 - Follow-ups: manually re-test Stripe cancel/back from the branded wrapper and confirm the URL cleans to `/portal?t=<token>` without showing the welcome modal.
+
+## 2026-05-29 - Checkout Return Request Metadata VM Pass
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: fix the remaining Stripe cancel/back case where the parent wrapper URL briefly contained `checkoutResult=cancel`, then cleaned to the tokenized project URL, but the welcome intro modal still appeared.
+- Root cause: the Squarespace wrapper was forwarding `checkoutResult=cancel` into the Apps Script iframe, but the initial Portal boot could run before the client reliably read that return signal from `window.location.search` or from parent iframe messaging.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Behavior preservation: no Stripe payload, return URL composition, order persistence, webhook logic, lifecycle state, schema, Apps Script config, Sheet contract, Squarespace wrapper, or payment data logic changed.
+- Implementation: `doGet(e)` now attaches safe request-route metadata to the rendered VM, and `Index.html` reads `VM.requestRoute.checkoutResult` before falling back to the browser query string. This gives `startPortalApp()` the cancel/success return state before it decides whether to auto-open the welcome intro.
+- Dev revision: incremented badge to `18`.
+- Validation before Apps Script ship: `npm run validate:runtime`, `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Preserve checkout return state in VM"` created version `843`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `843`.
+- Smoke tests: public stable Apps Script checkout-cancel URL response contains `Development revision 18`, does not contain stale `Development revision 17`, and renders a VM with `requestRoute.checkoutResult=cancel`.
+- Follow-ups: manually re-test Stripe's in-page Back/cancel through the branded wrapper and confirm the URL cleans to `/portal?t=<token>` without showing the welcome modal.
