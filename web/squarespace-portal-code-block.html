@@ -278,6 +278,7 @@
     var iframeParams = new URLSearchParams();
     var token = queryParams.get("t");
     var checkoutResult = queryParams.get("checkoutResult");
+    var setupResult = queryParams.get("setupResult");
     var stripeSessionId = queryParams.get("stripeSessionId");
     var MOBILE_BLOCK_QUERY = "(max-width: 899px)";
 
@@ -287,6 +288,10 @@
 
     if (checkoutResult) {
       iframeParams.set("checkoutResult", checkoutResult);
+    }
+
+    if (setupResult) {
+      iframeParams.set("setupResult", setupResult);
     }
 
     if (stripeSessionId) {
@@ -301,7 +306,7 @@
     var mobileLink = document.getElementById("rtPortalMobileLink");
     var mobileCopyButton = document.getElementById("rtPortalMobileCopyButton");
     var mobileCopyStatus = document.getElementById("rtPortalMobileCopyStatus");
-    var shouldShowLoading = !!(token || checkoutResult || stripeSessionId);
+    var shouldShowLoading = !!(token || checkoutResult || setupResult || stripeSessionId);
 
     function isMobileBlocked() {
       return !!(window.matchMedia && window.matchMedia(MOBILE_BLOCK_QUERY).matches);
@@ -434,6 +439,7 @@
       var nextParams = new URLSearchParams(window.location.search);
       var tokenValue = params.t || params.token || "";
       var checkoutValue = params.checkoutResult || "";
+      var setupValue = params.setupResult || "";
       var sessionValue = params.stripeSessionId || "";
 
       if (tokenValue) {
@@ -444,6 +450,12 @@
         nextParams.set("checkoutResult", checkoutValue);
       } else {
         nextParams.delete("checkoutResult");
+      }
+
+      if (setupValue === "success" || setupValue === "cancel") {
+        nextParams.set("setupResult", setupValue);
+      } else {
+        nextParams.delete("setupResult");
       }
 
       if (sessionValue) {

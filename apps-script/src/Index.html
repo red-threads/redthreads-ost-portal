@@ -16952,6 +16952,7 @@
         <button class="accountDocActionBtn" id="teamReopenPoBtn" type="button">Reopen PO Submission</button>
         <button class="accountDocActionBtn" id="teamResendLinkBtn" type="button">Resend Invoice / PO Link</button>
         <button class="accountDocActionBtn" id="teamLockProjectBtn" type="button">Lock Project Without Ordering</button>
+        <button class="accountDocActionBtn" id="teamAchPendingProductionBtn" type="button">Allow ACH Pending Production</button>
         <button class="accountDocActionBtn" id="teamMarkJobsCompletedBtn" type="button">Mark Jobs as Completed</button>
       </div>
       <div class="termsReviewDecisionSub" id="teamAccountAdminPanelTitle" hidden style="margin-top:18px;"></div>
@@ -17261,9 +17262,9 @@
               <span class="orderFlowChoiceBody orderFlowChoiceAccentRed" id="orderFlowCardFeeLabel">Item costs will increase by 3% ($0.00)</span>
             </button>
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowAchBtn" type="button" aria-pressed="false">
-              <span class="orderFlowChoiceTitle">Pay now: ACH Bank Transfer</span>
-              <span class="orderFlowChoiceFoot is-green">Turn time begins immediately</span>
-              <span class="orderFlowChoiceBody is-muted">Enter basic info found on any check.</span>
+              <span class="orderFlowChoiceTitle">ACH Bank Payment</span>
+              <span class="orderFlowChoiceFoot is-red">Production begins after payment clears</span>
+              <span class="orderFlowChoiceBody is-muted">Securely pay from your bank account. Red Threads never sees or stores your full bank account number.</span>
             </button>
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowCheckBtn" type="button" aria-pressed="false">
               <span class="orderFlowChoiceTitle">Submit: Physical check or cash</span>
@@ -17961,6 +17962,7 @@
   const PORTAL_LIFECYCLE_STAGES = {
     editable: 'editable',
     checkout_started: 'checkout_started',
+    payment_pending_locked: 'payment_pending_locked',
     po_draft_locked: 'po_draft_locked',
     manual_pending_locked: 'manual_pending_locked',
     po_submitted_unpaid: 'po_submitted_unpaid',
@@ -17980,10 +17982,9 @@
     cash: 'cash',
     purchase_order: 'purchase_order'
   };
-  const ACH_CLIENT_PAYMENT_ENABLED = true;
 
   function isClientAchPaymentEnabled_(){
-    return ACH_CLIENT_PAYMENT_ENABLED === true;
+    return !!(VM && VM.featureFlags && VM.featureFlags.achPaymentEnabled === true);
   }
 
   function hasNonBlankSignalValue(value){
@@ -18765,6 +18766,25 @@
 
   function normalizeAccountSummary(rawSummary){
     const raw = (rawSummary && typeof rawSummary === 'object') ? rawSummary : {};
+    const rawAchMethods = Array.isArray(raw.achPaymentMethods) ? raw.achPaymentMethods : [];
+    const achPaymentMethods = rawAchMethods.map(item => {
+      const source = (item && typeof item === 'object') ? item : {};
+      return {
+        paymentMethodId: String(source.paymentMethodId || '').trim(),
+        bankName: String(source.bankName || '').trim(),
+        last4: String(source.last4 || '').trim().slice(-4),
+        accountHolderType: String(source.accountHolderType || '').trim(),
+        accountType: String(source.accountType || '').trim(),
+        financialConnectionsAccountId: String(source.financialConnectionsAccountId || '').trim(),
+        mandateId: String(source.mandateId || '').trim(),
+        verificationStatus: String(source.verificationStatus || '').trim(),
+        status: String(source.status || '').trim(),
+        isDefault: source.isDefault === true,
+        createdAt: String(source.createdAt || '').trim(),
+        updatedAt: String(source.updatedAt || '').trim(),
+        source: String(source.source || '').trim()
+      };
+    }).filter(item => item.paymentMethodId);
     const rawWorkflows = (raw.documentWorkflows && typeof raw.documentWorkflows === 'object') ? raw.documentWorkflows : {};
     const creditTermsWorkflow = normalizeAccountDocumentWorkflow(rawWorkflows.creditTerms || {
       type: 'credit_terms',
@@ -18826,6 +18846,22 @@
       taxExemptDocumentDownloadUrl: String(raw.taxExemptDocumentDownloadUrl || '').trim(),
       billingContactEmail: String(raw.billingContactEmail || '').trim(),
       billingContactName: String(raw.billingContactName || '').trim(),
+      stripeCustomerId: String(raw.stripeCustomerId || '').trim(),
+      achPaymentMethods: achPaymentMethods,
+      defaultAchPaymentMethodId: String(raw.defaultAchPaymentMethodId || '').trim(),
+      defaultAchBankName: String(raw.defaultAchBankName || '').trim(),
+      defaultAchLast4: String(raw.defaultAchLast4 || '').trim().slice(-4),
+      defaultAchVerificationStatus: String(raw.defaultAchVerificationStatus || '').trim(),
+      defaultAchMandateId: String(raw.defaultAchMandateId || '').trim(),
+      defaultAchFinancialConnectionsAccountId: String(raw.defaultAchFinancialConnectionsAccountId || '').trim(),
+      achSetupIntentId: String(raw.achSetupIntentId || '').trim(),
+      achSetupSessionId: String(raw.achSetupSessionId || '').trim(),
+      achSetupStatus: String(raw.achSetupStatus || '').trim(),
+      achSetupLastUpdatedAt: String(raw.achSetupLastUpdatedAt || '').trim(),
+      achPendingProductionApproved: raw.achPendingProductionApproved === true,
+      achPendingProductionApprovedAt: String(raw.achPendingProductionApprovedAt || '').trim(),
+      achPendingProductionApprovedBy: String(raw.achPendingProductionApprovedBy || '').trim(),
+      achPendingProductionApprovalNotes: String(raw.achPendingProductionApprovalNotes || '').trim(),
       documentWorkflows: {
         creditTerms: creditTermsWorkflow,
         taxExempt: taxExemptWorkflow
@@ -18870,6 +18906,21 @@
       lockedAt: String(raw.lockedAt || '').trim(),
       stripeSessionId: String(raw.stripeSessionId || '').trim(),
       stripePaymentIntentId: String(raw.stripePaymentIntentId || '').trim(),
+      achPaymentMethodId: String(raw.achPaymentMethodId || '').trim(),
+      achBankName: String(raw.achBankName || '').trim(),
+      achLast4: String(raw.achLast4 || '').trim().slice(-4),
+      achMandateId: String(raw.achMandateId || '').trim(),
+      achFinancialConnectionsAccountId: String(raw.achFinancialConnectionsAccountId || '').trim(),
+      achVerificationStatus: String(raw.achVerificationStatus || '').trim(),
+      achVerificationFlow: String(raw.achVerificationFlow || '').trim(),
+      achExpectedDebitDate: String(raw.achExpectedDebitDate || '').trim(),
+      achFailureCode: String(raw.achFailureCode || '').trim(),
+      achFailureMessage: String(raw.achFailureMessage || '').trim(),
+      achPendingProductionApprovedAtOrder: String(raw.achPendingProductionApprovedAtOrder || '').trim(),
+      stripeLatestChargeId: String(raw.stripeLatestChargeId || '').trim(),
+      stripeLatestEventId: String(raw.stripeLatestEventId || '').trim(),
+      stripeLatestEventType: String(raw.stripeLatestEventType || '').trim(),
+      stripeLatestEventAt: String(raw.stripeLatestEventAt || '').trim(),
       lastUpdatedAt: String(raw.lastUpdatedAt || '').trim(),
       teamWorkflowMode: String(raw.teamWorkflowMode || '').trim(),
       workflowContext: normalizeWorkflowContextObject_(raw.workflowContext),
@@ -19406,8 +19457,20 @@
       }
       if (paymentState === 'failed') {
         return {
-          badge: 'Payment Failed',
-          text: 'The latest payment attempt failed. Production has not started.',
+          badge: paymentMethod === 'ach' ? 'ACH Action Needed' : 'Payment Failed',
+          text: paymentMethod === 'ach'
+            ? 'Action needed — ACH payment failed. Retry ACH, connect a different bank, or choose another payment method.'
+            : 'The latest payment attempt failed. Production has not started.',
+          meta: updatedAt ? ('Updated ' + updatedAt) : ''
+        };
+      }
+      if (paymentMethod === 'ach' && workflow.isPaymentPending === true) {
+        const approvedPending = workflow.achPaymentPendingProductionApproved === true;
+        return {
+          badge: approvedPending ? 'ACH Processing' : 'ACH Pending',
+          text: approvedPending
+            ? 'Order placed — ACH payment processing. Red Threads has approved production to begin while payment settles.'
+            : 'Order placed — ACH payment processing. Production will begin after payment is confirmed.',
           meta: updatedAt ? ('Updated ' + updatedAt) : ''
         };
       }
@@ -19578,6 +19641,62 @@
     });
   }
 
+  function getDefaultAchPaymentMethodForUi_(account){
+    const safeAccount = normalizeAccountSummary(account);
+    const defaultId = String(safeAccount.defaultAchPaymentMethodId || '').trim();
+    const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
+    return methods.find(item => item && (item.isDefault === true || (defaultId && item.paymentMethodId === defaultId))) || null;
+  }
+
+  function formatAchBankLabelForUi_(method, fallbackAccount){
+    const item = (method && typeof method === 'object') ? method : {};
+    const account = normalizeAccountSummary(fallbackAccount);
+    const bankName = String(item.bankName || account.defaultAchBankName || 'Saved bank').trim();
+    const last4 = String(item.last4 || account.defaultAchLast4 || '').trim().slice(-4);
+    return bankName + (last4 ? (' ••••' + last4) : '');
+  }
+
+  function getAchVerificationLabelForUi_(value){
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return 'Status pending';
+    if (raw === 'verified' || raw === 'succeeded' || raw === 'active') return 'Verified';
+    if (raw.indexOf('microdeposit') >= 0) return 'Microdeposit pending';
+    if (raw.indexOf('pending') >= 0 || raw === 'processing') return 'Verification pending';
+    if (raw.indexOf('fail') >= 0 || raw === 'blocked') return 'Action needed';
+    return raw.replace(/_/g, ' ');
+  }
+
+  async function startDashboardAchSetupSession_(){
+    if (!isClientAchPaymentEnabled_()) {
+      showDashboardWorkflowError_('ACH bank setup is not available yet.');
+      return;
+    }
+    const requestPayload = await ensureDashboardAccountDocumentContextReady_();
+    if (!requestPayload) {
+      showDashboardWorkflowError_('Unable to load this account payment workflow right now.');
+      return;
+    }
+    const payload = Object.assign({}, requestPayload, {
+      returnUrl: window.location.href
+    });
+    setAuthMessage('Opening secure Stripe bank setup...', false, { view: VIEW_DASHBOARD, persist: true });
+    try {
+      const resp = await callServer('createAchSetupSession', payload);
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to start bank setup.'));
+      }
+      if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
+      const checkoutUrl = String(resp.checkoutUrl || (resp.stripe && (resp.stripe.checkoutUrl || resp.stripe.url)) || '').trim();
+      if (!checkoutUrl) throw new Error('Secure bank setup URL missing.');
+      const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN || DASHBOARD_CONTEXT_TOKEN || '' });
+      if (!launched) {
+        setAuthMessage('Secure bank setup is ready. Allow pop-ups or try again.', true, { view: VIEW_DASHBOARD, persist: true });
+      }
+    } catch (err) {
+      setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+    }
+  }
+
   function renderDashboardAccountStatus(summary){
     if (!dashboardAccountPanel || !dashboardAccountMeta || !dashboardAccountBullets) return;
     const account = normalizeAccountSummary(summary);
@@ -19617,6 +19736,25 @@
     bindDashboardDocumentCard_(taxCard, 'tax_exempt');
     dashboardAccountMeta.appendChild(termsCard);
     dashboardAccountMeta.appendChild(taxCard);
+    if (isClientAchPaymentEnabled_()) {
+      const defaultAch = getDefaultAchPaymentMethodForUi_(account);
+      const bankLabel = defaultAch ? formatAchBankLabelForUi_(defaultAch, account) : 'Add bank account';
+      const achStatus = defaultAch
+        ? getAchVerificationLabelForUi_(defaultAch.verificationStatus || account.defaultAchVerificationStatus || defaultAch.status)
+        : 'Secure Stripe setup';
+      const achCard = buildDashboardAccountCard_(
+        'Payment Methods',
+        bankLabel,
+        {
+          interactive: true,
+          hoverValue: defaultAch ? achStatus : 'Connect bank',
+          stateClass: defaultAch ? 'isApproved' : 'isNotStarted',
+          ariaLabel: defaultAch ? 'Manage saved ACH bank account' : 'Add ACH bank account'
+        }
+      );
+      achCard.addEventListener('click', startDashboardAchSetupSession_);
+      dashboardAccountMeta.appendChild(achCard);
+    }
 
     dashboardAccountBullets.innerHTML = '';
     const appendBullet = (text) => {
@@ -19631,6 +19769,12 @@
     }
     if (termsApproved) {
       appendBullet('Credit terms are on file for your organization. You can now submit orders via purchase orders.');
+    }
+    if (isClientAchPaymentEnabled_()) {
+      const defaultAch = getDefaultAchPaymentMethodForUi_(account);
+      appendBullet(defaultAch
+        ? ('ACH bank on file: ' + formatAchBankLabelForUi_(defaultAch, account) + '. Red Threads never stores full bank account numbers.')
+        : 'Securely connect a bank account for faster ACH checkout later. Red Threads never sees or stores your full bank account number.');
     }
 
   }
@@ -19657,6 +19801,19 @@
   }
 
   function describeCheckoutReturnNotice(){
+    const setupResult = getSetupReturnResult_();
+    if (setupResult === 'success') {
+      return {
+        message: 'Bank account setup started. Stripe will update verification status as the bank connection completes.',
+        type: 'ok'
+      };
+    }
+    if (setupResult === 'cancel') {
+      return {
+        message: 'Bank account setup canceled. You can add a bank account later from Payment Methods.',
+        type: 'ok'
+      };
+    }
     const result = getCheckoutReturnResult_();
     if (!result) return null;
     if (result === 'cancel') {
@@ -19680,6 +19837,12 @@
       };
     }
     if (workflow.isProductionAuthorized === true || workflow.productionCurrent === true || workflow.productionComplete === true || workflow.paymentReceived === true) {
+      if (paymentMethod === 'ach' && workflow.paymentReceived !== true && paymentState !== 'paid') {
+        return {
+          message: 'Order placed — ACH payment initiated. Red Threads has approved production to begin while payment settles.',
+          type: 'ok'
+        };
+      }
       return {
         message: 'Payment received. Your order is authorized for production.',
         type: 'ok'
@@ -19687,7 +19850,7 @@
     }
     if (paymentMethod === 'ach' || workflow.isPaymentPending === true || lifecycleState === 'awaiting_payment_confirmation') {
       return {
-        message: 'Bank payment submitted. We are waiting for final confirmation before production begins.',
+        message: 'Order placed — ACH payment initiated. Bank payments can take a few business days to finish processing.',
         type: 'ok'
       };
     }
@@ -19699,12 +19862,13 @@
 
   function clearConsumedCheckoutReturnParams(){
     PARENT_CHECKOUT_RETURN_RESULT = '';
+    PARENT_SETUP_RETURN_RESULT = '';
     PARENT_STRIPE_SESSION_ID = '';
     if (typeof window === 'undefined' || !window.location || !window.history) return;
     try {
       const url = new URL(window.location.href);
       let changed = false;
-      ['checkoutResult', 'stripeSessionId'].forEach(key => {
+      ['checkoutResult', 'setupResult', 'stripeSessionId'].forEach(key => {
         if (!url.searchParams.has(key)) return;
         url.searchParams.delete(key);
         changed = true;
@@ -19717,6 +19881,10 @@
 
   function getCheckoutReturnResult_(){
     return String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+  }
+
+  function getSetupReturnResult_(){
+    return String(PARENT_SETUP_RETURN_RESULT || SETUP_RETURN_RESULT || '').trim().toLowerCase();
   }
 
   function handleCheckoutReturnNotice(){
@@ -19971,6 +20139,7 @@
   const teamReopenPoBtn = document.getElementById('teamReopenPoBtn');
   const teamResendLinkBtn = document.getElementById('teamResendLinkBtn');
   const teamLockProjectBtn = document.getElementById('teamLockProjectBtn');
+  const teamAchPendingProductionBtn = document.getElementById('teamAchPendingProductionBtn');
   const teamMarkJobsCompletedBtn = document.getElementById('teamMarkJobsCompletedBtn');
   const teamAccountAdminPanelTitle = document.getElementById('teamAccountAdminPanelTitle');
   const teamAccountAdminConfirmPanel = document.getElementById('teamAccountAdminConfirmPanel');
@@ -20223,6 +20392,10 @@
     const normalized = String(value || '').trim().toLowerCase();
     return (normalized === 'success' || normalized === 'cancel') ? normalized : '';
   }
+  function normalizeSetupReturnResultValue_(value){
+    const normalized = String(value || '').trim().toLowerCase();
+    return (normalized === 'success' || normalized === 'cancel') ? normalized : '';
+  }
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
   const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
   const TEAM_REVIEW_REQUEST = String(URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
@@ -20230,6 +20403,7 @@
   const ACCOUNT_DOC_DEEPLINK_TYPE = String(URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();
   const ACCOUNT_DOC_DEEPLINK_ACTION = String(URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
   const SUMMARY_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('summary') === '1';
+  const SETUP_RETURN_RESULT = normalizeSetupReturnResultValue_(VM_REQUEST_ROUTE_META.setupResult || URL_QUERY_PARAMS.get('setupResult'));
   const PAY_NOW_METHOD = String(URL_QUERY_PARAMS.get('payNow') || '').trim().toLowerCase();
   const PO_RESUME_REQUEST = URL_QUERY_PARAMS.get('resumePo') === '1';
   const PO_RESUME_STAGE = String(URL_QUERY_PARAMS.get('poStage') || '').trim().toLowerCase();
@@ -20263,6 +20437,7 @@
   ];
   let AUTH_SESSION_ID = '';
   let PARENT_CHECKOUT_RETURN_RESULT = '';
+  let PARENT_SETUP_RETURN_RESULT = '';
   let PARENT_STRIPE_SESSION_ID = '';
   let PORTAL_CHECKOUT_NAVIGATION_ACTIVE = false;
   let DASHBOARD_CONTEXT_MODE = 'session';
@@ -20368,6 +20543,7 @@
   let TEAM_ACCOUNT_ADMIN_BUSY_ACTION = '';
   let TEAM_ACCOUNT_ADMIN_ACTIVE_PANEL = '';
   let TEAM_ACCOUNT_ADMIN_CONFIRM_ACTION = '';
+  let TEAM_ACCOUNT_ADMIN_CONFIRM_PAYLOAD = null;
   let SUMMARY_SHARE_EMAIL_OPEN = false;
   let SUMMARY_SHARE_EMAIL_RECIPIENTS = '';
   let SUMMARY_SHARE_STATUS = { tone: '', message: '' };
@@ -21085,9 +21261,13 @@
     const msg = (message && typeof message === 'object') ? message : {};
     const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
     const checkoutResult = String(payload.checkoutResult || msg.checkoutResult || '').trim().toLowerCase();
+    const setupResult = String(payload.setupResult || msg.setupResult || '').trim().toLowerCase();
     const stripeSessionId = String(payload.stripeSessionId || msg.stripeSessionId || '').trim();
     if (checkoutResult === 'success' || checkoutResult === 'cancel') {
       PARENT_CHECKOUT_RETURN_RESULT = checkoutResult;
+    }
+    if (setupResult === 'success' || setupResult === 'cancel') {
+      PARENT_SETUP_RETURN_RESULT = setupResult;
     }
     if (stripeSessionId) {
       PARENT_STRIPE_SESSION_ID = stripeSessionId;
@@ -21394,6 +21574,9 @@
     if (extra.checkoutResult === 'success' || extra.checkoutResult === 'cancel') {
       params.checkoutResult = extra.checkoutResult;
     }
+    if (extra.setupResult === 'success' || extra.setupResult === 'cancel') {
+      params.setupResult = extra.setupResult;
+    }
     if (extra.stripeSessionId) {
       params.stripeSessionId = String(extra.stripeSessionId || '').trim();
     }
@@ -21423,7 +21606,7 @@
       if (window.history && window.location && typeof window.history.replaceState === 'function') {
         const url = new URL(window.location.href);
         url.searchParams.delete('token');
-        ['t', 'checkoutResult', 'stripeSessionId'].forEach(key => {
+        ['t', 'checkoutResult', 'setupResult', 'stripeSessionId'].forEach(key => {
           if (Object.prototype.hasOwnProperty.call(params, key) && params[key]) {
             url.searchParams.set(key, params[key]);
           } else {
@@ -22996,6 +23179,8 @@
     const poStageMode = String(safeCopy.poStageMode || '').trim().toLowerCase();
     const isPo = variant === 'purchase_order';
     const isManualPayment = isProjectHeaderManualPaymentMethod_(safeCopy);
+    const isAchPayment = String(safeCopy.paymentMethodLabel || '').trim().toLowerCase().indexOf('ach') >= 0 ||
+      String(safeCopy.paymentMethodLabel || '').trim().toLowerCase().indexOf('bank') >= 0;
     const completeText = 'Project complete. All orders were completed on {{completionDate|the final completion date}}.';
     const commonStandardPending = {
       order: 'Click [blue]Place Order[/blue] on the right to choose delivery and payment methods.',
@@ -23130,18 +23315,22 @@
     }
     if (stateMap.payment === 'current' && stateMap.production === 'future') {
       return {
-        subtext: isManualPayment
+        subtext: isAchPayment
+          ? 'Order placed — ACH payment processing. Production begins after payment is confirmed.'
+          : (isManualPayment
           ? 'Your next action: Submit payment to begin production. Invoice tab displays additional payment options.'
-          : 'Your next action: Submit payment to begin production. Invoice tab displays payment options.',
+          : 'Your next action: Submit payment to begin production. Invoice tab displays payment options.'),
         currentKey: 'payment',
         hovers: {
           qty_sizes: lockedStandard.qty_sizes,
           artwork: lockedStandard.artwork,
           place_order: lockedStandard.place_order,
-          payment: isManualPayment
+          payment: isAchPayment
+            ? 'ACH payment processing. Bank payments can take a few business days to finish.'
+            : (isManualPayment
             ? 'Payment pending... Additional payment options available on the [red]Invoice Tab[/red].'
-            : 'Complete Payment on the [red]Invoice Tab[/red]. Production and turn times begin after payment is received.',
-          production: 'Production begins after payment is received.'
+            : 'Complete Payment on the [red]Invoice Tab[/red]. Production and turn times begin after payment is received.'),
+          production: isAchPayment ? 'Production begins after ACH payment is confirmed.' : 'Production begins after payment is received.'
         }
       };
     }
@@ -23159,6 +23348,19 @@
           production: isManualPayment
             ? 'Production began on {{printStartDate|paidDate|the payment date}}. Review turn times in the project details below. [green]IN PROGRESS[/green]'
             : 'Production started on {{printStartDate|the production start date}}. Review turn times in the project details below. [green]IN PROGRESS[/green]'
+        }
+      };
+    }
+    if (isAchPayment && stateMap.payment === 'current' && stateMap.production === 'current') {
+      return {
+        subtext: 'ACH payment is processing. Red Threads has approved production to begin while payment settles.',
+        currentKey: 'production',
+        hovers: {
+          qty_sizes: lockedStandard.qty_sizes,
+          artwork: lockedStandard.artwork,
+          place_order: lockedStandard.place_order,
+          payment: 'ACH payment processing. Payment is not marked paid until Stripe confirms success.',
+          production: 'Production has been approved while ACH payment settles. [green]IN PROGRESS[/green]'
         }
       };
     }
@@ -24664,6 +24866,28 @@
     applyAuthShellRuntimeState();
     setView(VIEW_LOGIN, { focus: false });
     setAuthMessage('', false, { view: VIEW_LOGIN });
+    if (SETUP_RETURN_RESULT) {
+      const sid = String(AUTH_SESSION_ID || readStoredSessionId() || '').trim();
+      if (sid) {
+        AUTH_SESSION_ID = sid;
+        setDashboardSessionContext_();
+        setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+        setAuthMessage(
+          SETUP_RETURN_RESULT === 'success'
+            ? 'Bank account setup started. Stripe will update verification status as it completes.'
+            : 'Bank account setup canceled.',
+          false,
+          { view: VIEW_DASHBOARD, persist: true }
+        );
+        loadProjectsForHome({
+          requestPayload: { sessionId: sid },
+          suppressLoadingMessage: true,
+          awaitPaint: true
+        }).catch(err => {
+          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+        });
+      }
+    }
     warmAuthRuntime();
     notifyPortalReady({ reason: 'auth-shell-ready' });
 
@@ -27865,6 +28089,7 @@
   function resetTeamAccountAdminPanels_(){
     TEAM_ACCOUNT_ADMIN_ACTIVE_PANEL = '';
     TEAM_ACCOUNT_ADMIN_CONFIRM_ACTION = '';
+    TEAM_ACCOUNT_ADMIN_CONFIRM_PAYLOAD = null;
     if (teamAccountAdminPanelTitle) {
       teamAccountAdminPanelTitle.hidden = true;
       teamAccountAdminPanelTitle.textContent = '';
@@ -27904,11 +28129,12 @@
     return clonePlainObject((LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.teamJobCompletionByJobId) || {});
   }
 
-  function openTeamAccountAdminConfirmPanel_(action, title, copy){
+  function openTeamAccountAdminConfirmPanel_(action, title, copy, payload){
     resetTeamAccountAdminPanels_();
     setTeamAccountAdminMessage_('', 'info');
     TEAM_ACCOUNT_ADMIN_ACTIVE_PANEL = 'confirm';
     TEAM_ACCOUNT_ADMIN_CONFIRM_ACTION = String(action || '').trim();
+    TEAM_ACCOUNT_ADMIN_CONFIRM_PAYLOAD = (payload && typeof payload === 'object') ? payload : null;
     if (teamAccountAdminPanelTitle) {
       teamAccountAdminPanelTitle.hidden = false;
       teamAccountAdminPanelTitle.textContent = String(title || '').trim();
@@ -27975,6 +28201,24 @@
     renderTeamAccountAdminModal_();
   }
 
+  function openTeamAchPendingProductionApprovalPanel_(){
+    const account = normalizeAccountSummary(ACCOUNT_SUMMARY);
+    const nextApproved = account.achPendingProductionApproved !== true;
+    openTeamAccountAdminConfirmPanel_(
+      'ach_pending_production_approval',
+      nextApproved ? 'Allow ACH Pending Production' : 'Disable ACH Pending Production',
+      nextApproved
+        ? 'This account will be allowed to enter production while ACH payment is still processing. Clients cannot enable this themselves.'
+        : 'This account will return to the default policy: ACH orders begin production only after Stripe confirms payment success.',
+      {
+        approved: nextApproved,
+        notes: nextApproved
+          ? 'Approved from Team Controls.'
+          : 'Disabled from Team Controls.'
+      }
+    );
+  }
+
   function renderTeamAccountAdminModal_(){
     // Canonical team/admin consumer — modal visibility should mirror the
     // canonical workflowContext + server action metadata contract.
@@ -27989,6 +28233,7 @@
       [teamReopenPoBtn, 'reopen_po', busy === 'reopen_po', 'Reopen PO Submission', 'Reopening…'],
       [teamResendLinkBtn, 'resend_link', busy === 'resend_link', 'Resend Invoice / PO Link', 'Sending…'],
       [teamLockProjectBtn, 'lock_project', busy === 'lock_project', 'Lock Project Without Ordering', 'Locking…'],
+      [teamAchPendingProductionBtn, 'ach_pending_production_approval', busy === 'ach_pending_production_approval', 'Allow ACH Pending Production', 'Saving…'],
       [teamMarkJobsCompletedBtn, 'mark_jobs_completed', busy === 'mark_jobs_completed', 'Mark Jobs as Completed', 'Saving…']
     ];
     controls.forEach(entry => {
@@ -28037,6 +28282,7 @@
       reopen_po: workflow.canReopenPo === true,
       resend_link: workflow.canResendLink === true,
       lock_project: workflow.canLockWithoutOrdering === true,
+      ach_pending_production_approval: true,
       mark_jobs_completed: workflow.canManageJobCompletion === true
     };
     const canonicalLabels = {
@@ -28049,6 +28295,9 @@
       reopen_po: 'Reopen PO Submission',
       resend_link: workflow.isPoFlow === true ? 'Resend PO Return Link' : 'Resend Invoice Link',
       lock_project: 'Lock Project Without Ordering',
+      ach_pending_production_approval: normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved
+        ? 'Disable ACH Pending Production'
+        : 'Allow ACH Pending Production',
       mark_jobs_completed: workflow.hasAnyActualJobCompletion === true
         ? 'Manage Job Completion Dates'
         : 'Mark Jobs as Completed'
@@ -28096,6 +28345,7 @@
       reopen_po: 'adminReopenPoSubmission',
       resend_link: 'adminResendLockedOrderLink',
       lock_project: 'adminLockProjectWithoutOrdering',
+      ach_pending_production_approval: 'adminSetAchPendingProductionApproval',
       mark_jobs_completed: 'adminMarkJobsCompleted'
     };
     const methodName = methodMap[actionName];
@@ -28159,7 +28409,7 @@
 
   function submitTeamAccountAdminConfirmPanel_(){
     if (!TEAM_ACCOUNT_ADMIN_CONFIRM_ACTION) return;
-    runTeamAccountAdminAction_(TEAM_ACCOUNT_ADMIN_CONFIRM_ACTION);
+    runTeamAccountAdminAction_(TEAM_ACCOUNT_ADMIN_CONFIRM_ACTION, TEAM_ACCOUNT_ADMIN_CONFIRM_PAYLOAD);
   }
 
   function submitTeamAccountAdminEmailPanel_(){
@@ -34050,6 +34300,23 @@
       orderFlowAchBtn.hidden = !achAvailable;
       orderFlowAchBtn.setAttribute('aria-hidden', achAvailable ? 'false' : 'true');
       orderFlowAchBtn.disabled = !achAvailable || ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
+      const achTitle = orderFlowAchBtn.querySelector('.orderFlowChoiceTitle');
+      const achFoot = orderFlowAchBtn.querySelector('.orderFlowChoiceFoot');
+      const achBody = orderFlowAchBtn.querySelector('.orderFlowChoiceBody');
+      const defaultAch = getDefaultAchPaymentMethodForUi_(ACCOUNT_SUMMARY);
+      if (achTitle) achTitle.textContent = 'ACH Bank Payment';
+      if (achFoot) {
+        achFoot.textContent = normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved
+          ? 'Production approved while payment processes'
+          : 'Production begins after payment clears';
+        achFoot.classList.toggle('is-green', normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved === true);
+        achFoot.classList.toggle('is-red', normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved !== true);
+      }
+      if (achBody) {
+        achBody.textContent = defaultAch
+          ? ('Use ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + ' or connect a different bank in Stripe Checkout.')
+          : 'Securely pay from your bank account. Red Threads never sees or stores your full bank account number.';
+      }
     }
     if (orderFlowCheckBtn) orderFlowCheckBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
     if (orderFlowPoBtn) {
@@ -34150,9 +34417,12 @@
   function showPortalCheckoutPreparationLoader_(method){
     const normalizedMethod = String(method || '').trim().toLowerCase();
     const title = normalizedMethod === 'ach'
-      ? 'Preparing secure ACH payment...'
+      ? 'Opening secure Stripe bank checkout...'
       : 'Preparing secure payment...';
-    rtShowLoader(title, 'Saving your order and creating Stripe Checkout. This can take a few seconds.');
+    const body = normalizedMethod === 'ach'
+      ? 'Red Threads never sees or stores your full bank account number.'
+      : 'Saving your order and creating Stripe Checkout. This can take a few seconds.';
+    rtShowLoader(title, body);
   }
 
   function hidePortalCheckoutPreparationLoader_(){
@@ -34162,7 +34432,11 @@
   function setOrderFlowCheckoutLoadingState(method){
     ORDER_FLOW_CHECKOUT_URL = '';
     showPortalCheckoutPreparationLoader_(method);
-    if (orderFlowCheckoutBody) orderFlowCheckoutBody.textContent = 'Preparing secure payment...';
+    if (orderFlowCheckoutBody) {
+      orderFlowCheckoutBody.textContent = String(method || '').trim().toLowerCase() === 'ach'
+        ? 'Opening secure Stripe bank checkout.'
+        : 'Preparing secure payment...';
+    }
     if (orderFlowCheckoutMeta) {
       const methodLabel = String(method || '').trim().toLowerCase() === 'ach'
         ? 'ACH Checkout'
@@ -34192,7 +34466,7 @@
         resp.stripe && resp.stripe.sessionId ? ('Session ID: ' + resp.stripe.sessionId) : '',
         resp.orderSummary && resp.orderSummary.checkoutAttemptId ? ('Checkout Attempt: ' + resp.orderSummary.checkoutAttemptId) : '',
         method === 'ach'
-          ? 'ACH confirmation can remain pending until Stripe posts a later success event.'
+          ? 'Order will be placed when the hosted ACH flow completes. Payment is not marked paid until Stripe confirms success.'
           : 'Card payments typically confirm quickly once checkout.session.completed is processed.'
       ].filter(Boolean).join('\n');
     }
@@ -37879,6 +38153,8 @@
       productionTargetCompleteAt: String(workflow.productionTargetCompleteAt || '').trim(),
       productionCompletionAt: String(workflow.productionCompletionAt || '').trim(),
       productionCompletionSource: String(workflow.productionCompletionSource || '').trim().toLowerCase(),
+      achDetailState: String(workflow.achDetailState || '').trim(),
+      achPaymentPendingProductionApproved: workflow.achPaymentPendingProductionApproved === true,
       nextClientAction: String(workflow.nextClientAction || '').trim().toLowerCase(),
       nextTeamAction: String(workflow.nextTeamAction || '').trim().toLowerCase(),
       editorMode: String(workflow.editorMode || '').trim().toLowerCase(),
@@ -38112,6 +38388,30 @@
           ? ('Purchase order was submitted on ' + submittedDateLabel + '. Production is in progress while payment is still due.')
           : ('Purchase order was submitted on ' + submittedDateLabel + '. Payment is still due.'),
         referenceDate: productionStartAt || poSubmittedAt,
+        submittedAt: submittedAt,
+        paidAt: '',
+        completionDate: '',
+        completionDateValue: null,
+        completionDateLabel: '',
+        targetCompleteAt: productionTargetCompleteAt,
+        productionComplete: false,
+        completionSource: '',
+        paymentDue: paymentDue
+      };
+    }
+    if (paymentMethodSelected === PAYMENT_METHODS.ach && paymentDue) {
+      const achFailed = String(order.paymentState || '').trim().toLowerCase() === 'failed' ||
+        String(lifecycle.achDetailState || '').trim().toLowerCase().indexOf('failed') >= 0;
+      return {
+        isLocked: true,
+        freeze: true,
+        noteTone: achFailed ? 'alert' : (lifecycle.productionCurrent === true ? 'info' : 'alert'),
+        noteText: achFailed
+          ? 'Action needed — ACH payment failed. Retry payment from this invoice or choose another payment method.'
+          : (lifecycle.productionCurrent === true
+          ? 'ACH payment processing. Red Threads has approved production to begin while payment settles.'
+          : 'ACH payment processing. Production will begin after payment is confirmed.'),
+        referenceDate: productionStartAt || submittedAt || null,
         submittedAt: submittedAt,
         paidAt: '',
         completionDate: '',
@@ -39655,7 +39955,10 @@
         if (achAvailable) {
           const achLine = createEl('div', 'summaryEstimatePaymentNoteLine');
           achLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'ACH Payment: '));
-          achLine.appendChild(document.createTextNode('Final amount on the invoice is what you will pay.'));
+          const defaultAch = getDefaultAchPaymentMethodForUi_(ACCOUNT_SUMMARY);
+          achLine.appendChild(document.createTextNode(defaultAch
+            ? ('Use ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + ' or connect a different bank in Stripe Checkout.')
+            : 'Securely connect your bank in Stripe Checkout. Red Threads never stores your full bank account number.'));
           paymentNote.appendChild(achLine);
         }
 
@@ -41602,6 +41905,7 @@
     if (teamReopenPoBtn) teamReopenPoBtn.addEventListener('click', () => openTeamAccountAdminConfirmPanel_('reopen_po', 'Reopen PO Submission', 'This keeps the project locked but reopens the invoice-tab purchase-order upload step so the client can resubmit PO details.'));
     if (teamResendLinkBtn) teamResendLinkBtn.addEventListener('click', openTeamAccountAdminEmailPanel_);
     if (teamLockProjectBtn) teamLockProjectBtn.addEventListener('click', () => openTeamAccountAdminConfirmPanel_('lock_project', 'Lock Project Without Ordering', 'This will temporarily freeze the project without treating it like a placed order. You can unlock it later from this same menu.'));
+    if (teamAchPendingProductionBtn) teamAchPendingProductionBtn.addEventListener('click', openTeamAchPendingProductionApprovalPanel_);
     if (teamMarkJobsCompletedBtn) teamMarkJobsCompletedBtn.addEventListener('click', openTeamAccountAdminJobsPanel_);
     if (teamAccountAdminPanelCancelBtn) teamAccountAdminPanelCancelBtn.addEventListener('click', resetTeamAccountAdminPanels_);
     if (teamAccountAdminPanelConfirmBtn) teamAccountAdminPanelConfirmBtn.addEventListener('click', submitTeamAccountAdminConfirmPanel_);

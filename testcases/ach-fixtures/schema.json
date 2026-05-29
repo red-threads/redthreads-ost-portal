@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://redthreads.local/schemas/ach-fixture.schema.json",
+  "title": "Red Threads ACH Fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fixtureId",
+    "description",
+    "scenario",
+    "expected"
+  ],
+  "properties": {
+    "fixtureId": {
+      "type": "string",
+      "pattern": "^ach-[a-z0-9-]+$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "paymentMethodSelected",
+        "paymentState",
+        "productionAuthorizationState"
+      ],
+      "properties": {
+        "paymentMethodSelected": {
+          "const": "ach"
+        },
+        "paymentState": {
+          "enum": [
+            "not_started",
+            "checkout_created",
+            "pending",
+            "paid",
+            "failed"
+          ]
+        },
+        "orderState": {
+          "type": "string"
+        },
+        "productionAuthorizationState": {
+          "enum": [
+            "not_authorized",
+            "authorized",
+            "canceled"
+          ]
+        },
+        "achVerificationStatus": {
+          "type": "string"
+        },
+        "achPendingProductionApproved": {
+          "type": "boolean"
+        },
+        "latestStripeEventType": {
+          "type": "string"
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientLabel",
+        "paid",
+        "productionAuthorized",
+        "retryAvailable"
+      ],
+      "properties": {
+        "clientLabel": {
+          "type": "string"
+        },
+        "paid": {
+          "type": "boolean"
+        },
+        "productionAuthorized": {
+          "type": "boolean"
+        },
+        "retryAvailable": {
+          "type": "boolean"
+        },
+        "teamActionRequired": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
+

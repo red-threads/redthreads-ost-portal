@@ -349,3 +349,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Preserve checkout return state in VM"` created version `843`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `843`.
 - Smoke tests: public stable Apps Script checkout-cancel URL response contains `Development revision 18`, does not contain stale `Development revision 17`, and renders a VM with `requestRoute.checkoutResult=cancel`.
 - Follow-ups: manually re-test Stripe's in-page Back/cancel through the branded wrapper and confirm the URL cleans to `/portal?t=<token>` without showing the welcome modal.
+
+## 2026-05-29 - ACH V1 Infrastructure Local Build
+
+- Mode: Architect + Goal Mode.
+- Branch/commit/PR: `main`; no commit, push, Apps Script push, version, deploy, or live smoke was run.
+- Goal: implement ACH V1 as a Stripe-hosted delayed-payment lifecycle with Customer persistence, dashboard bank setup, saved-bank summaries, ACH pending-production policy, webhook idempotency, and client/team status copy.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `web/squarespace-portal-code-block.html`, `docs/CONTEXT_INDEX.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`, `docs/ACH_STRIPE_PORTAL_ARCHITECTURE.md`, `docs/ACH_SMOKE_TEST_PLAN.md`, `docs/ACH_SCRIPT_PROPERTIES.md`, and `testcases/ach-fixtures/*`.
+- Implementation: added safe ACH Script Property config, `STRIPE_ACH_ENABLED` runtime visibility gating, `PORTAL_STRIPE_EVENTS`, Stripe Customer helpers, safe ACH payment-method summary helpers, hosted ACH payment Checkout with Customer, hosted ACH setup Checkout, ACH webhook idempotency/audit handling, ACH lifecycle derivation, account-level pending-production approval, dashboard Payment Methods UI, ACH checkout/return/status copy, Team Controls approval action, and wrapper `setupResult` passthrough.
+- Safety decisions: V1 Financial Connections permissions are restricted to `payment_method`; raw bank details and raw Financial Connections account objects are redacted before webhook audit storage; saved bank data is limited to Stripe IDs, bank name, last4, status/verification metadata, timestamps, and source.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, JSON syntax checks for ACH fixture files, `npm run validate:runtime`, and `git diff --check` passed.
+- Sensitive-data search: targeted ACH search found only redaction/safety/documentation references plus pre-existing tax form direct-pay fields outside the ACH storage path; no new ACH path stores full bank account numbers, routing numbers, microdeposit values, or raw Financial Connections data.
+- Deployment state: not deployed. Stable Apps Script remains version `843` until explicit Full ship authorization.
+- Follow-ups: configure Script Properties, enable ACH Direct Debit in Stripe Dashboard, subscribe/verify the Cloud Run webhook forwarder event set, manually update the Squarespace `/portal` code block from the repo wrapper, then run the documented ACH smoke plan before committing/pushing the tranche.
