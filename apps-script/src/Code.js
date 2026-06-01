@@ -5536,8 +5536,8 @@ function buildStripeSetupReturnUrl_(token, options) {
       returnUrl: opts.returnUrl
     })
     : '';
-  const baseUrl = buildStripeReturnBaseUrl_(token, {
-    returnUrl: trimString_(dashboardUrl || opts.returnUrl || buildExternalPortalUrl_(token) || getConfig_().stripeReturnUrl || buildPortalDirectUrl_(token) || getWebAppUrl_())
+  const baseUrl = dashboardUrl || buildStripeReturnBaseUrl_(token, {
+    returnUrl: trimString_(opts.returnUrl || buildExternalPortalUrl_(token) || getConfig_().stripeReturnUrl || buildPortalDirectUrl_(token) || getWebAppUrl_())
   });
   return appendQueryParamsToUrl_(baseUrl, opts.queryParams || {})
     .replace(/%7BCHECKOUT_SESSION_ID%7D/gi, '{CHECKOUT_SESSION_ID}');
@@ -14751,12 +14751,25 @@ function normalizePublicPortalReturnUrl_(value) {
   return clean;
 }
 
+function normalizePublicPortalBaseUrl_(value) {
+  const clean = normalizePublicPortalReturnUrl_(value);
+  if (!clean) return '';
+  try {
+    const parsed = new URL(clean);
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch (_) {
+    return 'https://www.redthreads.com/portal';
+  }
+}
+
 function buildExternalPortalDashboardUrl_(accountSummary, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const cfg = opts.cfg || getConfig_();
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
-  const base = normalizePublicPortalReturnUrl_(opts.returnUrl) ||
-    normalizePublicPortalReturnUrl_(cfg.stripeReturnUrl) ||
+  const base = normalizePublicPortalBaseUrl_(opts.returnUrl) ||
+    normalizePublicPortalBaseUrl_(cfg.stripeReturnUrl) ||
     'https://www.redthreads.com/portal';
   const params = { dashboard: '1' };
   const accessToken = trimString_(account.accountAccessToken);

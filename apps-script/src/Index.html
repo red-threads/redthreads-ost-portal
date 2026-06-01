@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 28">28</div>
+  <div class="devRevisionBadge" aria-label="Development revision 29">29</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19850,7 +19850,12 @@
     const isDefault = item.isDefault === true || String(item.paymentMethodId || '') === String(account.defaultAchPaymentMethodId || '');
     const microdepositPending = isAchMicrodepositVerificationPendingForUi_(item);
     const usable = isAchPaymentMethodUsableForCheckout_(item);
-    const label = isDefault ? 'Default ACH Bank' : 'Saved ACH Bank';
+    const tone = getDashboardAchMethodCardTone_(item);
+    const label = microdepositPending
+      ? 'ACH Bank Verification'
+      : (tone === 'isRejected'
+        ? 'ACH Bank Action Needed'
+        : (isDefault ? 'Default ACH Bank' : 'Saved ACH Bank'));
     const statusLabel = getAchVerificationLabelForUi_(item.verificationStatus || item.status);
     const card = buildDashboardAccountCard_(
       label,
@@ -19858,7 +19863,7 @@
       {
         interactive: microdepositPending || (!isDefault && usable),
         hoverValue: microdepositPending ? 'Verify with Stripe' : (!isDefault && usable ? 'Set as default' : statusLabel),
-        stateClass: getDashboardAchMethodCardTone_(item),
+        stateClass: tone,
         ariaLabel: microdepositPending ? 'Verify pending ACH bank account with Stripe' : (!isDefault && usable ? 'Set saved ACH bank as default' : 'Saved ACH bank')
       }
     );
@@ -19913,28 +19918,21 @@
     bindDashboardDocumentCard_(taxCard, 'tax_exempt');
     if (isClientAchPaymentEnabled_()) {
       const visibleAchMethods = getDashboardVisibleAchPaymentMethodsForUi_(account);
-      const defaultAch = getDefaultAchPaymentMethodForUi_(account);
-      const microdepositAch = getMicrodepositPendingAchPaymentMethodForUi_(account);
-      const displayAch = defaultAch || microdepositAch || getMostRelevantAchPaymentMethodForUi_(account);
-      const bankLabel = displayAch ? formatAchBankLabelForUi_(displayAch, account) : 'Connect ACH bank';
-      const achStatus = displayAch
-        ? getAchVerificationLabelForUi_(displayAch.verificationStatus || displayAch.status || account.defaultAchVerificationStatus)
-        : 'Add bank in Stripe';
-      const achCard = buildDashboardAccountCard_(
-        'ACH Bank Account',
-        bankLabel,
-        {
-          interactive: true,
-          hoverValue: microdepositAch ? 'Verify with Stripe' : (displayAch ? achStatus : 'Add ACH bank'),
-          stateClass: defaultAch ? 'isApproved' : (displayAch ? 'isPending' : 'isNotStarted'),
-          ariaLabel: microdepositAch ? 'Verify pending ACH bank account with Stripe' : (defaultAch ? 'Manage saved ACH bank account' : (displayAch ? 'Manage pending ACH bank verification' : 'Add ACH bank account'))
-        }
-      );
-      achCard.addEventListener('click', microdepositAch ? startDashboardAchMicrodepositVerification_ : startDashboardAchSetupSession_);
-      dashboardAccountMeta.appendChild(achCard);
       visibleAchMethods.forEach(method => {
         dashboardAccountMeta.appendChild(buildDashboardAchPaymentMethodCard_(method, account));
       });
+      const addAchCard = buildDashboardAccountCard_(
+        visibleAchMethods.length ? 'Add ACH Bank' : 'ACH Bank Account',
+        visibleAchMethods.length ? 'Connect another bank' : 'Connect ACH bank',
+        {
+          interactive: true,
+          hoverValue: 'Add ACH bank',
+          stateClass: 'isNotStarted',
+          ariaLabel: 'Add ACH bank account'
+        }
+      );
+      addAchCard.addEventListener('click', startDashboardAchSetupSession_);
+      dashboardAccountMeta.appendChild(addAchCard);
     }
     dashboardAccountMeta.appendChild(termsCard);
     dashboardAccountMeta.appendChild(taxCard);
@@ -20150,10 +20148,11 @@
   }
 
   function buildCheckoutReturnReconciliationPayload_(){
+    const setupResult = getSetupReturnResult_();
     const payload = {
       token: String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim(),
       checkoutResult: getCheckoutReturnResult_(),
-      setupResult: getSetupReturnResult_(),
+      setupResult: setupResult,
       stripeSessionId: getStripeReturnSessionId_(),
       sessionId: String(AUTH_SESSION_ID || readStoredSessionId() || '').trim(),
       mode: PORTAL_MODE || 'client'
@@ -20162,6 +20161,7 @@
     if (dashboardContext && typeof dashboardContext === 'object') {
       if (dashboardContext.accountAccessToken) payload.accountAccessToken = dashboardContext.accountAccessToken;
       if (dashboardContext.accountId) payload.accountId = dashboardContext.accountId;
+      if (setupResult && (payload.accountAccessToken || payload.accountId)) payload.token = '';
     }
     return payload;
   }
@@ -43420,11 +43420,17 @@
       try {
         ensureAuthShellBindings();
         applyAuthShellRuntimeState();
-        setDashboardTokenContext_(CURRENT_TOKEN);
+        if (DASHBOARD_DEEPLINK_REQUEST && hasDashboardAccountContextFromUrl_()) {
+          const accountCtx = getDashboardAccountContextFromUrl_();
+          setDashboardAccountContext_(accountCtx.accountId, accountCtx.accountAccessToken);
+        } else {
+          setDashboardTokenContext_(CURRENT_TOKEN);
+        }
         setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
         await new Promise(resolve => requestAnimationFrame(resolve));
+        await reconcileCheckoutReturnOnBoot_();
         await loadProjectsForHome({
-          requestPayload: { token: CURRENT_TOKEN },
+          requestPayload: getDashboardContextRequestPayload_() || { token: CURRENT_TOKEN },
           suppressLoadingMessage: true,
           awaitPaint: true
         });

@@ -141,7 +141,9 @@ The repo and live Squarespace wrappers forward `setupResult` and account-dashboa
 
 If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The server retrieves the relevant PaymentIntent or SetupIntent, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, or microdeposit values in Sheets or logs.
 
-Dashboard Payment Methods lists only dashboard-saved records. Multiple dashboard-saved banks can be shown with bank display name, last4, verification/status, default badge, Add Bank, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. Hidden/order-only/AP banks do not appear in the Dashboard list.
+Dashboard Payment Methods lists only dashboard-saved records. Multiple dashboard-saved banks can be shown with bank display name, last4, verification/status, default badge, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. The Add Bank action is a separate card/action, not a duplicate representation of the current bank. Hidden/order-only/AP banks do not appear in the Dashboard list.
+
+Stripe setup returns must land on a canonical account dashboard route, preferably `https://www.redthreads.com/portal?dashboard=1&accountAccessToken=<account-link-token>`, plus one-time `setupResult` and `stripeSessionId` parameters. Setup return URLs should not preserve stale project `t` parameters once an account dashboard bearer route is available, because that can cause the client to hydrate the wrong dashboard context.
 
 ## Production Policy
 
