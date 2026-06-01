@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 18">18</div>
+  <div class="devRevisionBadge" aria-label="Development revision 19">19</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19811,22 +19811,20 @@
     );
     bindDashboardDocumentCard_(termsCard, 'credit_terms');
     bindDashboardDocumentCard_(taxCard, 'tax_exempt');
-    dashboardAccountMeta.appendChild(termsCard);
-    dashboardAccountMeta.appendChild(taxCard);
     if (isClientAchPaymentEnabled_()) {
       const defaultAch = getDefaultAchPaymentMethodForUi_(account);
       const microdepositAch = getMicrodepositPendingAchPaymentMethodForUi_(account);
       const displayAch = defaultAch || microdepositAch || getMostRelevantAchPaymentMethodForUi_(account);
-      const bankLabel = displayAch ? formatAchBankLabelForUi_(displayAch, account) : 'Add bank account';
+      const bankLabel = displayAch ? formatAchBankLabelForUi_(displayAch, account) : 'Connect ACH bank';
       const achStatus = displayAch
         ? getAchVerificationLabelForUi_(displayAch.verificationStatus || displayAch.status || account.defaultAchVerificationStatus)
-        : 'Secure Stripe setup';
+        : 'Add bank in Stripe';
       const achCard = buildDashboardAccountCard_(
-        'Payment Methods',
+        'ACH Bank Account',
         bankLabel,
         {
           interactive: true,
-          hoverValue: microdepositAch ? 'Verify with Stripe' : (displayAch ? achStatus : 'Connect bank'),
+          hoverValue: microdepositAch ? 'Verify with Stripe' : (displayAch ? achStatus : 'Add ACH bank'),
           stateClass: defaultAch ? 'isApproved' : (displayAch ? 'isPending' : 'isNotStarted'),
           ariaLabel: microdepositAch ? 'Verify pending ACH bank account with Stripe' : (defaultAch ? 'Manage saved ACH bank account' : (displayAch ? 'Manage pending ACH bank verification' : 'Add ACH bank account'))
         }
@@ -19834,6 +19832,8 @@
       achCard.addEventListener('click', microdepositAch ? startDashboardAchMicrodepositVerification_ : startDashboardAchSetupSession_);
       dashboardAccountMeta.appendChild(achCard);
     }
+    dashboardAccountMeta.appendChild(termsCard);
+    dashboardAccountMeta.appendChild(taxCard);
 
     dashboardAccountBullets.innerHTML = '';
     const appendBullet = (text) => {
@@ -19856,7 +19856,7 @@
       appendBullet(defaultAch
         ? ('ACH bank on file: ' + formatAchBankLabelForUi_(defaultAch, account) + '. Red Threads never stores full bank account numbers.')
         : (microdepositAch
-          ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(microdepositAch, account) + '. Select Payment Methods to verify securely with Stripe.')
+          ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(microdepositAch, account) + '. Select ACH Bank Account to verify securely with Stripe.')
           : (displayAch
           ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(displayAch, account) + '. Use Stripe email if microdeposit verification is required.')
           : 'Securely connect a bank account for faster ACH checkout later. Red Threads never sees or stores your full bank account number.')
@@ -19896,7 +19896,7 @@
     }
     if (setupResult === 'cancel') {
       return {
-        message: 'Bank account setup canceled. You can add a bank account later from Payment Methods.',
+        message: 'Bank account setup canceled. You can add an ACH bank account later from the dashboard.',
         type: 'ok'
       };
     }

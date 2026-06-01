@@ -427,3 +427,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Add ACH microdeposit verification handoff"` created version `849`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `849`.
 - Smoke tests: direct Apps Script `/exec` returned HTTP 200 and advertises the new `getAchMicrodepositVerificationLink` server function; public wrapper `/portal` returned HTTP 200 and still targets the stable deployment ID. No bank flow, tokenized fixture payment, or real payment was initiated during this ship.
 - Follow-ups: manually refresh the live Squarespace `/portal` code block from the repo wrapper so `RT_PORTAL_NAVIGATE` explicitly allows Stripe-hosted microdeposit verification URLs, then run the internal Stripe test-mode microdeposit fallback flow through Dashboard Payment Methods.
+
+## 2026-06-01 - ACH Dashboard Card Visibility Full Ship
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: make the customer dashboard ACH entry point explicit after live review showed the existing generic `Payment Methods` / `Add bank account` card was not recognizable as ACH functionality.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: changed the dashboard account-grid card to `ACH Bank Account`, changed the empty-state value to `Connect ACH bank`, changed the hover/action copy to `Add ACH bank`, moved the ACH card before Credit Terms and Tax Exemption, updated microdeposit guidance copy to point at `ACH Bank Account`, and incremented the dev badge to `19`.
+- Behavior preservation: no `snapshotJson`, EXPORT_LOG wide-schema order, token lookup semantics, pricing authority, `Code.js`, `appsscript.json`, `.clasp.json`, Script Properties, Stripe live-mode setting, Squarespace wrapper, card checkout, PO, check/cash/manual, or Team Mode permission logic changed.
+- Validation before Apps Script ship: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Expose ACH dashboard card"` created version `850`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `850`.
+- Smoke tests: direct Apps Script `/exec` returned HTTP 200 and contains `Development revision 19`, `ACH Bank Account`, `Connect ACH bank`, `Add ACH bank`, and `achPaymentEnabled`; public wrapper `/portal` returned HTTP 200, still targets the stable deployment ID, and includes the Stripe-hosted payment/verification navigation allowlist. No bank flow, tokenized fixture payment, or real payment was initiated during this ship.
+- Follow-ups: reload the client dashboard and confirm the account grid now shows `ACH Bank Account`; continue the internal Stripe test-mode bank-flow flight test for dashboard setup, first-time ACH success, microdeposit fallback if presented, ACH failure, approved-account pending-production exception, and webhook replay/idempotency before any live-mode pilot.
