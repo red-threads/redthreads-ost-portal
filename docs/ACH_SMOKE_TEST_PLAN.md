@@ -61,13 +61,18 @@ The second command should show only redaction, safety, or documentation referenc
 24. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
 25. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
 26. ACH cancel return lets the user retry ACH through Stripe-hosted instant verification/manual entry or choose another payment method.
-27. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+27. ACH success return calls `reconcile_checkout_return` before URL cleanup and immediately shows locked pending-not-paid state if the webhook has not finalized yet.
+28. ACH return reconciliation disables Save, Place Order, and payment controls while it is refreshing server state.
+29. ACH pending-not-paid hydration is accepted as a post-checkout canonical state and routes the user to Summary/Invoice copy without waiting for a paid/finalized signal.
+30. ACH cancel return reconciliation preserves locked/pending canonical state if the order had already been placed, otherwise leaves retry/alternate payment available.
+31. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 
 ## ACH Event Smokes
 
 For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID and `PORTAL_ORDERS` reflects the expected state:
 
 - `checkout.session.completed`: order placed, ACH pending, production policy applied.
+- Immediate Checkout success return before async payment finality: `reconcile_checkout_return` locks the order pending/not paid and records safe ACH fields only after ACH evidence is present.
 - Stale `checkout.session.completed`: no regression when the order is already paid, failed, disputed, team-hold, in production, or closed.
 - `checkout.session.async_payment_succeeded`: paid, production authorized, failure fields cleared.
 - `checkout.session.async_payment_failed`: failed/action-needed, retry available, team review if production was already authorized.

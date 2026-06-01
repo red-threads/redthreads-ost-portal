@@ -400,3 +400,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Complete ACH saved-bank and verification UX"` created version `847`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `847`.
 - Smoke tests: direct Apps Script `/exec` returned HTTP 200 and contained the new ACH cancel and bank-verification-pending copy; public wrapper `/portal` returned HTTP 200 and still targets the stable deployment ID while forwarding `setupResult`, `checkoutResult`, and `stripeSessionId`. No bank flow, tokenized fixture payment, or real payment was initiated during this ship.
 - Follow-ups: run the live internal Stripe test-mode bank-flow flight test for dashboard setup, first-time ACH success, microdeposit fallback if presented, ACH failure, approved-account pending-production exception, and webhook replay/idempotency before any live-mode pilot.
+
+## 2026-06-01 - ACH Return Reconciliation Completion Full Ship
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: complete the remaining ACH V1 return-path gap so a completed Stripe-hosted ACH Checkout return cannot depend on webhook timing or manual refresh before the portal shows a locked pending-not-paid state.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/ACH_SMOKE_TEST_PLAN.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added server action `reconcile_checkout_return` / `reconcileCheckoutReturn`, Stripe Checkout Session verification for return URLs, ACH-evidence-gated pending reconciliation that never marks ACH paid from browser return alone, setup-return account refresh, client boot-time return UI lock, pending-webhook polling, and locked ACH pending payload handling in post-checkout hydration.
+- Behavior preservation: no `snapshotJson`, EXPORT_LOG wide-schema order, token lookup semantics, pricing authority, `appsscript.json`, `.clasp.json`, Script Properties, Stripe live-mode setting, Squarespace wrapper, card, PO, check/cash/manual, or Team Mode permission logic changed.
+- Validation before Apps Script ship: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Complete ACH return reconciliation"` created version `848`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `848`.
+- Smoke tests: direct Apps Script `/exec` returned HTTP 200 and advertises the new `reconcileCheckoutReturn` server function; public wrapper `/portal` returned HTTP 200 and still targets the stable deployment ID while forwarding `setupResult`, `checkoutResult`, and `stripeSessionId`. No bank flow, tokenized fixture payment, or real payment was initiated during this ship.
+- Follow-ups: run the live internal Stripe test-mode bank-flow flight test for dashboard setup return reconciliation, first-time ACH success return reconciliation, ACH failure, microdeposit fallback if presented, approved-account pending-production exception, and webhook replay/idempotency before any live-mode pilot.

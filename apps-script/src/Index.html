@@ -19898,6 +19898,7 @@
   }
 
   function clearConsumedCheckoutReturnParams(){
+    CHECKOUT_RETURN_INTENT_CONSUMED = true;
     PARENT_CHECKOUT_RETURN_RESULT = '';
     PARENT_SETUP_RETURN_RESULT = '';
     PARENT_STRIPE_SESSION_ID = '';
@@ -19917,11 +19918,167 @@
   }
 
   function getCheckoutReturnResult_(){
+    if (CHECKOUT_RETURN_INTENT_CONSUMED) return '';
     return String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
   }
 
   function getSetupReturnResult_(){
+    if (CHECKOUT_RETURN_INTENT_CONSUMED) return '';
     return String(PARENT_SETUP_RETURN_RESULT || SETUP_RETURN_RESULT || '').trim().toLowerCase();
+  }
+
+  function getStripeReturnSessionId_(){
+    if (CHECKOUT_RETURN_INTENT_CONSUMED) return '';
+    return String(PARENT_STRIPE_SESSION_ID || VM_REQUEST_ROUTE_META.stripeSessionId || URL_QUERY_PARAMS.get('stripeSessionId') || '').trim();
+  }
+
+  function hasCheckoutReturnIntent_(){
+    return !!(getCheckoutReturnResult_() || getSetupReturnResult_());
+  }
+
+  function beginCheckoutReturnUiLock_(message){
+    CHECKOUT_RETURN_UI_LOCK_ACTIVE = true;
+    IS_READ_ONLY = true;
+    if (PORTAL_STATE && typeof PORTAL_STATE === 'object') PORTAL_STATE.isReadOnly = true;
+    try {
+      document.documentElement.dataset.checkoutReturnReconciling = '1';
+    } catch (_) {}
+    if (saveBtnMini) {
+      saveBtnMini.disabled = true;
+      saveBtnMini.textContent = 'Refreshing...';
+    }
+    if (placeOrderBtnMini) {
+      placeOrderBtnMini.disabled = true;
+      placeOrderBtnMini.setAttribute('aria-disabled', 'true');
+    }
+    [
+      orderFlowCardBtn,
+      orderFlowAchBtn,
+      orderFlowCheckBtn,
+      orderFlowPoBtn,
+      orderFlowSelectionConfirmBtn,
+      orderFlowClearSelectionsBtn
+    ].forEach(btn => {
+      if (!btn) return;
+      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
+    });
+    if (message) showNotice(message, 'ok', { persist: true });
+  }
+
+  function endCheckoutReturnUiLock_(){
+    CHECKOUT_RETURN_UI_LOCK_ACTIVE = false;
+    try {
+      delete document.documentElement.dataset.checkoutReturnReconciling;
+    } catch (_) {}
+    IS_READ_ONLY = isFinalizedPortal({
+      vm: VM,
+      row: ROW,
+      currentStateSummary: CURRENT_STATE_SUMMARY,
+      latestOrderSummary: LATEST_ORDER_SUMMARY,
+      portalMode: PORTAL_MODE
+    });
+    if (PORTAL_STATE && typeof PORTAL_STATE === 'object') PORTAL_STATE.isReadOnly = IS_READ_ONLY;
+    setSaveControls();
+  }
+
+  function getCheckoutReturnReconciliationMessage_(){
+    const setupResult = getSetupReturnResult_();
+    if (setupResult) return 'Refreshing bank setup status...';
+    const checkoutResult = getCheckoutReturnResult_();
+    if (checkoutResult === 'success') return 'Order placed — confirming payment status...';
+    if (checkoutResult === 'cancel') return 'Refreshing checkout status...';
+    return '';
+  }
+
+  function buildCheckoutReturnReconciliationPayload_(){
+    return {
+      token: String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim(),
+      checkoutResult: getCheckoutReturnResult_(),
+      setupResult: getSetupReturnResult_(),
+      stripeSessionId: getStripeReturnSessionId_(),
+      sessionId: String(AUTH_SESSION_ID || readStoredSessionId() || '').trim(),
+      mode: PORTAL_MODE || 'client'
+    };
+  }
+
+  function getCheckoutReturnNoticeFromResponse_(resp){
+    const response = (resp && typeof resp === 'object') ? resp : {};
+    const setupResult = String(response.setupResult || '').trim().toLowerCase();
+    const checkoutResult = String(response.checkoutResult || '').trim().toLowerCase();
+    const status = String(response.reconciliationStatus || '').trim().toLowerCase();
+    const order = normalizeOrderSummary(response.orderSummary);
+    const workflow = (order.workflowContext && typeof order.workflowContext === 'object')
+      ? order.workflowContext
+      : {};
+    const current = response.portalPayload ? normalizeCurrentStateSummary(response.portalPayload.currentStateSummary) : CURRENT_STATE_SUMMARY;
+    const method = String(workflow.paymentMethod || current.currentPaymentMethod || order.paymentMethodSelected || '').trim().toLowerCase();
+    const paymentState = String(current.currentPaymentState || order.paymentState || '').trim().toLowerCase();
+    const achDetailState = String(workflow.achDetailState || '').trim().toLowerCase();
+    if (setupResult === 'cancel' || status === 'cancel') return 'Checkout status refreshed.';
+    if (setupResult === 'success' || status === 'setup_processed' || status === 'setup_pending') {
+      return 'Bank account setup status refreshed.';
+    }
+    if (checkoutResult === 'cancel') return 'Checkout canceled. Your current order status has been refreshed.';
+    if (paymentState === 'failed') return 'Payment failed. Please retry checkout or choose another payment method.';
+    if (method === PAYMENT_METHODS.ach) {
+      if (achDetailState === 'ach_microdeposit_pending' || achDetailState === 'ach_bank_verification_pending') {
+        return 'Order placed — bank verification pending. Stripe may email a secure verification link if microdeposits are required.';
+      }
+      if (paymentState === 'paid' || workflow.paymentReceived === true || workflow.isPaymentReceived === true) {
+        return 'Payment received. Your order is authorized for production.';
+      }
+      if (status === 'pending_webhook' || paymentState === 'pending' || workflow.isPaymentPending === true) {
+        return 'Order placed — ACH payment initiated. Bank payments can take a few business days to finish processing.';
+      }
+    }
+    return 'Checkout status refreshed.';
+  }
+
+  async function reconcileCheckoutReturnOnBoot_(){
+    if (!hasCheckoutReturnIntent_() || CHECKOUT_RETURN_RECONCILE_IN_FLIGHT) return false;
+    const payload = buildCheckoutReturnReconciliationPayload_();
+    if (!payload.token) return false;
+    CHECKOUT_RETURN_RECONCILE_IN_FLIGHT = true;
+    beginCheckoutReturnUiLock_(getCheckoutReturnReconciliationMessage_());
+    let lastResp = null;
+    try {
+      const maxAttempts = payload.checkoutResult === 'success' ? 4 : 1;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const resp = await callServer('reconcileCheckoutReturn', payload);
+        if (!resp || resp.ok !== true) {
+          throw new Error(String((resp && resp.error) || 'Unable to refresh checkout status.'));
+        }
+        lastResp = resp;
+        if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
+        if (resp.portalPayload) {
+          CHECKOUT_RETURN_INTENT_CONSUMED = true;
+          clearConsumedCheckoutReturnParams();
+          applyPortalPayloadInPlace(resp.portalPayload, {
+            source: 'checkout-return-reconcile',
+            reason: 'checkout-return-reconcile',
+            preserveTeamMode: true
+          });
+          showNotice(getCheckoutReturnNoticeFromResponse_(resp), 'ok', { persist: true });
+          if (resp.reconciliationStatus !== 'pending_webhook' || hasLockedAchPendingReturnSignal_(resp.portalPayload) || hasStrongPaidFinalizedSignal_(resp.portalPayload)) {
+            return true;
+          }
+        }
+        if (resp.reconciliationStatus !== 'pending_webhook') return true;
+        await waitMs_(2500);
+      }
+      if (lastResp) {
+        showNotice(getCheckoutReturnNoticeFromResponse_(lastResp), 'ok', { persist: true });
+      }
+      return !!lastResp;
+    } catch (err) {
+      console.warn('Checkout return reconciliation failed:', err);
+      showNotice('Checkout status could not be refreshed automatically. Reload this project before editing or placing another order.', 'err', { persist: true });
+      return false;
+    } finally {
+      CHECKOUT_RETURN_RECONCILE_IN_FLIGHT = false;
+      endCheckoutReturnUiLock_();
+    }
   }
 
   function handleCheckoutReturnNotice(){
@@ -20476,6 +20633,9 @@
   let PARENT_CHECKOUT_RETURN_RESULT = '';
   let PARENT_SETUP_RETURN_RESULT = '';
   let PARENT_STRIPE_SESSION_ID = '';
+  let CHECKOUT_RETURN_INTENT_CONSUMED = false;
+  let CHECKOUT_RETURN_UI_LOCK_ACTIVE = false;
+  let CHECKOUT_RETURN_RECONCILE_IN_FLIGHT = false;
   let PORTAL_CHECKOUT_NAVIGATION_ACTIVE = false;
   let DASHBOARD_CONTEXT_MODE = 'session';
   let DASHBOARD_CONTEXT_TOKEN = '';
@@ -20814,6 +20974,32 @@
     return String(value || '').trim().toLowerCase() === 'locked';
   }
 
+  function hasLockedAchPendingReturnSignal_(portalPayload){
+    const payload = (portalPayload && typeof portalPayload === 'object') ? portalPayload : {};
+    const latest = normalizeOrderSummary(payload.latestOrderSummary);
+    const current = normalizeCurrentStateSummary(payload.currentStateSummary);
+    const latestWorkflow = (latest.workflowContext && typeof latest.workflowContext === 'object') ? latest.workflowContext : {};
+    const currentWorkflow = (current.workflowContext && typeof current.workflowContext === 'object') ? current.workflowContext : {};
+    const workflow = Object.assign({}, latestWorkflow, currentWorkflow);
+    const paymentMethod = String(
+      workflow.paymentMethod ||
+      workflow.paymentMethodSelected ||
+      current.currentPaymentMethod ||
+      latest.paymentMethodSelected ||
+      ''
+    ).trim().toLowerCase();
+    const paymentState = String(current.currentPaymentState || latest.paymentState || '').trim().toLowerCase();
+    const lifecycleStage = String(workflow.lifecycleStage || '').trim().toLowerCase();
+    const locked = isLockedPortalStateValue_(current.portalLockState) || isLockedPortalStateValue_(latest.portalLockState);
+    if (paymentMethod !== PAYMENT_METHODS.ach || locked !== true) return false;
+    if (paymentState === 'paid' || hasPaymentReceivedWorkflowSignal_(workflow)) return false;
+    return workflow.isPaymentPending === true ||
+      workflow.paymentDue === true ||
+      lifecycleStage === PORTAL_LIFECYCLE_STAGES.payment_pending_locked ||
+      paymentState === 'pending' ||
+      paymentState === 'failed';
+  }
+
   function hasStrongPaidFinalizedSignal_(portalPayload){
     const payload = (portalPayload && typeof portalPayload === 'object') ? portalPayload : {};
     const latest = normalizeOrderSummary(payload.latestOrderSummary);
@@ -20843,7 +21029,7 @@
   function routePaidFinalizedPayloadToInvoice_(portalPayload){
     const payload = clonePlainObject(portalPayload);
     const payloadState = normalizePortalState(payload.portalState || {});
-    if (!hasStrongPaidFinalizedSignal_(payload)) return payload;
+    if (!hasStrongPaidFinalizedSignal_(payload) && !hasLockedAchPendingReturnSignal_(payload)) return payload;
     payloadState.activePanel = 'summary';
     payload.portalState = payloadState;
     return payload;
@@ -20889,7 +21075,7 @@
       if (!resp || resp.ok !== true || !resp.portalPayload) {
         throw new Error(String((resp && resp.error) || 'Unable to refresh project status.'));
       }
-      if (!hasStrongPaidFinalizedSignal_(resp.portalPayload)) {
+      if (!hasStrongPaidFinalizedSignal_(resp.portalPayload) && !hasLockedAchPendingReturnSignal_(resp.portalPayload)) {
         return false;
       }
       applyFinalizedPaymentPayload_(resp.portalPayload, reason);
@@ -41401,6 +41587,7 @@
     const suppressSuccessNotice = Boolean(opts.suppressSuccessNotice);
     const showLoader = Boolean(opts.showLoader);
     const keepLoaderOnSuccess = Boolean(opts.keepLoaderOnSuccess);
+    if (CHECKOUT_RETURN_UI_LOCK_ACTIVE) return false;
     const editorLifecycle = getPortalEditorLifecycleUiState_();
     if (!editorLifecycle.saveAllowed) return false;
     if (!hasUnsavedSnapshotChanges()) return false;
@@ -41451,16 +41638,17 @@
     const editorLifecycle = getPortalEditorLifecycleUiState_();
     const hideTeamActions = IS_TEAM;
     const hasDirtyChanges = hasUnsavedSnapshotChanges();
+    const returnLocked = CHECKOUT_RETURN_UI_LOCK_ACTIVE === true;
 
     if (saveBtnMini) {
       saveBtnMini.style.display = hideTeamActions ? 'none' : '';
-      saveBtnMini.disabled = !(editorLifecycle.saveAllowed && hasDirtyChanges);
-      saveBtnMini.textContent = 'Save';
+      saveBtnMini.disabled = returnLocked || !(editorLifecycle.saveAllowed && hasDirtyChanges);
+      saveBtnMini.textContent = returnLocked ? 'Refreshing...' : 'Save';
     }
 
     if (placeOrderBtnMini) {
       placeOrderBtnMini.style.display = hideTeamActions ? 'none' : '';
-      placeOrderBtnMini.disabled = hideTeamActions ? true : !editorLifecycle.canAccessOrderFlow;
+      placeOrderBtnMini.disabled = hideTeamActions || returnLocked ? true : !editorLifecycle.canAccessOrderFlow;
       placeOrderBtnMini.title = editorLifecycle.isPoDraftResume
         ? 'Purchase-order submission continues from the Summary tab.'
         : '';
@@ -42629,6 +42817,11 @@
 
   function startPortalApp(){
     const checkoutReturnResult = getCheckoutReturnResult_();
+    const hasReturnIntent = hasCheckoutReturnIntent_();
+    if (hasReturnIntent) {
+      beginCheckoutReturnUiLock_(getCheckoutReturnReconciliationMessage_());
+      SUPPRESS_NEXT_AUTO_INTRO = true;
+    }
     closeUnsavedLeaveModal({ immediate: true });
     setView(VIEW_SNAPSHOT);
     hydrateUIFromPortalState(VM.portalState);
@@ -42642,9 +42835,16 @@
     setSaveControls();
     renderPortalStatusBanner();
     renderPortal();
-    handleCheckoutReturnNotice();
+    if (hasReturnIntent) {
+      reconcileCheckoutReturnOnBoot_().catch(err => {
+        console.warn('Checkout return reconciliation failed:', err);
+      });
+    } else {
+      handleCheckoutReturnNotice();
+    }
     if (CURRENT_TOKEN) replaceCurrentPortalProjectRoute_(CURRENT_TOKEN);
     if (
+      !hasReturnIntent &&
       checkoutReturnResult === 'success'
       && (!hasStrongPaidFinalizedSignal_(VM) || !hasPostCheckoutChargedTotalSignal_(VM))
     ) {

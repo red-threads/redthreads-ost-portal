@@ -1421,6 +1421,9 @@ function doPost(e) {
     if (action === 'get_account_status') {
       return jsonOutput_(getAccountStatus(payload));
     }
+    if (action === 'reconcile_checkout_return') {
+      return jsonOutput_(reconcileCheckoutReturn(payload));
+    }
     if (action === 'create_ach_setup_session') {
       return jsonOutput_(createAchSetupSession(payload));
     }
@@ -4908,6 +4911,282 @@ function getAccountStatus(payload) {
         taxExemptDriveFolderId: cfg.taxExemptDriveFolderId
       }
     };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function normalizeCheckoutReturnIntentValue_(value) {
+  const normalized = trimString_(value).toLowerCase();
+  return (normalized === 'success' || normalized === 'cancel') ? normalized : '';
+}
+
+function buildCheckoutReturnResponse_(status, token, rowInfo, orderInfo, accountInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const cleanToken = trimString_(token);
+  const freshRowInfo = rowInfo ? buildRowInfoFromSheet_(infra.exportSheet, rowInfo.row) : findRowByToken_(infra.exportSheet, cleanToken);
+  const latestOrderInfo = orderInfo
+    ? buildRowInfoFromSheet_(infra.ordersSheet, orderInfo.row)
+    : getLatestPortalOrderByToken_(cleanToken, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  const orderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
+  const accountSummary = accountInfo && accountInfo.summary
+    ? accountInfo.summary
+    : (freshRowInfo ? getAccountStatus({ token: cleanToken }).accountSummary : null);
+  const portalPayload = freshRowInfo
+    ? buildSafeSnapshotLoadResponse_(freshRowInfo, cleanToken, trimString_(opts.mode) || 'client')
+    : null;
+  return {
+    ok: true,
+    reconciliationStatus: trimString_(status) || 'already_current',
+    paymentMethodSelected: orderSummary ? trimString_(orderSummary.paymentMethodSelected) : '',
+    paymentState: orderSummary ? trimString_(orderSummary.paymentState) : '',
+    orderState: orderSummary ? trimString_(orderSummary.orderState) : '',
+    productionAuthorizationState: orderSummary ? trimString_(orderSummary.productionAuthorizationState) : '',
+    checkoutReturnPending: trimString_(status) === 'pending_webhook',
+    setupStatus: accountSummary ? trimString_(accountSummary.achSetupStatus) : '',
+    portalPayload: portalPayload,
+    orderSummary: orderSummary,
+    accountSummary: accountSummary
+  };
+}
+
+function resolveCheckoutReturnOrderInfo_(payload, sessionObj, options) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const session = (sessionObj && typeof sessionObj === 'object') ? sessionObj : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const stripeSessionId = trimString_(p.stripeSessionId || session.id);
+  const checkoutAttemptId = trimString_(p.checkoutAttemptId || extractStripeMetadataValue_(session, 'checkoutAttemptId'));
+  const orderId = trimString_(p.orderId || extractStripeMetadataValue_(session, 'orderId'));
+  const paymentIntentId = stripeIdFromObject_(session.payment_intent);
+  const token = trimString_(p.token || extractStripeMetadataValue_(session, 'token'));
+  return (
+    getPortalOrderByStripeSessionId_(stripeSessionId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) ||
+    getPortalOrderByCheckoutAttemptId_(checkoutAttemptId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) ||
+    getPortalOrderByStripePaymentIntentId_(paymentIntentId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) ||
+    getPortalOrderByOrderId_(orderId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) ||
+    getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet })
+  );
+}
+
+function isStripeCheckoutSessionCompletedForReturn_(sessionObj) {
+  const session = (sessionObj && typeof sessionObj === 'object') ? sessionObj : {};
+  const status = trimString_(session.status).toLowerCase();
+  return status === 'complete' || status === 'completed';
+}
+
+function reconcileAchCheckoutReturnOrderToPending_(orderInfo, sessionObj, rowInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const terminalReason = getTerminalAchPendingMutationReason_(orderInfo);
+  if (terminalReason) {
+    return {
+      status: 'already_current',
+      orderInfo: orderInfo,
+      accountInfo: getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra }),
+      terminalReason: terminalReason
+    };
+  }
+  const now = nowIso_();
+  const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
+  const nextDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(
+    mergeOrderDraftShippingDetails_(currentDraft, sessionObj),
+    buildStripeCheckoutActualAmountSummary_(sessionObj, currentDraft)
+  );
+  const achSummary = resolveAchPaymentMethodSummaryFromCheckoutSession_(sessionObj, {
+    cfg: cfg,
+    source: 'checkout_payment'
+  });
+  let accountInfo = getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra });
+  if (achSummary && accountInfo) {
+    accountInfo = upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+  const paymentIntent = sessionObj && sessionObj.payment_intent && typeof sessionObj.payment_intent === 'object'
+    ? sessionObj.payment_intent
+    : null;
+  const verificationStatus = achSummary && achSummary.verificationStatus
+    ? achSummary.verificationStatus
+    : deriveAchVerificationStatusFromStripeIntent_(paymentIntent, 'pending');
+  const policy = buildAchPendingProductionPolicyUpdates_(
+    accountInfo && accountInfo.summary ? accountInfo.summary : {},
+    orderInfo,
+    now
+  );
+  const updatedOrder = updatePortalOrderState_({
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    orderRowInfo: orderInfo,
+    orderDraft: nextDraft,
+    stripeSessionId: trimString_(sessionObj && sessionObj.id),
+    stripePaymentIntentId: stripeIdFromObject_(sessionObj && sessionObj.payment_intent),
+    amountCardFee: nextDraft.amountCardFee,
+    amountChargedTax: nextDraft.amountChargedTax,
+    amountChargedTotal: nextDraft.amountChargedTotal,
+    stripeAmountSubtotalCents: nextDraft.stripeAmountSubtotalCents,
+    stripeAmountTotalCents: nextDraft.stripeAmountTotalCents,
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    paymentMethodSelected: PAYMENT_METHODS.ach,
+    paymentState: PAYMENT_STATES.pending,
+    orderState: policy.orderState,
+    productionAuthorizationState: policy.productionAuthorizationState,
+    lockedAt: trimString_(orderInfo.rowObjNormalized.lockedat) || now,
+    authorizedToProduceAt: policy.authorizedToProduceAt,
+    achPaymentMethodId: achSummary ? achSummary.paymentMethodId : trimString_(orderInfo.rowObjNormalized.achpaymentmethodid),
+    achBankName: achSummary ? achSummary.bankName : trimString_(orderInfo.rowObjNormalized.achbankname),
+    achLast4: achSummary ? achSummary.last4 : trimString_(orderInfo.rowObjNormalized.achlast4),
+    achMandateId: achSummary ? achSummary.mandateId : trimString_(orderInfo.rowObjNormalized.achmandateid),
+    achFinancialConnectionsAccountId: achSummary ? achSummary.financialConnectionsAccountId : trimString_(orderInfo.rowObjNormalized.achfinancialconnectionsaccountid),
+    achVerificationStatus: verificationStatus || 'pending',
+    achVerificationFlow: 'stripe_hosted_checkout',
+    achFailureCode: '',
+    achFailureMessage: '',
+    achPendingProductionApprovedAtOrder: policy.achPendingProductionApprovedAtOrder
+  });
+  const orderSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  const lockedRowInfo = writeCurrentOrderPointersToExportLog_({
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    rowInfo: rowInfo,
+    orderSummary: orderSummary,
+    accountSummary: accountInfo && accountInfo.summary ? accountInfo.summary : getAccountStatus({ token: trimString_(rowInfo.rowObjNormalized.token) }).accountSummary
+  });
+  setPortalClientLockForRow_(infra.exportSheet, lockedRowInfo, true, {
+    token: trimString_(rowInfo.rowObjNormalized.token)
+  });
+  return {
+    status: 'pending_webhook',
+    orderInfo: updatedOrder,
+    accountInfo: accountInfo
+  };
+}
+
+function reconcileCheckoutReturn_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const token = trimString_(p.token);
+  if (!token) return { ok: false, code: 'missing_token', error: 'Missing token.' };
+  const checkoutResult = normalizeCheckoutReturnIntentValue_(p.checkoutResult);
+  const setupResult = normalizeCheckoutReturnIntentValue_(p.setupResult);
+  const stripeSessionId = trimString_(p.stripeSessionId);
+  if (!checkoutResult && !setupResult) {
+    return { ok: false, code: 'missing_return_intent', error: 'Missing checkout return intent.' };
+  }
+
+  const cfg = getConfig_();
+  const ss = SpreadsheetApp.openById(cfg.sheetId);
+  const infra = ensurePortalInfrastructure_(ss, cfg);
+  const rowInfo = findRowByToken_(infra.exportSheet, token);
+  if (!rowInfo) return { ok: false, code: 'token_not_found', error: 'Token not found.' };
+
+  let sessionObj = null;
+  if (stripeSessionId) {
+    const sessionResult = retrieveStripeCheckoutSession_(stripeSessionId, { cfg: cfg });
+    if (sessionResult.ok === true && sessionResult.body) {
+      sessionObj = sessionResult.body;
+    } else if (checkoutResult === 'success' || setupResult === 'success') {
+      return {
+        ok: false,
+        code: trimString_(sessionResult.code) || 'stripe_session_retrieve_failed',
+        error: trimString_(sessionResult.error) || 'Unable to verify Stripe checkout return.'
+      };
+    }
+  }
+
+  const sessionToken = sessionObj ? trimString_(extractStripeMetadataValue_(sessionObj, 'token')) : '';
+  if (sessionToken && sessionToken !== token) {
+    return { ok: false, code: 'stripe_session_token_mismatch', error: 'Stripe checkout session does not belong to this project.' };
+  }
+
+  if (setupResult) {
+    let accountInfo = null;
+    let status = setupResult === 'cancel' ? 'cancel' : 'setup_pending';
+    if (sessionObj && setupResult === 'success') {
+      const setupHandled = handleCheckoutSetupSessionCompleted_(sessionObj, { cfg: cfg, ss: ss, infra: infra });
+      if (setupHandled && setupHandled.ok === false) return setupHandled;
+      if (setupHandled && setupHandled.ignored !== true) {
+        status = 'setup_processed';
+        accountInfo = setupHandled.accountSummary ? { summary: setupHandled.accountSummary } : null;
+      }
+    }
+    return buildCheckoutReturnResponse_(status, token, rowInfo, null, accountInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+
+  const orderInfo = resolveCheckoutReturnOrderInfo_(p, sessionObj, { cfg: cfg, ss: ss, infra: infra });
+  if (!orderInfo) {
+    return buildCheckoutReturnResponse_(checkoutResult === 'cancel' ? 'cancel' : 'ignored', token, rowInfo, null, null, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+  const orderToken = trimString_(orderInfo.rowObjNormalized.token);
+  if (orderToken && orderToken !== token) {
+    return { ok: false, code: 'order_token_mismatch', error: 'Checkout return order does not belong to this project.' };
+  }
+
+  if (checkoutResult === 'cancel') {
+    return buildCheckoutReturnResponse_('cancel', token, rowInfo, orderInfo, null, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+
+  const achSummary = sessionObj ? resolveAchPaymentMethodSummaryFromCheckoutSession_(sessionObj, {
+    cfg: cfg,
+    source: 'checkout_payment'
+  }) : null;
+  const achEvidence = buildAchStripeEventEvidence_({
+    eventType: 'checkout.return.reconcile',
+    orderInfo: orderInfo,
+    session: sessionObj,
+    achSummary: achSummary
+  });
+  if (achEvidence.isAchPayment !== true) {
+    return buildCheckoutReturnResponse_('already_current', token, rowInfo, orderInfo, null, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+  if (!sessionObj || !isStripeCheckoutSessionCompletedForReturn_(sessionObj)) {
+    return buildCheckoutReturnResponse_('pending_webhook', token, rowInfo, orderInfo, null, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+  const reconciled = reconcileAchCheckoutReturnOrderToPending_(orderInfo, sessionObj, rowInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  return buildCheckoutReturnResponse_(reconciled.status, token, rowInfo, reconciled.orderInfo, reconciled.accountInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+}
+
+function reconcileCheckoutReturn(payload) {
+  try {
+    return reconcileCheckoutReturn_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
