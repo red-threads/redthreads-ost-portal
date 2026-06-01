@@ -280,6 +280,9 @@
     var checkoutResult = queryParams.get("checkoutResult");
     var setupResult = queryParams.get("setupResult");
     var stripeSessionId = queryParams.get("stripeSessionId");
+    var dashboard = queryParams.get("dashboard");
+    var accountId = queryParams.get("accountId");
+    var accountAccessToken = queryParams.get("accountAccessToken") || queryParams.get("dashboardAccessToken");
     var MOBILE_BLOCK_QUERY = "(max-width: 899px)";
 
     if (token) {
@@ -298,6 +301,18 @@
       iframeParams.set("stripeSessionId", stripeSessionId);
     }
 
+    if (dashboard === "1") {
+      iframeParams.set("dashboard", "1");
+    }
+
+    if (accountId) {
+      iframeParams.set("accountId", accountId);
+    }
+
+    if (accountAccessToken) {
+      iframeParams.set("accountAccessToken", accountAccessToken);
+    }
+
     var iframe = document.getElementById("rtPortalFrame");
     var loading = document.getElementById("rtPortalLoading");
     var loadingTitle = document.getElementById("rtPortalLoadingTitle");
@@ -306,7 +321,7 @@
     var mobileLink = document.getElementById("rtPortalMobileLink");
     var mobileCopyButton = document.getElementById("rtPortalMobileCopyButton");
     var mobileCopyStatus = document.getElementById("rtPortalMobileCopyStatus");
-    var shouldShowLoading = !!(token || checkoutResult || setupResult || stripeSessionId);
+    var shouldShowLoading = !!(token || checkoutResult || setupResult || stripeSessionId || dashboard || accountId || accountAccessToken);
 
     function isMobileBlocked() {
       return !!(window.matchMedia && window.matchMedia(MOBILE_BLOCK_QUERY).matches);
@@ -442,6 +457,9 @@
       var checkoutValue = params.checkoutResult || "";
       var setupValue = params.setupResult || "";
       var sessionValue = params.stripeSessionId || "";
+      var dashboardValue = params.dashboard || "";
+      var accountIdValue = params.accountId || "";
+      var accountAccessTokenValue = params.accountAccessToken || params.dashboardAccessToken || "";
 
       if (tokenValue) {
         nextParams.set("t", String(tokenValue));
@@ -463,6 +481,24 @@
         nextParams.set("stripeSessionId", String(sessionValue));
       } else {
         nextParams.delete("stripeSessionId");
+      }
+
+      if (dashboardValue === "1") {
+        nextParams.set("dashboard", "1");
+      } else {
+        nextParams.delete("dashboard");
+      }
+
+      if (accountIdValue) {
+        nextParams.set("accountId", String(accountIdValue));
+      } else {
+        nextParams.delete("accountId");
+      }
+
+      if (accountAccessTokenValue) {
+        nextParams.set("accountAccessToken", String(accountAccessTokenValue));
+      } else {
+        nextParams.delete("accountAccessToken");
       }
 
       var nextUrl = window.location.pathname + (nextParams.toString() ? "?" + nextParams.toString() : "");

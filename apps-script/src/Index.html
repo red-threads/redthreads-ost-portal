@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 20">20</div>
+  <div class="devRevisionBadge" aria-label="Development revision 21">21</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18820,6 +18820,7 @@
       orgId: String(raw.orgId || '').trim(),
       orgName: String(raw.orgName || '').trim(),
       primaryEmail: String(raw.primaryEmail || '').trim(),
+      accountAccessToken: String(raw.accountAccessToken || '').trim(),
       primaryContactName: String(raw.primaryContactName || '').trim(),
       termsStatus: String(raw.termsStatus || '').trim(),
       termsApproved: raw.termsApproved === true,
@@ -19724,7 +19725,8 @@
       return;
     }
     const payload = Object.assign({}, requestPayload, {
-      returnUrl: window.location.href
+      returnUrl: buildExternalPortalDashboardUrlForClient_(),
+      returnToDashboard: true
     });
     setAuthMessage('Opening secure Stripe bank setup...', false, { view: VIEW_DASHBOARD, persist: true });
     try {
@@ -20046,7 +20048,7 @@
   }
 
   function buildCheckoutReturnReconciliationPayload_(){
-    return {
+    const payload = {
       token: String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim(),
       checkoutResult: getCheckoutReturnResult_(),
       setupResult: getSetupReturnResult_(),
@@ -20054,6 +20056,12 @@
       sessionId: String(AUTH_SESSION_ID || readStoredSessionId() || '').trim(),
       mode: PORTAL_MODE || 'client'
     };
+    const dashboardContext = getDashboardContextRequestPayload_();
+    if (dashboardContext && typeof dashboardContext === 'object') {
+      if (dashboardContext.accountAccessToken) payload.accountAccessToken = dashboardContext.accountAccessToken;
+      if (dashboardContext.accountId) payload.accountId = dashboardContext.accountId;
+    }
+    return payload;
   }
 
   function getCheckoutReturnNoticeFromResponse_(resp){
@@ -20092,7 +20100,7 @@
   async function reconcileCheckoutReturnOnBoot_(){
     if (!hasCheckoutReturnIntent_() || CHECKOUT_RETURN_RECONCILE_IN_FLIGHT) return false;
     const payload = buildCheckoutReturnReconciliationPayload_();
-    if (!payload.token) return false;
+    if (!payload.token && !payload.setupResult) return false;
     CHECKOUT_RETURN_RECONCILE_IN_FLIGHT = true;
     beginCheckoutReturnUiLock_(getCheckoutReturnReconciliationMessage_());
     let lastResp = null;
@@ -20647,7 +20655,9 @@
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
   const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
   const TEAM_REVIEW_REQUEST = String(URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
-  const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1';
+  const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1' || VM_REQUEST_ROUTE_META.dashboard === '1';
+  const DASHBOARD_ACCOUNT_ID_PARAM = String(VM_REQUEST_ROUTE_META.accountId || URL_QUERY_PARAMS.get('accountId') || '').trim();
+  const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
   const ACCOUNT_DOC_DEEPLINK_TYPE = String(URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();
   const ACCOUNT_DOC_DEEPLINK_ACTION = String(URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
   const SUMMARY_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('summary') === '1';
@@ -20670,6 +20680,7 @@
   const VIEW_SNAPSHOT = STATE_SNAPSHOT;
   const VIEWS = ['login', 'resetRequest', 'resetConfirm', 'dashboard', 'project'];
   const DASHBOARD_TOKEN_CONTEXT_STORAGE_KEY = 'rtDashboardTokenContext';
+  const DASHBOARD_ACCOUNT_CONTEXT_STORAGE_KEY = 'rtDashboardAccountContext';
   const BASE_BOOT_CLEAR_KEYS = [
     AUTH_SESSION_STORAGE_KEY,
     AUTH_PORTAL_PAYLOAD_STORAGE_KEY,
@@ -20693,6 +20704,8 @@
   let PORTAL_CHECKOUT_NAVIGATION_ACTIVE = false;
   let DASHBOARD_CONTEXT_MODE = 'session';
   let DASHBOARD_CONTEXT_TOKEN = '';
+  let DASHBOARD_CONTEXT_ACCOUNT_ID = '';
+  let DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN = '';
   let CHAT_MESSAGES = [];
   let CHAT_PREFILL_PREFIX = '';
   let CHAT_PREFILL_SOURCE = '';
@@ -21223,7 +21236,10 @@
   function setDashboardSessionContext_(){
     DASHBOARD_CONTEXT_MODE = 'session';
     DASHBOARD_CONTEXT_TOKEN = '';
+    DASHBOARD_CONTEXT_ACCOUNT_ID = '';
+    DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN = '';
     writeStoredDashboardTokenContext_('');
+    writeStoredDashboardAccountContext_(null);
   }
 
   function setDashboardTokenContext_(token){
@@ -21234,14 +21250,97 @@
     }
     DASHBOARD_CONTEXT_MODE = 'token';
     DASHBOARD_CONTEXT_TOKEN = cleanToken;
+    DASHBOARD_CONTEXT_ACCOUNT_ID = '';
+    DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN = '';
     writeStoredDashboardTokenContext_(cleanToken);
+    writeStoredDashboardAccountContext_(null);
+  }
+
+  function writeStoredDashboardAccountContext_(context){
+    try {
+      if (!context || typeof context !== 'object') {
+        sessionStorage.removeItem(DASHBOARD_ACCOUNT_CONTEXT_STORAGE_KEY);
+        return;
+      }
+      const accountId = String(context.accountId || '').trim();
+      const accountAccessToken = String(context.accountAccessToken || '').trim();
+      if (!accountId && !accountAccessToken) {
+        sessionStorage.removeItem(DASHBOARD_ACCOUNT_CONTEXT_STORAGE_KEY);
+        return;
+      }
+      sessionStorage.setItem(DASHBOARD_ACCOUNT_CONTEXT_STORAGE_KEY, JSON.stringify({
+        accountId: accountId,
+        accountAccessToken: accountAccessToken
+      }));
+    } catch (_) {}
+  }
+
+  function readStoredDashboardAccountContext_(){
+    try {
+      const raw = String(sessionStorage.getItem(DASHBOARD_ACCOUNT_CONTEXT_STORAGE_KEY) || '').trim();
+      const parsed = raw ? JSON.parse(raw) : null;
+      return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function setDashboardAccountContext_(accountId, accountAccessToken){
+    const cleanAccountId = String(accountId || '').trim();
+    const cleanAccessToken = String(accountAccessToken || '').trim();
+    if (!cleanAccountId && !cleanAccessToken) {
+      setDashboardSessionContext_();
+      return;
+    }
+    DASHBOARD_CONTEXT_MODE = 'account';
+    DASHBOARD_CONTEXT_TOKEN = '';
+    DASHBOARD_CONTEXT_ACCOUNT_ID = cleanAccountId;
+    DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN = cleanAccessToken;
+    writeStoredDashboardTokenContext_('');
+    writeStoredDashboardAccountContext_({
+      accountId: cleanAccountId,
+      accountAccessToken: cleanAccessToken
+    });
   }
 
   function hasDashboardTokenContext_(){
     return DASHBOARD_CONTEXT_MODE === 'token' && !!String(DASHBOARD_CONTEXT_TOKEN || '').trim();
   }
 
+  function hasDashboardAccountContext_(){
+    return DASHBOARD_CONTEXT_MODE === 'account' &&
+      !!(String(DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim() || String(DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim());
+  }
+
+  function getDashboardAccountContextFromUrl_(){
+    return {
+      accountId: DASHBOARD_ACCOUNT_ID_PARAM,
+      accountAccessToken: DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM
+    };
+  }
+
+  function hasDashboardAccountContextFromUrl_(){
+    const ctx = getDashboardAccountContextFromUrl_();
+    return !!(ctx.accountAccessToken || ctx.accountId);
+  }
+
+  function syncDashboardAccountContextFromSummary_(summary){
+    if (!hasDashboardAccountContext_()) return;
+    const account = normalizeAccountSummary(summary);
+    const nextAccountId = String(account.accountId || DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
+    const nextAccessToken = String(account.accountAccessToken || DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim();
+    setDashboardAccountContext_(nextAccountId, nextAccessToken);
+  }
+
   function getDashboardContextRequestPayload_(){
+    if (hasDashboardAccountContext_()) {
+      const payload = {};
+      const accountAccessToken = String(DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim();
+      const accountId = String(DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
+      if (accountAccessToken) payload.accountAccessToken = accountAccessToken;
+      if (accountId) payload.accountId = accountId;
+      return payload;
+    }
     if (hasDashboardTokenContext_()) {
       return { token: String(DASHBOARD_CONTEXT_TOKEN || '').trim() };
     }
@@ -21253,6 +21352,8 @@
 
   function getDashboardContextKey_(payload){
     const req = (payload && typeof payload === 'object') ? payload : {};
+    if (req.accountAccessToken) return 'accountAccessToken:' + String(req.accountAccessToken).trim();
+    if (req.accountId) return 'accountId:' + String(req.accountId).trim();
     if (req.token) return 'token:' + String(req.token).trim();
     if (req.sessionId) return 'session:' + String(req.sessionId).trim();
     return '';
@@ -21263,7 +21364,13 @@
     if (!AUTH_SESSION_ID) {
       AUTH_SESSION_ID = String(readStoredSessionId() || '').trim();
     }
-    if (!hasDashboardTokenContext_()) {
+    if (!hasDashboardTokenContext_() && !hasDashboardAccountContext_()) {
+      const storedAccount = readStoredDashboardAccountContext_();
+      if (storedAccount && (storedAccount.accountAccessToken || storedAccount.accountId)) {
+        setDashboardAccountContext_(storedAccount.accountId, storedAccount.accountAccessToken);
+      }
+    }
+    if (!hasDashboardTokenContext_() && !hasDashboardAccountContext_()) {
       const storedToken = String(readStoredDashboardTokenContext_() || '').trim();
       if (storedToken) setDashboardTokenContext_(storedToken);
     }
@@ -21342,6 +21449,7 @@
       AUTH_PORTAL_BOOT_INTENT_KEY,
       AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY,
       DASHBOARD_TOKEN_CONTEXT_STORAGE_KEY,
+      DASHBOARD_ACCOUNT_CONTEXT_STORAGE_KEY,
       RT_LOADER_PENDING_KEY,
       'selectedToken',
       'currentToken',
@@ -21839,6 +21947,22 @@
     return cleanToken ? ('https://www.redthreads.com/portal?t=' + encodeURIComponent(cleanToken)) : '';
   }
 
+  function buildExternalPortalDashboardUrlForClient_(){
+    const params = new URLSearchParams();
+    params.set('dashboard', '1');
+    const accountAccessToken = String(DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim();
+    const accountId = String(DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
+    const dashboardToken = String(DASHBOARD_CONTEXT_TOKEN || CURRENT_TOKEN || '').trim();
+    if (accountAccessToken) {
+      params.set('accountAccessToken', accountAccessToken);
+    } else if (accountId) {
+      params.set('accountId', accountId);
+    } else if (dashboardToken) {
+      params.set('t', dashboardToken);
+    }
+    return 'https://www.redthreads.com/portal?' + params.toString();
+  }
+
   function getActivePortalProjectToken_(){
     return String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim();
   }
@@ -21857,6 +21981,9 @@
     if (extra.stripeSessionId) {
       params.stripeSessionId = String(extra.stripeSessionId || '').trim();
     }
+    if (extra.dashboard === '1') params.dashboard = '1';
+    if (extra.accountId) params.accountId = String(extra.accountId || '').trim();
+    if (extra.accountAccessToken) params.accountAccessToken = String(extra.accountAccessToken || '').trim();
     return params;
   }
 
@@ -21883,7 +22010,7 @@
       if (window.history && window.location && typeof window.history.replaceState === 'function') {
         const url = new URL(window.location.href);
         url.searchParams.delete('token');
-        ['t', 'checkoutResult', 'setupResult', 'stripeSessionId'].forEach(key => {
+        ['t', 'checkoutResult', 'setupResult', 'stripeSessionId', 'dashboard', 'accountId', 'accountAccessToken'].forEach(key => {
           if (Object.prototype.hasOwnProperty.call(params, key) && params[key]) {
             url.searchParams.set(key, params[key]);
           } else {
@@ -22701,7 +22828,7 @@
     try {
       const url = new URL(window.location.href);
       let changed = false;
-      ['dashboard', 'accountDoc', 'accountDocAction', 'resumePo', 'poStage', 'summary', 'payNow'].forEach(key => {
+      ['accountDoc', 'accountDocAction', 'resumePo', 'poStage', 'summary', 'payNow'].forEach(key => {
         if (!url.searchParams.has(key)) return;
         url.searchParams.delete(key);
         changed = true;
@@ -24866,6 +24993,7 @@
       prewarmDashboardPeekPayloadImages_(inlinePeek);
     });
     renderProjectRows(projects);
+    syncDashboardAccountContextFromSummary_(payload.accountSummary || {});
     renderDashboardAccountStatus(payload.accountSummary || {});
     startDashboardProjectPeekPrefetch_(projects);
     return payload;
@@ -26482,6 +26610,7 @@
     if (shouldSyncAccountSummaryCache_(DASHBOARD_ACCOUNT_SUMMARY, next) || AUTH_SESSION_ID) {
       DASHBOARD_ACCOUNT_SUMMARY = next;
     }
+    syncDashboardAccountContextFromSummary_(next);
     renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY);
     renderPortalStatusBanner();
     renderOrderFlowAccountBanner_();
@@ -42945,6 +43074,37 @@
     ensureGlobalOverlayMounts_();
     ensureAuthShellBindings();
     if (!HAS_PORTAL_TOKEN) {
+      if (DASHBOARD_DEEPLINK_REQUEST && hasDashboardAccountContextFromUrl_()) {
+        const accountCtx = getDashboardAccountContextFromUrl_();
+        rtShowLoader('Loading dashboard', 'Preparing your account view.');
+        try {
+          ensureAuthShellBindings();
+          applyAuthShellRuntimeState();
+          setDashboardAccountContext_(accountCtx.accountId, accountCtx.accountAccessToken);
+          setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          if (SETUP_RETURN_RESULT) {
+            setAuthMessage(
+              SETUP_RETURN_RESULT === 'success'
+                ? 'Bank account setup started. Stripe will update verification status as it completes.'
+                : 'Bank account setup canceled.',
+              false,
+              { view: VIEW_DASHBOARD, persist: true }
+            );
+          }
+          await reconcileCheckoutReturnOnBoot_();
+          await loadProjectsForHome({
+            requestPayload: getDashboardContextRequestPayload_(),
+            suppressLoadingMessage: true,
+            awaitPaint: true
+          });
+          notifyPortalReady({ reason: 'dashboard-ready' });
+        } finally {
+          rtHideLoader();
+        }
+        scheduleTaxFormImagePreload_();
+        return;
+      }
       // Base /exec: auth shell path (login/session -> dashboard -> explicit snapshot open).
       initAuthShell();
       scheduleTaxFormImagePreload_();

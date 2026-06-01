@@ -267,6 +267,7 @@ const PORTAL_STRIPE_EVENT_STATUSES = {
 
 const PORTAL_ACCOUNT_HEADERS = [
   'accountId',
+  'accountAccessToken',
   'orgId',
   'orgName',
   'primaryEmail',
@@ -619,7 +620,10 @@ function buildPortalRequestRouteMeta_(e) {
   return {
     checkoutResult: checkoutResult,
     setupResult: setupResult,
-    stripeSessionId: String(params.stripeSessionId || '').trim()
+    stripeSessionId: String(params.stripeSessionId || '').trim(),
+    dashboard: String(params.dashboard || '').trim() === '1' ? '1' : '',
+    accountId: String(params.accountId || '').trim(),
+    accountAccessToken: String(params.accountAccessToken || params.dashboardAccessToken || '').trim()
   };
 }
 
@@ -637,7 +641,10 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
   payload.requestRoute = {
     checkoutResult: checkoutResult,
     setupResult: setupResult,
-    stripeSessionId: String(meta.stripeSessionId || '').trim()
+    stripeSessionId: String(meta.stripeSessionId || '').trim(),
+    dashboard: String(meta.dashboard || '').trim() === '1' ? '1' : '',
+    accountId: String(meta.accountId || '').trim(),
+    accountAccessToken: String(meta.accountAccessToken || '').trim()
   };
   return payload;
 }
@@ -1836,6 +1843,114 @@ function listProjectsForEmail_(exportSheet, email, options) {
     // Larger first-view peek payloads should never block dashboard rendering.
   }
   return projects;
+}
+
+function isExportRowVisibleForAccount_(rowState, accountSummary) {
+  const row = (rowState && typeof rowState === 'object') ? rowState : {};
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const accountId = trimString_(account.accountId);
+  const orgId = trimString_(account.orgId);
+  const emails = normalizeEmailRecipients_([
+    account.primaryEmail,
+    account.billingContactEmail
+  ]);
+  if (accountId && (
+    trimString_(row.currentaccountid || row.currentAccountId) === accountId ||
+    trimString_(row.accountid || row.accountId) === accountId
+  )) {
+    return true;
+  }
+  if (orgId && trimString_(row.orgid || row.orgId) === orgId) {
+    return true;
+  }
+  const rowEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER] || row.personEmail || row.primaryemail || row.primaryEmail);
+  return !!(rowEmail && emails.indexOf(rowEmail) >= 0);
+}
+
+function listProjectsForAccount_(exportSheet, accountSummary, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  if (!exportSheet) throw new Error('Auth configuration is incomplete.');
+  if (!trimString_(account.accountId) && !trimString_(account.orgId) && !normalizeEmail_(account.primaryEmail || account.billingContactEmail)) {
+    return [];
+  }
+
+  const lastCol = exportSheet.getLastColumn();
+  const header = exportSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const colMap = buildColumnMap_(header);
+  const tokenCol = colMap.token;
+  if (!tokenCol) {
+    throw new Error('EXPORT_LOG missing required columns.');
+  }
+
+  const lastRow = exportSheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const rowCount = lastRow - 1;
+  const rows = exportSheet.getRange(2, 1, rowCount, lastCol).getValues();
+  const tokenIdx = tokenCol - 1;
+  const projectEntries = [];
+
+  for (let i = 0; i < rowCount; i++) {
+    const rowVals = rows[i] || [];
+    const rowInfo = buildRowInfoFromSheet_(exportSheet, i + 2, header, rowVals);
+    const rowState = rowInfo.rowObjNormalized;
+    if (!isExportRowVisibleForAccount_(rowState, account)) continue;
+
+    const token = String(rowVals[tokenIdx] || '').trim();
+    if (!token) continue;
+    projectEntries.push({
+      token: token,
+      rowInfo: rowInfo,
+      rowState: rowState,
+      runtimeMeta: buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState),
+      includeLatestOrderSummary: shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState),
+      exportedAt: trimString_(rowState.exportedat || rowState.createdat),
+      createdAt: trimString_(rowState.createdat || rowState.exportedat)
+    });
+  }
+
+  projectEntries.sort((a, b) => {
+    const da = Date.parse(a && (a.exportedAt || a.createdAt || ''));
+    const db = Date.parse(b && (b.exportedAt || b.createdAt || ''));
+    if (!isNaN(da) && !isNaN(db)) return db - da;
+    return 0;
+  });
+
+  const latestOrderMapByToken = buildLatestPortalOrderInfoMapByToken_(
+    projectEntries
+      .filter(function(entry) { return entry && entry.includeLatestOrderSummary === true; })
+      .map(function(entry) { return entry.token; }),
+    {
+      cfg: opts.cfg,
+      ss: opts.ss,
+      ordersSheet: opts.infra && opts.infra.ordersSheet
+    }
+  );
+
+  return projectEntries.map(function(entry, index) {
+    const latestOrderInfo = latestOrderMapByToken[entry.token] || null;
+    const latestOrderSummary = latestOrderInfo
+      ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized)
+      : null;
+    const projectionContext = buildDashboardProjectProjectionContext_(entry.rowInfo, {
+      rowInfo: entry.rowInfo,
+      runtimeMeta: entry.runtimeMeta,
+      cfg: opts.cfg,
+      ss: opts.ss,
+      infra: opts.infra,
+      accountSummary: account,
+      latestOrderInfo: latestOrderInfo,
+      latestOrderSummary: latestOrderSummary
+    });
+    const shouldInlinePeek = index < 6;
+    return buildDashboardProjectHomeMetaFromProjectionContext_(projectionContext, {
+      peekInline: shouldInlinePeek,
+      peekPreview: shouldInlinePeek
+        ? buildDashboardProjectPeekMetaFromProjectionContext_(projectionContext)
+        : null
+    });
+  });
 }
 
 function buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState) {
@@ -3125,6 +3240,33 @@ function buildDashboardHomeData_(options) {
   let userCtx = opts.userCtx || null;
   const sessionId = trimString_(opts.sessionId);
   const token = trimString_(opts.token);
+  const hasDirectAccountAccess = hasPortalAccountDirectAccessPayload_(opts);
+
+  if (hasDirectAccountAccess && !sessionId && !token) {
+    const directAccount = resolvePortalAccountDirectAccess_(opts, { cfg: cfg, ss: ss, infra: infra });
+    if (!directAccount || directAccount.ok !== true) return directAccount;
+    const accountSummary = directAccount.accountSummary || {};
+    const accountIdentity = buildAccountIdentityFromPortalAccountSummary_(accountSummary);
+    const accountEmail = normalizeEmail_(accountIdentity.personEmail || accountSummary.primaryEmail || accountSummary.billingContactEmail);
+    const projects = listProjectsForAccount_(exportSheet, accountSummary, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      accountSummary: accountSummary
+    });
+    return {
+      ok: true,
+      email: accountEmail,
+      accessMode: 'account',
+      projects: projects,
+      accountSummary: accountSummary,
+      termsDocumentUrl: accountSummary.termsDocumentUrl || cfg.termsDocumentUrl,
+      placeholders: {
+        termsDriveFolderId: cfg.termsDriveFolderId,
+        taxExemptDriveFolderId: cfg.taxExemptDriveFolderId
+      }
+    };
+  }
 
   if (token) {
     const rowInfo = findRowByToken_(exportSheet, token);
@@ -3212,18 +3354,23 @@ function getDashboardProjectPeek(payload) {
     const sessionId = trimString_(p.sessionId);
     const dashboardToken = trimString_(p.token);
     let authorizedEmail = '';
+    let authorizedAccountSummary = null;
     if (sessionId) {
       const userCtx = getUserContextBySessionId_(ss, sessionId);
       if (!userCtx || userCtx.ok !== true) {
         return userCtx || { ok: false, error: 'Missing session.' };
       }
       authorizedEmail = normalizeEmail_(userCtx.email);
+    } else if (hasPortalAccountDirectAccessPayload_(p)) {
+      const directAccount = resolvePortalAccountDirectAccess_(p, { cfg: cfg, ss: ss, infra: infra });
+      if (!directAccount || directAccount.ok !== true) return directAccount;
+      authorizedAccountSummary = directAccount.accountSummary || {};
     } else if (dashboardToken) {
       const dashboardRowInfo = findRowByToken_(exportSheet, dashboardToken);
       if (!dashboardRowInfo) return { ok: false, error: 'Link not found.' };
       authorizedEmail = normalizeEmail_(dashboardRowInfo.rowObjNormalized && dashboardRowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
     }
-    if (!authorizedEmail) {
+    if (!authorizedEmail && !authorizedAccountSummary) {
       return { ok: false, error: 'Missing session.' };
     }
 
@@ -3231,7 +3378,10 @@ function getDashboardProjectPeek(payload) {
     if (!rowInfo) return { ok: false, error: 'Link not found.' };
 
     const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
-    if (!rowEmail || rowEmail !== authorizedEmail) {
+    const accountAuthorized = authorizedAccountSummary
+      ? isExportRowVisibleForAccount_(rowInfo.rowObjNormalized, authorizedAccountSummary)
+      : false;
+    if (!accountAuthorized && (!rowEmail || rowEmail !== authorizedEmail)) {
       return { ok: false, error: 'Unauthorized project access.' };
     }
 
@@ -3275,19 +3425,24 @@ function buildDashboardProjectStatusBatch_(options) {
   const sessionId = trimString_(opts.sessionId);
   const dashboardToken = trimString_(opts.token);
   let authorizedEmail = '';
+  let authorizedAccountSummary = null;
   if (sessionId) {
     const userCtx = getUserContextBySessionId_(ss, sessionId);
     if (!userCtx || userCtx.ok !== true) {
       return userCtx || { ok: false, error: 'Missing session.' };
     }
     authorizedEmail = normalizeEmail_(userCtx.email);
+  } else if (hasPortalAccountDirectAccessPayload_(opts)) {
+    const directAccount = resolvePortalAccountDirectAccess_(opts, { cfg: cfg, ss: ss, infra: infra });
+    if (!directAccount || directAccount.ok !== true) return directAccount;
+    authorizedAccountSummary = directAccount.accountSummary || {};
   } else if (dashboardToken) {
     const dashboardRowInfo = findRowByToken_(exportSheet, dashboardToken);
     if (!dashboardRowInfo) return { ok: false, error: 'Link not found.' };
     authorizedEmail = normalizeEmail_(dashboardRowInfo.rowObjNormalized && dashboardRowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
   }
 
-  if (!authorizedEmail) {
+  if (!authorizedEmail && !authorizedAccountSummary) {
     return { ok: false, error: 'Missing session.' };
   }
 
@@ -3301,7 +3456,10 @@ function buildDashboardProjectStatusBatch_(options) {
       };
     }
     const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
-    if (!rowEmail || rowEmail !== authorizedEmail) {
+    const accountAuthorized = authorizedAccountSummary
+      ? isExportRowVisibleForAccount_(rowInfo.rowObjNormalized, authorizedAccountSummary)
+      : false;
+    if (!accountAuthorized && (!rowEmail || rowEmail !== authorizedEmail)) {
       return {
         token: projectToken,
         ok: false,
@@ -4806,6 +4964,7 @@ function buildEphemeralAccountSummary_(identity, cfg) {
   const taxExemptWorkflow = buildAccountDocumentWorkflowSummary_({}, ACCOUNT_DOCUMENT_TYPES.tax_exempt, cfg);
   return {
     accountId: '',
+    accountAccessToken: '',
     orgId: merged.orgId,
     orgName: merged.orgName,
     primaryEmail: merged.personEmail,
@@ -4861,6 +5020,107 @@ function buildEphemeralAccountSummary_(identity, cfg) {
   };
 }
 
+function buildAccountIdentityFromPortalAccountSummary_(accountSummary) {
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  return buildAccountIdentityFromInputs_({
+    orgId: trimString_(account.orgId),
+    orgName: trimString_(account.orgName),
+    personEmail: normalizeEmail_(account.primaryEmail || account.billingContactEmail),
+    personName: trimString_(account.primaryContactName || account.billingContactName),
+    billingContactEmail: normalizeEmail_(account.billingContactEmail || account.primaryEmail),
+    billingContactName: trimString_(account.billingContactName || account.primaryContactName)
+  });
+}
+
+function getPortalAccountByAccessToken_(accessToken, options) {
+  const token = trimString_(accessToken);
+  if (!token) return null;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const rowInfo = listSheetRowInfos_(infra.accountsSheet).find(function(info) {
+    return trimString_(info.rowObjNormalized.accountaccesstoken || info.rowObjNormalized.accountAccessToken) === token;
+  }) || null;
+  return rowInfo ? {
+    rowInfo: rowInfo,
+    summary: buildPortalAccountSummary_(rowInfo.rowObjNormalized, cfg)
+  } : null;
+}
+
+function newPortalAccountAccessToken_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  for (let i = 0; i < 5; i += 1) {
+    const token = newPortalId_('acctlink');
+    if (!getPortalAccountByAccessToken_(token, opts)) return token;
+  }
+  return newPortalId_('acctlink');
+}
+
+function ensurePortalAccountAccessToken_(accountInfo, options) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : null;
+  if (!info || !info.rowInfo || !info.rowInfo.colMap) return info;
+  const currentToken = trimString_(
+    (info.summary && info.summary.accountAccessToken) ||
+    info.rowInfo.rowObjNormalized.accountaccesstoken ||
+    info.rowInfo.rowObjNormalized.accountAccessToken
+  );
+  if (currentToken) {
+    if (info.summary) info.summary.accountAccessToken = currentToken;
+    return info;
+  }
+  if (!info.rowInfo.colMap.accountaccesstoken) return info;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const accountsSheet = opts.accountsSheet || infra.accountsSheet;
+  const token = newPortalAccountAccessToken_({ cfg: cfg, ss: ss, infra: infra });
+  setRowValuesByHeaderMap_(accountsSheet, info.rowInfo.row, info.rowInfo.colMap, {
+    accountAccessToken: token,
+    updatedAt: nowIso_()
+  });
+  const refreshed = buildRowInfoFromSheet_(accountsSheet, info.rowInfo.row);
+  return {
+    rowInfo: refreshed,
+    summary: buildPortalAccountSummary_(refreshed.rowObjNormalized, cfg)
+  };
+}
+
+function hasPortalAccountDirectAccessPayload_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  return !!(trimString_(p.accountAccessToken || p.dashboardAccessToken) || trimString_(p.accountId));
+}
+
+function resolvePortalAccountDirectAccess_(payload, options) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const accessToken = trimString_(p.accountAccessToken || p.dashboardAccessToken);
+  const accountId = trimString_(p.accountId);
+  if (!accessToken && !accountId) {
+    return { ok: false, code: 'account_dashboard_context_required', error: 'Missing account dashboard link.' };
+  }
+  let accountInfo = accessToken
+    ? getPortalAccountByAccessToken_(accessToken, { cfg: cfg, ss: ss, infra: infra })
+    : null;
+  if (!accountInfo && accountId) {
+    accountInfo = getPortalAccountByAccountId_(accountId, { cfg: cfg, ss: ss, infra: infra });
+  }
+  if (!accountInfo || !accountInfo.rowInfo) {
+    return { ok: false, code: 'account_dashboard_not_found', error: 'Account dashboard link not found.' };
+  }
+  accountInfo = ensurePortalAccountAccessToken_(accountInfo, { cfg: cfg, ss: ss, infra: infra }) || accountInfo;
+  return {
+    ok: true,
+    accountInfo: accountInfo,
+    accountSummary: accountInfo.summary,
+    identity: buildAccountIdentityFromPortalAccountSummary_(accountInfo.summary)
+  };
+}
+
 function getAccountStatus(payload) {
   try {
     const p = (payload && typeof payload === 'object') ? payload : {};
@@ -4870,6 +5130,23 @@ function getAccountStatus(payload) {
 
     let identity = buildAccountIdentityFromInputs_(p);
     let rowInfo = null;
+
+    if (hasPortalAccountDirectAccessPayload_(p) && !trimString_(p.sessionId) && !trimString_(p.token)) {
+      const directAccount = resolvePortalAccountDirectAccess_(p, { cfg: cfg, ss: ss, infra: infra });
+      if (!directAccount || directAccount.ok !== true) return directAccount;
+      const accountSummary = directAccount.accountSummary || {};
+      return {
+        ok: true,
+        accessMode: 'account',
+        accountSummary: accountSummary,
+        latestOrderSummary: null,
+        termsDocumentUrl: accountSummary.termsDocumentUrl || cfg.termsDocumentUrl,
+        placeholders: {
+          termsDriveFolderId: cfg.termsDriveFolderId,
+          taxExemptDriveFolderId: cfg.taxExemptDriveFolderId
+        }
+      };
+    }
 
     if (trimString_(p.sessionId)) {
       const userCtx = getUserContextBySessionId_(ss, p.sessionId);
@@ -5079,19 +5356,19 @@ function reconcileAchCheckoutReturnOrderToPending_(orderInfo, sessionObj, rowInf
 function reconcileCheckoutReturn_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   const token = trimString_(p.token);
-  if (!token) return { ok: false, code: 'missing_token', error: 'Missing token.' };
   const checkoutResult = normalizeCheckoutReturnIntentValue_(p.checkoutResult);
   const setupResult = normalizeCheckoutReturnIntentValue_(p.setupResult);
   const stripeSessionId = trimString_(p.stripeSessionId);
   if (!checkoutResult && !setupResult) {
     return { ok: false, code: 'missing_return_intent', error: 'Missing checkout return intent.' };
   }
+  if (!token && !setupResult) return { ok: false, code: 'missing_token', error: 'Missing token.' };
 
   const cfg = getConfig_();
   const ss = SpreadsheetApp.openById(cfg.sheetId);
   const infra = ensurePortalInfrastructure_(ss, cfg);
-  const rowInfo = findRowByToken_(infra.exportSheet, token);
-  if (!rowInfo) return { ok: false, code: 'token_not_found', error: 'Token not found.' };
+  const rowInfo = token ? findRowByToken_(infra.exportSheet, token) : null;
+  if (token && !rowInfo) return { ok: false, code: 'token_not_found', error: 'Token not found.' };
 
   let sessionObj = null;
   if (stripeSessionId) {
@@ -5108,20 +5385,33 @@ function reconcileCheckoutReturn_(payload) {
   }
 
   const sessionToken = sessionObj ? trimString_(extractStripeMetadataValue_(sessionObj, 'token')) : '';
-  if (sessionToken && sessionToken !== token) {
+  if (sessionToken && token && sessionToken !== token) {
     return { ok: false, code: 'stripe_session_token_mismatch', error: 'Stripe checkout session does not belong to this project.' };
   }
 
   if (setupResult) {
     let accountInfo = null;
+    if (hasPortalAccountDirectAccessPayload_(p)) {
+      const directAccount = resolvePortalAccountDirectAccess_(p, { cfg: cfg, ss: ss, infra: infra });
+      if (!directAccount || directAccount.ok !== true) return directAccount;
+      accountInfo = directAccount.accountInfo;
+    }
     let status = setupResult === 'cancel' ? 'cancel' : 'setup_pending';
     if (sessionObj && setupResult === 'success') {
+      const sessionAccountId = trimString_(extractStripeMetadataValue_(sessionObj, 'accountId') || sessionObj.client_reference_id);
+      const requestAccountId = trimString_(accountInfo && accountInfo.summary && accountInfo.summary.accountId);
+      if (sessionAccountId && requestAccountId && sessionAccountId !== requestAccountId) {
+        return { ok: false, code: 'stripe_setup_account_mismatch', error: 'Stripe setup session does not belong to this account.' };
+      }
       const setupHandled = handleCheckoutSetupSessionCompleted_(sessionObj, { cfg: cfg, ss: ss, infra: infra });
       if (setupHandled && setupHandled.ok === false) return setupHandled;
       if (setupHandled && setupHandled.ignored !== true) {
         status = 'setup_processed';
         accountInfo = setupHandled.accountSummary ? { summary: setupHandled.accountSummary } : null;
       }
+    }
+    if (!accountInfo && token && rowInfo) {
+      accountInfo = null;
     }
     return buildCheckoutReturnResponse_(status, token, rowInfo, null, accountInfo, {
       cfg: cfg,
@@ -5197,8 +5487,15 @@ function reconcileCheckoutReturn(payload) {
 
 function buildStripeSetupReturnUrl_(token, options) {
   const opts = (options && typeof options === 'object') ? options : {};
+  const accountSummary = (opts.accountSummary && typeof opts.accountSummary === 'object') ? opts.accountSummary : {};
+  const dashboardUrl = (opts.dashboardReturn === true || trimString_(accountSummary.accountId) || trimString_(accountSummary.accountAccessToken))
+    ? buildExternalPortalDashboardUrl_(accountSummary, {
+      cfg: getConfig_(),
+      returnUrl: opts.returnUrl
+    })
+    : '';
   const baseUrl = buildStripeReturnBaseUrl_(token, {
-    returnUrl: trimString_(opts.returnUrl || buildExternalPortalUrl_(token) || getConfig_().stripeReturnUrl || buildPortalDirectUrl_(token) || getWebAppUrl_())
+    returnUrl: trimString_(dashboardUrl || opts.returnUrl || buildExternalPortalUrl_(token) || getConfig_().stripeReturnUrl || buildPortalDirectUrl_(token) || getWebAppUrl_())
   });
   return appendQueryParamsToUrl_(baseUrl, opts.queryParams || {})
     .replace(/%7BCHECKOUT_SESSION_ID%7D/gi, '{CHECKOUT_SESSION_ID}');
@@ -5207,6 +5504,12 @@ function buildStripeSetupReturnUrl_(token, options) {
 function validateAchSetupDashboardAuthorization_(ctx, payload) {
   const context = (ctx && typeof ctx === 'object') ? ctx : {};
   const p = (payload && typeof payload === 'object') ? payload : {};
+  if (context.directAccountAccess === true && hasPortalAccountDirectAccessPayload_(p)) {
+    return {
+      ok: true,
+      directAccountAccess: true
+    };
+  }
   const sessionId = trimString_(p.sessionId);
   if (!sessionId) {
     return {
@@ -5254,9 +5557,6 @@ function validateAchSetupDashboardAuthorization_(ctx, payload) {
 
 function createAchSetupSession_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
-  if (!trimString_(p.sessionId)) {
-    return { ok: false, error: 'Missing account session.' };
-  }
   const ctx = buildAccountDocumentContext_(p);
   if (!ctx || ctx.ok !== true) return ctx || { ok: false, error: 'Unable to load account.' };
   if (ctx.cfg.stripeAchEnabled !== true) {
@@ -5267,6 +5567,11 @@ function createAchSetupSession_(payload) {
   }
   const authResult = validateAchSetupDashboardAuthorization_(ctx, p);
   if (!authResult || authResult.ok !== true) return authResult;
+  ctx.accountInfo = ensurePortalAccountAccessToken_(ctx.accountInfo, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra
+  }) || ctx.accountInfo;
   const customerResult = ensureStripeCustomerForPortalAccount_(ctx, {
     cfg: ctx.cfg,
     ss: ctx.ss,
@@ -5282,8 +5587,11 @@ function createAchSetupSession_(payload) {
   }
   ctx.accountInfo = customerResult.accountInfo || ctx.accountInfo;
   const token = resolveAccountDocumentPortalToken_(ctx) || trimString_(p.token);
+  const setupAccountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const successUrl = buildStripeSetupReturnUrl_(token, {
     returnUrl: trimString_(p.returnUrl),
+    dashboardReturn: true,
+    accountSummary: setupAccountSummary,
     queryParams: {
       setupResult: 'success',
       stripeSessionId: '{CHECKOUT_SESSION_ID}'
@@ -5291,6 +5599,8 @@ function createAchSetupSession_(payload) {
   });
   const cancelUrl = buildStripeSetupReturnUrl_(token, {
     returnUrl: trimString_(p.returnUrl),
+    dashboardReturn: true,
+    accountSummary: setupAccountSummary,
     queryParams: {
       setupResult: 'cancel'
     }
@@ -6112,14 +6422,22 @@ function hasUsableCheckoutSession_(stripe) {
 
 function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkoutIdentity) {
   const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
+  const payload = (ctx && ctx.payload && typeof ctx.payload === 'object') ? ctx.payload : {};
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const dashboardReturnUrl = payload.returnToDashboard === true
+    ? buildExternalPortalDashboardUrl_(accountSummary, {
+      cfg: ctx.cfg,
+      returnUrl: payload.returnUrl
+    })
+    : '';
   return {
     cfg: ctx.cfg,
-    accountSummary: ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {},
+    accountSummary: accountSummary,
     stripeCustomerId: trimString_(ctx.stripeCustomerId),
     paymentMethodSelected: paymentMethodSelected,
     checkoutAttemptId: trimString_(checkoutIdentity && checkoutIdentity.checkoutAttemptId),
     orderId: trimString_(checkoutIdentity && checkoutIdentity.orderId),
-    returnUrl: trimString_(ctx.payload.returnUrl || buildExternalPortalUrl_(token) || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(token))
+    returnUrl: trimString_(dashboardReturnUrl || payload.returnUrl || buildExternalPortalUrl_(token) || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(token))
   };
 }
 
@@ -7298,6 +7616,22 @@ function buildAccountDocumentContext_(payload) {
   const infra = ensurePortalInfrastructure_(ss, cfg);
   let identity = buildAccountIdentityFromInputs_(p);
   let exportRowInfo = null;
+
+  if (hasPortalAccountDirectAccessPayload_(p) && !trimString_(p.sessionId) && !trimString_(p.token)) {
+    const directAccount = resolvePortalAccountDirectAccess_(p, { cfg: cfg, ss: ss, infra: infra });
+    if (!directAccount || directAccount.ok !== true) return directAccount;
+    return {
+      ok: true,
+      payload: p,
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      identity: directAccount.identity,
+      exportRowInfo: null,
+      accountInfo: directAccount.accountInfo,
+      directAccountAccess: true
+    };
+  }
 
   if (trimString_(p.sessionId)) {
     const userCtx = getUserContextBySessionId_(ss, p.sessionId);
@@ -13749,6 +14083,7 @@ function buildPortalAccountSummary_(accountRow, cfg) {
   const taxExemptWorkflow = buildAccountDocumentWorkflowSummary_(row, ACCOUNT_DOCUMENT_TYPES.tax_exempt, cfg);
   const summary = {
     accountId: trimString_(row.accountid || row.accountId),
+    accountAccessToken: trimString_(row.accountaccesstoken || row.accountAccessToken),
     orgId: trimString_(row.orgid || row.orgId),
     orgName: trimString_(row.orgname || row.orgName),
     primaryEmail: normalizeEmail_(row.primaryemail || row.primaryEmail),
@@ -13947,6 +14282,7 @@ function createPortalAccountIfMissing_(opts) {
   const rowVals = new Array(accountsSheet.getLastColumn()).fill('');
 
   rowVals[colMap.accountid - 1] = newPortalId_('acct');
+  if (colMap.accountaccesstoken) rowVals[colMap.accountaccesstoken - 1] = newPortalAccountAccessToken_({ cfg: cfg, ss: ss, infra: infra });
   rowVals[colMap.orgid - 1] = identity.orgId;
   rowVals[colMap.orgname - 1] = identity.orgName;
   rowVals[colMap.primaryemail - 1] = identity.personEmail;
@@ -13990,6 +14326,45 @@ function buildExternalPortalUrl_(token) {
   const tokenValue = String(token || '').trim();
   if (!tokenValue) return '';
   return 'https://www.redthreads.com/portal?t=' + encodeURIComponent(tokenValue);
+}
+
+function isPublicRedThreadsPortalUrl_(value) {
+  const clean = trimString_(value);
+  if (!clean) return false;
+  try {
+    const parsed = new URL(clean);
+    const host = trimString_(parsed.hostname).toLowerCase();
+    const path = trimString_(parsed.pathname).replace(/\/+$/, '').toLowerCase();
+    return parsed.protocol === 'https:' &&
+      (host === 'www.redthreads.com' || host === 'redthreads.com') &&
+      (path === '/portal' || path === '');
+  } catch (_) {
+    return false;
+  }
+}
+
+function normalizePublicPortalReturnUrl_(value) {
+  const clean = trimString_(value);
+  if (!isPublicRedThreadsPortalUrl_(clean)) return '';
+  return clean;
+}
+
+function buildExternalPortalDashboardUrl_(accountSummary, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const base = normalizePublicPortalReturnUrl_(opts.returnUrl) ||
+    normalizePublicPortalReturnUrl_(cfg.stripeReturnUrl) ||
+    'https://www.redthreads.com/portal';
+  const params = { dashboard: '1' };
+  const accessToken = trimString_(account.accountAccessToken);
+  const accountId = trimString_(account.accountId);
+  if (accessToken) {
+    params.accountAccessToken = accessToken;
+  } else if (accountId) {
+    params.accountId = accountId;
+  }
+  return appendQueryParamsToUrl_(base, params);
 }
 
 function buildTeamSnapshotPortalUrl_(token) {
@@ -14061,7 +14436,10 @@ function appendQueryParamsToUrl_(baseUrl, params) {
 
 function buildStripeReturnBaseUrl_(token, options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const base = trimString_(opts.returnUrl || buildExternalPortalUrl_(token) || getConfig_().stripeReturnUrl || buildPortalDirectUrl_(token));
+  const cfg = getConfig_();
+  const overrideUrl = normalizePublicPortalReturnUrl_(opts.returnUrl);
+  const configReturnUrl = normalizePublicPortalReturnUrl_(cfg.stripeReturnUrl);
+  const base = trimString_(overrideUrl || buildExternalPortalUrl_(token) || configReturnUrl || buildPortalDirectUrl_(token));
   if (!base) return '';
   const tokenValue = trimString_(token);
   if (!tokenValue) return base;
@@ -17948,14 +18326,21 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     }
   );
   markCheckoutTiming_(timing, 'stripe_session_start', { paymentMethodSelected: method });
+  const lockedAccountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const lockedReturnUrl = p.returnToDashboard === true
+    ? buildExternalPortalDashboardUrl_(lockedAccountSummary, {
+      cfg: ctx.cfg,
+      returnUrl: p.returnUrl
+    })
+    : buildPortalSummaryUrl_(ctx.orderDraft.token);
   const stripe = createStripeCheckoutSession_(orderDraft, {
     cfg: ctx.cfg,
-    accountSummary: ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {},
+    accountSummary: lockedAccountSummary,
     stripeCustomerId: trimString_(ctx.stripeCustomerId),
     paymentMethodSelected: method,
     checkoutAttemptId: checkoutAttemptId,
     orderId: trimString_(latestOrder.rowObjNormalized.orderid),
-    returnUrl: buildPortalSummaryUrl_(ctx.orderDraft.token),
+    returnUrl: lockedReturnUrl,
     suppressShippingAddressCollection: true,
     timing: timing
   });
