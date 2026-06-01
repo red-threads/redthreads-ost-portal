@@ -19466,11 +19466,17 @@
       }
       if (paymentMethod === 'ach' && workflow.isPaymentPending === true) {
         const approvedPending = workflow.achPaymentPendingProductionApproved === true;
+        const achDetailState = String(workflow.achDetailState || '').trim().toLowerCase();
+        const verificationPending = achDetailState === 'ach_microdeposit_pending' || achDetailState === 'ach_bank_verification_pending';
         return {
-          badge: approvedPending ? 'ACH Processing' : 'ACH Pending',
-          text: approvedPending
-            ? 'Order placed — ACH payment processing. Red Threads has approved production to begin while payment settles.'
-            : 'Order placed — ACH payment processing. Production will begin after payment is confirmed.',
+          badge: verificationPending ? 'Bank Verification Pending' : (approvedPending ? 'ACH Processing' : 'ACH Pending'),
+          text: verificationPending
+            ? (approvedPending
+              ? 'Order placed — bank verification pending. Use Stripe email if microdeposit verification is required. Red Threads has approved production to begin while payment settles.'
+              : 'Order placed — bank verification pending. Use Stripe email if microdeposit verification is required. Production will begin after payment is confirmed.')
+            : (approvedPending
+              ? 'Order placed — ACH payment processing. Red Threads has approved production to begin while payment settles.'
+              : 'Order placed — ACH payment processing. Production will begin after payment is confirmed.'),
           meta: updatedAt ? ('Updated ' + updatedAt) : ''
         };
       }
@@ -19645,7 +19651,29 @@
     const safeAccount = normalizeAccountSummary(account);
     const defaultId = String(safeAccount.defaultAchPaymentMethodId || '').trim();
     const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
-    return methods.find(item => item && (item.isDefault === true || (defaultId && item.paymentMethodId === defaultId))) || null;
+    return methods.find(item => item && isAchPaymentMethodUsableForCheckout_(item) && (item.isDefault === true || (defaultId && item.paymentMethodId === defaultId))) || null;
+  }
+
+  function isAchPaymentMethodUsableForCheckout_(method){
+    const item = (method && typeof method === 'object') ? method : {};
+    const status = String(item.status || '').trim().toLowerCase();
+    const verificationStatus = String(item.verificationStatus || '').trim().toLowerCase();
+    const signal = (status + ' ' + verificationStatus).trim();
+    if (!signal) return false;
+    if (/(blocked|removed|fail|failed|invalid|expired|timeout|exceeded|requires_payment_method)/i.test(signal)) return false;
+    if (/(pending|processing|microdeposit|requires_action|unverified)/i.test(signal)) return false;
+    return status === 'active' || status === 'verified' || status === 'succeeded' ||
+      verificationStatus === 'active' || verificationStatus === 'verified' || verificationStatus === 'succeeded';
+  }
+
+  function getMostRelevantAchPaymentMethodForUi_(account){
+    const safeAccount = normalizeAccountSummary(account);
+    const defaultAch = getDefaultAchPaymentMethodForUi_(safeAccount);
+    if (defaultAch) return defaultAch;
+    const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
+    return methods.slice().sort((a, b) => {
+      return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
+    }).find(item => item && item.paymentMethodId) || null;
   }
 
   function formatAchBankLabelForUi_(method, fallbackAccount){
@@ -19738,18 +19766,19 @@
     dashboardAccountMeta.appendChild(taxCard);
     if (isClientAchPaymentEnabled_()) {
       const defaultAch = getDefaultAchPaymentMethodForUi_(account);
-      const bankLabel = defaultAch ? formatAchBankLabelForUi_(defaultAch, account) : 'Add bank account';
-      const achStatus = defaultAch
-        ? getAchVerificationLabelForUi_(defaultAch.verificationStatus || account.defaultAchVerificationStatus || defaultAch.status)
+      const displayAch = defaultAch || getMostRelevantAchPaymentMethodForUi_(account);
+      const bankLabel = displayAch ? formatAchBankLabelForUi_(displayAch, account) : 'Add bank account';
+      const achStatus = displayAch
+        ? getAchVerificationLabelForUi_(displayAch.verificationStatus || displayAch.status || account.defaultAchVerificationStatus)
         : 'Secure Stripe setup';
       const achCard = buildDashboardAccountCard_(
         'Payment Methods',
         bankLabel,
         {
           interactive: true,
-          hoverValue: defaultAch ? achStatus : 'Connect bank',
-          stateClass: defaultAch ? 'isApproved' : 'isNotStarted',
-          ariaLabel: defaultAch ? 'Manage saved ACH bank account' : 'Add ACH bank account'
+          hoverValue: displayAch ? achStatus : 'Connect bank',
+          stateClass: defaultAch ? 'isApproved' : (displayAch ? 'isPending' : 'isNotStarted'),
+          ariaLabel: defaultAch ? 'Manage saved ACH bank account' : (displayAch ? 'Manage pending ACH bank verification' : 'Add ACH bank account')
         }
       );
       achCard.addEventListener('click', startDashboardAchSetupSession_);
@@ -19772,9 +19801,13 @@
     }
     if (isClientAchPaymentEnabled_()) {
       const defaultAch = getDefaultAchPaymentMethodForUi_(account);
+      const displayAch = defaultAch || getMostRelevantAchPaymentMethodForUi_(account);
       appendBullet(defaultAch
         ? ('ACH bank on file: ' + formatAchBankLabelForUi_(defaultAch, account) + '. Red Threads never stores full bank account numbers.')
-        : 'Securely connect a bank account for faster ACH checkout later. Red Threads never sees or stores your full bank account number.');
+        : (displayAch
+          ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(displayAch, account) + '. Use Stripe email if microdeposit verification is required.')
+          : 'Securely connect a bank account for faster ACH checkout later. Red Threads never sees or stores your full bank account number.')
+        );
     }
 
   }
@@ -19816,19 +19849,21 @@
     }
     const result = getCheckoutReturnResult_();
     if (!result) return null;
-    if (result === 'cancel') {
-      return {
-        message: 'Checkout canceled. Your order draft was saved, and you can restart payment whenever you are ready.',
-        type: 'ok'
-      };
-    }
-    if (result !== 'success') return null;
-
     const workflow = getPortalWorkflowContext_();
     const current = normalizeCurrentStateSummary(CURRENT_STATE_SUMMARY);
     const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
     const paymentState = String(current.currentPaymentState || '').trim().toLowerCase();
     const paymentMethod = String(workflow.paymentMethod || current.currentPaymentMethod || '').trim().toLowerCase();
+    const achDetailState = String(workflow.achDetailState || '').trim().toLowerCase();
+    if (result === 'cancel') {
+      return {
+        message: paymentMethod === 'ach'
+          ? 'ACH bank checkout canceled. You can retry ACH to use Stripe instant verification or manual entry, or choose another payment method.'
+          : 'Checkout canceled. Your order draft was saved, and you can restart payment whenever you are ready.',
+        type: 'ok'
+      };
+    }
+    if (result !== 'success') return null;
 
     if (paymentState === 'failed') {
       return {
@@ -19850,7 +19885,9 @@
     }
     if (paymentMethod === 'ach' || workflow.isPaymentPending === true || lifecycleState === 'awaiting_payment_confirmation') {
       return {
-        message: 'Order placed — ACH payment initiated. Bank payments can take a few business days to finish processing.',
+        message: achDetailState === 'ach_microdeposit_pending' || achDetailState === 'ach_bank_verification_pending'
+          ? 'Order placed — bank verification pending. Stripe may email a secure verification link if microdeposits are required.'
+          : 'Order placed — ACH payment initiated. Bank payments can take a few business days to finish processing.',
         type: 'ok'
       };
     }
@@ -38402,15 +38439,21 @@
     if (paymentMethodSelected === PAYMENT_METHODS.ach && paymentDue) {
       const achFailed = String(order.paymentState || '').trim().toLowerCase() === 'failed' ||
         String(lifecycle.achDetailState || '').trim().toLowerCase().indexOf('failed') >= 0;
+      const achDetailState = String(lifecycle.achDetailState || '').trim().toLowerCase();
+      const verificationPending = achDetailState === 'ach_microdeposit_pending' || achDetailState === 'ach_bank_verification_pending';
       return {
         isLocked: true,
         freeze: true,
         noteTone: achFailed ? 'alert' : (lifecycle.productionCurrent === true ? 'info' : 'alert'),
         noteText: achFailed
           ? 'Action needed — ACH payment failed. Retry payment from this invoice or choose another payment method.'
-          : (lifecycle.productionCurrent === true
-          ? 'ACH payment processing. Red Threads has approved production to begin while payment settles.'
-          : 'ACH payment processing. Production will begin after payment is confirmed.'),
+          : (verificationPending
+            ? (lifecycle.productionCurrent === true
+              ? 'Bank verification pending. Use Stripe email if microdeposit verification is required. Red Threads has approved production to begin while payment settles.'
+              : 'Bank verification pending. Use Stripe email if microdeposit verification is required. Production will begin after payment is confirmed.')
+            : (lifecycle.productionCurrent === true
+              ? 'ACH payment processing. Red Threads has approved production to begin while payment settles.'
+              : 'ACH payment processing. Production will begin after payment is confirmed.')),
         referenceDate: productionStartAt || submittedAt || null,
         submittedAt: submittedAt,
         paidAt: '',

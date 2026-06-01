@@ -52,13 +52,16 @@ The second command should show only redaction, safety, or documentation referenc
 15. ACH failure marks action needed and leaves retry payment available.
 16. Dashboard Payment Methods Add Bank launches hosted setup.
 17. Setup success stores a safe saved bank summary.
-18. Saved bank appears in Dashboard and ACH checkout copy.
-19. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
-20. Stale tab cannot overwrite paid, failed, locked, or superseded state.
-21. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
-22. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
-23. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
-24. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+18. Saved verified bank appears in Dashboard and ACH checkout copy.
+19. Pending/unverified ACH banks appear as verification pending in Dashboard but are not promoted as the default saved checkout bank.
+20. ACH Checkout Session payload requests saved bank redisplay for Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
+21. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
+22. Stale tab cannot overwrite paid, failed, locked, or superseded state.
+23. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
+24. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
+25. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
+26. ACH cancel return lets the user retry ACH through Stripe-hosted instant verification/manual entry or choose another payment method.
+27. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 
 ## ACH Event Smokes
 

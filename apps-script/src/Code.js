@@ -10005,6 +10005,16 @@ function mapAchPaymentMethodStatusFromVerification_(verificationStatus, fallback
   return fallback || 'active';
 }
 
+function normalizeAchSummaryVerificationStatus_(intentStatus, bankStatus) {
+  const intent = trimString_(intentStatus);
+  const bank = trimString_(bankStatus);
+  const intentRaw = intent.toLowerCase();
+  if (/(microdeposit|requires_action|verification_failed|requires_payment_method|fail|failed|timeout|exceeded|invalid|blocked)/i.test(intentRaw)) {
+    return intent;
+  }
+  return bank || intent;
+}
+
 function resolveAchPaymentMethodSummaryFromPaymentIntent_(paymentIntentObj, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const pi = (paymentIntentObj && typeof paymentIntentObj === 'object') ? paymentIntentObj : {};
@@ -12755,12 +12765,12 @@ function extractAchPaymentMethodSummaryFromStripe_(paymentMethodObj, options) {
   if (!hasBankPayload && methodType !== 'us_bank_account') return null;
   const paymentMethodId = trimString_(opts.paymentMethodId || method.id);
   if (!paymentMethodId) return null;
-  const verificationStatus = trimString_(
-    opts.verificationStatus ||
+  const bankVerificationStatus = trimString_(
     bank.status ||
     method.status ||
     (method.allow_redisplay === 'limited' ? 'verified' : '')
   );
+  const verificationStatus = normalizeAchSummaryVerificationStatus_(opts.verificationStatus, bankVerificationStatus);
   return normalizeAchPaymentMethodSummary_({
     paymentMethodId: paymentMethodId,
     bankName: bank.bank_name || bank.bankName || opts.bankName,
@@ -12783,8 +12793,23 @@ function getDefaultAchPaymentMethodForAccount_(accountSummary) {
   const defaultId = trimString_(account.defaultAchPaymentMethodId);
   const methods = normalizeAchPaymentMethodsJson_(account.achPaymentMethods || account.achPaymentMethodsJson);
   return methods.find(function(item) {
-    return item.isDefault === true || (defaultId && item.paymentMethodId === defaultId);
+    return isAchPaymentMethodUsableForDefault_(item) && (item.isDefault === true || (defaultId && item.paymentMethodId === defaultId));
   }) || null;
+}
+
+function isAchPaymentMethodUsableForDefault_(achMethod) {
+  const method = normalizeAchPaymentMethodSummary_(achMethod);
+  if (!method) return false;
+  const status = trimString_(method.status).toLowerCase();
+  const verificationStatus = trimString_(method.verificationStatus).toLowerCase();
+  if (/(blocked|removed|fail|failed|invalid|expired|timeout|exceeded|requires_payment_method)/i.test(status + ' ' + verificationStatus)) {
+    return false;
+  }
+  if (/(pending|processing|microdeposit|requires_action|unverified)/i.test(status + ' ' + verificationStatus)) {
+    return false;
+  }
+  return status === 'active' || status === 'verified' || status === 'succeeded' ||
+    verificationStatus === 'active' || verificationStatus === 'verified' || verificationStatus === 'succeeded';
 }
 
 function upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, options) {
@@ -12815,23 +12840,31 @@ function upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, options
     current.push(incoming);
   }
   const hasExistingDefault = current.some(function(item) {
-    return item.paymentMethodId !== incoming.paymentMethodId && item.isDefault === true && item.status !== 'removed';
+    return item.paymentMethodId !== incoming.paymentMethodId && item.isDefault === true && isAchPaymentMethodUsableForDefault_(item);
   });
-  const shouldDefault = incoming.isDefault === true || !trimString_(currentAccount.defaultAchPaymentMethodId) || !hasExistingDefault;
+  const incomingDefaultEligible = isAchPaymentMethodUsableForDefault_(incoming);
+  const shouldDefault = incomingDefaultEligible && (
+    incoming.isDefault === true ||
+    !trimString_(currentAccount.defaultAchPaymentMethodId) ||
+    !hasExistingDefault
+  );
   const normalized = current.map(function(item) {
+    const retainExistingDefault = item.isDefault === true && isAchPaymentMethodUsableForDefault_(item);
     return normalizeAchPaymentMethodSummary_(Object.assign({}, item, {
-      isDefault: shouldDefault ? item.paymentMethodId === incoming.paymentMethodId : item.isDefault === true
+      isDefault: shouldDefault ? item.paymentMethodId === incoming.paymentMethodId : retainExistingDefault
     }));
   }).filter(Boolean);
-  const defaultMethod = normalized.find(function(item) { return item.isDefault === true; }) || incoming;
+  const defaultMethod = normalized.find(function(item) {
+    return item.isDefault === true && isAchPaymentMethodUsableForDefault_(item);
+  }) || null;
   setRowValuesByHeaderMap_(accountsSheet, rowInfo.row, rowInfo.colMap, {
     achPaymentMethodsJson: JSON.stringify(normalized),
-    defaultAchPaymentMethodId: trimString_(defaultMethod.paymentMethodId),
-    defaultAchBankName: trimString_(defaultMethod.bankName),
-    defaultAchLast4: trimString_(defaultMethod.last4),
-    defaultAchVerificationStatus: trimString_(defaultMethod.verificationStatus),
-    defaultAchMandateId: trimString_(defaultMethod.mandateId),
-    defaultAchFinancialConnectionsAccountId: trimString_(defaultMethod.financialConnectionsAccountId),
+    defaultAchPaymentMethodId: defaultMethod ? trimString_(defaultMethod.paymentMethodId) : '',
+    defaultAchBankName: defaultMethod ? trimString_(defaultMethod.bankName) : '',
+    defaultAchLast4: defaultMethod ? trimString_(defaultMethod.last4) : '',
+    defaultAchVerificationStatus: defaultMethod ? trimString_(defaultMethod.verificationStatus) : '',
+    defaultAchMandateId: defaultMethod ? trimString_(defaultMethod.mandateId) : '',
+    defaultAchFinancialConnectionsAccountId: defaultMethod ? trimString_(defaultMethod.financialConnectionsAccountId) : '',
     updatedAt: now
   });
   const refreshed = buildRowInfoFromSheet_(accountsSheet, rowInfo.row);
@@ -12857,7 +12890,9 @@ function setDefaultAchPaymentMethodForAccount_(accountInfo, paymentMethodId, opt
       updatedAt: item.paymentMethodId === targetId ? nowIso_() : item.updatedAt
     }));
   }).filter(Boolean);
-  const defaultMethod = methods.find(function(item) { return item.paymentMethodId === targetId; }) || null;
+  const defaultMethod = methods.find(function(item) {
+    return item.paymentMethodId === targetId && isAchPaymentMethodUsableForDefault_(item);
+  }) || null;
   if (!defaultMethod) return info;
   setRowValuesByHeaderMap_(opts.accountsSheet || infra.accountsSheet, rowInfo.row, rowInfo.colMap, {
     achPaymentMethodsJson: JSON.stringify(methods),
@@ -12896,7 +12931,7 @@ function markAchPaymentMethodUnusable_(accountInfo, paymentMethodId, reason, opt
     }));
   }).filter(Boolean);
   const nextDefault = methods.find(function(item) {
-    return item.status === 'active';
+    return isAchPaymentMethodUsableForDefault_(item);
   }) || null;
   if (nextDefault) nextDefault.isDefault = true;
   setRowValuesByHeaderMap_(opts.accountsSheet || infra.accountsSheet, rowInfo.row, rowInfo.colMap, {
@@ -19218,6 +19253,8 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     permissions.forEach(function(permission, idx) {
       payload['payment_method_options[us_bank_account][financial_connections][permissions][' + idx + ']'] = trimString_(permission);
     });
+    payload['saved_payment_method_options[allow_redisplay_filters][0]'] = 'unspecified';
+    payload['saved_payment_method_options[allow_redisplay_filters][1]'] = 'always';
     if (cfg.stripeAchSaveForFuture === true) {
       payload['payment_intent_data[setup_future_usage]'] = 'off_session';
     }

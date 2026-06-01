@@ -97,6 +97,7 @@ Active ACH payment uses hosted Checkout:
 - Existing token, order, checkout attempt, fulfillment, and amount metadata
 
 Saved bank reuse is hosted-Checkout-mediated in V1. The portal shows the saved bank summary, but Stripe Checkout controls saved or new bank selection.
+ACH payment sessions include `saved_payment_method_options[allow_redisplay_filters]` for `unspecified` and `always` so saved verified Customer bank accounts can redisplay in Checkout. Portal default-bank fields are reserved for usable verified/active ACH methods; pending, failed, blocked, removed, or microdeposit-required methods remain in the safe saved-method list but are not treated as the default checkout bank.
 
 ## Dashboard Bank Setup
 
@@ -108,7 +109,7 @@ Dashboard Account Settings can start hosted bank setup through `createAchSetupSe
 - Financial Connections permission `payment_method`
 - Return parameters: `setupResult` and `stripeSessionId`
 
-The repo Squarespace wrapper forwards `setupResult`, but the live Squarespace code block must still be manually updated after deployment.
+The repo and live Squarespace wrappers forward `setupResult` into the Apps Script iframe.
 
 ## Production Policy
 
@@ -146,4 +147,3 @@ Handled event families:
 - `setup_intent.setup_failed`
 
 Raw Stripe event JSON is redacted before storage. Secret, account, routing, microdeposit, and Financial Connections raw values are removed or replaced with placeholders.
-
