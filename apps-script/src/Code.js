@@ -14727,15 +14727,21 @@ function buildExternalPortalUrl_(token) {
 function isPublicRedThreadsPortalUrl_(value) {
   const clean = trimString_(value);
   if (!clean) return false;
-  try {
-    const parsed = new URL(clean);
-    const host = trimString_(parsed.hostname).toLowerCase();
-    const path = trimString_(parsed.pathname).replace(/\/+$/, '').toLowerCase();
-    return parsed.protocol === 'https:' &&
+  function isAllowedPublicPortalParts_(protocol, hostValue, pathValue) {
+    const protocolText = trimString_(protocol).toLowerCase();
+    const host = trimString_(hostValue).toLowerCase();
+    const path = trimString_(pathValue).replace(/\/+$/, '').toLowerCase();
+    return protocolText === 'https:' &&
       (host === 'www.redthreads.com' || host === 'redthreads.com') &&
       (path === '/portal' || path === '');
+  }
+  try {
+    const parsed = new URL(clean);
+    return isAllowedPublicPortalParts_(parsed.protocol, parsed.hostname, parsed.pathname);
   } catch (_) {
-    return false;
+    const match = clean.match(/^(https:)?\/\/([^/?#]+)([^?#]*)?(?:[?#]|$)/i);
+    if (!match) return false;
+    return isAllowedPublicPortalParts_(match[1] || '', match[2] || '', match[3] || '');
   }
 }
 
