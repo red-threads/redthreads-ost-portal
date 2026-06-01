@@ -494,3 +494,16 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Fix tokenized dashboard ACH setup"` created version `853`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `853`.
 - Smoke tests: direct Apps Script `/exec` returned HTTP 200 and exposes `createAchSetupSession` and `getAchMicrodepositVerificationLink`; public wrapper `/portal` returned HTTP 200 and still targets the stable deployment ID; in-app browser smoke confirmed the public wrapper forwards `dashboard=1` and `accountId` into the stable Apps Script iframe. No bank flow, tokenized fixture payment, or real payment was initiated during this ship.
 - Follow-ups: run the internal Stripe test-mode Dashboard bank setup from a valid tokenized job dashboard link and confirm no `Sign in to Dashboard before adding a bank account` or `Missing required param: success_url` error occurs.
+
+## 2026-06-01 - Dashboard URL Routing Full Ship
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: mature the portal URL model so dashboard login, refresh, project navigation, Stripe returns, and browser Back/Forward can use durable public parent URLs instead of only in-memory dashboard state.
+- Files changed: `apps-script/src/Index.html`, `web/squarespace-portal-code-block.html`, `docs/ACH_SMOKE_TEST_PLAN.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added a centralized client route manager, promoted hydrated dashboard sessions to `?dashboard=1&accountAccessToken=...`, pushed project routes when opening projects from the dashboard, pushed dashboard routes when returning home, preserved durable route context while clearing one-time params, and updated the repo Squarespace wrapper to use one route allowlist plus Back/Forward iframe reload.
+- Behavior preservation: no `snapshotJson`, EXPORT_LOG wide-schema order, token lookup semantics, pricing authority, `Code.js`, `appsscript.json`, `.clasp.json`, Script Properties, Stripe live-mode setting, card checkout, PO, check/cash/manual, ACH storage, webhook, or Team Mode permission logic changed.
+- Validation before Apps Script ship: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, extracted wrapper script syntax check, `npm run validate:runtime`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Add dashboard URL routing"` created version `855`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `855`.
+- Smoke tests: direct Apps Script `/exec` and public wrapper `/portal` returned HTTP 200. Live parent Back/Forward route reload was not verified because the live Squarespace wrapper must still be manually refreshed from the repo wrapper for wrapper-layer changes to take effect.
+- Follow-ups: update the live Squarespace `/portal` code block from `web/squarespace-portal-code-block.html`, then smoke login URL promotion, refresh-on-dashboard, dashboard project open, browser Back/Forward, logout URL reset, and ACH setup return routing through the public wrapper.

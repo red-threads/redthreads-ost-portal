@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 23">23</div>
+  <div class="devRevisionBadge" aria-label="Development revision 24">24</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19971,6 +19971,7 @@
       const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
       window.history.replaceState({}, document.title, nextUrl);
     } catch (_) {}
+    syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
   }
 
   function getCheckoutReturnResult_(){
@@ -20845,6 +20846,23 @@
   const RT_PORTAL_EVENT_LOAD_TOKEN = 'RT_PORTAL_LOAD_TOKEN';
   const RT_PORTAL_EVENT_ROUTE_REPLACE = 'RT_PORTAL_ROUTE_REPLACE';
   const RT_PORTAL_EVENT_NAVIGATE = 'RT_PORTAL_NAVIGATE';
+  const RT_PORTAL_ROUTE_PARAM_KEYS = [
+    't',
+    'dashboard',
+    'accountId',
+    'accountAccessToken',
+    'checkoutResult',
+    'setupResult',
+    'stripeSessionId',
+    'summary',
+    'payNow',
+    'resumePo',
+    'poStage',
+    'accountDoc',
+    'accountDocAction',
+    'teamReview',
+    'mode'
+  ];
   const TEAM_MODE_UNLOCK_STORAGE_PREFIX = 'rtTeamModeUnlocked';
   const TEAM_MODE_AUTH_STORAGE_PREFIX = 'rtTeamModeAuth';
   const TEAM_MODE_SENDER_STORAGE_PREFIX = 'rtTeamModeSender';
@@ -21949,19 +21967,137 @@
     return cleanToken ? ('https://www.redthreads.com/portal?t=' + encodeURIComponent(cleanToken)) : '';
   }
 
-  function buildExternalPortalDashboardUrlForClient_(){
-    const params = new URLSearchParams();
-    params.set('dashboard', '1');
-    const accountAccessToken = String(DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim();
-    const accountId = String(DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
-    const dashboardToken = String(DASHBOARD_CONTEXT_TOKEN || CURRENT_TOKEN || '').trim();
+  function normalizePortalRouteHistoryMode_(value){
+    return String(value || '').trim().toLowerCase() === 'push' ? 'push' : 'replace';
+  }
+
+  function normalizePortalRouteParams_(params){
+    const source = (params && typeof params === 'object') ? params : {};
+    const normalized = {};
+    const token = String(source.t || source.token || '').trim();
+    if (token) normalized.t = token;
+
+    const dashboard = String(source.dashboard || '').trim();
+    if (dashboard === '1') normalized.dashboard = '1';
+
+    const accountId = String(source.accountId || '').trim();
+    const accountAccessToken = String(source.accountAccessToken || source.dashboardAccessToken || '').trim();
+    if (accountId) normalized.accountId = accountId;
+    if (accountAccessToken) normalized.accountAccessToken = accountAccessToken;
+
+    const checkoutResult = normalizeCheckoutReturnResultValue_(source.checkoutResult);
+    const setupResult = normalizeSetupReturnResultValue_(source.setupResult);
+    if (checkoutResult) normalized.checkoutResult = checkoutResult;
+    if (setupResult) normalized.setupResult = setupResult;
+
+    const stripeSessionId = String(source.stripeSessionId || '').trim();
+    if (stripeSessionId) normalized.stripeSessionId = stripeSessionId;
+
+    ['summary', 'resumePo'].forEach(key => {
+      if (String(source[key] || '').trim() === '1') normalized[key] = '1';
+    });
+
+    ['payNow', 'poStage', 'accountDoc', 'accountDocAction', 'teamReview', 'mode'].forEach(key => {
+      const value = String(source[key] || '').trim();
+      if (value) normalized[key] = value;
+    });
+
+    return normalized;
+  }
+
+  function applyPortalRouteParamsToUrl_(url, params){
+    const targetUrl = url instanceof URL ? url : new URL(window.location.href);
+    const normalized = normalizePortalRouteParams_(params);
+    targetUrl.searchParams.delete('token');
+    targetUrl.searchParams.delete('dashboardAccessToken');
+    RT_PORTAL_ROUTE_PARAM_KEYS.forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(normalized, key) && normalized[key]) {
+        targetUrl.searchParams.set(key, normalized[key]);
+      } else {
+        targetUrl.searchParams.delete(key);
+      }
+    });
+    return targetUrl;
+  }
+
+  function buildCurrentPortalRouteUrl_(params){
+    const url = applyPortalRouteParamsToUrl_(new URL(window.location.href), params);
+    return url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
+  }
+
+  function buildPortalRouteMessage_(params, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const normalized = normalizePortalRouteParams_(params);
+    const historyMode = normalizePortalRouteHistoryMode_(opts.historyMode);
+    return {
+      source: 'redthreads-portal',
+      type: RT_PORTAL_EVENT_ROUTE_REPLACE,
+      historyMode: historyMode,
+      params: normalized,
+      payload: {
+        params: normalized
+      }
+    };
+  }
+
+  function updateCurrentPortalRoute_(params, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const normalized = normalizePortalRouteParams_(params);
+    const historyMode = normalizePortalRouteHistoryMode_(opts.historyMode);
+    const messageSent = postPortalMessageToTop_(buildPortalRouteMessage_(normalized, {
+      historyMode: historyMode
+    }));
+
+    try {
+      if (window.history && window.location) {
+        const nextUrl = buildCurrentPortalRouteUrl_(normalized);
+        const currentUrl = window.location.pathname + (window.location.search || '') + (window.location.hash || '');
+        if (nextUrl !== currentUrl) {
+          if (historyMode === 'push' && typeof window.history.pushState === 'function') {
+            window.history.pushState({ routeParams: normalized }, document.title, nextUrl);
+          } else if (typeof window.history.replaceState === 'function') {
+            window.history.replaceState({ routeParams: normalized }, document.title, nextUrl);
+          }
+        }
+      }
+    } catch (_) {}
+
+    return messageSent;
+  }
+
+  function buildPortalDashboardRouteParams_(extraParams){
+    const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
+    const accountAccessToken = String(extra.accountAccessToken || DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim();
+    const accountId = String(extra.accountId || DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
+    const dashboardToken = String(extra.t || extra.token || DASHBOARD_CONTEXT_TOKEN || CURRENT_TOKEN || '').trim();
+    const params = Object.assign({}, extra, { dashboard: '1' });
     if (accountAccessToken) {
-      params.set('accountAccessToken', accountAccessToken);
+      params.accountAccessToken = accountAccessToken;
+      delete params.accountId;
+      delete params.t;
+      delete params.token;
     } else if (accountId) {
-      params.set('accountId', accountId);
+      params.accountId = accountId;
+      delete params.t;
+      delete params.token;
     } else if (dashboardToken) {
-      params.set('t', dashboardToken);
+      params.t = dashboardToken;
     }
+    return normalizePortalRouteParams_(params);
+  }
+
+  function syncCurrentPortalDashboardRoute_(options){
+    if (!hasDashboardAccountContext_() && !hasDashboardTokenContext_()) return false;
+    const opts = (options && typeof options === 'object') ? options : {};
+    return updateCurrentPortalRoute_(buildPortalDashboardRouteParams_(opts), {
+      historyMode: opts.historyMode
+    });
+  }
+
+  function buildExternalPortalDashboardUrlForClient_(){
+    const params = new URLSearchParams(buildPortalDashboardRouteParams_({
+      t: String(DASHBOARD_CONTEXT_TOKEN || CURRENT_TOKEN || '').trim()
+    }));
     return 'https://www.redthreads.com/portal?' + params.toString();
   }
 
@@ -21970,61 +22106,30 @@
   }
 
   function buildPortalRouteParams_(token, extraParams){
-    const params = {};
-    const cleanToken = String(token || '').trim();
+    const params = (extraParams && typeof extraParams === 'object') ? Object.assign({}, extraParams) : {};
+    const cleanToken = String(token || params.t || params.token || '').trim();
     const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
     if (cleanToken) params.t = cleanToken;
-    if (extra.checkoutResult === 'success' || extra.checkoutResult === 'cancel') {
-      params.checkoutResult = extra.checkoutResult;
-    }
-    if (extra.setupResult === 'success' || extra.setupResult === 'cancel') {
-      params.setupResult = extra.setupResult;
-    }
-    if (extra.stripeSessionId) {
-      params.stripeSessionId = String(extra.stripeSessionId || '').trim();
-    }
-    if (extra.dashboard === '1') params.dashboard = '1';
-    if (extra.accountId) params.accountId = String(extra.accountId || '').trim();
-    if (extra.accountAccessToken) params.accountAccessToken = String(extra.accountAccessToken || '').trim();
-    return params;
+    if (extra.summary === '1') params.summary = '1';
+    if (extra.mode) params.mode = extra.mode;
+    return normalizePortalRouteParams_(params);
   }
 
   function buildPortalRouteReplaceMessage_(token, extraParams){
-    const params = buildPortalRouteParams_(token, extraParams);
-    return {
-      source: 'redthreads-portal',
-      type: RT_PORTAL_EVENT_ROUTE_REPLACE,
-      params: params,
-      payload: {
-        params: params
-      }
-    };
+    const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
+    return buildPortalRouteMessage_(buildPortalRouteParams_(token, extra), {
+      historyMode: extra.historyMode
+    });
   }
 
   function replaceCurrentPortalProjectRoute_(token, extraParams){
-    const cleanToken = String(token || '').trim();
+    const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
+    const cleanToken = String(token || extra.t || extra.token || '').trim();
     if (!cleanToken) return false;
 
-    const params = buildPortalRouteParams_(cleanToken, extraParams);
-    const messageSent = postPortalMessageToTop_(buildPortalRouteReplaceMessage_(cleanToken, extraParams));
-
-    try {
-      if (window.history && window.location && typeof window.history.replaceState === 'function') {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('token');
-        ['t', 'checkoutResult', 'setupResult', 'stripeSessionId', 'dashboard', 'accountId', 'accountAccessToken'].forEach(key => {
-          if (Object.prototype.hasOwnProperty.call(params, key) && params[key]) {
-            url.searchParams.set(key, params[key]);
-          } else {
-            url.searchParams.delete(key);
-          }
-        });
-        const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
-        window.history.replaceState({ token: cleanToken }, document.title, nextUrl);
-      }
-    } catch (_) {}
-
-    return messageSent;
+    return updateCurrentPortalRoute_(buildPortalRouteParams_(cleanToken, extra), {
+      historyMode: extra.historyMode
+    });
   }
 
   function isStripeCheckoutUrl_(url){
@@ -23219,6 +23324,9 @@
         setDashboardSessionContext_();
       } else {
         setDashboardTokenContext_(cleanToken);
+      }
+      if (source === 'dashboard' || normalizePortalRouteHistoryMode_(opts.historyMode) === 'push') {
+        replaceCurrentPortalProjectRoute_(cleanToken, { historyMode: 'push' });
       }
       applyPortalPayloadInPlace(resp.portalPayload, {
         source: source,
@@ -25133,6 +25241,7 @@
           if (dashboardHomeData) {
             resetDashboardHomeTransientState_();
             applyDashboardHomeData(dashboardHomeData);
+            syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
             if (AUTH_SESSION_ID) {
               setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
               await new Promise(resolve => requestAnimationFrame(resolve));
@@ -25140,6 +25249,7 @@
             setAuthMessage('', false, { view: VIEW_DASHBOARD });
           } else {
             await loadProjectsForHome({ suppressLoadingMessage: true, awaitPaint: true });
+            syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
             if (AUTH_SESSION_ID) {
               setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
               await new Promise(resolve => requestAnimationFrame(resolve));
@@ -25300,6 +25410,8 @@
           requestPayload: { sessionId: sid },
           suppressLoadingMessage: true,
           awaitPaint: true
+        }).then(() => {
+          syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
         }).catch(err => {
           setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
         });
@@ -25346,6 +25458,7 @@
 
       resetDashboardHomeTransientState_();
       applyDashboardHomeData(dashboardHomeData);
+      syncCurrentPortalDashboardRoute_({ historyMode: 'push' });
       setView(VIEW_DASHBOARD, { focus: false });
       if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
       await new Promise(resolve => requestAnimationFrame(resolve));
@@ -43100,6 +43213,7 @@
             suppressLoadingMessage: true,
             awaitPaint: true
           });
+          syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
           notifyPortalReady({ reason: 'dashboard-ready' });
         } finally {
           rtHideLoader();
@@ -43138,6 +43252,7 @@
           suppressLoadingMessage: true,
           awaitPaint: true
         });
+        syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
         notifyPortalReady({ reason: 'dashboard-ready' });
       } finally {
         rtHideLoader();

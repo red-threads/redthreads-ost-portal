@@ -274,43 +274,61 @@
     document.body.style.overflow = "hidden";
 
     var APP_URL = "https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec";
-    var queryParams = new URLSearchParams(window.location.search);
-    var iframeParams = new URLSearchParams();
-    var token = queryParams.get("t");
-    var checkoutResult = queryParams.get("checkoutResult");
-    var setupResult = queryParams.get("setupResult");
-    var stripeSessionId = queryParams.get("stripeSessionId");
-    var dashboard = queryParams.get("dashboard");
-    var accountId = queryParams.get("accountId");
-    var accountAccessToken = queryParams.get("accountAccessToken") || queryParams.get("dashboardAccessToken");
+    var ROUTE_PARAM_KEYS = [
+      "t",
+      "dashboard",
+      "accountId",
+      "accountAccessToken",
+      "checkoutResult",
+      "setupResult",
+      "stripeSessionId",
+      "summary",
+      "payNow",
+      "resumePo",
+      "poStage",
+      "accountDoc",
+      "accountDocAction",
+      "teamReview",
+      "mode"
+    ];
     var MOBILE_BLOCK_QUERY = "(max-width: 899px)";
 
-    if (token) {
-      iframeParams.set("t", token);
+    function getCurrentQueryParams() {
+      return new URLSearchParams(window.location.search);
     }
 
-    if (checkoutResult) {
-      iframeParams.set("checkoutResult", checkoutResult);
+    function normalizeRouteParamValue(key, value) {
+      var clean = String(value || "").trim();
+      if (!clean) return "";
+      if (key === "dashboard") return clean === "1" ? "1" : "";
+      if (key === "checkoutResult" || key === "setupResult") {
+        return clean === "success" || clean === "cancel" ? clean : "";
+      }
+      if (key === "summary" || key === "resumePo") return clean === "1" ? "1" : "";
+      return clean;
     }
 
-    if (setupResult) {
-      iframeParams.set("setupResult", setupResult);
+    function buildIframeParamsFromLocation() {
+      var source = getCurrentQueryParams();
+      var params = new URLSearchParams();
+      ROUTE_PARAM_KEYS.forEach(function (key) {
+        var raw = source.get(key);
+        if (key === "accountAccessToken" && !raw) {
+          raw = source.get("dashboardAccessToken");
+        }
+        var value = normalizeRouteParamValue(key, raw);
+        if (value) params.set(key, value);
+      });
+      return params;
     }
 
-    if (stripeSessionId) {
-      iframeParams.set("stripeSessionId", stripeSessionId);
+    function hasForwardedRouteParams(params) {
+      return !!(params && params.toString());
     }
 
-    if (dashboard === "1") {
-      iframeParams.set("dashboard", "1");
-    }
-
-    if (accountId) {
-      iframeParams.set("accountId", accountId);
-    }
-
-    if (accountAccessToken) {
-      iframeParams.set("accountAccessToken", accountAccessToken);
+    function buildIframeUrl(params) {
+      var query = params && params.toString ? params.toString() : "";
+      return query ? APP_URL + "?" + query : APP_URL;
     }
 
     var iframe = document.getElementById("rtPortalFrame");
@@ -321,7 +339,8 @@
     var mobileLink = document.getElementById("rtPortalMobileLink");
     var mobileCopyButton = document.getElementById("rtPortalMobileCopyButton");
     var mobileCopyStatus = document.getElementById("rtPortalMobileCopyStatus");
-    var shouldShowLoading = !!(token || checkoutResult || setupResult || stripeSessionId || dashboard || accountId || accountAccessToken);
+    var iframeParams = buildIframeParamsFromLocation();
+    var shouldShowLoading = hasForwardedRouteParams(iframeParams);
 
     function isMobileBlocked() {
       return !!(window.matchMedia && window.matchMedia(MOBILE_BLOCK_QUERY).matches);
@@ -389,9 +408,11 @@
       }
 
       iframe.dataset.rtPortalStarted = "1";
+      iframeParams = buildIframeParamsFromLocation();
+      shouldShowLoading = hasForwardedRouteParams(iframeParams);
 
       if (shouldShowLoading && loading) {
-        if (loadingTitle && token) {
+        if (loadingTitle && iframeParams.get("t")) {
           loadingTitle.textContent = "Loading project...";
         }
 
@@ -399,11 +420,11 @@
       }
 
       if (shouldShowLoading) {
-        iframe.addEventListener("load", hideLoading);
+        iframe.addEventListener("load", hideLoading, { once: true });
         window.setTimeout(hideLoading, 16000);
       }
 
-      iframe.src = iframeParams.toString() ? APP_URL + "?" + iframeParams.toString() : APP_URL;
+      iframe.src = buildIframeUrl(iframeParams);
     }
 
     function hideLoading() {
@@ -451,58 +472,61 @@
       return params && typeof params === "object" ? params : {};
     }
 
-    function replacePortalRoute(params) {
+    function getPortalHistoryMode(data) {
+      var payload = data && typeof data.payload === "object" ? data.payload : {};
+      var mode = String((data && data.historyMode) || payload.historyMode || "").toLowerCase();
+      return mode === "push" ? "push" : "replace";
+    }
+
+    function replacePortalRoute(params, historyMode) {
       var nextParams = new URLSearchParams(window.location.search);
-      var tokenValue = params.t || params.token || "";
-      var checkoutValue = params.checkoutResult || "";
-      var setupValue = params.setupResult || "";
-      var sessionValue = params.stripeSessionId || "";
-      var dashboardValue = params.dashboard || "";
-      var accountIdValue = params.accountId || "";
-      var accountAccessTokenValue = params.accountAccessToken || params.dashboardAccessToken || "";
+      var normalized = {};
+      ROUTE_PARAM_KEYS.forEach(function (key) {
+        nextParams.delete(key);
+      });
+      nextParams.delete("token");
+      nextParams.delete("dashboardAccessToken");
 
-      if (tokenValue) {
-        nextParams.set("t", String(tokenValue));
-      }
-
-      if (checkoutValue === "success" || checkoutValue === "cancel") {
-        nextParams.set("checkoutResult", checkoutValue);
-      } else {
-        nextParams.delete("checkoutResult");
-      }
-
-      if (setupValue === "success" || setupValue === "cancel") {
-        nextParams.set("setupResult", setupValue);
-      } else {
-        nextParams.delete("setupResult");
-      }
-
-      if (sessionValue) {
-        nextParams.set("stripeSessionId", String(sessionValue));
-      } else {
-        nextParams.delete("stripeSessionId");
-      }
-
-      if (dashboardValue === "1") {
-        nextParams.set("dashboard", "1");
-      } else {
-        nextParams.delete("dashboard");
-      }
-
-      if (accountIdValue) {
-        nextParams.set("accountId", String(accountIdValue));
-      } else {
-        nextParams.delete("accountId");
-      }
-
-      if (accountAccessTokenValue) {
-        nextParams.set("accountAccessToken", String(accountAccessTokenValue));
-      } else {
-        nextParams.delete("accountAccessToken");
-      }
+      ROUTE_PARAM_KEYS.forEach(function (key) {
+        var raw = key === "accountAccessToken"
+          ? (params.accountAccessToken || params.dashboardAccessToken)
+          : (key === "t" ? (params.t || params.token) : params[key]);
+        var value = normalizeRouteParamValue(key, raw);
+        if (!value) return;
+        normalized[key] = value;
+        nextParams.set(key, value);
+      });
 
       var nextUrl = window.location.pathname + (nextParams.toString() ? "?" + nextParams.toString() : "");
-      window.history.replaceState({}, "", nextUrl);
+      if (nextUrl === window.location.pathname + window.location.search) return;
+      if (historyMode === "push") {
+        window.history.pushState({ routeParams: normalized }, "", nextUrl);
+      } else {
+        window.history.replaceState({ routeParams: normalized }, "", nextUrl);
+      }
+      syncMobileCopyLink();
+    }
+
+    function reloadPortalFrameFromCurrentRoute() {
+      iframeParams = buildIframeParamsFromLocation();
+      shouldShowLoading = hasForwardedRouteParams(iframeParams);
+      syncMobileCopyLink();
+      if (isMobileBlocked()) {
+        showMobileBlock();
+        return;
+      }
+      hideMobileBlock();
+      if (!iframe) return;
+      iframe.dataset.rtPortalStarted = "1";
+      if (shouldShowLoading && loading) {
+        loading.classList.remove("is-hidden");
+        if (loadingTitle) {
+          loadingTitle.textContent = iframeParams.get("t") ? "Loading project..." : "Loading portal...";
+        }
+        iframe.addEventListener("load", hideLoading, { once: true });
+        window.setTimeout(hideLoading, 16000);
+      }
+      iframe.src = buildIframeUrl(iframeParams);
     }
 
     window.addEventListener("message", function (event) {
@@ -512,7 +536,7 @@
       if (data.source !== "redthreads-portal") return;
 
       if (data.type === "RT_PORTAL_ROUTE_REPLACE") {
-        replacePortalRoute(getPortalMessageParams(data));
+        replacePortalRoute(getPortalMessageParams(data), getPortalHistoryMode(data));
         return;
       }
 
@@ -543,6 +567,7 @@
     }
 
     window.addEventListener("resize", syncMobileBlock);
+    window.addEventListener("popstate", reloadPortalFrameFromCurrentRoute);
     syncMobileBlock();
   })();
 </script>

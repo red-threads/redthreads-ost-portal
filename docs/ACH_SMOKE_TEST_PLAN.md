@@ -58,21 +58,24 @@ The second command should show only redaction, safety, or documentation referenc
 21. Tokenized dashboard links, such as `?t=<job-token>&dashboard=1`, can launch Dashboard ACH setup without requiring a separate dashboard login.
 22. Dashboard ACH setup sessions are created only when server-built `success_url` and `cancel_url` are non-empty public portal URLs, and the server accepts Stripe's literal `{CHECKOUT_SESSION_ID}` placeholder during validation.
 23. Tokenized or logged-in session dashboard ACH setup returns with `dashboard=1`, `setupResult`, `stripeSessionId`, and an account bearer context when available.
-24. Pending/unverified ACH banks appear as verification pending in Dashboard but are not promoted as the default saved checkout bank.
-25. ACH Checkout Session payload requests saved bank redisplay for Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
-26. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
-27. Stale tab cannot overwrite paid, failed, locked, or superseded state.
-28. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
-29. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
-30. Dashboard Payment Methods shows a pending microdeposit bank as an action and opens Stripe-hosted verification through `getAchMicrodepositVerificationLink`.
-31. The hosted verification URL is returned only to the browser for immediate navigation and is not stored in Sheets, docs, logs, browser state, or committed files.
-32. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
-33. ACH cancel return lets the user retry ACH through Stripe-hosted instant verification/manual entry or choose another payment method.
-34. ACH success return calls `reconcile_checkout_return` before URL cleanup and immediately shows locked pending-not-paid state if the webhook has not finalized yet.
-35. ACH return reconciliation disables Save, Place Order, and payment controls while it is refreshing server state.
-36. ACH pending-not-paid hydration is accepted as a post-checkout canonical state and routes the user to Summary/Invoice copy without waiting for a paid/finalized signal.
-37. ACH cancel return reconciliation preserves locked/pending canonical state if the order had already been placed, otherwise leaves retry/alternate payment available.
-38. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+24. Login from public `/portal` replaces the parent URL with `?dashboard=1&accountAccessToken=<account-access-token>` after dashboard hydration.
+25. Refreshing the account dashboard URL reloads the dashboard without returning to the login view.
+26. Opening a project from the dashboard pushes `?t=<project-token>`, and browser Back/Forward reloads the matching dashboard/project iframe route after the live wrapper has been refreshed from the repo copy.
+27. Pending/unverified ACH banks appear as verification pending in Dashboard but are not promoted as the default saved checkout bank.
+28. ACH Checkout Session payload requests saved bank redisplay for Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
+29. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
+30. Stale tab cannot overwrite paid, failed, locked, or superseded state.
+31. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
+32. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
+33. Dashboard Payment Methods shows a pending microdeposit bank as an action and opens Stripe-hosted verification through `getAchMicrodepositVerificationLink`.
+34. The hosted verification URL is returned only to the browser for immediate navigation and is not stored in Sheets, docs, logs, browser state, or committed files.
+35. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
+36. ACH cancel return lets the user retry ACH through Stripe-hosted instant verification/manual entry or choose another payment method.
+37. ACH success return calls `reconcile_checkout_return` before URL cleanup and immediately shows locked pending-not-paid state if the webhook has not finalized yet.
+38. ACH return reconciliation disables Save, Place Order, and payment controls while it is refreshing server state.
+39. ACH pending-not-paid hydration is accepted as a post-checkout canonical state and routes the user to Summary/Invoice copy without waiting for a paid/finalized signal.
+40. ACH cancel return reconciliation preserves locked/pending canonical state if the order had already been placed, otherwise leaves retry/alternate payment available.
+41. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 
 ## ACH Event Smokes
 
