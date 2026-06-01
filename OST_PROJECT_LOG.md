@@ -362,3 +362,15 @@ Append-only project memory for decisions, session summaries, validation results,
 - Sensitive-data search: targeted ACH search found only redaction/safety/documentation references plus pre-existing tax form direct-pay fields outside the ACH storage path; no new ACH path stores full bank account numbers, routing numbers, microdeposit values, or raw Financial Connections data.
 - Deployment state: not deployed. Stable Apps Script remains version `843` until explicit Full ship authorization.
 - Follow-ups: configure Script Properties, enable ACH Direct Debit in Stripe Dashboard, subscribe/verify the Cloud Run webhook forwarder event set, manually update the Squarespace `/portal` code block from the repo wrapper, then run the documented ACH smoke plan before committing/pushing the tranche.
+
+## 2026-06-01 - ACH V1 Hardening Full Ship
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: fix and ship the three ACH review hardening items found after ACH V1 deployment: redact tokenized URL fields from Stripe webhook audit JSON, block locked-invoice ACH Customer preparation while ACH is disabled, and prevent duplicate ACH success finalization/copy across distinct Stripe success event types.
+- Files changed: `apps-script/src/Code.js`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `redactStripeObjectForStorage_()` now redacts URL/redirect keys; `createLockedOrderPaymentCheckout_()` now returns `ach_checkout_disabled` before calling `prepareAchStripeCustomerForCheckout_()` when `STRIPE_ACH_ENABLED` is false; ACH success handlers preserve existing `paidAt` and skip second `finalizePortalAfterPayment()` calls when the order is already recorded paid; ACH-cleared system messages now have a semantic dedupe key.
+- Validation before Apps Script ship: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, and `git diff --check` passed. Targeted secret/raw-bank grep returned no committed Stripe secrets or raw bank assignment patterns.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Harden ACH webhook finalization"` created version `845`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `845`.
+- Smoke tests: direct Apps Script `/exec`, direct tokenized `/exec`, public wrapper `/portal`, and tokenized public wrapper returned HTTP 200; public wrapper target matched the stable deployment ID; decoded VM reported `achPaymentEnabled=true`, `mode=client`, and the ACH fixture remained `currentPaymentState=pending`, not paid. No bank flow or payment was initiated.
+- Follow-ups: continue the documented internal Stripe test-mode ACH flight test for dashboard setup, success/failure, microdeposit fallback if presented, approved-account pending-production exception, and webhook replay/idempotency before any live-mode pilot.

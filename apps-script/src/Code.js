@@ -10227,6 +10227,11 @@ function buildAchSuccessProductionStateUpdates_(orderInfo) {
   };
 }
 
+function hasPortalOrderRecordedPaidState_(orderInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  return !!trimString_(row.paidat) || trimString_(row.paymentstate).toLowerCase() === PAYMENT_STATES.paid;
+}
+
 function handleCheckoutSessionCompleted_(sessionObj, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   if (trimString_(sessionObj && sessionObj.mode).toLowerCase() === 'setup' ||
@@ -10424,6 +10429,7 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj, options) {
   });
   if (currentGuard.current === false) return currentGuard;
   const now = nowIso_();
+  const alreadyPaid = hasPortalOrderRecordedPaidState_(orderInfo);
   const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
   const nextDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(
     mergeOrderDraftShippingDetails_(currentDraft, sessionObj),
@@ -10472,7 +10478,7 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj, options) {
     orderState: successProductionState.orderState,
     productionAuthorizationState: successProductionState.productionAuthorizationState,
     lockedAt: trimString_(orderInfo.rowObjNormalized.lockedat) || now,
-    paidAt: now,
+    paidAt: trimString_(orderInfo.rowObjNormalized.paidat) || now,
     authorizedToProduceAt: trimString_(orderInfo.rowObjNormalized.authorizedtoproduceat) || now,
     achPaymentMethodId: achSummary ? achSummary.paymentMethodId : trimString_(orderInfo.rowObjNormalized.achpaymentmethodid),
     achBankName: achSummary ? achSummary.bankName : trimString_(orderInfo.rowObjNormalized.achbankname),
@@ -10493,12 +10499,14 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj, options) {
       orderSummary: buildPortalOrderSummary_(updatedOrder.rowObjNormalized),
       accountSummary: accountInfo && accountInfo.summary ? accountInfo.summary : getAccountStatus({ token: trimString_(rowInfo.rowObjNormalized.token) }).accountSummary
     });
-    finalizePortalAfterPayment({
-      token: trimString_(rowInfo.rowObjNormalized.token),
-      portalState: safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {}) || { printJobs: {} },
-      submittedAt: now,
-      systemMessage: 'ACH payment cleared on ' + now + '. Order authorized for production.'
-    });
+    if (!alreadyPaid) {
+      finalizePortalAfterPayment({
+        token: trimString_(rowInfo.rowObjNormalized.token),
+        portalState: safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {}) || { printJobs: {} },
+        submittedAt: now,
+        systemMessage: 'ACH payment cleared on ' + now + '. Order authorized for production.'
+      });
+    }
   }
   return { ok: true };
 }
@@ -10742,6 +10750,7 @@ function handlePaymentIntentSucceeded_(paymentIntentObj, options) {
     accountInfo = upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, { cfg: cfg, ss: ss, infra: infra });
   }
   const now = nowIso_();
+  const alreadyPaid = hasPortalOrderRecordedPaidState_(orderInfo);
   const successProductionState = buildAchSuccessProductionStateUpdates_(orderInfo);
   const eventUpdates = buildStripeLatestEventOrderUpdates_(opts.eventPayload, paymentIntentObj);
   const updatedOrder = updatePortalOrderState_(Object.assign({
@@ -10770,7 +10779,7 @@ function handlePaymentIntentSucceeded_(paymentIntentObj, options) {
   updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, updatedSummary);
   const token = trimString_(orderInfo.rowObjNormalized.token);
   const rowInfo = token ? findRowByToken_(infra.exportSheet, token) : null;
-  if (rowInfo) {
+  if (rowInfo && !alreadyPaid) {
     finalizePortalAfterPayment({
       token: token,
       portalState: safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {}) || { printJobs: {} },
@@ -11091,6 +11100,9 @@ function redactStripeObjectForStorage_(value, depth, parentKey) {
   if (level > 8) return '[redacted_depth_limit]';
   if (value == null) return value;
   const keyName = trimString_(parentKey).toLowerCase();
+  if (/(^|_)(url|uri)$|url$|uri$|redirect|return_url|success_url|cancel_url/i.test(keyName)) {
+    return '[redacted_url]';
+  }
   if (/(routing|account_number|accountnumber|bank_account_token|client_secret|secret|verification_code|microdeposit|address|phone|postal|zip|line1|line2|city|state|country)/i.test(keyName)) {
     return '[redacted]';
   }
@@ -17204,6 +17216,18 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
   markCheckoutTiming_(timing, 'context_build_start', { paymentMethodSelected: method });
   const ctx = buildOrderActionContext_(payload, timing);
   markCheckoutTiming_(timing, 'context_build_end', { paymentMethodSelected: method });
+  if (method === PAYMENT_METHODS.ach && ctx.cfg.stripeAchEnabled !== true) {
+    return attachCheckoutTiming_({
+      ok: false,
+      code: 'ach_checkout_disabled',
+      error: 'ACH bank payments are not currently available.'
+    }, timing, {
+      ok: false,
+      stage: 'payment_method_validation',
+      paymentMethodSelected: method,
+      code: 'ach_checkout_disabled'
+    });
+  }
   if (method === PAYMENT_METHODS.ach) {
     const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
     if (!achCustomer || achCustomer.ok !== true) {
@@ -19987,6 +20011,9 @@ function getChatMessageSemanticKey_(message) {
   const text = String(message.text || '').trim();
   if (sender === 'system' && /^Order placed successfully on .+\.$/.test(text)) {
     return 'system:order_placed_successfully';
+  }
+  if (sender === 'system' && /^ACH payment cleared on .+\. Order authorized for production\.$/.test(text)) {
+    return 'system:ach_payment_cleared';
   }
   return '';
 }
