@@ -111,7 +111,9 @@ Dashboard Account Settings can start hosted bank setup through `createAchSetupSe
 
 Account dashboard links are intentionally no-password bearer links for this V1 internal testing surface. Generated links should prefer `accountAccessToken`; raw `accountId` links are accepted for owner-requested compatibility. Treat both as sensitive access URLs and do not commit live account dashboard URLs.
 
-The repo Squarespace wrapper forwards `setupResult` and account-dashboard route parameters into the Apps Script iframe. The live Squarespace code block must be refreshed from the repo wrapper after this change before public account-dashboard links work end to end.
+Tokenized project dashboard links, such as `?t=<job-token>&dashboard=1`, are also treated as bearer access for that token's resolved account. The server permits ACH setup only when the token resolves through `EXPORT_LOG`, resolves to the same persisted `PORTAL_ACCOUNTS` account, and can build non-empty public portal `success_url` and `cancel_url` values before calling Stripe.
+
+The repo and live Squarespace wrappers forward `setupResult` and account-dashboard route parameters into the Apps Script iframe.
 
 If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The server retrieves the relevant PaymentIntent or SetupIntent, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, or microdeposit values in Sheets or logs.
 

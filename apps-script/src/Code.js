@@ -3298,11 +3298,18 @@ function buildDashboardHomeData_(options) {
   identity = resolveClientIdentityFromExportLog_(exportSheet, identity);
   email = normalizeEmail_(identity.personEmail || email);
 
-  const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
+  let accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
     cfg: cfg,
     ss: ss,
     infra: infra
   }));
+  if (accountInfo && accountInfo.rowInfo) {
+    accountInfo = ensurePortalAccountAccessToken_(accountInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    }) || accountInfo;
+  }
   const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(identity, cfg);
   const projects = listProjectsForEmail_(exportSheet, email, {
     cfg: cfg,
@@ -5166,11 +5173,18 @@ function getAccountStatus(payload) {
     }
     identity = resolveClientIdentityFromExportLog_(infra.exportSheet, identity);
 
-    const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
+    let accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
       cfg: cfg,
       ss: ss,
       infra: infra
     }));
+    if (accountInfo && accountInfo.rowInfo) {
+      accountInfo = ensurePortalAccountAccessToken_(accountInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      }) || accountInfo;
+    }
     const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(identity, cfg);
     if (rowInfo) {
       rowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, rowInfo, accountSummary) || rowInfo;
@@ -5501,6 +5515,22 @@ function buildStripeSetupReturnUrl_(token, options) {
     .replace(/%7BCHECKOUT_SESSION_ID%7D/gi, '{CHECKOUT_SESSION_ID}');
 }
 
+function isPortalAccountSummaryLinkedToExportRow_(accountSummary, exportRow) {
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const row = (exportRow && typeof exportRow === 'object') ? exportRow : {};
+  const rowIdentity = deriveOrgContextFromRow_(row);
+  const accountOrgId = trimString_(account.orgId);
+  const rowOrgId = trimString_(rowIdentity.orgId);
+  if (accountOrgId && rowOrgId && accountOrgId === rowOrgId) return true;
+
+  const rowEmail = normalizeEmail_(rowIdentity.personEmail || row[EXPORT_LOG_PERSON_EMAIL_HEADER] || row.primaryemail);
+  const accountEmails = normalizeEmailRecipients_([
+    account.primaryEmail,
+    account.billingContactEmail
+  ]);
+  return !!(rowEmail && accountEmails.indexOf(rowEmail) >= 0);
+}
+
 function validateAchSetupDashboardAuthorization_(ctx, payload) {
   const context = (ctx && typeof ctx === 'object') ? ctx : {};
   const p = (payload && typeof payload === 'object') ? payload : {};
@@ -5508,6 +5538,38 @@ function validateAchSetupDashboardAuthorization_(ctx, payload) {
     return {
       ok: true,
       directAccountAccess: true
+    };
+  }
+  const token = trimString_(p.token);
+  if (token) {
+    const exportRowInfo = context.exportRowInfo || null;
+    const exportRow = exportRowInfo && exportRowInfo.rowObjNormalized ? exportRowInfo.rowObjNormalized : {};
+    const exportToken = trimString_(exportRow.token);
+    const accountSummary = context.accountInfo && context.accountInfo.summary ? context.accountInfo.summary : {};
+    if (!exportRowInfo || !exportToken || exportToken !== token) {
+      return {
+        ok: false,
+        code: 'dashboard_token_invalid_for_ach_setup',
+        error: 'This dashboard link is not authorized to manage bank accounts.'
+      };
+    }
+    if (!context.accountInfo || !context.accountInfo.rowInfo || !trimString_(accountSummary.accountId)) {
+      return {
+        ok: false,
+        code: 'dashboard_token_account_required_for_ach_setup',
+        error: 'A portal account is required before adding a bank account.'
+      };
+    }
+    if (!isPortalAccountSummaryLinkedToExportRow_(accountSummary, exportRow)) {
+      return {
+        ok: false,
+        code: 'dashboard_token_account_mismatch_for_ach_setup',
+        error: 'This dashboard link is not authorized to manage bank accounts for this account.'
+      };
+    }
+    return {
+      ok: true,
+      tokenAccountAccess: true
     };
   }
   const sessionId = trimString_(p.sessionId);
@@ -5605,6 +5667,13 @@ function createAchSetupSession_(payload) {
       setupResult: 'cancel'
     }
   });
+  if (!successUrl || !cancelUrl || !isPublicRedThreadsPortalUrl_(successUrl) || !isPublicRedThreadsPortalUrl_(cancelUrl)) {
+    return {
+      ok: false,
+      code: 'ach_setup_return_url_unavailable',
+      error: 'Secure bank setup cannot start because the portal return URL is not configured.'
+    };
+  }
   const permissions = Array.isArray(ctx.cfg.stripeAchFinancialConnectionsPermissions) && ctx.cfg.stripeAchFinancialConnectionsPermissions.length
     ? ctx.cfg.stripeAchFinancialConnectionsPermissions
     : DEFAULT_STRIPE_ACH_FINANCIAL_CONNECTIONS_PERMISSIONS;
@@ -5840,7 +5909,7 @@ function resolveAchSetupMicrodepositVerificationCandidate_(ctx) {
 
 function getAchMicrodepositVerificationLink_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
-  if (!trimString_(p.token) && !trimString_(p.sessionId)) {
+  if (!trimString_(p.token) && !trimString_(p.sessionId) && !hasPortalAccountDirectAccessPayload_(p)) {
     return {
       ok: false,
       code: 'ach_verification_context_required',
@@ -5852,10 +5921,8 @@ function getAchMicrodepositVerificationLink_(payload) {
   if (ctx.cfg.stripeAchEnabled !== true) {
     return { ok: false, code: 'ach_verification_disabled', error: 'ACH bank verification is not currently available.' };
   }
-  if (trimString_(p.sessionId)) {
-    const authResult = validateAchSetupDashboardAuthorization_(ctx, p);
-    if (!authResult || authResult.ok !== true) return authResult;
-  }
+  const authResult = validateAchSetupDashboardAuthorization_(ctx, p);
+  if (!authResult || authResult.ok !== true) return authResult;
 
   const requestedType = trimString_(p.intentType).toLowerCase();
   let candidate = null;
@@ -7651,7 +7718,7 @@ function buildAccountDocumentContext_(payload) {
   }
   identity = resolveClientIdentityFromExportLog_(infra.exportSheet, identity);
 
-  const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
+  let accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
     cfg: cfg,
     ss: ss,
     infra: infra,
@@ -7660,6 +7727,13 @@ function buildAccountDocumentContext_(payload) {
     summary: buildEphemeralAccountSummary_(identity, cfg),
     rowInfo: null
   };
+  if (accountInfo && accountInfo.rowInfo) {
+    accountInfo = ensurePortalAccountAccessToken_(accountInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    }) || accountInfo;
+  }
   if (exportRowInfo) {
     exportRowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, exportRowInfo, accountInfo.summary) || exportRowInfo;
     identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(exportRowInfo.rowObjNormalized));
