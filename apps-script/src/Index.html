@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 22">22</div>
+  <div class="devRevisionBadge" aria-label="Development revision 23">23</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21329,7 +21329,7 @@
     const nextAccountId = String(account.accountId || DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
     const nextAccessToken = String(account.accountAccessToken || DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim();
     if (!nextAccountId && !nextAccessToken) return;
-    if (hasDashboardAccountContext_() || hasDashboardTokenContext_()) {
+    if (hasDashboardAccountContext_() || hasDashboardTokenContext_() || DASHBOARD_CONTEXT_MODE === 'session') {
       setDashboardAccountContext_(nextAccountId, nextAccessToken);
     }
   }

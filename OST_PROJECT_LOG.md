@@ -401,6 +401,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Smoke tests: direct Apps Script `/exec` returned HTTP 200 and contained the new ACH cancel and bank-verification-pending copy; public wrapper `/portal` returned HTTP 200 and still targets the stable deployment ID while forwarding `setupResult`, `checkoutResult`, and `stripeSessionId`. No bank flow, tokenized fixture payment, or real payment was initiated during this ship.
 - Follow-ups: run the live internal Stripe test-mode bank-flow flight test for dashboard setup, first-time ACH success, microdeposit fallback if presented, ACH failure, approved-account pending-production exception, and webhook replay/idempotency before any live-mode pilot.
 
+## 2026-06-01 - ACH Setup Return Validation Fix Full Ship
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: fix the live Dashboard ACH bank setup error where a logged-in dashboard user saw `Secure bank setup cannot start because the portal return URL is not configured`.
+- Root cause: Stripe setup success URLs intentionally contain the literal `{CHECKOUT_SESSION_ID}` placeholder, but the portal's pre-Stripe public URL guard parsed that placeholder as a normal URL value and rejected the otherwise valid public return URL before calling Stripe.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/ACH_SMOKE_TEST_PLAN.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added setup-return URL validation that normalizes Stripe's `{CHECKOUT_SESSION_ID}` placeholder only for the public portal guard; preserved the existing public Red Threads portal URL requirement; allowed logged-in session dashboards to promote hydrated account summaries into the account bearer return context; incremented the dev badge to `23`.
+- Behavior preservation: no `snapshotJson`, EXPORT_LOG wide-schema order, token lookup semantics, pricing authority, `appsscript.json`, `.clasp.json`, Script Properties, Stripe live-mode setting, Squarespace wrapper, card checkout, PO, check/cash/manual, or Team Mode permission logic changed.
+- Validation before Apps Script ship: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, a local placeholder-validation simulation, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Fix ACH setup return validation"` created version `854`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `854`.
+- Smoke tests: public wrapper `/portal` returned HTTP 200 and still targets the stable deployment ID; direct Apps Script `/exec` returned HTTP 200. No bank flow, tokenized fixture payment, real payment, Script Properties change, live-mode switch, or Squarespace update was performed during this ship.
+- Follow-ups: retry the Dashboard `ACH Bank Account` card while logged in; the previous return URL configuration error should be cleared, and any Stripe-hosted setup that opens must remain test-mode only until the internal ACH flight test is complete.
+
 ## 2026-06-01 - ACH Return Reconciliation Completion Full Ship
 
 - Mode: Full ship.

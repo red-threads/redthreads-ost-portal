@@ -5515,6 +5515,14 @@ function buildStripeSetupReturnUrl_(token, options) {
     .replace(/%7BCHECKOUT_SESSION_ID%7D/gi, '{CHECKOUT_SESSION_ID}');
 }
 
+function normalizeStripeCheckoutPlaceholderForUrlValidation_(value) {
+  return trimString_(value).replace(/\{CHECKOUT_SESSION_ID\}/g, 'cs_test_return_placeholder');
+}
+
+function isPublicRedThreadsStripeReturnUrl_(value) {
+  return isPublicRedThreadsPortalUrl_(normalizeStripeCheckoutPlaceholderForUrlValidation_(value));
+}
+
 function isPortalAccountSummaryLinkedToExportRow_(accountSummary, exportRow) {
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
   const row = (exportRow && typeof exportRow === 'object') ? exportRow : {};
@@ -5667,7 +5675,7 @@ function createAchSetupSession_(payload) {
       setupResult: 'cancel'
     }
   });
-  if (!successUrl || !cancelUrl || !isPublicRedThreadsPortalUrl_(successUrl) || !isPublicRedThreadsPortalUrl_(cancelUrl)) {
+  if (!successUrl || !cancelUrl || !isPublicRedThreadsStripeReturnUrl_(successUrl) || !isPublicRedThreadsStripeReturnUrl_(cancelUrl)) {
     return {
       ok: false,
       code: 'ach_setup_return_url_unavailable',
