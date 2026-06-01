@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 19">19</div>
+  <div class="devRevisionBadge" aria-label="Development revision 20">20</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19058,6 +19058,7 @@
       },
       portalState: {},
       chatLog: [],
+      featureFlags: clonePlainObject((VM && VM.featureFlags) || {}),
       postUrl: String((VM && VM.postUrl) || '').trim() || (window.location.origin + window.location.pathname),
       diagnostics: {
         shell: 'auth'

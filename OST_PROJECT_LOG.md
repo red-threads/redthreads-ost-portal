@@ -440,3 +440,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Expose ACH dashboard card"` created version `850`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `850`.
 - Smoke tests: direct Apps Script `/exec` returned HTTP 200 and contains `Development revision 19`, `ACH Bank Account`, `Connect ACH bank`, `Add ACH bank`, and `achPaymentEnabled`; public wrapper `/portal` returned HTTP 200, still targets the stable deployment ID, and includes the Stripe-hosted payment/verification navigation allowlist. No bank flow, tokenized fixture payment, or real payment was initiated during this ship.
 - Follow-ups: reload the client dashboard and confirm the account grid now shows `ACH Bank Account`; continue the internal Stripe test-mode bank-flow flight test for dashboard setup, first-time ACH success, microdeposit fallback if presented, ACH failure, approved-account pending-production exception, and webhook replay/idempotency before any live-mode pilot.
+
+## 2026-06-01 - Dashboard ACH Feature Flag Preservation Full Ship
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`.
+- Goal: fix the remaining live dashboard issue where the deployed badge and ACH card copy were present, but the authenticated dashboard still hid the ACH card.
+- Root cause: `applyAuthShellRuntimeState()` rebuilds the client auth/dashboard VM after login through `buildClientAuthShellVm()`, and that client-side VM omitted `featureFlags`. The dashboard ACH card is correctly gated by `isClientAchPaymentEnabled_()`, so the gate became false after the auth-shell reset even when the server-rendered boot VM had `achPaymentEnabled=true`.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `buildClientAuthShellVm()` now carries forward cloned `VM.featureFlags`, preserving `achPaymentEnabled` through login/dashboard state resets; the dev badge was incremented to `20`.
+- Behavior preservation: no `snapshotJson`, EXPORT_LOG wide-schema order, token lookup semantics, pricing authority, `Code.js`, `appsscript.json`, `.clasp.json`, Script Properties, Stripe live-mode setting, Squarespace wrapper, card checkout, PO, check/cash/manual, or Team Mode permission logic changed.
+- Validation before Apps Script ship: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, and `git diff --check` passed.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Preserve dashboard ACH feature flags"` created version `851`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` deployed at version `851`.
+- Smoke tests: direct Apps Script `/exec` returned HTTP 200 and contains `Development revision 20`, `ACH Bank Account`, and `achPaymentEnabled`; the in-app browser public wrapper reload showed dev badge `20`. The reload landed on the login screen, so authenticated dashboard visual confirmation remains for the owner after login.
+- Follow-ups: owner should log back into the dashboard and confirm the account grid now shows `ACH Bank Account`; continue the internal Stripe test-mode ACH bank-flow flight test before any live-mode pilot.
