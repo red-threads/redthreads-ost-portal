@@ -9966,6 +9966,45 @@ function extractFailureFromStripeObject_(stripeObj) {
   };
 }
 
+function hasStripeMicrodepositNextAction_(stripeObj) {
+  const obj = (stripeObj && typeof stripeObj === 'object') ? stripeObj : {};
+  const nextAction = (obj.next_action && typeof obj.next_action === 'object')
+    ? obj.next_action
+    : ((obj.nextAction && typeof obj.nextAction === 'object') ? obj.nextAction : {});
+  const type = trimString_(nextAction.type || nextAction.next_action_type).toLowerCase();
+  return type === 'verify_with_microdeposits' ||
+    !!(nextAction.verify_with_microdeposits && typeof nextAction.verify_with_microdeposits === 'object') ||
+    !!(nextAction.verifyWithMicrodeposits && typeof nextAction.verifyWithMicrodeposits === 'object');
+}
+
+function deriveAchVerificationStatusFromStripeIntent_(stripeObj, fallback) {
+  const obj = (stripeObj && typeof stripeObj === 'object') ? stripeObj : {};
+  const status = trimString_(obj.status).toLowerCase();
+  const failure = extractFailureFromStripeObject_(obj);
+  const failureSignal = [
+    failure.code,
+    failure.message
+  ].join(' ').toLowerCase();
+  if (hasStripeMicrodepositNextAction_(obj)) return 'microdeposit_pending';
+  if (failureSignal.indexOf('microdeposit') >= 0) {
+    if (/(timeout|exceeded|failed|mismatch|invalid)/i.test(failureSignal)) return 'verification_failed';
+    return 'microdeposit_pending';
+  }
+  if (status === 'requires_action') return 'microdeposit_pending';
+  if (status === 'requires_payment_method' && failureSignal) return 'verification_failed';
+  if (status === 'processing') return 'processing';
+  if (status === 'succeeded') return 'succeeded';
+  return trimString_(fallback);
+}
+
+function mapAchPaymentMethodStatusFromVerification_(verificationStatus, fallbackStatus) {
+  const fallback = trimString_(fallbackStatus);
+  const raw = trimString_(verificationStatus).toLowerCase();
+  if (/(fail|failed|failure|blocked|invalid|expired|timeout|exceeded|requires_payment_method)/i.test(raw)) return 'failed';
+  if (/(pending|processing|microdeposit|requires_action|unverified)/i.test(raw)) return 'pending';
+  return fallback || 'active';
+}
+
 function resolveAchPaymentMethodSummaryFromPaymentIntent_(paymentIntentObj, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const pi = (paymentIntentObj && typeof paymentIntentObj === 'object') ? paymentIntentObj : {};
@@ -9981,12 +10020,14 @@ function resolveAchPaymentMethodSummaryFromPaymentIntent_(paymentIntentObj, opti
   if (!mandateId && pi.payment_method_options && pi.payment_method_options.us_bank_account) {
     mandateId = stripeIdFromObject_(pi.payment_method_options.us_bank_account.mandate);
   }
+  const verificationStatus = deriveAchVerificationStatusFromStripeIntent_(pi, opts.verificationStatus);
   return paymentMethod ? extractAchPaymentMethodSummaryFromStripe_(paymentMethod, {
     source: trimString_(opts.source) || 'checkout_payment',
     mandateId: mandateId,
-    status: 'active'
-	  }) : null;
-	}
+    verificationStatus: verificationStatus,
+    status: mapAchPaymentMethodStatusFromVerification_(verificationStatus, 'active')
+  }) : null;
+}
 
 function getStripePaymentMethodTypes_(stripeObj) {
   const obj = (stripeObj && typeof stripeObj === 'object') ? stripeObj : {};
@@ -10154,9 +10195,11 @@ function resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, options)
     const methodResult = retrieveStripePaymentMethod_(paymentMethodId, opts);
     if (methodResult.ok) paymentMethod = methodResult.body;
   }
+  const verificationStatus = deriveAchVerificationStatusFromStripeIntent_(setupIntent, opts.verificationStatus);
   return paymentMethod ? extractAchPaymentMethodSummaryFromStripe_(paymentMethod, {
     source: 'dashboard_setup',
-    status: 'active'
+    verificationStatus: verificationStatus,
+    status: mapAchPaymentMethodStatusFromVerification_(verificationStatus, 'active')
   }) : null;
 }
 
@@ -10196,6 +10239,61 @@ function buildAchPendingProductionPolicyUpdates_(accountSummary, orderInfo, now)
       ? (trimString_(orderRow.achpendingproductionapprovedatorder) || trimString_(account.achPendingProductionApprovedAt) || trimString_(now))
       : ''
   };
+}
+
+function getTerminalAchPendingMutationReason_(orderInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const paymentMethodSelected = trimString_(row.paymentmethodselected).toLowerCase();
+  if (paymentMethodSelected && paymentMethodSelected !== PAYMENT_METHODS.ach) return '';
+  const paymentState = trimString_(row.paymentstate).toLowerCase();
+  const orderState = trimString_(row.orderstate).toLowerCase();
+  const failureCode = trimString_(row.achfailurecode).toLowerCase();
+  const latestEventType = trimString_(row.stripelatesteventtype).toLowerCase();
+  const draft = safeJsonParse_(row.orderdraftjson, {}) || {};
+  const teamMeta = readTeamWorkflowMetaFromDraft_(draft);
+  if (trimString_(row.paidat) || paymentState === PAYMENT_STATES.paid) return 'paid';
+  if (paymentState === PAYMENT_STATES.failed) return 'failed';
+  if (latestEventType === 'charge.dispute.created' || failureCode.indexOf('dispute') >= 0) return 'disputed';
+  if (teamMeta.workflowMode === TEAM_WORKFLOW_MODES.team_hold) return 'team_hold';
+  if (orderState === ORDER_STATES.in_production || orderState === ORDER_STATES.closed) return orderState;
+  return '';
+}
+
+function shouldMarkAchPaymentMethodUnusableForFailure_(failure, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (opts.force === true) return true;
+  const source = (failure && typeof failure === 'object') ? failure : {};
+  const signal = [
+    source.code,
+    source.message,
+    opts.reason,
+    opts.verificationStatus
+  ].join(' ').toLowerCase();
+  if (!signal) return false;
+  return /(microdeposit.*(failed|timeout|exceeded)|verification.*(failed|timeout|exceeded)|mandate|authorization|debit.*not.*authorized|account.*closed|no_account|invalid.*account|bank.*account.*unusable|payment_method.*unusable|dispute|late.*return)/i.test(signal);
+}
+
+function markOrderAchPaymentMethodUnusableIfNeeded_(accountInfo, orderInfo, achSummary, failure, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = normalizeAchPaymentMethodSummary_(achSummary);
+  const paymentMethodId = trimString_(
+    (summary && summary.paymentMethodId) ||
+    row.achpaymentmethodid ||
+    row.achPaymentMethodId
+  );
+  if (!paymentMethodId || !accountInfo || !accountInfo.rowInfo) return accountInfo;
+  const verificationStatus = trimString_(
+    (summary && summary.verificationStatus) ||
+    row.achverificationstatus ||
+    row.achVerificationStatus
+  );
+  if (!shouldMarkAchPaymentMethodUnusableForFailure_(failure, Object.assign({}, opts, {
+    verificationStatus: verificationStatus
+  }))) {
+    return accountInfo;
+  }
+  return markAchPaymentMethodUnusable_(accountInfo, paymentMethodId, opts.markReason || 'blocked', opts);
 }
 
 function buildAchSuccessProductionStateUpdates_(orderInfo) {
@@ -10263,6 +10361,18 @@ function handleCheckoutSessionCompleted_(sessionObj, options) {
     achSummary: achSummary
   });
   const isAch = achEvidence.isAchPayment === true;
+  if (isAch) {
+    const terminalReason = getTerminalAchPendingMutationReason_(orderInfo);
+    if (terminalReason) {
+      return {
+        ok: true,
+        ignored: true,
+        type: 'checkout.session.completed',
+        reason: 'terminal_ach_order_preserved',
+        terminalReason: terminalReason
+      };
+    }
+  }
   const effectivePaymentMethodSelected = isAch
     ? PAYMENT_METHODS.ach
     : (paymentMethodSelected === PAYMENT_METHODS.ach ? PAYMENT_METHODS.card : paymentMethodSelected);
@@ -10545,6 +10655,13 @@ function handleCheckoutAsyncPaymentFailed_(sessionObj, options) {
   const existingAuthorized = trimString_(orderInfo.rowObjNormalized.productionauthorizationstate).toLowerCase() === PRODUCTION_AUTHORIZATION_STATES.authorized ||
     !!trimString_(orderInfo.rowObjNormalized.authorizedtoproduceat);
   const failure = extractFailureFromStripeObject_(sessionObj);
+  let accountInfo = getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra });
+  accountInfo = markOrderAchPaymentMethodUnusableIfNeeded_(accountInfo, orderInfo, achSummary, failure, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    reason: 'checkout.session.async_payment_failed'
+  });
   const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
   const nextDraft = existingAuthorized ? writeTeamWorkflowMetaIntoDraft_(currentDraft, {
     workflowMode: TEAM_WORKFLOW_MODES.team_hold
@@ -10608,6 +10725,15 @@ function handlePaymentIntentFailed_(paymentIntentObj, options) {
   const existingAuthorized = trimString_(orderInfo.rowObjNormalized.productionauthorizationstate).toLowerCase() === PRODUCTION_AUTHORIZATION_STATES.authorized ||
     !!trimString_(orderInfo.rowObjNormalized.authorizedtoproduceat);
   const failure = extractFailureFromStripeObject_(paymentIntentObj);
+  if (isAch) {
+    const accountInfo = getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra });
+    markOrderAchPaymentMethodUnusableIfNeeded_(accountInfo, orderInfo, achSummary, failure, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      reason: 'payment_intent.payment_failed'
+    });
+  }
   const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
   const shouldTeamHold = isAch && existingAuthorized;
   const nextDraft = shouldTeamHold ? writeTeamWorkflowMetaIntoDraft_(currentDraft, {
@@ -10678,6 +10804,16 @@ function handlePaymentIntentProcessing_(paymentIntentObj, options) {
       ignored: true,
       type: 'payment_intent.processing',
       reason: 'non_ach_payment_intent'
+    };
+  }
+  const terminalReason = getTerminalAchPendingMutationReason_(orderInfo);
+  if (terminalReason) {
+    return {
+      ok: true,
+      ignored: true,
+      type: 'payment_intent.processing',
+      reason: 'terminal_ach_order_preserved',
+      terminalReason: terminalReason
     };
   }
   let accountInfo = getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra });
@@ -10872,6 +11008,17 @@ function handleChargeDisputeCreated_(disputeObj, options) {
       reason: 'non_ach_dispute'
     };
   }
+  const accountInfo = getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra });
+  markOrderAchPaymentMethodUnusableIfNeeded_(accountInfo, orderInfo, null, {
+    code: trimString_(dispute.reason) || 'dispute_created',
+    message: 'Stripe ACH dispute or late return opened.'
+  }, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    force: true,
+    reason: 'charge.dispute.created'
+  });
   const currentDraft = safeJsonParse_(orderInfo.rowObjNormalized.orderdraftjson, {}) || {};
   const eventUpdates = buildStripeLatestEventOrderUpdates_(opts.eventPayload, dispute);
   const updatedOrder = updatePortalOrderState_(Object.assign({
@@ -12623,7 +12770,7 @@ function extractAchPaymentMethodSummaryFromStripe_(paymentMethodObj, options) {
     financialConnectionsAccountId: stripeIdFromObject_(bank.financial_connections_account || bank.financialConnectionsAccount || opts.financialConnectionsAccountId),
     mandateId: opts.mandateId || stripeIdFromObject_(method.mandate),
     verificationStatus: verificationStatus,
-    status: opts.status || (verificationStatus === 'verification_failed' ? 'failed' : 'active'),
+    status: mapAchPaymentMethodStatusFromVerification_(verificationStatus, opts.status),
     isDefault: opts.isDefault === true,
     createdAt: opts.createdAt || (method.created ? new Date(Number(method.created) * 1000).toISOString() : nowIso_()),
     updatedAt: opts.updatedAt || nowIso_(),

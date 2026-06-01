@@ -19,7 +19,8 @@ Last aligned: 2026-06-01.
 ## ACH V1 Live State
 
 - ACH V1 infrastructure is merged to `main` and deployed to the existing stable Apps Script deployment.
-- Stable Apps Script deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` is currently version `845`, `Harden ACH webhook finalization`.
+- Stable Apps Script deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` is currently version `846`, `Harden ACH terminal and saved-bank states`.
+- Version `846` hardens ACH terminal behavior after review: stale pending/processing Stripe events now preserve paid, failed, disputed, team-hold, in-production, and closed ACH orders; ACH microdeposit `requires_action` is mapped to bank-verification-pending state; and hard ACH failures/disputes mark unsafe saved banks unusable.
 - Version `845` hardens ACH V1 after review: Stripe webhook audit URL fields are redacted, locked-invoice ACH checkout checks `STRIPE_ACH_ENABLED` before Customer preparation, and ACH success finalization is deduped across distinct Stripe success event types.
 - Version `844`, `ACH V1 infrastructure`, deployed the main ACH V1 surface: `STRIPE_ACH_ENABLED` gating, Stripe Customer persistence on `PORTAL_ACCOUNTS`, hosted ACH payment Checkout with Customer, hosted dashboard bank setup, safe saved-bank summaries, ACH pending-production approval controls, ACH lifecycle copy, and Stripe webhook idempotency through `PORTAL_STRIPE_EVENTS`.
 - Sheet infrastructure ensures ACH account headers, ACH order headers, and `PORTAL_STRIPE_EVENTS` through existing infrastructure helpers.
@@ -31,7 +32,7 @@ Last aligned: 2026-06-01.
 - Expected stable Apps Script deployment ID: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
 - Expected stable public Apps Script URL: `https://script.google.com/macros/s/AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw/exec`.
 - Public branded wrapper URL: `https://www.redthreads.com/portal`.
-- Live Squarespace wrapper was last verified forwarding `t`, `checkoutResult`, and `stripeSessionId` into the Apps Script iframe. The repo wrapper now additionally forwards `setupResult`, but that is not live until the Squarespace code block is manually updated.
+- Live Squarespace wrapper was verified on 2026-06-01 forwarding `t`, `checkoutResult`, `setupResult`, and `stripeSessionId` into the Apps Script iframe.
 - Historical calculator sheet ID: `1STzkJjn5WRoBqa5H1KdxAbn4-JCab9DCX4FuZt5HImc`.
 - Historical Make scenario: `4062378`.
 - Fuller intended architecture includes PORTAL_ORDERS, PORTAL_ACCOUNTS, USERS, USER_SESSIONS, hosted Stripe Checkout, Cloud Run webhook forwarding, Gmail notifications, QuickBooks, and Pipedrive.
@@ -41,7 +42,7 @@ Last aligned: 2026-06-01.
 - Browser-verified Apps Script project URL: `https://script.google.com/u/0/home/projects/1zv9lbls_bohme0vDA8EZg4G0dyFrsuv3hHO0NOAijSw9imYYNkqMbkKU/edit`.
 - `clasp pull` against the verified live project succeeded on 2026-05-27 and pulled `appsscript.json`, `Code.js`, `Index.html`, and `TaxForm3372Manifest.html`.
 - After the binding repair, `clasp push --force`, `clasp version`, and `clasp deploy` can update the live Apps Script source and stable deployment when commands are run sequentially and retried if needed.
-- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 845, `Harden ACH webhook finalization`.
+- Existing stable deployment ID is present: `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`, currently deployed at version 846, `Harden ACH terminal and saved-bank states`.
 - Stage 3A checkout performance work was deployed to the stable Apps Script deployment on 2026-05-28 after sequential `clasp push`, `clasp version`, and `clasp deploy` commands completed. The normal Place Order card checkout path still performs validation, Stripe session creation, PORTAL_ORDERS write, EXPORT_LOG pointer write, and competing unpaid order supersede before returning `checkoutUrl`, but supersede now writes each known candidate row once and returns row info from the in-memory updated values.
 - Stage 3B0 checkout timing observability was deployed to the stable Apps Script deployment on 2026-05-28 as version 837. This was instrumentation only: checkout behavior, Stripe payloads, order persistence, webhook logic, lifecycle state, schema, and Squarespace wrapper navigation were not changed. Browser console output now includes `[RT-CHECKOUT-TIMING-CLIENT-SUMMARY]`; Apps Script server logs now include `[RT-CHECKOUT-TIMING-SERVER-SUMMARY]`.
 - Desktop-only mobile blocking was deployed to the stable Apps Script deployment on 2026-05-28 as version 838. This is UI/access guard only: Stripe payloads, order persistence, webhook logic, lifecycle state, schema, Apps Script config, and `Code.js` were not changed. Direct Apps Script and iframe-rendered Portal views under `900px` now show the Red Threads mobile block with copy-link controls.
@@ -50,7 +51,7 @@ Last aligned: 2026-06-01.
 - ACH checkout selection was deployed to the stable Apps Script deployment on 2026-05-28 as version 841. The existing ACH Checkout Session path is now exposed in the order checkout flow and locked invoice payment controls by enabling the shared ACH client gate. ACH sessions continue to use Stripe Checkout with `us_bank_account`; async webhook/currentness handling remains unchanged.
 - Checkout-return welcome modal suppression was deployed to the stable Apps Script deployment on 2026-05-29 as version 842. When Stripe returns with `checkoutResult=success` or `checkoutResult=cancel`, the app now preserves that return intent for intro suppression before consuming and removing the checkout URL params.
 - Checkout-return request metadata was deployed to the stable Apps Script deployment on 2026-05-29 as version 843. `doGet(e)` now passes safe `checkoutResult` and `stripeSessionId` request-route metadata into the rendered Portal VM so the initial app boot can suppress the welcome intro before URL cleanup or parent iframe messaging completes.
-- ACH V1 infrastructure was deployed to the stable Apps Script deployment as version 844, then hardened and redeployed as version 845 on 2026-06-01.
+- ACH V1 infrastructure was deployed to the stable Apps Script deployment as version 844, hardened and redeployed as version 845 on 2026-06-01, then hardened again as version 846 to preserve terminal ACH states and block unsafe saved-bank reuse after hard ACH failures/disputes.
 - The previous `Requested entity was not found` blocker was traced to the stale local `.clasp.json` binding, not to the stable deployment ID itself.
 
 ## Blocked Or Unverified
@@ -65,6 +66,7 @@ Last aligned: 2026-06-01.
 - Live Squarespace `/portal` inspection on 2026-05-28 showed the fullscreen iframe and `RT_PORTAL_ROUTE_REPLACE` / `RT_PORTAL_NAVIGATE` wrapper handlers present after the Squarespace snippet was corrected.
 - The repo wrapper has the cleaned pre-iframe mobile block, but Squarespace must be manually updated from `web/squarespace-portal-code-block.html` for that wrapper-layer block to be live. Until then, the deployed Apps Script app-level block handles narrow wrapper access after the iframe loads.
 - ACH V1 non-transactional live-surface smoke passed on 2026-06-01 after version 845 deployment: direct `/exec`, direct token load, public wrapper, and tokenized public wrapper returned 200; the public wrapper target matched the stable deployment ID; decoded VM reported `achPaymentEnabled=true` and an ACH pending fixture remained `currentPaymentState=pending`, not paid.
+- ACH V1 post-846 smoke confirmed the direct Apps Script `/exec` and public wrapper `/portal` returned 200, and the live wrapper still targets the stable deployment ID while forwarding `setupResult`, `checkoutResult`, and `stripeSessionId`. No bank payment flow was initiated during the version 846 smoke.
 - Targeted ACH sensitive-data search found only redaction/safety/documentation references plus pre-existing tax form direct-pay fields outside the ACH storage path; no new ACH storage path writes full bank account numbers, routing numbers, microdeposit values, or raw Financial Connections data.
 
 ## Workflow

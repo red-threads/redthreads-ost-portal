@@ -55,22 +55,28 @@ The second command should show only redaction, safety, or documentation referenc
 18. Saved bank appears in Dashboard and ACH checkout copy.
 19. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
 20. Stale tab cannot overwrite paid, failed, locked, or superseded state.
-21. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+21. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
+22. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
+23. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
+24. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 
 ## ACH Event Smokes
 
 For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID and `PORTAL_ORDERS` reflects the expected state:
 
 - `checkout.session.completed`: order placed, ACH pending, production policy applied.
+- Stale `checkout.session.completed`: no regression when the order is already paid, failed, disputed, team-hold, in production, or closed.
 - `checkout.session.async_payment_succeeded`: paid, production authorized, failure fields cleared.
 - `checkout.session.async_payment_failed`: failed/action-needed, retry available, team review if production was already authorized.
 - `payment_intent.processing`: ACH processing, not paid.
+- Stale `payment_intent.processing`: no regression when the order is already paid, failed, disputed, team-hold, in production, or closed.
 - `payment_intent.succeeded`: paid and production authorized.
-- `payment_intent.payment_failed` or `charge.failed`: failed/action-needed.
+- `payment_intent.payment_failed` or `charge.failed`: failed/action-needed, with unsafe saved-bank default blocked for hard bank/mandate/verification failures.
 - `charge.updated`: expected debit date and safe bank summary fields updated when available.
-- `charge.dispute.created`: failed/team review, no silent retry.
+- `charge.dispute.created`: failed/team review, no silent retry, saved bank marked unusable.
 - `setup_intent.succeeded`: saved bank summary stored.
 - `setup_intent.setup_failed`: setup failed with retry path.
+- PaymentIntent or SetupIntent `requires_action` with `next_action.verify_with_microdeposits`: verification status shown as microdeposit pending; no microdeposit values stored.
 
 ## Deployment Smoke Order
 
@@ -85,4 +91,3 @@ Run only after explicit Full ship authorization:
 7. ACH payment launch and return.
 8. ACH setup launch and return.
 9. Webhook replay/idempotency check.
-
