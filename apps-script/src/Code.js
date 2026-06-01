@@ -180,6 +180,9 @@ const PORTAL_ORDER_HEADERS = [
   'achFinancialConnectionsAccountId',
   'achVerificationStatus',
   'achVerificationFlow',
+  'achPaymentSource',
+  'achPaymentVisibilityScope',
+  'stripeAchCustomerId',
   'achExpectedDebitDate',
   'achFailureCode',
   'achFailureMessage',
@@ -330,6 +333,23 @@ const PAYMENT_METHODS = {
   check: 'check',
   cash: 'cash',
   purchase_order: 'purchase_order'
+};
+
+const ACH_PAYMENT_METHOD_SOURCES = {
+  dashboard_setup: 'dashboard_setup',
+  order_checkout: 'order_checkout',
+  ap_payment_link: 'ap_payment_link',
+  checkout_payment: 'checkout_payment',
+  stripe_auto_update: 'stripe_auto_update',
+  unknown: 'unknown'
+};
+
+const ACH_PAYMENT_VISIBILITY_SCOPES = {
+  dashboard_saved: 'dashboard_saved',
+  order_only: 'order_only',
+  hidden_from_dashboard: 'hidden_from_dashboard',
+  blocked: 'blocked',
+  removed: 'removed'
 };
 
 const ACH_DETAIL_STATES = {
@@ -623,7 +643,8 @@ function buildPortalRequestRouteMeta_(e) {
     stripeSessionId: String(params.stripeSessionId || '').trim(),
     dashboard: String(params.dashboard || '').trim() === '1' ? '1' : '',
     accountId: String(params.accountId || '').trim(),
-    accountAccessToken: String(params.accountAccessToken || params.dashboardAccessToken || '').trim()
+    accountAccessToken: String(params.accountAccessToken || params.dashboardAccessToken || '').trim(),
+    paymentOrigin: String(params.paymentOrigin || '').trim()
   };
 }
 
@@ -644,7 +665,8 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     stripeSessionId: String(meta.stripeSessionId || '').trim(),
     dashboard: String(meta.dashboard || '').trim() === '1' ? '1' : '',
     accountId: String(meta.accountId || '').trim(),
-    accountAccessToken: String(meta.accountAccessToken || '').trim()
+    accountAccessToken: String(meta.accountAccessToken || '').trim(),
+    paymentOrigin: String(meta.paymentOrigin || '').trim()
   };
   return payload;
 }
@@ -1436,6 +1458,9 @@ function doPost(e) {
     }
     if (action === 'get_ach_microdeposit_verification_link') {
       return jsonOutput_(getAchMicrodepositVerificationLink(payload));
+    }
+    if (action === 'set_default_ach_payment_method') {
+      return jsonOutput_(setDefaultAchPaymentMethod(payload));
     }
     if (action === 'get_dashboard_project_peek') {
       return jsonOutput_(getDashboardProjectPeek(payload));
@@ -5344,6 +5369,9 @@ function reconcileAchCheckoutReturnOrderToPending_(orderInfo, sessionObj, rowInf
     achFinancialConnectionsAccountId: achSummary ? achSummary.financialConnectionsAccountId : trimString_(orderInfo.rowObjNormalized.achfinancialconnectionsaccountid),
     achVerificationStatus: verificationStatus || 'pending',
     achVerificationFlow: 'stripe_hosted_checkout',
+    achPaymentSource: buildAchOrderPaymentSource_(orderInfo, sessionObj),
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    stripeAchCustomerId: stripeIdFromObject_(sessionObj && sessionObj.customer),
     achFailureCode: '',
     achFailureMessage: '',
     achPendingProductionApprovedAtOrder: policy.achPendingProductionApprovedAtOrder
@@ -5958,6 +5986,48 @@ function getAchMicrodepositVerificationLink(payload) {
   }
 }
 
+function setDefaultAchPaymentMethod_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const paymentMethodId = trimString_(p.paymentMethodId);
+  if (!paymentMethodId) {
+    return { ok: false, code: 'ach_payment_method_required', error: 'Choose a saved bank before setting a default.' };
+  }
+  const ctx = buildAccountDocumentContext_(p);
+  if (!ctx || ctx.ok !== true) return ctx || { ok: false, error: 'Unable to load account.' };
+  if (ctx.cfg.stripeAchEnabled !== true) {
+    return { ok: false, code: 'ach_setup_disabled', error: 'ACH bank setup is not currently available.' };
+  }
+  const authResult = validateAchSetupDashboardAuthorization_(ctx, p);
+  if (!authResult || authResult.ok !== true) return authResult;
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const method = normalizeAchPaymentMethodsJson_(accountSummary.achPaymentMethods).find(function(item) {
+    return item.paymentMethodId === paymentMethodId;
+  }) || null;
+  if (!method || !isDashboardSavedAchPaymentMethod_(method)) {
+    return { ok: false, code: 'ach_payment_method_not_dashboard_saved', error: 'Only dashboard-saved ACH banks can be set as the default.' };
+  }
+  if (!isAchPaymentMethodUsableForDefault_(method)) {
+    return { ok: false, code: 'ach_payment_method_not_default_eligible', error: 'This bank is not verified and active yet.' };
+  }
+  const updated = setDefaultAchPaymentMethodForAccount_(ctx.accountInfo, paymentMethodId, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra
+  });
+  return {
+    ok: true,
+    accountSummary: updated && updated.summary ? updated.summary : accountSummary
+  };
+}
+
+function setDefaultAchPaymentMethod(payload) {
+  try {
+    return setDefaultAchPaymentMethod_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 /* ---------------- Order Action Gateway + Validation Services ---------------- */
 
 function buildCheckoutTimingExtra_(extra) {
@@ -6499,6 +6569,7 @@ function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkout
   const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
   const payload = (ctx && ctx.payload && typeof ctx.payload === 'object') ? ctx.payload : {};
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const paymentOrigin = normalizeAchPaymentSource_(payload.paymentOrigin || payload.checkoutOrigin);
   const dashboardReturnUrl = payload.returnToDashboard === true
     ? buildExternalPortalDashboardUrl_(accountSummary, {
       cfg: ctx.cfg,
@@ -6510,9 +6581,47 @@ function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkout
     accountSummary: accountSummary,
     stripeCustomerId: trimString_(ctx.stripeCustomerId),
     paymentMethodSelected: paymentMethodSelected,
+    paymentOrigin: paymentOrigin,
+    saveAchForFuture: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    allowSavedPaymentMethodRedisplay: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
     checkoutAttemptId: trimString_(checkoutIdentity && checkoutIdentity.checkoutAttemptId),
     orderId: trimString_(checkoutIdentity && checkoutIdentity.orderId),
     returnUrl: trimString_(dashboardReturnUrl || payload.returnUrl || buildExternalPortalUrl_(token) || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(token))
+  };
+}
+
+function ensureOrderScopedStripeCustomerForAchCheckout_(ctx, options) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || context.cfg || getConfig_();
+  const draft = context.orderDraft || {};
+  const account = context.accountInfo && context.accountInfo.summary ? context.accountInfo.summary : {};
+  const email = normalizeEmail_(draft.personEmail || account.billingContactEmail || account.primaryEmail);
+  const name = trimString_(draft.personName || account.billingContactName || account.primaryContactName || account.orgName || draft.orgName);
+  const params = {
+    'metadata[source]': 'red_threads_portal',
+    'metadata[checkoutScope]': 'order_only',
+    'metadata[paymentOrigin]': ACH_PAYMENT_METHOD_SOURCES.ap_payment_link
+  };
+  if (email) params.email = email;
+  if (name) params.name = name;
+  if (trimString_(draft.token)) params['metadata[token]'] = trimString_(draft.token);
+  if (trimString_(draft.accountId || account.accountId)) params['metadata[accountId]'] = trimString_(draft.accountId || account.accountId);
+  if (trimString_(draft.orgId || account.orgId)) params['metadata[orgId]'] = trimString_(draft.orgId || account.orgId);
+  const result = stripeApiRequest_('/v1/customers', params, {
+    cfg: cfg,
+    method: 'post'
+  });
+  if (!result.ok) return result;
+  const customerId = trimString_(result.body && result.body.id);
+  if (!customerId || customerId.indexOf('cus_') !== 0) {
+    return { ok: false, statusCode: result.statusCode, error: 'Stripe Customer creation did not return a Customer ID.' };
+  }
+  return {
+    ok: true,
+    customerId: customerId,
+    customer: result.body,
+    orderScoped: true
   };
 }
 
@@ -6527,15 +6636,20 @@ function prepareAchStripeCustomerForCheckout_(ctx, timing, stageName) {
     };
   }
   markCheckoutTiming_(timing, trimString_(stageName || 'ach_customer') + '_start');
-  const customerResult = ensureStripeCustomerForPortalAccount_(context, {
-    cfg: cfg,
-    ss: context.ss,
-    infra: context.infra,
-    accountInfo: context.accountInfo
-  });
+  const payload = (context.payload && typeof context.payload === 'object') ? context.payload : {};
+  const paymentOrigin = normalizeAchPaymentSource_(payload.paymentOrigin || payload.checkoutOrigin);
+  const customerResult = paymentOrigin === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link
+    ? ensureOrderScopedStripeCustomerForAchCheckout_(context, { cfg: cfg })
+    : ensureStripeCustomerForPortalAccount_(context, {
+      cfg: cfg,
+      ss: context.ss,
+      infra: context.infra,
+      accountInfo: context.accountInfo
+    });
   markCheckoutTiming_(timing, trimString_(stageName || 'ach_customer') + '_end', {
     ok: !!(customerResult && customerResult.ok === true),
-    hasCustomer: !!(customerResult && trimString_(customerResult.customerId))
+    hasCustomer: !!(customerResult && trimString_(customerResult.customerId)),
+    orderScoped: !!(customerResult && customerResult.orderScoped === true)
   });
   if (!customerResult || customerResult.ok !== true) {
     return Object.assign({
@@ -6546,10 +6660,13 @@ function prepareAchStripeCustomerForCheckout_(ctx, timing, stageName) {
   }
   context.accountInfo = customerResult.accountInfo || context.accountInfo;
   context.stripeCustomerId = trimString_(customerResult.customerId);
+  context.stripeCustomerOrderScoped = customerResult.orderScoped === true;
+  context.paymentOrigin = paymentOrigin;
   return {
     ok: true,
     customerId: context.stripeCustomerId,
-    accountInfo: context.accountInfo
+    accountInfo: context.accountInfo,
+    orderScoped: context.stripeCustomerOrderScoped === true
   };
 }
 
@@ -6572,7 +6689,10 @@ function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, che
     orderState: ORDER_STATES.payment_in_progress,
     productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
     portalLockState: PORTAL_LOCK_STATES.editable,
-    stripeSessionId: trimString_(stripeResult.sessionId)
+    stripeSessionId: trimString_(stripeResult.sessionId),
+    achPaymentSource: paymentMethodSelected === PAYMENT_METHODS.ach ? buildAchOrderPaymentSource_(ctx, null) : '',
+    achPaymentVisibilityScope: paymentMethodSelected === PAYMENT_METHODS.ach ? ACH_PAYMENT_VISIBILITY_SCOPES.order_only : '',
+    stripeAchCustomerId: paymentMethodSelected === PAYMENT_METHODS.ach ? trimString_(ctx.stripeCustomerId) : ''
   });
 }
 
@@ -6985,6 +7105,9 @@ function buildSupersededPaymentPathOrderStateOptions_(currentDraft, opts) {
     achFinancialConnectionsAccountId: '',
     achVerificationStatus: '',
     achVerificationFlow: '',
+    achPaymentSource: '',
+    achPaymentVisibilityScope: '',
+    stripeAchCustomerId: '',
     achExpectedDebitDate: '',
     achFailureCode: '',
     achFailureMessage: '',
@@ -7038,6 +7161,9 @@ function buildPortalOrderStateUpdates_(options) {
     'achFinancialConnectionsAccountId',
     'achVerificationStatus',
     'achVerificationFlow',
+    'achPaymentSource',
+    'achPaymentVisibilityScope',
+    'stripeAchCustomerId',
     'achExpectedDebitDate',
     'achFailureCode',
     'achFailureMessage',
@@ -11076,6 +11202,45 @@ function isAchChargeForOrder_(chargeObj, orderInfo) {
   }).isAchPayment;
 }
 
+function buildAchOrderPaymentSource_(orderInfoOrCtx, stripeObj) {
+  const source = (orderInfoOrCtx && typeof orderInfoOrCtx === 'object') ? orderInfoOrCtx : {};
+  const row = source.rowObjNormalized || {};
+  const payload = source.payload && typeof source.payload === 'object' ? source.payload : {};
+  const draft = source.orderDraft && typeof source.orderDraft === 'object'
+    ? source.orderDraft
+    : safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const value = trimString_(
+    extractStripeMetadataValue_(stripeObj || {}, 'paymentOrigin') ||
+    extractStripeMetadataValue_(stripeObj || {}, 'checkoutOrigin') ||
+    row.achpaymentsource ||
+    row.achPaymentSource ||
+    draft.paymentOrigin ||
+    draft.checkoutOrigin ||
+    payload.paymentOrigin ||
+    payload.checkoutOrigin
+  );
+  const normalized = normalizeAchPaymentSource_(value);
+  return normalized === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link
+    ? ACH_PAYMENT_METHOD_SOURCES.ap_payment_link
+    : ACH_PAYMENT_METHOD_SOURCES.order_checkout;
+}
+
+function buildAchOrderOnlyPaymentUpdates_(orderInfoOrCtx, stripeObj) {
+  const source = (orderInfoOrCtx && typeof orderInfoOrCtx === 'object') ? orderInfoOrCtx : {};
+  const row = source.rowObjNormalized || {};
+  const customerId = stripeIdFromObject_(
+    (stripeObj && typeof stripeObj === 'object' ? stripeObj.customer : '') ||
+    source.stripeCustomerId ||
+    row.stripeachcustomerid ||
+    row.stripeAchCustomerId
+  );
+  return {
+    achPaymentSource: buildAchOrderPaymentSource_(orderInfoOrCtx, stripeObj),
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    stripeAchCustomerId: customerId
+  };
+}
+
 function resolveAchPaymentMethodSummaryFromCheckoutSession_(sessionObj, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const session = (sessionObj && typeof sessionObj === 'object') ? sessionObj : {};
@@ -11333,6 +11498,9 @@ function handleCheckoutSessionCompleted_(sessionObj, options) {
       achFinancialConnectionsAccountId: achSummary ? achSummary.financialConnectionsAccountId : trimString_(orderInfo.rowObjNormalized.achfinancialconnectionsaccountid),
       achVerificationStatus: achSummary && achSummary.verificationStatus ? achSummary.verificationStatus : 'pending',
       achVerificationFlow: 'stripe_hosted_checkout',
+      achPaymentSource: buildAchOrderPaymentSource_(orderInfo, sessionObj),
+      achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+      stripeAchCustomerId: stripeIdFromObject_(sessionObj && sessionObj.customer),
       achFailureCode: '',
       achFailureMessage: '',
       achPendingProductionApprovedAtOrder: achPolicy.achPendingProductionApprovedAtOrder
@@ -11409,7 +11577,7 @@ function handleCheckoutSetupSessionCompleted_(sessionObj, options) {
     return { ok: false, error: 'Portal account not found for ACH setup session.' };
   }
   if (achSummary) {
-    accountInfo = upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, {
+    accountInfo = upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, {
       cfg: cfg,
       ss: ss,
       infra: infra
@@ -11504,6 +11672,9 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj, options) {
     achMandateId: achSummary ? achSummary.mandateId : trimString_(orderInfo.rowObjNormalized.achmandateid),
     achFinancialConnectionsAccountId: achSummary ? achSummary.financialConnectionsAccountId : trimString_(orderInfo.rowObjNormalized.achfinancialconnectionsaccountid),
     achVerificationStatus: achSummary ? (achSummary.verificationStatus || 'succeeded') : trimString_(orderInfo.rowObjNormalized.achverificationstatus),
+    achPaymentSource: buildAchOrderPaymentSource_(orderInfo, sessionObj),
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    stripeAchCustomerId: stripeIdFromObject_(sessionObj && sessionObj.customer),
     achFailureCode: '',
     achFailureMessage: ''
   }, eventUpdates));
@@ -11584,6 +11755,9 @@ function handleCheckoutAsyncPaymentFailed_(sessionObj, options) {
     paymentState: PAYMENT_STATES.failed,
     orderState: existingAuthorized ? trimString_(orderInfo.rowObjNormalized.orderstate) || ORDER_STATES.ready_for_production : ORDER_STATES.awaiting_payment_confirmation,
     productionAuthorizationState: existingAuthorized ? PRODUCTION_AUTHORIZATION_STATES.authorized : PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    achPaymentSource: buildAchOrderPaymentSource_(orderInfo, sessionObj),
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    stripeAchCustomerId: stripeIdFromObject_(sessionObj && sessionObj.customer),
     achFailureCode: failure.code,
     achFailureMessage: failure.message || 'Stripe async payment failed.',
     notes: existingAuthorized
@@ -11664,6 +11838,7 @@ function handlePaymentIntentFailed_(paymentIntentObj, options) {
   if (isAch) {
     failureUpdates.achFailureCode = failure.code;
     failureUpdates.achFailureMessage = failure.message || 'Stripe payment intent failed.';
+    Object.assign(failureUpdates, buildAchOrderOnlyPaymentUpdates_(orderInfo, paymentIntentObj));
   }
   const updatedOrder = updatePortalOrderState_(Object.assign(failureUpdates, eventUpdates));
   const token = trimString_(orderInfo.rowObjNormalized.token);
@@ -11750,6 +11925,9 @@ function handlePaymentIntentProcessing_(paymentIntentObj, options) {
     achFinancialConnectionsAccountId: achSummary ? achSummary.financialConnectionsAccountId : trimString_(orderInfo.rowObjNormalized.achfinancialconnectionsaccountid),
     achVerificationStatus: achSummary && achSummary.verificationStatus ? achSummary.verificationStatus : 'processing',
     achVerificationFlow: 'stripe_hosted_checkout',
+    achPaymentSource: buildAchOrderPaymentSource_(orderInfo, paymentIntentObj),
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    stripeAchCustomerId: stripeIdFromObject_(paymentIntentObj && paymentIntentObj.customer),
     achPendingProductionApprovedAtOrder: policy.achPendingProductionApprovedAtOrder
   }, eventUpdates));
   updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, buildPortalOrderSummary_(updatedOrder.rowObjNormalized));
@@ -11816,6 +11994,9 @@ function handlePaymentIntentSucceeded_(paymentIntentObj, options) {
     achMandateId: achSummary ? achSummary.mandateId : trimString_(orderInfo.rowObjNormalized.achmandateid),
     achFinancialConnectionsAccountId: achSummary ? achSummary.financialConnectionsAccountId : trimString_(orderInfo.rowObjNormalized.achfinancialconnectionsaccountid),
     achVerificationStatus: achSummary && achSummary.verificationStatus ? achSummary.verificationStatus : 'succeeded',
+    achPaymentSource: buildAchOrderPaymentSource_(orderInfo, paymentIntentObj),
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    stripeAchCustomerId: stripeIdFromObject_(paymentIntentObj && paymentIntentObj.customer),
     achFailureCode: '',
     achFailureMessage: ''
   }, eventUpdates));
@@ -11991,7 +12172,7 @@ function handleSetupIntentSucceeded_(setupIntentObj) {
       reason: 'non_ach_setup_intent'
     };
   }
-  if (summary) accountInfo = upsertAchPaymentMethodOnPortalAccount_(accountInfo, summary, { cfg: cfg, ss: ss, infra: infra });
+  if (summary) accountInfo = upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, summary, { cfg: cfg, ss: ss, infra: infra });
   setRowValuesByHeaderMap_(infra.accountsSheet, accountInfo.rowInfo.row, accountInfo.rowInfo.colMap, {
     achSetupIntentId: trimString_(setupIntentObj && setupIntentObj.id),
     achSetupStatus: 'succeeded',
@@ -13385,6 +13566,51 @@ function buildApprovedPaymentTermsSummaryFromRow_(row) {
   };
 }
 
+function normalizeAchPaymentSource_(value) {
+  const raw = trimString_(value).toLowerCase();
+  if (!raw) return ACH_PAYMENT_METHOD_SOURCES.order_checkout;
+  if (raw === 'ap' || raw === 'ap_payment' || raw === 'ap_payment_link' || raw === 'accounts_payable') {
+    return ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  }
+  if (raw === 'dashboard' || raw === 'dashboard_setup' || raw === 'dashboard_bank_setup') {
+    return ACH_PAYMENT_METHOD_SOURCES.dashboard_setup;
+  }
+  if (raw === 'stripe_auto_update') return ACH_PAYMENT_METHOD_SOURCES.stripe_auto_update;
+  if (raw === 'checkout_payment') return ACH_PAYMENT_METHOD_SOURCES.checkout_payment;
+  if (raw === 'order_checkout' || raw === 'order_payment') return ACH_PAYMENT_METHOD_SOURCES.order_checkout;
+  return raw;
+}
+
+function normalizeAchVisibilityScope_(value) {
+  const raw = trimString_(value).toLowerCase();
+  if (!raw) return '';
+  if (raw === ACH_PAYMENT_VISIBILITY_SCOPES.dashboard_saved ||
+      raw === ACH_PAYMENT_VISIBILITY_SCOPES.order_only ||
+      raw === ACH_PAYMENT_VISIBILITY_SCOPES.hidden_from_dashboard ||
+      raw === ACH_PAYMENT_VISIBILITY_SCOPES.blocked ||
+      raw === ACH_PAYMENT_VISIBILITY_SCOPES.removed) {
+    return raw;
+  }
+  if (raw === 'dashboard' || raw === 'saved' || raw === 'account_saved') return ACH_PAYMENT_VISIBILITY_SCOPES.dashboard_saved;
+  if (raw === 'order' || raw === 'ap') return ACH_PAYMENT_VISIBILITY_SCOPES.order_only;
+  return raw;
+}
+
+function inferAchVisibilityScope_(source, status, existingScope) {
+  const scope = normalizeAchVisibilityScope_(existingScope);
+  if (scope) return scope;
+  const normalizedSource = normalizeAchPaymentSource_(source);
+  const normalizedStatus = normalizeAchPaymentMethodStatus_(status);
+  if (normalizedStatus === 'removed') return ACH_PAYMENT_VISIBILITY_SCOPES.removed;
+  if (normalizedSource === ACH_PAYMENT_METHOD_SOURCES.dashboard_setup) return ACH_PAYMENT_VISIBILITY_SCOPES.dashboard_saved;
+  if (normalizedSource === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ||
+      normalizedSource === ACH_PAYMENT_METHOD_SOURCES.order_checkout ||
+      normalizedSource === ACH_PAYMENT_METHOD_SOURCES.checkout_payment) {
+    return ACH_PAYMENT_VISIBILITY_SCOPES.order_only;
+  }
+  return ACH_PAYMENT_VISIBILITY_SCOPES.hidden_from_dashboard;
+}
+
 function normalizeAchPaymentMethodStatus_(value) {
   const raw = trimString_(value).toLowerCase();
   if (!raw) return 'pending';
@@ -13396,6 +13622,8 @@ function normalizeAchPaymentMethodSummary_(value) {
   const source = (value && typeof value === 'object') ? value : {};
   const paymentMethodId = trimString_(source.paymentMethodId || source.paymentmethodid || source.id);
   if (!paymentMethodId) return null;
+  const status = normalizeAchPaymentMethodStatus_(source.status);
+  const methodSource = normalizeAchPaymentSource_(source.source);
   return {
     paymentMethodId: paymentMethodId,
     bankName: trimString_(source.bankName || source.bankname),
@@ -13405,11 +13633,15 @@ function normalizeAchPaymentMethodSummary_(value) {
     financialConnectionsAccountId: trimString_(source.financialConnectionsAccountId || source.financialconnectionsaccountid),
     mandateId: trimString_(source.mandateId || source.mandateid),
     verificationStatus: trimString_(source.verificationStatus || source.verificationstatus),
-    status: normalizeAchPaymentMethodStatus_(source.status),
+    status: status,
     isDefault: source.isDefault === true || boolFromCell_(source.isdefault),
     createdAt: trimString_(source.createdAt || source.createdat),
     updatedAt: trimString_(source.updatedAt || source.updatedat),
-    source: trimString_(source.source)
+    source: methodSource,
+    visibilityScope: inferAchVisibilityScope_(methodSource, status, source.visibilityScope || source.visibilityscope),
+    linkedOrderId: trimString_(source.linkedOrderId || source.linkedorderid),
+    linkedCheckoutAttemptId: trimString_(source.linkedCheckoutAttemptId || source.linkedcheckoutattemptid),
+    linkedBy: trimString_(source.linkedBy || source.linkedby)
   };
 }
 
@@ -13682,7 +13914,11 @@ function extractAchPaymentMethodSummaryFromStripe_(paymentMethodObj, options) {
     isDefault: opts.isDefault === true,
     createdAt: opts.createdAt || (method.created ? new Date(Number(method.created) * 1000).toISOString() : nowIso_()),
     updatedAt: opts.updatedAt || nowIso_(),
-    source: opts.source || 'stripe'
+    source: opts.source || ACH_PAYMENT_METHOD_SOURCES.unknown,
+    visibilityScope: opts.visibilityScope,
+    linkedOrderId: opts.linkedOrderId,
+    linkedCheckoutAttemptId: opts.linkedCheckoutAttemptId,
+    linkedBy: opts.linkedBy
   });
 }
 
@@ -13695,9 +13931,27 @@ function getDefaultAchPaymentMethodForAccount_(accountSummary) {
   }) || null;
 }
 
+function isDashboardSavedAchPaymentMethod_(achMethod) {
+  const method = normalizeAchPaymentMethodSummary_(achMethod);
+  if (!method) return false;
+  const scope = normalizeAchVisibilityScope_(method.visibilityScope);
+  const source = normalizeAchPaymentSource_(method.source);
+  const status = trimString_(method.status).toLowerCase();
+  if (status === 'removed' || scope === ACH_PAYMENT_VISIBILITY_SCOPES.removed) return false;
+  return scope === ACH_PAYMENT_VISIBILITY_SCOPES.dashboard_saved ||
+    (source === ACH_PAYMENT_METHOD_SOURCES.dashboard_setup &&
+      scope !== ACH_PAYMENT_VISIBILITY_SCOPES.order_only &&
+      scope !== ACH_PAYMENT_VISIBILITY_SCOPES.hidden_from_dashboard);
+}
+
+function isAchMethodVisibleInDashboard_(achMethod) {
+  return isDashboardSavedAchPaymentMethod_(achMethod);
+}
+
 function isAchPaymentMethodUsableForDefault_(achMethod) {
   const method = normalizeAchPaymentMethodSummary_(achMethod);
   if (!method) return false;
+  if (!isDashboardSavedAchPaymentMethod_(method)) return false;
   const status = trimString_(method.status).toLowerCase();
   const verificationStatus = trimString_(method.verificationStatus).toLowerCase();
   if (/(blocked|removed|fail|failed|invalid|expired|timeout|exceeded|requires_payment_method)/i.test(status + ' ' + verificationStatus)) {
@@ -13708,6 +13962,73 @@ function isAchPaymentMethodUsableForDefault_(achMethod) {
   }
   return status === 'active' || status === 'verified' || status === 'succeeded' ||
     verificationStatus === 'active' || verificationStatus === 'verified' || verificationStatus === 'succeeded';
+}
+
+function writeAchPaymentMethodsForPortalAccount_(accountInfo, methods, options) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : {};
+  const rowInfo = info.rowInfo || null;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const accountsSheet = opts.accountsSheet || infra.accountsSheet;
+  if (!rowInfo || !rowInfo.row || !rowInfo.colMap) return info;
+  const normalized = (Array.isArray(methods) ? methods : []).map(normalizeAchPaymentMethodSummary_).filter(Boolean);
+  const defaultMethod = normalized.find(function(item) {
+    return item.isDefault === true && isAchPaymentMethodUsableForDefault_(item);
+  }) || normalized.find(function(item) {
+    return isAchPaymentMethodUsableForDefault_(item);
+  }) || null;
+  if (defaultMethod) defaultMethod.isDefault = true;
+  const finalMethods = normalized.map(function(item) {
+    if (!defaultMethod) return Object.assign({}, item, { isDefault: false });
+    return Object.assign({}, item, { isDefault: item.paymentMethodId === defaultMethod.paymentMethodId });
+  });
+  setRowValuesByHeaderMap_(accountsSheet, rowInfo.row, rowInfo.colMap, {
+    achPaymentMethodsJson: JSON.stringify(finalMethods),
+    defaultAchPaymentMethodId: defaultMethod ? trimString_(defaultMethod.paymentMethodId) : '',
+    defaultAchBankName: defaultMethod ? trimString_(defaultMethod.bankName) : '',
+    defaultAchLast4: defaultMethod ? trimString_(defaultMethod.last4) : '',
+    defaultAchVerificationStatus: defaultMethod ? trimString_(defaultMethod.verificationStatus) : '',
+    defaultAchMandateId: defaultMethod ? trimString_(defaultMethod.mandateId) : '',
+    defaultAchFinancialConnectionsAccountId: defaultMethod ? trimString_(defaultMethod.financialConnectionsAccountId) : '',
+    updatedAt: nowIso_()
+  });
+  const refreshed = buildRowInfoFromSheet_(accountsSheet, rowInfo.row);
+  return {
+    rowInfo: refreshed,
+    summary: buildPortalAccountSummary_(refreshed.rowObjNormalized, cfg)
+  };
+}
+
+function updateExistingDashboardSavedAchMethodOnly_(accountInfo, achSummary, options) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : {};
+  const rowInfo = info.rowInfo || null;
+  const incoming = normalizeAchPaymentMethodSummary_(achSummary);
+  if (!rowInfo || !incoming) return info;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const account = buildPortalAccountSummary_(rowInfo.rowObjNormalized || {}, cfg);
+  let changed = false;
+  const methods = normalizeAchPaymentMethodsJson_(account.achPaymentMethods).map(function(item) {
+    if (item.paymentMethodId !== incoming.paymentMethodId || !isDashboardSavedAchPaymentMethod_(item)) return item;
+    changed = true;
+    return normalizeAchPaymentMethodSummary_(Object.assign({}, item, incoming, {
+      visibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.dashboard_saved,
+      source: trimString_(item.source) || ACH_PAYMENT_METHOD_SOURCES.dashboard_setup,
+      isDefault: item.isDefault === true,
+      updatedAt: nowIso_()
+    }));
+  }).filter(Boolean);
+  return changed ? writeAchPaymentMethodsForPortalAccount_(info, methods, opts) : info;
+}
+
+function upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, options) {
+  const summary = normalizeAchPaymentMethodSummary_(Object.assign({}, achSummary || {}, {
+    source: ACH_PAYMENT_METHOD_SOURCES.dashboard_setup,
+    visibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.dashboard_saved
+  }));
+  return upsertAchPaymentMethodOnPortalAccount_(accountInfo, summary, options);
 }
 
 function upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, options) {
@@ -13721,13 +14042,18 @@ function upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, options
   const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
   const accountsSheet = opts.accountsSheet || infra.accountsSheet;
   if (!rowInfo || !rowInfo.row || !rowInfo.colMap) return info;
+  if (!isAchMethodVisibleInDashboard_(summary)) {
+    return updateExistingDashboardSavedAchMethodOnly_(info, summary, opts);
+  }
 
   const currentAccount = buildPortalAccountSummary_(rowInfo.rowObjNormalized || {}, cfg);
   const current = normalizeAchPaymentMethodsJson_(currentAccount.achPaymentMethods);
   const now = nowIso_();
   const incoming = Object.assign({}, summary, {
     updatedAt: now,
-    createdAt: trimString_(summary.createdAt) || now
+    createdAt: trimString_(summary.createdAt) || now,
+    source: ACH_PAYMENT_METHOD_SOURCES.dashboard_setup,
+    visibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.dashboard_saved
   });
   const existingIdx = current.findIndex(function(item) {
     return item.paymentMethodId === incoming.paymentMethodId;
@@ -13755,21 +14081,9 @@ function upsertAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, options
   const defaultMethod = normalized.find(function(item) {
     return item.isDefault === true && isAchPaymentMethodUsableForDefault_(item);
   }) || null;
-  setRowValuesByHeaderMap_(accountsSheet, rowInfo.row, rowInfo.colMap, {
-    achPaymentMethodsJson: JSON.stringify(normalized),
-    defaultAchPaymentMethodId: defaultMethod ? trimString_(defaultMethod.paymentMethodId) : '',
-    defaultAchBankName: defaultMethod ? trimString_(defaultMethod.bankName) : '',
-    defaultAchLast4: defaultMethod ? trimString_(defaultMethod.last4) : '',
-    defaultAchVerificationStatus: defaultMethod ? trimString_(defaultMethod.verificationStatus) : '',
-    defaultAchMandateId: defaultMethod ? trimString_(defaultMethod.mandateId) : '',
-    defaultAchFinancialConnectionsAccountId: defaultMethod ? trimString_(defaultMethod.financialConnectionsAccountId) : '',
-    updatedAt: now
-  });
-  const refreshed = buildRowInfoFromSheet_(accountsSheet, rowInfo.row);
-  return {
-    rowInfo: refreshed,
-    summary: buildPortalAccountSummary_(refreshed.rowObjNormalized, cfg)
-  };
+  return writeAchPaymentMethodsForPortalAccount_(info, normalized, Object.assign({}, opts, {
+    accountsSheet: accountsSheet
+  }));
 }
 
 function setDefaultAchPaymentMethodForAccount_(accountInfo, paymentMethodId, options) {
@@ -15540,6 +15854,9 @@ function buildPortalOrderSummary_(row) {
     achFinancialConnectionsAccountId: trimString_(order.achfinancialconnectionsaccountid || order.achFinancialConnectionsAccountId),
     achVerificationStatus: trimString_(order.achverificationstatus || order.achVerificationStatus),
     achVerificationFlow: trimString_(order.achverificationflow || order.achVerificationFlow),
+    achPaymentSource: trimString_(order.achpaymentsource || order.achPaymentSource),
+    achPaymentVisibilityScope: trimString_(order.achpaymentvisibilityscope || order.achPaymentVisibilityScope),
+    stripeAchCustomerId: trimString_(order.stripeachcustomerid || order.stripeAchCustomerId),
     achExpectedDebitDate: trimString_(order.achexpecteddebitdate || order.achExpectedDebitDate),
     achFailureCode: trimString_(order.achfailurecode || order.achFailureCode),
     achFailureMessage: trimString_(order.achfailuremessage || order.achFailureMessage),
@@ -15820,6 +16137,9 @@ function createPortalOrder_(opts) {
     achFinancialConnectionsAccountId: trimString_(options.achFinancialConnectionsAccountId || draft.achFinancialConnectionsAccountId),
     achVerificationStatus: trimString_(options.achVerificationStatus || draft.achVerificationStatus),
     achVerificationFlow: trimString_(options.achVerificationFlow || draft.achVerificationFlow),
+    achPaymentSource: trimString_(options.achPaymentSource || draft.achPaymentSource),
+    achPaymentVisibilityScope: trimString_(options.achPaymentVisibilityScope || draft.achPaymentVisibilityScope),
+    stripeAchCustomerId: trimString_(options.stripeAchCustomerId || draft.stripeAchCustomerId),
     achExpectedDebitDate: trimString_(options.achExpectedDebitDate || draft.achExpectedDebitDate),
     achFailureCode: trimString_(options.achFailureCode || draft.achFailureCode),
     achFailureMessage: trimString_(options.achFailureMessage || draft.achFailureMessage),
@@ -18330,6 +18650,7 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
   markCheckoutTiming_(timing, 'request_received');
   const p = (payload && typeof payload === 'object') ? payload : {};
   const method = trimString_(p.paymentMethodSelected).toLowerCase();
+  const paymentOrigin = normalizeAchPaymentSource_(p.paymentOrigin || p.checkoutOrigin);
   if (method !== PAYMENT_METHODS.card && method !== PAYMENT_METHODS.ach) {
     return attachCheckoutTiming_({ ok: false, error: 'Unsupported payment method.' }, timing, {
       ok: false,
@@ -18420,6 +18741,9 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     accountSummary: lockedAccountSummary,
     stripeCustomerId: trimString_(ctx.stripeCustomerId),
     paymentMethodSelected: method,
+    paymentOrigin: paymentOrigin,
+    saveAchForFuture: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    allowSavedPaymentMethodRedisplay: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
     checkoutAttemptId: checkoutAttemptId,
     orderId: trimString_(latestOrder.rowObjNormalized.orderid),
     returnUrl: lockedReturnUrl,
@@ -18450,6 +18774,9 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     orderRowInfo: latestOrder,
     checkoutAttemptId: checkoutAttemptId,
     stripeSessionId: trimString_(stripe.sessionId),
+    achPaymentSource: method === PAYMENT_METHODS.ach ? paymentOrigin : '',
+    achPaymentVisibilityScope: method === PAYMENT_METHODS.ach ? ACH_PAYMENT_VISIBILITY_SCOPES.order_only : '',
+    stripeAchCustomerId: method === PAYMENT_METHODS.ach ? trimString_(ctx.stripeCustomerId) : '',
     paymentState: PAYMENT_STATES.checkout_created,
     amountCardFee: chargedOrderDraft.amountCardFee,
     amountChargedTax: chargedOrderDraft.amountChargedTax,
@@ -20113,6 +20440,10 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
   const cfg = opts.cfg || getConfig_();
   const paymentMethodSelected = trimString_(opts.paymentMethodSelected).toLowerCase();
   const paymentMethodType = paymentMethodSelected === PAYMENT_METHODS.ach ? 'us_bank_account' : 'card';
+  const paymentOrigin = paymentMethodSelected === PAYMENT_METHODS.ach
+    ? normalizeAchPaymentSource_(opts.paymentOrigin || orderDraft.paymentOrigin || orderDraft.checkoutOrigin)
+    : '';
+  const isApPaymentLink = paymentOrigin === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
   const stripeCustomerId = trimString_(opts.stripeCustomerId);
   const accountSummary = (opts.accountSummary && typeof opts.accountSummary === 'object') ? opts.accountSummary : {};
   const suppressShippingAddressCollection = opts.suppressShippingAddressCollection === true;
@@ -20121,13 +20452,17 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     returnUrl: returnBaseUrl,
     queryParams: {
       checkoutResult: 'success',
-      stripeSessionId: '{CHECKOUT_SESSION_ID}'
+      stripeSessionId: '{CHECKOUT_SESSION_ID}',
+      summary: isApPaymentLink ? '1' : '',
+      paymentOrigin: isApPaymentLink ? 'ap' : ''
     }
   });
   const cancelUrl = buildStripeCheckoutReturnUrl_(orderDraft.token, {
     returnUrl: returnBaseUrl,
     queryParams: {
-      checkoutResult: 'cancel'
+      checkoutResult: 'cancel',
+      summary: isApPaymentLink ? '1' : '',
+      paymentOrigin: isApPaymentLink ? 'ap' : ''
     }
   });
   const currency = trimString_(orderDraft.currency || getConfig_().stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY).toLowerCase();
@@ -20157,6 +20492,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     checkoutAttemptId: trimString_(opts.checkoutAttemptId),
     orderId: trimString_(opts.orderId),
     paymentMethodSelected: paymentMethodSelected,
+    paymentOrigin: paymentOrigin,
     accountId: trimString_(accountSummary.accountId),
     orgId: trimString_(accountSummary.orgId),
     fulfillmentMethod: fulfillmentMethod,
@@ -20202,9 +20538,11 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     permissions.forEach(function(permission, idx) {
       payload['payment_method_options[us_bank_account][financial_connections][permissions][' + idx + ']'] = trimString_(permission);
     });
-    payload['saved_payment_method_options[allow_redisplay_filters][0]'] = 'unspecified';
-    payload['saved_payment_method_options[allow_redisplay_filters][1]'] = 'always';
-    if (cfg.stripeAchSaveForFuture === true) {
+    if (opts.allowSavedPaymentMethodRedisplay !== false) {
+      payload['saved_payment_method_options[allow_redisplay_filters][0]'] = 'unspecified';
+      payload['saved_payment_method_options[allow_redisplay_filters][1]'] = 'always';
+    }
+    if (cfg.stripeAchSaveForFuture === true && opts.saveAchForFuture !== false) {
       payload['payment_intent_data[setup_future_usage]'] = 'off_session';
     }
   }
@@ -20337,13 +20675,17 @@ function createStripeCheckoutSession_(orderDraft, options) {
     returnUrl: returnBaseUrl,
     queryParams: {
       checkoutResult: 'success',
-      stripeSessionId: '{CHECKOUT_SESSION_ID}'
+      stripeSessionId: '{CHECKOUT_SESSION_ID}',
+      summary: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? '1' : '',
+      paymentOrigin: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? 'ap' : ''
     }
   });
   const cancelUrl = buildStripeCheckoutReturnUrl_(orderDraft.token, {
     returnUrl: returnBaseUrl,
     queryParams: {
-      checkoutResult: 'cancel'
+      checkoutResult: 'cancel',
+      summary: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? '1' : '',
+      paymentOrigin: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? 'ap' : ''
     }
   });
   console.log('[RT-STRIPE-CHECKOUT] ' + JSON.stringify({

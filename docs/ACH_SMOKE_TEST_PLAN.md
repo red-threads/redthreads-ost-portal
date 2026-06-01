@@ -27,8 +27,8 @@ git diff --check
 Targeted safety checks:
 
 ```bash
-rg -n "ACH_CLIENT_PAYMENT_ENABLED|STRIPE_ACH_|PORTAL_STRIPE_EVENTS|createAchSetupSession|adminSetAchPendingProductionApproval" apps-script/src docs testcases web
-rg -n "routing_number|account_number|bank_account_token|client_secret|microdeposit" apps-script/src docs testcases web
+rg -n "ACH_CLIENT_PAYMENT_ENABLED|STRIPE_ACH_|PORTAL_STRIPE_EVENTS|createAchSetupSession|adminSetAchPendingProductionApproval|visibilityScope|paymentOrigin" apps-script/src docs testcases web
+rg -n "routing_number|account_number|bank_account_token|client_secret|hosted_verification_url|microdeposit" apps-script/src docs testcases web
 ```
 
 The second command should show only redaction, safety, or documentation references, not persisted bank data.
@@ -41,7 +41,7 @@ The second command should show only redaction, safety, or documentation referenc
 4. Existing check/cash manual payment path still works.
 5. Dashboard loads with metadata-only project listing.
 6. Token deep link loads exactly one EXPORT_LOG row.
-7. Public wrapper loads and forwards `t`, `checkoutResult`, `setupResult`, `stripeSessionId`, `dashboard`, `accountId`, and `accountAccessToken`.
+7. Public wrapper loads and forwards `t`, `checkoutResult`, `setupResult`, `stripeSessionId`, `dashboard`, `accountId`, `accountAccessToken`, and `paymentOrigin`.
 8. ACH remains hidden while `STRIPE_ACH_ENABLED` is false.
 9. ACH first-time hosted Checkout launches when `STRIPE_ACH_ENABLED` is true.
 10. ACH Checkout Session includes `customer` and `us_bank_account`.
@@ -51,8 +51,8 @@ The second command should show only redaction, safety, or documentation referenc
 14. ACH success marks payment paid and authorizes production.
 15. ACH failure marks action needed and leaves retry payment available.
 16. Dashboard Payment Methods Add Bank launches hosted setup.
-17. Setup success stores a safe saved bank summary.
-18. Saved verified bank appears in Dashboard and ACH checkout copy.
+17. Setup success stores a safe saved bank summary with `source=dashboard_setup` and `visibilityScope=dashboard_saved`.
+18. Saved verified dashboard banks appear in Dashboard and ACH checkout copy.
 19. Direct account dashboard links load without password gate for `?dashboard=1&accountId=<account-id>` and `?dashboard=1&accountAccessToken=<account-access-token>`.
 20. Stripe ACH setup success/cancel returns to the same account dashboard URL rather than the Apps Script iframe sandbox URL.
 21. Tokenized dashboard links, such as `?t=<job-token>&dashboard=1`, can launch Dashboard ACH setup without requiring a separate dashboard login.
@@ -62,7 +62,7 @@ The second command should show only redaction, safety, or documentation referenc
 25. Refreshing the account dashboard URL reloads the dashboard without returning to the login view.
 26. Opening a project from the dashboard pushes `?t=<project-token>`, and browser Back/Forward reloads the matching dashboard/project iframe route after the live wrapper has been refreshed from the repo copy.
 27. Pending/unverified ACH banks appear as verification pending in Dashboard but are not promoted as the default saved checkout bank.
-28. ACH Checkout Session payload requests saved bank redisplay for Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
+28. ACH Checkout Session payload requests saved bank redisplay for normal Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
 29. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
 30. Stale tab cannot overwrite paid, failed, locked, or superseded state.
 31. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
@@ -75,7 +75,13 @@ The second command should show only redaction, safety, or documentation referenc
 38. ACH return reconciliation disables Save, Place Order, and payment controls while it is refreshing server state.
 39. ACH pending-not-paid hydration is accepted as a post-checkout canonical state and routes the user to Summary/Invoice copy without waiting for a paid/finalized signal.
 40. ACH cancel return reconciliation preserves locked/pending canonical state if the order had already been placed, otherwise leaves retry/alternate payment available.
-41. No full bank account numbers, routing numbers, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+41. Dashboard Payment Methods lists multiple `dashboard_saved` records only; hidden/order-only/AP records do not render.
+42. Usable non-default dashboard-saved banks can be selected as default; pending, failed, blocked, removed, and order-only records cannot.
+43. Checkout saved-bank copy appears only when a usable `dashboard_saved` bank exists.
+44. Copy ACH payment link creates `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`, never a private Stripe Checkout URL.
+45. AP payment links launch hosted ACH from the locked invoice/payment-due surface, use an order-scoped Stripe Customer, omit future-save/redisplay settings, and write `achPaymentSource=ap_payment_link` plus `achPaymentVisibilityScope=order_only`.
+46. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
+47. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 
 ## ACH Event Smokes
 
@@ -94,6 +100,7 @@ For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID an
 - `charge.dispute.created`: failed/team review, no silent retry, saved bank marked unusable.
 - `setup_intent.succeeded`: saved bank summary stored.
 - `setup_intent.setup_failed`: setup failed with retry path.
+- AP-link payment events: order-level ACH fields update, but `PORTAL_ACCOUNTS.achPaymentMethodsJson` is not expanded with a dashboard-visible bank.
 - PaymentIntent or SetupIntent `requires_action` with `next_action.verify_with_microdeposits`: verification status shown as microdeposit pending; no microdeposit values stored.
 - Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink` returns a Stripe-hosted verification URL only when ACH payment/setup evidence is present.
 - Tokenized Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink({ token })` accepts a valid job dashboard token but rejects invalid or cross-account token context.

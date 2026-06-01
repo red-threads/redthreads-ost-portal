@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 24">24</div>
+  <div class="devRevisionBadge" aria-label="Development revision 26">26</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18782,7 +18782,11 @@
         isDefault: source.isDefault === true,
         createdAt: String(source.createdAt || '').trim(),
         updatedAt: String(source.updatedAt || '').trim(),
-        source: String(source.source || '').trim()
+        source: String(source.source || '').trim(),
+        visibilityScope: String(source.visibilityScope || '').trim(),
+        linkedOrderId: String(source.linkedOrderId || '').trim(),
+        linkedCheckoutAttemptId: String(source.linkedCheckoutAttemptId || '').trim(),
+        linkedBy: String(source.linkedBy || '').trim()
       };
     }).filter(item => item.paymentMethodId);
     const rawWorkflows = (raw.documentWorkflows && typeof raw.documentWorkflows === 'object') ? raw.documentWorkflows : {};
@@ -19652,12 +19656,43 @@
   function getDefaultAchPaymentMethodForUi_(account){
     const safeAccount = normalizeAccountSummary(account);
     const defaultId = String(safeAccount.defaultAchPaymentMethodId || '').trim();
-    const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
+    const methods = getDashboardVisibleAchPaymentMethodsForUi_(safeAccount);
     return methods.find(item => item && isAchPaymentMethodUsableForCheckout_(item) && (item.isDefault === true || (defaultId && item.paymentMethodId === defaultId))) || null;
+  }
+
+  function normalizeAchVisibilityScopeForUi_(value){
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'dashboard' || raw === 'saved' || raw === 'account_saved') return 'dashboard_saved';
+    if (raw === 'order' || raw === 'ap') return 'order_only';
+    return raw;
+  }
+
+  function normalizeAchSourceForUi_(value){
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'dashboard' || raw === 'dashboard_bank_setup') return 'dashboard_setup';
+    if (raw === 'ap' || raw === 'accounts_payable') return 'ap_payment_link';
+    return raw;
+  }
+
+  function isDashboardSavedAchPaymentMethodForUi_(method){
+    const item = (method && typeof method === 'object') ? method : {};
+    const scope = normalizeAchVisibilityScopeForUi_(item.visibilityScope);
+    const source = normalizeAchSourceForUi_(item.source);
+    const status = String(item.status || '').trim().toLowerCase();
+    if (!String(item.paymentMethodId || '').trim()) return false;
+    if (scope === 'removed' || status === 'removed') return false;
+    return scope === 'dashboard_saved' || (source === 'dashboard_setup' && scope !== 'order_only' && scope !== 'hidden_from_dashboard');
+  }
+
+  function getDashboardVisibleAchPaymentMethodsForUi_(account){
+    const safeAccount = normalizeAccountSummary(account);
+    const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
+    return methods.filter(isDashboardSavedAchPaymentMethodForUi_);
   }
 
   function isAchPaymentMethodUsableForCheckout_(method){
     const item = (method && typeof method === 'object') ? method : {};
+    if (!isDashboardSavedAchPaymentMethodForUi_(item)) return false;
     const status = String(item.status || '').trim().toLowerCase();
     const verificationStatus = String(item.verificationStatus || '').trim().toLowerCase();
     const signal = (status + ' ' + verificationStatus).trim();
@@ -19680,7 +19715,7 @@
 
   function getMicrodepositPendingAchPaymentMethodForUi_(account){
     const safeAccount = normalizeAccountSummary(account);
-    const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
+    const methods = getDashboardVisibleAchPaymentMethodsForUi_(safeAccount);
     return methods.slice().sort((a, b) => {
       return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
     }).find(item => item && item.paymentMethodId && isAchMicrodepositVerificationPendingForUi_(item)) || null;
@@ -19690,7 +19725,7 @@
     const safeAccount = normalizeAccountSummary(account);
     const defaultAch = getDefaultAchPaymentMethodForUi_(safeAccount);
     if (defaultAch) return defaultAch;
-    const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
+    const methods = getDashboardVisibleAchPaymentMethodsForUi_(safeAccount);
     return methods.slice().sort((a, b) => {
       return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
     }).find(item => item && item.paymentMethodId) || null;
@@ -19777,6 +19812,68 @@
     }
   }
 
+  async function setDashboardDefaultAchPaymentMethod_(paymentMethodId){
+    const methodId = String(paymentMethodId || '').trim();
+    if (!methodId) return;
+    const requestPayload = await ensureDashboardAccountDocumentContextReady_();
+    if (!requestPayload) {
+      showDashboardWorkflowError_('Unable to load this account payment workflow right now.');
+      return;
+    }
+    setAuthMessage('Updating default ACH bank...', false, { view: VIEW_DASHBOARD, persist: true });
+    try {
+      const resp = await callServer('setDefaultAchPaymentMethod', Object.assign({}, requestPayload, {
+        paymentMethodId: methodId
+      }));
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to update the default ACH bank.'));
+      }
+      if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
+      setAuthMessage('Default ACH bank updated.', false, { view: VIEW_DASHBOARD, timeoutMs: 5000 });
+      renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY);
+    } catch (err) {
+      setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+    }
+  }
+
+  function getDashboardAchMethodCardTone_(method){
+    const item = (method && typeof method === 'object') ? method : {};
+    const signal = [item.status, item.verificationStatus].map(value => String(value || '').trim().toLowerCase()).join(' ');
+    if (isAchPaymentMethodUsableForCheckout_(item)) return 'isApproved';
+    if (/(fail|failed|blocked|invalid|expired|timeout|exceeded|requires_payment_method)/i.test(signal)) return 'isRejected';
+    if (/(pending|processing|microdeposit|requires_action|unverified)/i.test(signal)) return 'isPending';
+    return 'isNotStarted';
+  }
+
+  function buildDashboardAchPaymentMethodCard_(method, account){
+    const item = (method && typeof method === 'object') ? method : {};
+    const isDefault = item.isDefault === true || String(item.paymentMethodId || '') === String(account.defaultAchPaymentMethodId || '');
+    const microdepositPending = isAchMicrodepositVerificationPendingForUi_(item);
+    const usable = isAchPaymentMethodUsableForCheckout_(item);
+    const label = isDefault ? 'Default ACH Bank' : 'Saved ACH Bank';
+    const statusLabel = getAchVerificationLabelForUi_(item.verificationStatus || item.status);
+    const card = buildDashboardAccountCard_(
+      label,
+      formatAchBankLabelForUi_(item, account),
+      {
+        interactive: microdepositPending || (!isDefault && usable),
+        hoverValue: microdepositPending ? 'Verify with Stripe' : (!isDefault && usable ? 'Set as default' : statusLabel),
+        stateClass: getDashboardAchMethodCardTone_(item),
+        ariaLabel: microdepositPending ? 'Verify pending ACH bank account with Stripe' : (!isDefault && usable ? 'Set saved ACH bank as default' : 'Saved ACH bank')
+      }
+    );
+    if (microdepositPending) {
+      card.addEventListener('click', startDashboardAchMicrodepositVerification_);
+    } else if (!isDefault && usable) {
+      card.addEventListener('click', () => {
+        setDashboardDefaultAchPaymentMethod_(item.paymentMethodId).catch(err => {
+          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+        });
+      });
+    }
+    return card;
+  }
+
   function renderDashboardAccountStatus(summary){
     if (!dashboardAccountPanel || !dashboardAccountMeta || !dashboardAccountBullets) return;
     const account = normalizeAccountSummary(summary);
@@ -19815,6 +19912,7 @@
     bindDashboardDocumentCard_(termsCard, 'credit_terms');
     bindDashboardDocumentCard_(taxCard, 'tax_exempt');
     if (isClientAchPaymentEnabled_()) {
+      const visibleAchMethods = getDashboardVisibleAchPaymentMethodsForUi_(account);
       const defaultAch = getDefaultAchPaymentMethodForUi_(account);
       const microdepositAch = getMicrodepositPendingAchPaymentMethodForUi_(account);
       const displayAch = defaultAch || microdepositAch || getMostRelevantAchPaymentMethodForUi_(account);
@@ -19834,6 +19932,9 @@
       );
       achCard.addEventListener('click', microdepositAch ? startDashboardAchMicrodepositVerification_ : startDashboardAchSetupSession_);
       dashboardAccountMeta.appendChild(achCard);
+      visibleAchMethods.forEach(method => {
+        dashboardAccountMeta.appendChild(buildDashboardAchPaymentMethodCard_(method, account));
+      });
     }
     dashboardAccountMeta.appendChild(termsCard);
     dashboardAccountMeta.appendChild(taxCard);
@@ -20664,6 +20765,8 @@
   const SUMMARY_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('summary') === '1';
   const SETUP_RETURN_RESULT = normalizeSetupReturnResultValue_(VM_REQUEST_ROUTE_META.setupResult || URL_QUERY_PARAMS.get('setupResult'));
   const PAY_NOW_METHOD = String(URL_QUERY_PARAMS.get('payNow') || '').trim().toLowerCase();
+  const PAYMENT_ORIGIN_PARAM_RAW = String(VM_REQUEST_ROUTE_META.paymentOrigin || URL_QUERY_PARAMS.get('paymentOrigin') || '').trim().toLowerCase();
+  const PAYMENT_ORIGIN_PARAM = PAYMENT_ORIGIN_PARAM_RAW || (SUMMARY_DEEPLINK_REQUEST && PAY_NOW_METHOD === 'ach' ? 'ap' : '');
   const PO_RESUME_REQUEST = URL_QUERY_PARAMS.get('resumePo') === '1';
   const PO_RESUME_STAGE = String(URL_QUERY_PARAMS.get('poStage') || '').trim().toLowerCase();
   let HAS_PORTAL_TOKEN = false;
@@ -20861,6 +20964,7 @@
     'accountDoc',
     'accountDocAction',
     'teamReview',
+    'paymentOrigin',
     'mode'
   ];
   const TEAM_MODE_UNLOCK_STORAGE_PREFIX = 'rtTeamModeUnlocked';
@@ -21967,6 +22071,58 @@
     return cleanToken ? ('https://www.redthreads.com/portal?t=' + encodeURIComponent(cleanToken)) : '';
   }
 
+  function buildExternalPortalProjectUrlWithParams_(token, extraParams){
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) return '';
+    const params = new URLSearchParams();
+    params.set('t', cleanToken);
+    const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
+    Object.keys(extra).forEach(key => {
+      const value = String(extra[key] || '').trim();
+      if (!value) return;
+      params.set(key, value);
+    });
+    return 'https://www.redthreads.com/portal?' + params.toString();
+  }
+
+  function buildExternalPortalAchPaymentLink_(token){
+    return buildExternalPortalProjectUrlWithParams_(token, {
+      summary: '1',
+      payNow: 'ach',
+      paymentOrigin: 'ap'
+    });
+  }
+
+  async function copyTextToClipboard_(text){
+    const value = String(text || '').trim();
+    if (!value) return false;
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+    return false;
+  }
+
+  async function copyPublicAchPaymentLink_(){
+    const token = getActivePortalProjectToken_();
+    const url = buildExternalPortalAchPaymentLink_(token);
+    if (!url) {
+      showNotice('Unable to build the ACH payment link for this order.', 'err', { persist: true });
+      return;
+    }
+    try {
+      const copied = await copyTextToClipboard_(url);
+      if (copied) {
+        showNotice('ACH payment link copied.', 'ok');
+        return;
+      }
+    } catch (_) {}
+    try {
+      window.prompt('Copy ACH payment link', url);
+    } catch (_) {}
+    showNotice('Copy the ACH payment link from the dialog.', 'ok', { persist: true });
+  }
+
   function normalizePortalRouteHistoryMode_(value){
     return String(value || '').trim().toLowerCase() === 'push' ? 'push' : 'replace';
   }
@@ -21997,7 +22153,7 @@
       if (String(source[key] || '').trim() === '1') normalized[key] = '1';
     });
 
-    ['payNow', 'poStage', 'accountDoc', 'accountDocAction', 'teamReview', 'mode'].forEach(key => {
+    ['payNow', 'poStage', 'accountDoc', 'accountDocAction', 'teamReview', 'paymentOrigin', 'mode'].forEach(key => {
       const value = String(source[key] || '').trim();
       if (value) normalized[key] = value;
     });
@@ -22111,6 +22267,8 @@
     const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
     if (cleanToken) params.t = cleanToken;
     if (extra.summary === '1') params.summary = '1';
+    if (extra.payNow) params.payNow = extra.payNow;
+    if (extra.paymentOrigin) params.paymentOrigin = extra.paymentOrigin;
     if (extra.mode) params.mode = extra.mode;
     return normalizePortalRouteParams_(params);
   }
@@ -22935,7 +23093,7 @@
     try {
       const url = new URL(window.location.href);
       let changed = false;
-      ['accountDoc', 'accountDocAction', 'resumePo', 'poStage', 'summary', 'payNow'].forEach(key => {
+      ['accountDoc', 'accountDocAction', 'resumePo', 'poStage', 'summary', 'payNow', 'paymentOrigin'].forEach(key => {
         if (!url.searchParams.has(key)) return;
         url.searchParams.delete(key);
         changed = true;
@@ -39043,7 +39201,10 @@
       markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_start');
       const resp = await callServer('createLockedOrderPaymentCheckout', {
         token: CURRENT_TOKEN,
-        paymentMethodSelected: paymentMethodSelected
+        paymentMethodSelected: paymentMethodSelected,
+        paymentOrigin: paymentMethodSelected === PAYMENT_METHODS.ach && PAYMENT_ORIGIN_PARAM === 'ap'
+          ? 'ap_payment_link'
+          : ''
       });
       markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_end', {
         ok: !!(resp && resp.ok === true)
@@ -40470,6 +40631,21 @@
             });
           });
           paymentSurface.appendChild(achBtn);
+
+          const achCopyBtn = createEl(
+            'button',
+            'summaryEstimateControlSecondary isPayment',
+            'Copy ACH Payment Link'
+          );
+          achCopyBtn.type = 'button';
+          achCopyBtn.disabled = isBusy;
+          achCopyBtn.addEventListener('click', () => {
+            if (isBusy) return;
+            copyPublicAchPaymentLink_().catch(err => {
+              showNotice(String((err && err.message) || err || 'Unable to copy ACH payment link.'), 'err', { persist: true });
+            });
+          });
+          paymentSurface.appendChild(achCopyBtn);
         }
 
         const paymentNote = createEl('div', 'summaryEstimatePaymentNote' + (shouldFlattenPoPaymentControls ? ' isDirect' : ''));

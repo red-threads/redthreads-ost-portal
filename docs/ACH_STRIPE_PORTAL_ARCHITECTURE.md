@@ -1,6 +1,6 @@
 # ACH Stripe Portal Architecture
 
-Status: local implementation notes for ACH V1. This document describes repo behavior before deployment. It does not contain live tokens, customer data, raw webhook payloads, or secrets.
+Status: implementation notes for ACH V1. This document describes repo behavior and does not contain live tokens, customer data, raw webhook payloads, or secrets.
 
 ## Boundaries
 
@@ -32,7 +32,13 @@ Status: local implementation notes for ACH V1. This document describes repo beha
 - `achPendingProductionApprovedBy`
 - `achPendingProductionApprovalNotes`
 
-`achPaymentMethodsJson` is an array of safe records containing Stripe IDs, bank name, last4, holder/type metadata, verification/status metadata, timestamps, and source.
+`achPaymentMethodsJson` is an array of safe records containing Stripe IDs, bank name, last4, holder/type metadata, verification/status metadata, timestamps, source, and visibility scope.
+
+Saved-bank scope rules:
+
+- `source=dashboard_setup` and `visibilityScope=dashboard_saved` are visible in Dashboard Payment Methods and default-eligible when usable.
+- `source=order_checkout`, `source=checkout_payment`, `source=ap_payment_link`, or unknown legacy records are order-only/hidden unless an existing dashboard-saved method with the same Stripe PaymentMethod ID is being updated.
+- Safe linkage metadata may include `linkedOrderId`, `linkedCheckoutAttemptId`, and `linkedBy`. It must not include bank routing/account numbers, bank tokens, raw Financial Connections payloads, hosted verification URLs, or microdeposit values.
 
 `PORTAL_ORDERS` stores ACH order metadata:
 
@@ -43,6 +49,9 @@ Status: local implementation notes for ACH V1. This document describes repo beha
 - `achFinancialConnectionsAccountId`
 - `achVerificationStatus`
 - `achVerificationFlow`
+- `achPaymentSource`
+- `achPaymentVisibilityScope`
+- `stripeAchCustomerId`
 - `achExpectedDebitDate`
 - `achFailureCode`
 - `achFailureMessage`
@@ -84,6 +93,8 @@ Customer metadata is limited to portal identifiers:
 
 ACH payment Checkout Sessions require a Customer. Card checkout preserves the existing behavior.
 
+Order-scoped AP payment links use an ephemeral/order-scoped Stripe Customer and do not write that Customer ID to `PORTAL_ACCOUNTS`. This prevents Accounts Payable bank details from becoming dashboard-visible saved banks.
+
 ## ACH Payment Checkout
 
 Active ACH payment uses hosted Checkout:
@@ -96,8 +107,20 @@ Active ACH payment uses hosted Checkout:
 - `payment_intent_data[setup_future_usage]=off_session` by default
 - Existing token, order, checkout attempt, fulfillment, and amount metadata
 
-Saved bank reuse is hosted-Checkout-mediated in V1. The portal shows the saved bank summary, but Stripe Checkout controls saved or new bank selection.
-ACH payment sessions include `saved_payment_method_options[allow_redisplay_filters]` for `unspecified` and `always` so saved verified Customer bank accounts can redisplay in Checkout. Portal default-bank fields are reserved for usable verified/active ACH methods; pending, failed, blocked, removed, or microdeposit-required methods remain in the safe saved-method list but are not treated as the default checkout bank.
+Saved bank reuse is hosted-Checkout-mediated in V1. The portal shows dashboard-saved bank summaries, but Stripe Checkout controls saved or new bank selection.
+
+ACH payment sessions for normal portal account checkout include `saved_payment_method_options[allow_redisplay_filters]` for `unspecified` and `always` so dashboard-saved verified Customer bank accounts can redisplay in Checkout. Portal default-bank fields are reserved for usable verified/active `dashboard_saved` ACH methods; pending, failed, blocked, removed, order-only, AP-link, or microdeposit-required methods are not treated as the default checkout bank.
+
+AP payment links use:
+
+- Public route: `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`
+- Hosted Checkout only after AP opens the public portal order link and starts payment.
+- `metadata[paymentOrigin]=ap_payment_link`
+- `PORTAL_ORDERS.achPaymentSource=ap_payment_link`
+- `PORTAL_ORDERS.achPaymentVisibilityScope=order_only`
+- No `payment_intent_data[setup_future_usage]`
+- No saved-payment redisplay filters
+- No account-level ACH saved-bank creation
 
 ## Dashboard Bank Setup
 
@@ -116,6 +139,8 @@ Tokenized project dashboard links, such as `?t=<job-token>&dashboard=1`, are als
 The repo and live Squarespace wrappers forward `setupResult` and account-dashboard route parameters into the Apps Script iframe.
 
 If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The server retrieves the relevant PaymentIntent or SetupIntent, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, or microdeposit values in Sheets or logs.
+
+Dashboard Payment Methods lists only dashboard-saved records. Multiple dashboard-saved banks can be shown with bank display name, last4, verification/status, default badge, Add Bank, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. Hidden/order-only/AP banks do not appear in the Dashboard list.
 
 ## Production Policy
 
