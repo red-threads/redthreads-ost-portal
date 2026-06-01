@@ -18679,17 +18679,6 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
       code: 'ach_checkout_disabled'
     });
   }
-  if (method === PAYMENT_METHODS.ach) {
-    const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
-    if (!achCustomer || achCustomer.ok !== true) {
-      return attachCheckoutTiming_(achCustomer, timing, {
-        ok: false,
-        stage: 'ach_customer',
-        paymentMethodSelected: method,
-        code: trimString_(achCustomer && achCustomer.code)
-      });
-    }
-  }
   markCheckoutTiming_(timing, 'latest_order_lookup_start', { paymentMethodSelected: method });
   const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
     cfg: ctx.cfg,
@@ -18723,6 +18712,17 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     });
   }
   markCheckoutTiming_(timing, 'locked_order_validation_end', { ok: true, paymentMethodSelected: method });
+  if (method === PAYMENT_METHODS.ach) {
+    const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
+    if (!achCustomer || achCustomer.ok !== true) {
+      return attachCheckoutTiming_(achCustomer, timing, {
+        ok: false,
+        stage: 'ach_customer',
+        paymentMethodSelected: method,
+        code: trimString_(achCustomer && achCustomer.code)
+      });
+    }
+  }
   markCheckoutTiming_(timing, 'checkout_identity_build_start');
   const checkoutAttemptId = newPortalId_('chk');
   markCheckoutTiming_(timing, 'checkout_identity_build_end');

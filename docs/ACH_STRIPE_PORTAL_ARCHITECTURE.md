@@ -121,6 +121,7 @@ AP payment links use:
 - No `payment_intent_data[setup_future_usage]`
 - No saved-payment redisplay filters
 - No account-level ACH saved-bank creation
+- Order-scoped Stripe Customer preparation happens only after the server confirms the latest order exists, is locked, and is not already paid.
 
 ## Dashboard Bank Setup
 

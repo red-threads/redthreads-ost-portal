@@ -80,8 +80,9 @@ The second command should show only redaction, safety, or documentation referenc
 43. Checkout saved-bank copy appears only when a usable `dashboard_saved` bank exists.
 44. Copy ACH payment link creates `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`, never a private Stripe Checkout URL.
 45. AP payment links launch hosted ACH from the locked invoice/payment-due surface, use an order-scoped Stripe Customer, omit future-save/redisplay settings, and write `achPaymentSource=ap_payment_link` plus `achPaymentVisibilityScope=order_only`.
-46. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
-47. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+46. AP-link ACH Customer/session creation happens only after the latest order is confirmed locked and unpaid; missing, unlocked, or already-paid orders fail before Stripe side effects.
+47. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
+48. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 
 ## ACH Event Smokes
 
