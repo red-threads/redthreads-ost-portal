@@ -19666,6 +19666,24 @@
       verificationStatus === 'active' || verificationStatus === 'verified' || verificationStatus === 'succeeded';
   }
 
+  function isAchMicrodepositVerificationPendingForUi_(method){
+    const item = (method && typeof method === 'object') ? method : {};
+    const signal = [
+      item.status,
+      item.verificationStatus,
+      item.source
+    ].map(value => String(value || '').trim().toLowerCase()).join(' ');
+    return /\b(microdeposit|requires_action)\b/i.test(signal);
+  }
+
+  function getMicrodepositPendingAchPaymentMethodForUi_(account){
+    const safeAccount = normalizeAccountSummary(account);
+    const methods = Array.isArray(safeAccount.achPaymentMethods) ? safeAccount.achPaymentMethods : [];
+    return methods.slice().sort((a, b) => {
+      return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
+    }).find(item => item && item.paymentMethodId && isAchMicrodepositVerificationPendingForUi_(item)) || null;
+  }
+
   function getMostRelevantAchPaymentMethodForUi_(account){
     const safeAccount = normalizeAccountSummary(account);
     const defaultAch = getDefaultAchPaymentMethodForUi_(safeAccount);
@@ -19725,6 +19743,37 @@
     }
   }
 
+  async function startDashboardAchMicrodepositVerification_(){
+    if (!isClientAchPaymentEnabled_()) {
+      showDashboardWorkflowError_('ACH bank verification is not available yet.');
+      return;
+    }
+    const requestPayload = await ensureDashboardAccountDocumentContextReady_();
+    if (!requestPayload) {
+      showDashboardWorkflowError_('Unable to load this account payment workflow right now.');
+      return;
+    }
+    const payload = Object.assign({}, requestPayload, {
+      intentType: 'auto'
+    });
+    setAuthMessage('Opening secure Stripe bank verification...', false, { view: VIEW_DASHBOARD, persist: true });
+    try {
+      const resp = await callServer('getAchMicrodepositVerificationLink', payload);
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Stripe bank verification is not ready yet.'));
+      }
+      if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
+      const verificationUrl = String(resp.verificationUrl || '').trim();
+      if (!verificationUrl) throw new Error('Secure bank verification URL missing.');
+      const launched = navigateToPortalStripeCheckout_(verificationUrl, { token: CURRENT_TOKEN || DASHBOARD_CONTEXT_TOKEN || '' });
+      if (!launched) {
+        setAuthMessage('Secure bank verification is ready. Allow pop-ups or try again.', true, { view: VIEW_DASHBOARD, persist: true });
+      }
+    } catch (err) {
+      setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+    }
+  }
+
   function renderDashboardAccountStatus(summary){
     if (!dashboardAccountPanel || !dashboardAccountMeta || !dashboardAccountBullets) return;
     const account = normalizeAccountSummary(summary);
@@ -19766,7 +19815,8 @@
     dashboardAccountMeta.appendChild(taxCard);
     if (isClientAchPaymentEnabled_()) {
       const defaultAch = getDefaultAchPaymentMethodForUi_(account);
-      const displayAch = defaultAch || getMostRelevantAchPaymentMethodForUi_(account);
+      const microdepositAch = getMicrodepositPendingAchPaymentMethodForUi_(account);
+      const displayAch = defaultAch || microdepositAch || getMostRelevantAchPaymentMethodForUi_(account);
       const bankLabel = displayAch ? formatAchBankLabelForUi_(displayAch, account) : 'Add bank account';
       const achStatus = displayAch
         ? getAchVerificationLabelForUi_(displayAch.verificationStatus || displayAch.status || account.defaultAchVerificationStatus)
@@ -19776,12 +19826,12 @@
         bankLabel,
         {
           interactive: true,
-          hoverValue: displayAch ? achStatus : 'Connect bank',
+          hoverValue: microdepositAch ? 'Verify with Stripe' : (displayAch ? achStatus : 'Connect bank'),
           stateClass: defaultAch ? 'isApproved' : (displayAch ? 'isPending' : 'isNotStarted'),
-          ariaLabel: defaultAch ? 'Manage saved ACH bank account' : (displayAch ? 'Manage pending ACH bank verification' : 'Add ACH bank account')
+          ariaLabel: microdepositAch ? 'Verify pending ACH bank account with Stripe' : (defaultAch ? 'Manage saved ACH bank account' : (displayAch ? 'Manage pending ACH bank verification' : 'Add ACH bank account'))
         }
       );
-      achCard.addEventListener('click', startDashboardAchSetupSession_);
+      achCard.addEventListener('click', microdepositAch ? startDashboardAchMicrodepositVerification_ : startDashboardAchSetupSession_);
       dashboardAccountMeta.appendChild(achCard);
     }
 
@@ -19801,13 +19851,16 @@
     }
     if (isClientAchPaymentEnabled_()) {
       const defaultAch = getDefaultAchPaymentMethodForUi_(account);
-      const displayAch = defaultAch || getMostRelevantAchPaymentMethodForUi_(account);
+      const microdepositAch = getMicrodepositPendingAchPaymentMethodForUi_(account);
+      const displayAch = defaultAch || microdepositAch || getMostRelevantAchPaymentMethodForUi_(account);
       appendBullet(defaultAch
         ? ('ACH bank on file: ' + formatAchBankLabelForUi_(defaultAch, account) + '. Red Threads never stores full bank account numbers.')
-        : (displayAch
+        : (microdepositAch
+          ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(microdepositAch, account) + '. Select Payment Methods to verify securely with Stripe.')
+          : (displayAch
           ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(displayAch, account) + '. Use Stripe email if microdeposit verification is required.')
           : 'Securely connect a bank account for faster ACH checkout later. Red Threads never sees or stores your full bank account number.')
-        );
+        ));
     }
 
   }
@@ -21853,6 +21906,16 @@
     }
   }
 
+  function isStripeHostedPaymentUrl_(url){
+    try {
+      const parsed = new URL(String(url || '').trim());
+      const host = String(parsed.hostname || '').trim().toLowerCase();
+      return parsed.protocol === 'https:' && (host === 'stripe.com' || host.endsWith('.stripe.com'));
+    } catch (_) {
+      return false;
+    }
+  }
+
   function markPortalCheckoutNavigationActive_(){
     PORTAL_CHECKOUT_NAVIGATION_ACTIVE = true;
     try { sessionStorage.setItem(RT_CHECKOUT_NAVIGATION_ACTIVE_KEY, '1'); } catch (_) {}
@@ -21888,7 +21951,7 @@
     const opts = (options && typeof options === 'object') ? options : {};
     const token = String(opts.token || getActivePortalProjectToken_()).trim();
     if (token) replaceCurrentPortalProjectRoute_(token);
-    const navigatesToStripe = isStripeCheckoutUrl_(targetUrl);
+    const navigatesToStripe = isStripeHostedPaymentUrl_(targetUrl);
     if (navigatesToStripe) markPortalCheckoutNavigationActive_();
 
     let topNavigationAttempted = false;

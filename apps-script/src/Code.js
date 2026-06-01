@@ -1427,6 +1427,9 @@ function doPost(e) {
     if (action === 'create_ach_setup_session') {
       return jsonOutput_(createAchSetupSession(payload));
     }
+    if (action === 'get_ach_microdeposit_verification_link') {
+      return jsonOutput_(getAchMicrodepositVerificationLink(payload));
+    }
     if (action === 'get_dashboard_project_peek') {
       return jsonOutput_(getDashboardProjectPeek(payload));
     }
@@ -5365,6 +5368,206 @@ function createAchSetupSession_(payload) {
 function createAchSetupSession(payload) {
   try {
     return createAchSetupSession_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function isSafeStripeHostedVerificationUrl_(value) {
+  const clean = trimString_(value);
+  if (!clean) return false;
+  try {
+    const parsed = new URL(clean);
+    const host = trimString_(parsed.hostname).toLowerCase();
+    return parsed.protocol === 'https:' && (host === 'stripe.com' || host.endsWith('.stripe.com'));
+  } catch (_) {
+    return false;
+  }
+}
+
+function getStripeHostedMicrodepositVerificationUrl_(intentObj) {
+  const intent = (intentObj && typeof intentObj === 'object') ? intentObj : {};
+  const nextAction = (intent.next_action && typeof intent.next_action === 'object')
+    ? intent.next_action
+    : ((intent.nextAction && typeof intent.nextAction === 'object') ? intent.nextAction : {});
+  const verification = (nextAction.verify_with_microdeposits && typeof nextAction.verify_with_microdeposits === 'object')
+    ? nextAction.verify_with_microdeposits
+    : ((nextAction.verifyWithMicrodeposits && typeof nextAction.verifyWithMicrodeposits === 'object') ? nextAction.verifyWithMicrodeposits : {});
+  const hostedUrl = trimString_(verification.hosted_verification_url || verification.hostedVerificationUrl);
+  return isSafeStripeHostedVerificationUrl_(hostedUrl) ? hostedUrl : '';
+}
+
+function buildAchMicrodepositVerificationCandidate_(intentType, intentObj, options) {
+  const intent = (intentObj && typeof intentObj === 'object') ? intentObj : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const verificationUrl = getStripeHostedMicrodepositVerificationUrl_(intent);
+  if (!verificationUrl) return null;
+  const verificationStatus = deriveAchVerificationStatusFromStripeIntent_(intent, 'microdeposit_pending');
+  return {
+    ok: true,
+    intentType: trimString_(intentType),
+    intentId: trimString_(intent.id),
+    verificationStatus: verificationStatus,
+    verificationUrl: verificationUrl,
+    orderSummary: opts.orderInfo ? buildPortalOrderSummary_(opts.orderInfo.rowObjNormalized) : null,
+    accountSummary: opts.accountInfo && opts.accountInfo.summary ? opts.accountInfo.summary : null
+  };
+}
+
+function findLatestAchVerificationOrderForAccount_(accountSummary, options) {
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const ordersSheet = opts.ordersSheet || infra.ordersSheet;
+  const accountId = trimString_(account.accountId);
+  const orgId = trimString_(account.orgId);
+  const emails = normalizeEmailRecipients_([
+    account.primaryEmail,
+    account.billingContactEmail
+  ]);
+  const matches = listSheetRowInfos_(ordersSheet).filter(function(info) {
+    const row = (info && info.rowObjNormalized && typeof info.rowObjNormalized === 'object') ? info.rowObjNormalized : {};
+    if (trimString_(row.paymentmethodselected).toLowerCase() !== PAYMENT_METHODS.ach) return false;
+    if (!trimString_(row.stripepaymentintentid)) return false;
+    const paymentState = trimString_(row.paymentstate).toLowerCase();
+    if (paymentState === PAYMENT_STATES.paid || paymentState === PAYMENT_STATES.failed) return false;
+    const verificationStatus = trimString_(row.achverificationstatus).toLowerCase();
+    if (verificationStatus && !/(microdeposit|requires_action|pending|unverified)/i.test(verificationStatus)) return false;
+    if (accountId && trimString_(row.accountid) === accountId) return true;
+    if (orgId && trimString_(row.orgid) === orgId) return true;
+    const rowEmail = normalizeEmail_(row.personemail || row.primaryemail);
+    return !!(rowEmail && emails.indexOf(rowEmail) >= 0);
+  });
+  if (!matches.length) return null;
+  matches.sort(comparePortalOrderInfosDesc_);
+  return matches[0] || null;
+}
+
+function resolveAchPaymentMicrodepositVerificationCandidate_(ctx, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const cfg = ctx.cfg || getConfig_();
+  const ss = ctx.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = ctx.infra || ensurePortalInfrastructure_(ss, cfg);
+  const token = trimString_(p.token || (ctx.exportRowInfo && ctx.exportRowInfo.rowObjNormalized && ctx.exportRowInfo.rowObjNormalized.token));
+  let orderInfo = null;
+  if (trimString_(p.orderId)) {
+    orderInfo = getPortalOrderByOrderId_(trimString_(p.orderId), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  }
+  if (!orderInfo && trimString_(p.paymentIntentId)) {
+    orderInfo = getPortalOrderByStripePaymentIntentId_(trimString_(p.paymentIntentId), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  }
+  if (!orderInfo && token) {
+    orderInfo = getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  }
+  if (!orderInfo && ctx.accountInfo && ctx.accountInfo.summary) {
+    orderInfo = findLatestAchVerificationOrderForAccount_(ctx.accountInfo.summary, { cfg: cfg, ss: ss, infra: infra });
+  }
+  if (!orderInfo) return null;
+  const row = orderInfo.rowObjNormalized || {};
+  const orderToken = trimString_(row.token);
+  if (token && orderToken && orderToken !== token) return null;
+  if (trimString_(row.paymentmethodselected).toLowerCase() !== PAYMENT_METHODS.ach) return null;
+  const paymentIntentId = trimString_(row.stripepaymentintentid);
+  if (!paymentIntentId) return null;
+  const paymentIntentResult = retrieveStripePaymentIntent_(paymentIntentId, { cfg: cfg });
+  if (!paymentIntentResult || paymentIntentResult.ok !== true || !paymentIntentResult.body) return null;
+  const achSummary = resolveAchPaymentMethodSummaryFromPaymentIntent_(paymentIntentResult.body, { cfg: cfg, source: 'checkout_payment' });
+  const achEvidence = buildAchStripeEventEvidence_({
+    eventType: 'payment_intent.microdeposit_verification',
+    orderInfo: orderInfo,
+    paymentIntent: paymentIntentResult.body,
+    achSummary: achSummary
+  });
+  if (achEvidence.isAchPayment !== true) return null;
+  return buildAchMicrodepositVerificationCandidate_('payment', paymentIntentResult.body, {
+    orderInfo: orderInfo,
+    accountInfo: ctx.accountInfo || null
+  });
+}
+
+function resolveAchSetupMicrodepositVerificationCandidate_(ctx) {
+  const cfg = ctx.cfg || getConfig_();
+  let accountInfo = ctx.accountInfo || null;
+  if (!accountInfo || !accountInfo.summary) return null;
+  let accountSummary = accountInfo.summary;
+  let setupIntentId = trimString_(accountSummary.achSetupIntentId);
+  if (!setupIntentId && trimString_(accountSummary.achSetupSessionId)) {
+    const sessionResult = retrieveStripeCheckoutSession_(accountSummary.achSetupSessionId, { cfg: cfg });
+    if (sessionResult && sessionResult.ok === true && sessionResult.body) {
+      const session = sessionResult.body;
+      setupIntentId = stripeIdFromObject_(session.setup_intent);
+      const setupHandled = handleCheckoutSetupSessionCompleted_(session, {
+        cfg: cfg,
+        ss: ctx.ss,
+        infra: ctx.infra
+      });
+      if (setupHandled && setupHandled.accountSummary) {
+        accountInfo = {
+          rowInfo: accountInfo.rowInfo,
+          summary: setupHandled.accountSummary
+        };
+        accountSummary = setupHandled.accountSummary;
+        setupIntentId = setupIntentId || trimString_(accountSummary.achSetupIntentId);
+      }
+    }
+  }
+  if (!setupIntentId) return null;
+  const setupIntentResult = retrieveStripeSetupIntent_(setupIntentId, { cfg: cfg });
+  if (!setupIntentResult || setupIntentResult.ok !== true || !setupIntentResult.body) return null;
+  const achSummary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentResult.body, { cfg: cfg });
+  const achEvidence = buildAchStripeEventEvidence_({
+    eventType: 'setup_intent.microdeposit_verification',
+    setupIntent: setupIntentResult.body,
+    achSummary: achSummary
+  });
+  if (achEvidence.isAchSetup !== true) return null;
+  return buildAchMicrodepositVerificationCandidate_('setup', setupIntentResult.body, {
+    accountInfo: accountInfo
+  });
+}
+
+function getAchMicrodepositVerificationLink_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  if (!trimString_(p.token) && !trimString_(p.sessionId)) {
+    return {
+      ok: false,
+      code: 'ach_verification_context_required',
+      error: 'Open this project or sign in to Dashboard before verifying bank microdeposits.'
+    };
+  }
+  const ctx = buildAccountDocumentContext_(p);
+  if (!ctx || ctx.ok !== true) return ctx || { ok: false, error: 'Unable to load account.' };
+  if (ctx.cfg.stripeAchEnabled !== true) {
+    return { ok: false, code: 'ach_verification_disabled', error: 'ACH bank verification is not currently available.' };
+  }
+  if (trimString_(p.sessionId)) {
+    const authResult = validateAchSetupDashboardAuthorization_(ctx, p);
+    if (!authResult || authResult.ok !== true) return authResult;
+  }
+
+  const requestedType = trimString_(p.intentType).toLowerCase();
+  let candidate = null;
+  if (requestedType !== 'payment') {
+    candidate = resolveAchSetupMicrodepositVerificationCandidate_(ctx);
+  }
+  if (!candidate && requestedType !== 'setup') {
+    candidate = resolveAchPaymentMicrodepositVerificationCandidate_(ctx, p);
+  }
+  if (!candidate || !candidate.verificationUrl) {
+    return {
+      ok: false,
+      code: 'ach_microdeposit_verification_unavailable',
+      error: 'Stripe-hosted bank verification is not available yet. Check the Stripe email link or retry ACH with a different bank.'
+    };
+  }
+  return candidate;
+}
+
+function getAchMicrodepositVerificationLink(payload) {
+  try {
+    return getAchMicrodepositVerificationLink_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }

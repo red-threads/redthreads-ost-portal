@@ -111,6 +111,8 @@ Dashboard Account Settings can start hosted bank setup through `createAchSetupSe
 
 The repo and live Squarespace wrappers forward `setupResult` into the Apps Script iframe.
 
+If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The server retrieves the relevant PaymentIntent or SetupIntent, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, or microdeposit values in Sheets or logs.
+
 ## Production Policy
 
 Default policy:
