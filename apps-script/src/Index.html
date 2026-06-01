@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 29">29</div>
+  <div class="devRevisionBadge" aria-label="Development revision 30">30</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19048,6 +19048,23 @@
     refreshRuntimeBootFlags();
   }
 
+  function isCheckoutCancelReturnIntent_(){
+    const value = String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+    return value === 'cancel';
+  }
+
+  function forceClientModeForCheckoutCancelReturn_(){
+    if (!isCheckoutCancelReturnIntent_()) return false;
+    PORTAL_MODE = 'client';
+    IS_TEAM = false;
+    TEAM_MODE_UNLOCKED = false;
+    TEAM_MODE_AUTH_KEY = '';
+    try {
+      closeTeamModeGate({ immediate: true });
+    } catch (_) {}
+    return true;
+  }
+
   function buildClientAuthShellVm(){
     return {
       token: '',
@@ -20008,7 +20025,10 @@
     const current = normalizeCurrentStateSummary(CURRENT_STATE_SUMMARY);
     const lifecycleState = String(workflow.lifecycleState || '').trim().toLowerCase();
     const paymentState = String(current.currentPaymentState || '').trim().toLowerCase();
-    const paymentMethod = String(workflow.paymentMethod || current.currentPaymentMethod || '').trim().toLowerCase();
+    const requestedPaymentMethod = PAY_NOW_METHOD === PAYMENT_METHODS.ach || PAYMENT_ORIGIN_PARAM === 'ap'
+      ? PAYMENT_METHODS.ach
+      : (PAY_NOW_METHOD === 'card' ? 'card' : '');
+    const paymentMethod = String(workflow.paymentMethod || current.currentPaymentMethod || requestedPaymentMethod || '').trim().toLowerCase();
     const achDetailState = String(workflow.achDetailState || '').trim().toLowerCase();
     if (result === 'cancel') {
       return {
@@ -20052,7 +20072,25 @@
     };
   }
 
-  function clearConsumedCheckoutReturnParams(){
+  function getSetupReturnDashboardMessage_(result){
+    const value = String(result || getSetupReturnResult_() || '').trim().toLowerCase();
+    if (value === 'success') {
+      return 'Bank account setup started. Stripe will update verification status as it completes.';
+    }
+    if (value === 'cancel') {
+      return 'Bank account setup canceled.';
+    }
+    return '';
+  }
+
+  function showSetupReturnDashboardMessage_(result){
+    const message = getSetupReturnDashboardMessage_(result);
+    if (!message) return;
+    setAuthMessage(message, false, { view: VIEW_DASHBOARD, persist: true });
+  }
+
+  function clearConsumedCheckoutReturnParams(options){
+    const opts = (options && typeof options === 'object') ? options : {};
     CHECKOUT_RETURN_INTENT_CONSUMED = true;
     PARENT_CHECKOUT_RETURN_RESULT = '';
     PARENT_SETUP_RETURN_RESULT = '';
@@ -20061,7 +20099,11 @@
     try {
       const url = new URL(window.location.href);
       let changed = false;
-      ['checkoutResult', 'setupResult', 'stripeSessionId'].forEach(key => {
+      const clearKeys = ['checkoutResult', 'setupResult', 'stripeSessionId'];
+      if (opts.checkoutCancel === true) {
+        clearKeys.push('payNow', 'paymentOrigin', 'mode', 'teamReview');
+      }
+      clearKeys.forEach(key => {
         if (!url.searchParams.has(key)) return;
         url.searchParams.delete(key);
         changed = true;
@@ -20143,7 +20185,7 @@
     if (setupResult) return 'Refreshing bank setup status...';
     const checkoutResult = getCheckoutReturnResult_();
     if (checkoutResult === 'success') return 'Order placed — confirming payment status...';
-    if (checkoutResult === 'cancel') return 'Refreshing checkout status...';
+    if (checkoutResult === 'cancel') return 'Checkout canceled. Returning to your order...';
     return '';
   }
 
@@ -20201,6 +20243,11 @@
 
   async function reconcileCheckoutReturnOnBoot_(){
     if (!hasCheckoutReturnIntent_() || CHECKOUT_RETURN_RECONCILE_IN_FLIGHT) return false;
+    if (getCheckoutReturnResult_() === 'cancel') {
+      forceClientModeForCheckoutCancelReturn_();
+      handleCheckoutReturnNotice({ checkoutCancel: true });
+      return true;
+    }
     const payload = buildCheckoutReturnReconciliationPayload_();
     if (!payload.token && !payload.setupResult) return false;
     CHECKOUT_RETURN_RECONCILE_IN_FLIGHT = true;
@@ -20245,15 +20292,21 @@
     }
   }
 
-  function handleCheckoutReturnNotice(){
+  function handleCheckoutReturnNotice(options){
+    const opts = (options && typeof options === 'object') ? options : {};
     const result = getCheckoutReturnResult_();
     const notice = describeCheckoutReturnNotice();
     if (!notice) return;
     if (result === 'success' || result === 'cancel') {
       SUPPRESS_NEXT_AUTO_INTRO = true;
     }
+    if (result === 'cancel' || opts.checkoutCancel === true) {
+      forceClientModeForCheckoutCancelReturn_();
+    }
     showNotice(notice.message, notice.type || 'ok');
-    clearConsumedCheckoutReturnParams();
+    clearConsumedCheckoutReturnParams({
+      checkoutCancel: result === 'cancel' || opts.checkoutCancel === true
+    });
   }
 
   /* ---------------- DOM Registry + Runtime State ---------------- */
@@ -22959,6 +23012,7 @@
   }
 
   function syncTeamModeUi(){
+    forceClientModeForCheckoutCancelReturn_();
     const isTeam = IS_TEAM;
     const isLocked = isTeamModeLocked();
     const authorName = getVisibleTeamAuthorName();
@@ -23168,6 +23222,11 @@
     if (SUMMARY_BOOTSTRAP_INTENT_CONSUMED) return false;
     if (!SUMMARY_DEEPLINK_REQUEST || CURRENT_VIEW !== VIEW_SNAPSHOT) return false;
     SUMMARY_BOOTSTRAP_INTENT_CONSUMED = true;
+    if (isCheckoutCancelReturnIntent_()) {
+      closeIntroModal();
+      setActiveSummaryPanel({ render: true });
+      return true;
+    }
     clearDashboardBootstrapQueryParams_();
     closeIntroModal();
     setActiveSummaryPanel({ render: true });
@@ -25188,7 +25247,7 @@
       resetDashboardHomeTransientState_();
       clearDashboardProjectRows();
       renderDashboardAccountStatus({});
-      return;
+      return null;
     }
     resetDashboardHomeTransientState_();
     if (!opts.suppressLoadingMessage) {
@@ -25199,7 +25258,7 @@
       const resp = await fetchDashboardHomeDataForRequest_(requestPayload);
       if (!resp) {
         clearDashboardProjectRows();
-        return;
+        return null;
       }
       applyDashboardHomeData(resp);
       if (opts.awaitPaint) {
@@ -25207,6 +25266,7 @@
       }
       setAuthMessage('', false, { view: VIEW_DASHBOARD });
       consumeDashboardBootstrapIntent_().catch(() => {});
+      return resp;
     } catch (err) {
       const msg = String((err && err.message) || err);
       setAuthMessage(msg, true, { view: VIEW_DASHBOARD });
@@ -25218,6 +25278,7 @@
         setView(VIEW_LOGIN);
         setAuthMessage(msg, true, { view: VIEW_LOGIN, preserve: true });
       }
+      return null;
     }
   }
 
@@ -25554,24 +25615,25 @@
     if (SETUP_RETURN_RESULT) {
       const sid = String(AUTH_SESSION_ID || readStoredSessionId() || '').trim();
       if (sid) {
+        const setupReturnResult = SETUP_RETURN_RESULT;
         AUTH_SESSION_ID = sid;
         setDashboardSessionContext_();
-        setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
-        setAuthMessage(
-          SETUP_RETURN_RESULT === 'success'
-            ? 'Bank account setup started. Stripe will update verification status as it completes.'
-            : 'Bank account setup canceled.',
-          false,
-          { view: VIEW_DASHBOARD, persist: true }
-        );
+        rtShowLoader('Loading dashboard', 'Preparing your account view.');
         loadProjectsForHome({
           requestPayload: { sessionId: sid },
           suppressLoadingMessage: true,
           awaitPaint: true
-        }).then(() => {
+        }).then(async resp => {
+          if (!resp) return;
           syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+          setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          showSetupReturnDashboardMessage_(setupReturnResult);
+          notifyPortalReady({ reason: 'dashboard-ready' });
         }).catch(err => {
           setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+        }).finally(() => {
+          rtHideLoader();
         });
       }
     }
@@ -43302,7 +43364,12 @@
   function startPortalApp(){
     const checkoutReturnResult = getCheckoutReturnResult_();
     const hasReturnIntent = hasCheckoutReturnIntent_();
-    if (hasReturnIntent) {
+    const isCheckoutCancelReturn = checkoutReturnResult === 'cancel';
+    const shouldReconcileReturn = hasReturnIntent && !isCheckoutCancelReturn;
+    if (isCheckoutCancelReturn) {
+      forceClientModeForCheckoutCancelReturn_();
+      SUPPRESS_NEXT_AUTO_INTRO = true;
+    } else if (shouldReconcileReturn) {
       beginCheckoutReturnUiLock_(getCheckoutReturnReconciliationMessage_());
       SUPPRESS_NEXT_AUTO_INTRO = true;
     }
@@ -43319,14 +43386,20 @@
     setSaveControls();
     renderPortalStatusBanner();
     renderPortal();
-    if (hasReturnIntent) {
+    if (shouldReconcileReturn) {
       reconcileCheckoutReturnOnBoot_().catch(err => {
         console.warn('Checkout return reconciliation failed:', err);
       });
     } else {
-      handleCheckoutReturnNotice();
+      handleCheckoutReturnNotice({
+        checkoutCancel: isCheckoutCancelReturn
+      });
     }
-    if (CURRENT_TOKEN) replaceCurrentPortalProjectRoute_(CURRENT_TOKEN);
+    if (CURRENT_TOKEN) {
+      replaceCurrentPortalProjectRoute_(CURRENT_TOKEN, {
+        summary: isCheckoutCancelReturn && SUMMARY_DEEPLINK_REQUEST ? '1' : ''
+      });
+    }
     if (
       !hasReturnIntent &&
       checkoutReturnResult === 'success'
@@ -43372,17 +43445,7 @@
           ensureAuthShellBindings();
           applyAuthShellRuntimeState();
           setDashboardAccountContext_(accountCtx.accountId, accountCtx.accountAccessToken);
-          setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          if (SETUP_RETURN_RESULT) {
-            setAuthMessage(
-              SETUP_RETURN_RESULT === 'success'
-                ? 'Bank account setup started. Stripe will update verification status as it completes.'
-                : 'Bank account setup canceled.',
-              false,
-              { view: VIEW_DASHBOARD, persist: true }
-            );
-          }
+          const setupReturnResult = SETUP_RETURN_RESULT;
           await reconcileCheckoutReturnOnBoot_();
           await loadProjectsForHome({
             requestPayload: getDashboardContextRequestPayload_(),
@@ -43390,6 +43453,10 @@
             awaitPaint: true
           });
           syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+          setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          showSetupReturnDashboardMessage_(setupReturnResult);
+          consumeDashboardBootstrapIntent_().catch(() => {});
           notifyPortalReady({ reason: 'dashboard-ready' });
         } finally {
           rtHideLoader();
@@ -43426,8 +43493,7 @@
         } else {
           setDashboardTokenContext_(CURRENT_TOKEN);
         }
-        setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
-        await new Promise(resolve => requestAnimationFrame(resolve));
+        const setupReturnResult = SETUP_RETURN_RESULT;
         await reconcileCheckoutReturnOnBoot_();
         await loadProjectsForHome({
           requestPayload: getDashboardContextRequestPayload_() || { token: CURRENT_TOKEN },
@@ -43435,6 +43501,10 @@
           awaitPaint: true
         });
         syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+        setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        showSetupReturnDashboardMessage_(setupReturnResult);
+        consumeDashboardBootstrapIntent_().catch(() => {});
         notifyPortalReady({ reason: 'dashboard-ready' });
       } finally {
         rtHideLoader();

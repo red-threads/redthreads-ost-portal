@@ -547,7 +547,9 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
-    const mode = normalizeMode_((e && e.parameter && e.parameter.mode) || 'client');
+    const mode = routeMeta.checkoutResult
+      ? 'client'
+      : normalizeMode_((e && e.parameter && e.parameter.mode) || 'client');
 
     const cfg = getConfig_();
     const ss = SpreadsheetApp.openById(cfg.sheetId);
