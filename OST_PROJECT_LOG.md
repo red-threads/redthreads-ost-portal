@@ -592,3 +592,13 @@ Append-only project memory for decisions, session summaries, validation results,
 - Deployment: `clasp status` succeeded; `clasp push --force` pushed 4 files; `clasp version "Fix dashboard project Team Mode inheritance"` created version `862`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` is deployed at version `862`.
 - Smoke tests: direct Apps Script `/exec` returned HTTP 200 and contains `Development revision 31`; stale `Development revision 30` is absent; `forceClientMode` and `clearTeamModeRuntimeStateForToken_` are present. Public wrapper `/portal` returned HTTP 200, targets the stable deployment ID, and still forwards `mode` and `teamReview` for explicit team links. Browser smoke loaded the public wrapper login surface. The live private dashboard-open flow for order/project 1900 was not automated because no private account credential or token was used.
 - Follow-ups: retry opening order/project 1900 from the logged-in dashboard. Expected result: no Team Mode password modal, Place Order visibility governed by normal lifecycle/art/quantity gates, and explicit `?mode=team` links still entering Team Mode.
+
+## 2026-06-02 - Order 1900 Fixture Smoke After Access Clarification
+
+- Mode: QA / docs-only context update.
+- Branch/commit/PR: `main`.
+- Owner clarification: current portal orders/accounts are test/build fixtures and may be used for debugging and smoke testing. Data-safety rules still apply: do not commit or print bearer links, tokenized URLs, Stripe Checkout URLs, secrets, raw bank data, raw webhook payloads, or Sheet row dumps.
+- Smoke tests: opened the local order/project 1900 fixture through the public wrapper as a direct project route. The project loaded with `Development revision 31`, no Team Mode password gate appeared, the lifecycle/status copy said the next action is to click Place Order, and the Place Order button was visible/enabled. This confirms the shipped `forceClientMode` protection handles the visible client-mode symptoms for the order-1900 fixture.
+- Additional observation: a previously available account bearer dashboard route resolved to a blank account shell with no organization/email/projects, so that route is not a valid stand-in for the logged-in account dashboard. The correct authenticated dashboard-open click can be retested from an actual logged-in dashboard session; expected behavior remains no Team Mode password gate and Place Order governed only by normal lifecycle gates.
+- Files changed: `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Deployment: none. No Apps Script push/version/deploy, Script Properties change, Stripe mode change, Squarespace update, or source runtime change was performed.
