@@ -2174,38 +2174,6 @@
       line-height:1.45;
       font-weight:700;
     }
-    .dashboardAchReadinessActions{
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-      margin-top:auto;
-    }
-    .dashboardAchReadinessAction{
-      appearance:none;
-      -webkit-appearance:none;
-      border:1px solid rgba(255,255,255,.16);
-      border-radius:999px;
-      background:rgba(255,255,255,.06);
-      color:#f8fafc;
-      min-height:28px;
-      padding:0 10px;
-      font:inherit;
-      font-size:11px;
-      line-height:1;
-      font-weight:900;
-      letter-spacing:.04em;
-      text-transform:uppercase;
-      cursor:pointer;
-      transition:background-color .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
-    }
-    .dashboardAchReadinessAction:hover,
-    .dashboardAchReadinessAction:focus-visible{
-      outline:none;
-      transform:translateY(-1px);
-      border-color:rgba(81,255,183,.58);
-      background:rgba(81,255,183,.13);
-      color:#9fffd0;
-    }
     .dashboardAchManageBackdrop{
       position:fixed;
       inset:0;
@@ -16722,7 +16690,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 38">38</div>
+  <div class="devRevisionBadge" aria-label="Development revision 39">39</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20441,10 +20409,8 @@
       return {
         state: 'ready',
         stateClass: 'isApproved',
-        status: 'Ready for Stripe checkout',
-        body: 'Your account has verified ACH bank information available for Stripe checkout.' +
-          (needsActionMethods.length ? (' ' + needsActionMethods.length + ' ' + (needsActionMethods.length === 1 ? 'bank needs' : 'banks need') + ' verification.') : '') +
-          (unavailableMethods.length ? (' ' + unavailableMethods.length + ' ' + (unavailableMethods.length === 1 ? 'bank needs' : 'banks need') + ' attention.') : ''),
+        status: 'Manage connected accounts',
+        body: '',
         visibleMethods: visibleMethods,
         readyMethods: readyMethods,
         needsActionMethods: needsActionMethods,
@@ -20455,10 +20421,8 @@
       return {
         state: 'action_needed',
         stateClass: unavailableMethods.length ? 'isRejected' : 'isPending',
-        status: 'Action needed',
-        body: unavailableMethods.length
-          ? 'One or more ACH bank connections need attention. Manage ACH banks to retry setup or connect another bank.'
-          : 'ACH bank verification is pending. Verify your bank before relying on saved ACH checkout.',
+        status: 'Manage connected accounts',
+        body: '',
         visibleMethods: visibleMethods,
         readyMethods: readyMethods,
         needsActionMethods: needsActionMethods,
@@ -20468,8 +20432,8 @@
     return {
       state: 'not_set_up',
       stateClass: 'isNotStarted',
-      status: 'Not set up',
-      body: 'Connect a bank to prepare ACH payments through Stripe.',
+      status: 'Manage connected accounts',
+      body: '',
       visibleMethods: [],
       readyMethods: [],
       needsActionMethods: [],
@@ -20481,23 +20445,19 @@
     const summary = getDashboardAchReadinessSummary_(account);
     const card = document.createElement('div');
     card.className = 'dashboardAccountCard dashboardAchReadinessCard isInteractive ' + summary.stateClass;
-    card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH Bank Payments'));
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', 'Manage ACH payment accounts');
+    card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH payment accounts'));
     const wrap = createEl('div', 'dashboardAccountCardValueWrap');
-    wrap.appendChild(createEl('span', 'dashboardAccountCardValue', summary.status));
-    wrap.appendChild(createEl('span', 'dashboardAchReadinessBody', summary.body));
+    wrap.appendChild(createEl('span', 'dashboardAccountCardValue', 'Manage connected accounts'));
     card.appendChild(wrap);
-    const actions = createEl('div', 'dashboardAchReadinessActions');
-    if (summary.visibleMethods.length) {
-      const manageBtn = createEl('button', 'dashboardAchReadinessAction', 'Manage ACH banks');
-      manageBtn.type = 'button';
-      manageBtn.addEventListener('click', openDashboardAchManageModal_);
-      actions.appendChild(manageBtn);
-    }
-    const addBtn = createEl('button', 'dashboardAchReadinessAction', 'Add ACH bank');
-    addBtn.type = 'button';
-    addBtn.addEventListener('click', startDashboardAchSetupSession_);
-    actions.appendChild(addBtn);
-    card.appendChild(actions);
+    card.addEventListener('click', openDashboardAchManageModal_);
+    card.addEventListener('keydown', evt => {
+      if (evt.key !== 'Enter' && evt.key !== ' ') return;
+      evt.preventDefault();
+      openDashboardAchManageModal_();
+    });
     return card;
   }
 

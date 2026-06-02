@@ -52,7 +52,7 @@ The second command should show only redaction, safety, or documentation referenc
 15. ACH failure marks action needed and leaves retry payment available.
 16. Dashboard Payment Methods Add Bank launches hosted setup.
 17. Setup success stores a safe saved bank summary with `source=dashboard_setup` and `visibilityScope=dashboard_saved`.
-18. Dashboard shows one `ACH Bank Payments` readiness card; bank names/last4 appear only inside Manage ACH banks, not in checkout copy.
+18. Dashboard shows one `ACH payment accounts` card with body text `Manage connected accounts`; bank names/last4 appear only inside Manage ACH banks, not in the top card or checkout copy.
 19. Direct account dashboard links load without password gate for `?dashboard=1&accountId=<account-id>` and `?dashboard=1&accountAccessToken=<account-access-token>`.
 20. Stripe ACH setup success/cancel returns to the same account dashboard URL rather than the Apps Script iframe sandbox URL.
 21. Tokenized dashboard links, such as `?t=<job-token>&dashboard=1`, can launch Dashboard ACH setup without requiring a separate dashboard login.
@@ -62,7 +62,7 @@ The second command should show only redaction, safety, or documentation referenc
 25. Login from public `/portal` replaces the parent URL with `?dashboard=1&accountAccessToken=<account-access-token>` after dashboard hydration.
 26. Refreshing the account dashboard URL reloads the dashboard without returning to the login view.
 27. Opening a project from the dashboard pushes `?t=<project-token>`, and browser Back/Forward reloads the matching dashboard/project iframe route after the live wrapper has been refreshed from the repo copy.
-28. Pending/unverified ACH banks produce an `ACH Bank Payments` readiness card with action-needed copy; Manage ACH banks shows the pending rows with Verify with Stripe, and the same PaymentMethod is not rendered twice in the top dashboard summary.
+28. Pending/unverified ACH banks keep the same compact `ACH payment accounts` card; clicking it opens Manage ACH banks, where pending rows show Verify with Stripe and the same PaymentMethod is not rendered twice in the top dashboard summary.
 29. Pending/unverified ACH banks are not promoted as the default saved checkout bank.
 30. ACH Checkout Session payload requests saved bank redisplay for normal Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
 31. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.

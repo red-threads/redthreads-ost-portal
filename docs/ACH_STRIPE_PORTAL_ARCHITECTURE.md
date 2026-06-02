@@ -162,11 +162,7 @@ The repo and live Squarespace wrappers forward `setupResult` and account-dashboa
 
 If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The server retrieves the relevant PaymentIntent or SetupIntent, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, or microdeposit values in Sheets or logs.
 
-The top Dashboard summary renders one compact `ACH Bank Payments` readiness card, not one card per saved bank. The readiness card uses generic account-level copy only:
-
-- `Ready for Stripe checkout` when at least one usable `dashboard_saved` method exists.
-- `Action needed` when visible ACH methods exist but pending, failed, blocked, or otherwise unavailable methods require attention.
-- `Not set up` when no dashboard-visible ACH methods exist.
+The top Dashboard summary renders one compact `ACH payment accounts` card, not one card per saved bank. The card body is limited to `Manage connected accounts` and acts as the single entry point to ACH management. It does not show readiness paragraphs, bank counts, bank names, last4, or separate Manage/Add buttons.
 
 `Manage ACH banks` opens a dashboard modal with safe details for dashboard-saved records only. The modal can show bank display name, last4, verification/status, default badge, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. Its copy states that Stripe may still ask the payer to confirm, choose, or connect a bank during Checkout. Hidden/order-only/AP banks do not appear in Dashboard Payment Methods.
 
