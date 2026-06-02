@@ -52,7 +52,7 @@ The second command should show only redaction, safety, or documentation referenc
 15. ACH failure marks action needed and leaves retry payment available.
 16. Dashboard Payment Methods Add Bank launches hosted setup.
 17. Setup success stores a safe saved bank summary with `source=dashboard_setup` and `visibilityScope=dashboard_saved`.
-18. Dashboard shows one `ACH payment accounts` card with body text `Manage connected accounts`; bank names/last4 appear only inside Manage ACH banks, not in the top card or checkout copy.
+18. Dashboard shows one `ACH payment accounts` card with body text `Manage accounts`; bank names/last4 appear only inside Manage ACH banks, not in the top card or checkout copy, and no ready-state ACH checkout bullet appears below the dashboard cards.
 19. Direct account dashboard links load without password gate for `?dashboard=1&accountId=<account-id>` and `?dashboard=1&accountAccessToken=<account-access-token>`.
 20. Stripe ACH setup success/cancel returns to the same account dashboard URL rather than the Apps Script iframe sandbox URL.
 21. Tokenized dashboard links, such as `?t=<job-token>&dashboard=1`, can launch Dashboard ACH setup without requiring a separate dashboard login.

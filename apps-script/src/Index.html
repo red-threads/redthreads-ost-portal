@@ -16693,7 +16693,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 40">40</div>
+  <div class="devRevisionBadge" aria-label="Development revision 41">41</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20432,7 +20432,7 @@
       return {
         state: 'ready',
         stateClass: 'isApproved',
-        status: 'Manage connected accounts',
+        status: 'Manage accounts',
         body: '',
         visibleMethods: visibleMethods,
         readyMethods: readyMethods,
@@ -20444,7 +20444,7 @@
       return {
         state: 'action_needed',
         stateClass: unavailableMethods.length ? 'isRejected' : 'isPending',
-        status: 'Manage connected accounts',
+        status: 'Manage accounts',
         body: '',
         visibleMethods: visibleMethods,
         readyMethods: readyMethods,
@@ -20455,7 +20455,7 @@
     return {
       state: 'not_set_up',
       stateClass: 'isNotStarted',
-      status: 'Manage connected accounts',
+      status: 'Manage accounts',
       body: '',
       visibleMethods: [],
       readyMethods: [],
@@ -20473,7 +20473,7 @@
     card.setAttribute('aria-label', 'Manage ACH payment accounts');
     card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH payment accounts'));
     const wrap = createEl('div', 'dashboardAccountCardValueWrap');
-    wrap.appendChild(createEl('span', 'dashboardAccountCardValue', 'Manage connected accounts'));
+    wrap.appendChild(createEl('span', 'dashboardAccountCardValue', 'Manage accounts'));
     card.appendChild(wrap);
     card.addEventListener('click', openDashboardAchManageModal_);
     card.addEventListener('keydown', evt => {
@@ -20641,11 +20641,11 @@
     }
     if (isClientAchPaymentEnabled_()) {
       const achReadiness = getDashboardAchReadinessSummary_(account);
-      appendBullet(achReadiness.state === 'ready'
-        ? 'ACH bank payments are ready for Stripe checkout. Stripe may still ask the payer to confirm, choose, or connect a bank.'
-        : (achReadiness.state === 'action_needed'
-          ? 'ACH bank payments need attention. Use Manage ACH banks to verify, retry setup, or connect another bank.'
-          : 'Connect a bank account to prepare ACH payments through Stripe. Red Threads never sees or stores your full bank account number.'));
+      if (achReadiness.state === 'action_needed') {
+        appendBullet('ACH bank payments need attention. Use Manage ACH banks to verify, retry setup, or connect another bank.');
+      } else if (achReadiness.state !== 'ready') {
+        appendBullet('Connect a bank account to prepare ACH payments through Stripe. Red Threads never sees or stores your full bank account number.');
+      }
     }
 
   }
