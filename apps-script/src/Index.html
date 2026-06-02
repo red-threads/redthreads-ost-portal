@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 30">30</div>
+  <div class="devRevisionBadge" aria-label="Development revision 31">31</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19063,6 +19063,21 @@
       closeTeamModeGate({ immediate: true });
     } catch (_) {}
     return true;
+  }
+
+  function clearTeamModeRuntimeStateForToken_(token){
+    const cleanToken = String(token || INITIAL_TOKEN || CURRENT_TOKEN || '').trim();
+    PORTAL_MODE = 'client';
+    IS_TEAM = false;
+    TEAM_MODE_UNLOCKED = false;
+    TEAM_MODE_AUTH_KEY = '';
+    if (cleanToken) {
+      writeStoredTeamModeAuthKey(cleanToken, '');
+      writeStoredTeamModeUnlock(cleanToken, false);
+    }
+    try {
+      closeTeamModeGate({ immediate: true });
+    } catch (_) {}
   }
 
   function buildClientAuthShellVm(){
@@ -22280,6 +22295,8 @@
     const accountId = String(extra.accountId || DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
     const dashboardToken = String(extra.t || extra.token || DASHBOARD_CONTEXT_TOKEN || CURRENT_TOKEN || '').trim();
     const params = Object.assign({}, extra, { dashboard: '1' });
+    delete params.mode;
+    delete params.teamReview;
     if (accountAccessToken) {
       params.accountAccessToken = accountAccessToken;
       delete params.accountId;
@@ -22318,11 +22335,19 @@
     const params = (extraParams && typeof extraParams === 'object') ? Object.assign({}, extraParams) : {};
     const cleanToken = String(token || params.t || params.token || '').trim();
     const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
+    const forceClientRoute = extra.forceClientMode === true || extra.clientMode === true;
+    delete params.forceClientMode;
+    delete params.clientMode;
     if (cleanToken) params.t = cleanToken;
     if (extra.summary === '1') params.summary = '1';
     if (extra.payNow) params.payNow = extra.payNow;
     if (extra.paymentOrigin) params.paymentOrigin = extra.paymentOrigin;
-    if (extra.mode) params.mode = extra.mode;
+    if (forceClientRoute) {
+      delete params.mode;
+      delete params.teamReview;
+    } else if (extra.mode) {
+      params.mode = extra.mode;
+    }
     return normalizePortalRouteParams_(params);
   }
 
@@ -23437,9 +23462,16 @@
     const payload = clonePlainObject(portalPayload);
     const payloadToken = String(payload.token || '').trim();
     if (!payloadToken) throw new Error('Project payload token missing.');
+    const forceClientMode = opts.forceClientMode === true;
     const shouldPreserveTeamMode =
-      opts.preserveTeamMode === true ||
-      (IS_TEAM && payloadToken && payloadToken === String(CURRENT_TOKEN || INITIAL_TOKEN || '').trim());
+      forceClientMode !== true && (
+        opts.preserveTeamMode === true ||
+        (IS_TEAM && payloadToken && payloadToken === String(CURRENT_TOKEN || INITIAL_TOKEN || '').trim())
+      );
+    if (forceClientMode) {
+      payload.mode = 'client';
+      clearTeamModeRuntimeStateForToken_(payloadToken);
+    }
     if (shouldPreserveTeamMode) {
       payload.mode = 'team';
     }
@@ -23543,12 +23575,16 @@
         setDashboardTokenContext_(cleanToken);
       }
       if (source === 'dashboard' || normalizePortalRouteHistoryMode_(opts.historyMode) === 'push') {
-        replaceCurrentPortalProjectRoute_(cleanToken, { historyMode: 'push' });
+        replaceCurrentPortalProjectRoute_(cleanToken, {
+          historyMode: 'push',
+          forceClientMode: source === 'dashboard' || requireAuthSession
+        });
       }
       applyPortalPayloadInPlace(resp.portalPayload, {
         source: source,
         fromAuthShell: requireAuthSession,
-        reason: source
+        reason: source,
+        forceClientMode: source === 'dashboard' || requireAuthSession
       });
       rtDebugStep('OPEN:done', {
         source: source,
