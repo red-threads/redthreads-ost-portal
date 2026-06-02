@@ -5121,6 +5121,49 @@ function ensurePortalAccountAccessToken_(accountInfo, options) {
   };
 }
 
+function hasPortalAccountDashboardIdentity_(accountSummary) {
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  return !!(
+    trimString_(account.orgId) ||
+    trimString_(account.orgName) ||
+    normalizeEmail_(account.primaryEmail) ||
+    normalizeEmail_(account.billingContactEmail)
+  );
+}
+
+function hasPortalAccountDashboardProjectBinding_(accountSummary, options) {
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const accountEmail = normalizeEmail_(account.primaryEmail) || normalizeEmail_(account.billingContactEmail);
+  if (!trimString_(account.accountId) && !trimString_(account.orgId) && !accountEmail) {
+    return false;
+  }
+  const opts = (options && typeof options === 'object') ? options : {};
+  const exportSheet = opts.exportSheet || (opts.infra && opts.infra.exportSheet);
+  if (!exportSheet) return false;
+  return listSheetRowInfos_(exportSheet).some(function(info) {
+    return isExportRowVisibleForAccount_(
+      info && info.rowObjNormalized ? info.rowObjNormalized : {},
+      account
+    );
+  });
+}
+
+function validatePortalAccountDirectAccessInfo_(accountInfo, options) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : {};
+  const summary = (info.summary && typeof info.summary === 'object') ? info.summary : {};
+  if (hasPortalAccountDashboardIdentity_(summary)) {
+    return { ok: true };
+  }
+  if (hasPortalAccountDashboardProjectBinding_(summary, options)) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    code: 'account_dashboard_unlinked',
+    error: 'This account dashboard link is not connected to an account. Open your dashboard from a current project link or sign in again.'
+  };
+}
+
 function hasPortalAccountDirectAccessPayload_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   return !!(trimString_(p.accountAccessToken || p.dashboardAccessToken) || trimString_(p.accountId));
@@ -5147,6 +5190,13 @@ function resolvePortalAccountDirectAccess_(payload, options) {
     return { ok: false, code: 'account_dashboard_not_found', error: 'Account dashboard link not found.' };
   }
   accountInfo = ensurePortalAccountAccessToken_(accountInfo, { cfg: cfg, ss: ss, infra: infra }) || accountInfo;
+  const validation = validatePortalAccountDirectAccessInfo_(accountInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    exportSheet: infra.exportSheet
+  });
+  if (!validation || validation.ok !== true) return validation;
   return {
     ok: true,
     accountInfo: accountInfo,

@@ -16340,7 +16340,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 31">31</div>
+  <div class="devRevisionBadge" aria-label="Development revision 32">32</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21502,6 +21502,14 @@
       !!(String(DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim() || String(DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim());
   }
 
+  function isAccountDashboardRequestPayload_(payload){
+    const req = (payload && typeof payload === 'object') ? payload : {};
+    return !!(
+      String(req.accountAccessToken || req.dashboardAccessToken || '').trim() ||
+      String(req.accountId || '').trim()
+    );
+  }
+
   function getDashboardAccountContextFromUrl_(){
     return {
       accountId: DASHBOARD_ACCOUNT_ID_PARAM,
@@ -25305,7 +25313,12 @@
       return resp;
     } catch (err) {
       const msg = String((err && err.message) || err);
-      setAuthMessage(msg, true, { view: VIEW_DASHBOARD });
+      const messageOptions = { view: VIEW_DASHBOARD };
+      if (isAccountDashboardRequestPayload_(requestPayload)) {
+        messageOptions.timeoutMs = 0;
+      }
+      setAuthMessage(msg, true, messageOptions);
+      clearDashboardProjectRows();
       renderDashboardAccountStatus({});
       if (/session/i.test(msg) && !hasDashboardTokenContext_()) {
         writeStoredSessionId('');
@@ -43483,13 +43496,17 @@
           setDashboardAccountContext_(accountCtx.accountId, accountCtx.accountAccessToken);
           const setupReturnResult = SETUP_RETURN_RESULT;
           await reconcileCheckoutReturnOnBoot_();
-          await loadProjectsForHome({
+          const dashboardHomeResp = await loadProjectsForHome({
             requestPayload: getDashboardContextRequestPayload_(),
             suppressLoadingMessage: true,
             awaitPaint: true
           });
-          syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
           setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+          if (!dashboardHomeResp) {
+            notifyPortalReady({ reason: 'dashboard-load-failed' });
+            return;
+          }
+          syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
           await new Promise(resolve => requestAnimationFrame(resolve));
           showSetupReturnDashboardMessage_(setupReturnResult);
           consumeDashboardBootstrapIntent_().catch(() => {});
@@ -43531,13 +43548,17 @@
         }
         const setupReturnResult = SETUP_RETURN_RESULT;
         await reconcileCheckoutReturnOnBoot_();
-        await loadProjectsForHome({
+        const dashboardHomeResp = await loadProjectsForHome({
           requestPayload: getDashboardContextRequestPayload_() || { token: CURRENT_TOKEN },
           suppressLoadingMessage: true,
           awaitPaint: true
         });
-        syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
         setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+        if (!dashboardHomeResp) {
+          notifyPortalReady({ reason: 'dashboard-load-failed' });
+          return;
+        }
+        syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
         await new Promise(resolve => requestAnimationFrame(resolve));
         showSetupReturnDashboardMessage_(setupReturnResult);
         consumeDashboardBootstrapIntent_().catch(() => {});
