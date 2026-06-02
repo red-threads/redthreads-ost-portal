@@ -2156,6 +2156,226 @@
     .dashboardAccountCard.isInteractive:focus-visible .dashboardAccountCardHoverValue{
       display:block;
     }
+    .dashboardAchReadinessCard{
+      gap:10px;
+    }
+    .dashboardAchReadinessCard .dashboardAccountCardValueWrap{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .dashboardAccountCard.dashboardAchReadinessCard:hover .dashboardAccountCardValue,
+    .dashboardAccountCard.dashboardAchReadinessCard:focus-within .dashboardAccountCardValue{
+      display:block;
+    }
+    .dashboardAchReadinessBody{
+      color:#dbeafe;
+      font-size:12px;
+      line-height:1.45;
+      font-weight:700;
+    }
+    .dashboardAchReadinessActions{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:auto;
+    }
+    .dashboardAchReadinessAction{
+      appearance:none;
+      -webkit-appearance:none;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:999px;
+      background:rgba(255,255,255,.06);
+      color:#f8fafc;
+      min-height:28px;
+      padding:0 10px;
+      font:inherit;
+      font-size:11px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      cursor:pointer;
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
+    }
+    .dashboardAchReadinessAction:hover,
+    .dashboardAchReadinessAction:focus-visible{
+      outline:none;
+      transform:translateY(-1px);
+      border-color:rgba(81,255,183,.58);
+      background:rgba(81,255,183,.13);
+      color:#9fffd0;
+    }
+    .dashboardAchManageBackdrop{
+      position:fixed;
+      inset:0;
+      z-index:1200;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      background:rgba(2,6,23,.76);
+      backdrop-filter:blur(18px);
+    }
+    .dashboardAchManageBackdrop[hidden]{
+      display:none !important;
+    }
+    .dashboardAchManageModal{
+      width:min(860px,100%);
+      max-height:min(82vh,760px);
+      overflow:auto;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:14px;
+      background:linear-gradient(180deg, rgba(15,23,42,.98) 0%, rgba(7,12,22,.98) 100%);
+      box-shadow:0 28px 90px rgba(0,0,0,.42);
+      color:var(--rt-text);
+      padding:22px;
+    }
+    .dashboardAchManageHead{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+    }
+    .dashboardAchManageTitle{
+      margin:0;
+      color:#51ffb7;
+      font-size:22px;
+      line-height:1.15;
+      font-weight:900;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .dashboardAchManageSub{
+      margin:8px 0 0;
+      color:#dbeafe;
+      font-size:13px;
+      line-height:1.5;
+      font-weight:700;
+    }
+    .dashboardAchManageClose{
+      appearance:none;
+      -webkit-appearance:none;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:999px;
+      background:rgba(255,255,255,.06);
+      color:#fff;
+      width:36px;
+      height:36px;
+      font:inherit;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .dashboardAchManageBody{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .dashboardAchManageSection{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:12px;
+      background:rgba(255,255,255,.035);
+      padding:14px;
+    }
+    .dashboardAchManageSectionTitle{
+      margin:0 0 10px;
+      color:#f8fafc;
+      font-size:13px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    .dashboardAchManageEmpty{
+      margin:0;
+      color:#94a3b8;
+      font-size:13px;
+      line-height:1.45;
+      font-weight:700;
+    }
+    .dashboardAchManageRows{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .dashboardAchManageRow{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:12px;
+      align-items:center;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:10px;
+      background:rgba(15,23,42,.56);
+      padding:12px;
+    }
+    .dashboardAchManageBank{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+    }
+    .dashboardAchManageBankName{
+      color:#fff;
+      font-size:14px;
+      line-height:1.3;
+      font-weight:900;
+      overflow-wrap:anywhere;
+    }
+    .dashboardAchManageMeta{
+      color:#cbd5e1;
+      font-size:12px;
+      line-height:1.4;
+      font-weight:700;
+    }
+    .dashboardAchManageBadge{
+      display:inline-flex;
+      width:max-content;
+      max-width:100%;
+      min-height:22px;
+      align-items:center;
+      padding:0 8px;
+      border-radius:999px;
+      border:1px solid rgba(81,255,183,.35);
+      background:rgba(81,255,183,.1);
+      color:#9fffd0;
+      font-size:11px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:.05em;
+      text-transform:uppercase;
+    }
+    .dashboardAchManageActions{
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+      gap:8px;
+    }
+    .dashboardAchManageBtn{
+      appearance:none;
+      -webkit-appearance:none;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:999px;
+      background:rgba(255,255,255,.06);
+      color:#f8fafc;
+      min-height:30px;
+      padding:0 12px;
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .dashboardAchManageBtn.is-primary{
+      border-color:rgba(81,255,183,.5);
+      background:rgba(81,255,183,.12);
+      color:#9fffd0;
+    }
+    .dashboardAchManageFooter{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      margin-top:18px;
+    }
     .dashboardAccountBullets{
       margin:0;
       padding-left:18px;
@@ -13748,74 +13968,6 @@
       line-height:1.55;
       font-weight:700;
     }
-    .orderFlowAchBankList{
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-    }
-    .orderFlowAchBankOption{
-      display:grid;
-      grid-template-columns:auto minmax(0,1fr);
-      gap:10px;
-      align-items:start;
-      width:100%;
-      border:1px solid rgba(255,255,255,.14);
-      border-radius:14px;
-      background:rgba(15,23,42,.52);
-      color:#f8fafc;
-      padding:11px 12px;
-      box-sizing:border-box;
-      cursor:pointer;
-    }
-    .orderFlowAchBankOption.is-selected{
-      border-color:rgba(81,255,183,.7);
-      background:rgba(20,184,166,.18);
-      box-shadow:0 0 0 1px rgba(81,255,183,.18);
-    }
-    .orderFlowAchBankOption.is-disabled{
-      cursor:default;
-      opacity:.78;
-    }
-    .orderFlowAchBankRadio{
-      margin-top:2px;
-      accent-color:#51ffb7;
-    }
-    .orderFlowAchBankMain{
-      min-width:0;
-      display:flex;
-      flex-direction:column;
-      gap:4px;
-    }
-    .orderFlowAchBankName{
-      color:#fff;
-      font-size:14px;
-      line-height:1.25;
-      font-weight:900;
-      overflow-wrap:anywhere;
-    }
-    .orderFlowAchBankMeta{
-      color:#cbd5e1;
-      font-size:12px;
-      line-height:1.35;
-      font-weight:700;
-    }
-    .orderFlowAchBankBadge{
-      display:inline-flex;
-      align-items:center;
-      width:max-content;
-      max-width:100%;
-      min-height:22px;
-      padding:0 8px;
-      border-radius:999px;
-      border:1px solid rgba(81,255,183,.35);
-      background:rgba(81,255,183,.1);
-      color:#9fffd0;
-      font-size:11px;
-      line-height:1;
-      font-weight:900;
-      text-transform:uppercase;
-      letter-spacing:.05em;
-    }
     .orderFlowApFieldGrid{
       display:grid;
       grid-template-columns:minmax(0,1fr);
@@ -16570,7 +16722,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 37">37</div>
+  <div class="devRevisionBadge" aria-label="Development revision 38">38</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -16671,6 +16823,22 @@
       <div class="dashboardAccountPanel" id="dashboardAccountPanel">
         <div class="dashboardAccountMeta" id="dashboardAccountMeta"></div>
         <ul class="dashboardAccountBullets" id="dashboardAccountBullets"></ul>
+      </div>
+      <div class="dashboardAchManageBackdrop" id="dashboardAchManageBackdrop" hidden>
+        <div class="dashboardAchManageModal" id="dashboardAchManageModal" role="dialog" aria-modal="true" aria-labelledby="dashboardAchManageTitle">
+          <div class="dashboardAchManageHead">
+            <div>
+              <h2 class="dashboardAchManageTitle" id="dashboardAchManageTitle">Manage ACH banks</h2>
+              <p class="dashboardAchManageSub">Stripe may ask the payer to confirm, choose, or connect a bank during checkout. Red Threads does not store full bank account numbers.</p>
+            </div>
+            <button class="dashboardAchManageClose" id="dashboardAchManageCloseBtn" type="button" aria-label="Close ACH bank management">X</button>
+          </div>
+          <div class="dashboardAchManageBody" id="dashboardAchManageBody"></div>
+          <div class="dashboardAchManageFooter">
+            <button class="dashboardAchManageBtn" id="dashboardAchManageDoneBtn" type="button">Done</button>
+            <button class="dashboardAchManageBtn is-primary" id="dashboardAchManageAddBtn" type="button">Add ACH bank</button>
+          </div>
+        </div>
       </div>
       <div class="authProjectsWrap">
         <table class="authProjectsTable">
@@ -17582,8 +17750,7 @@
         <div class="orderFlowAchDecisionLayout">
           <div class="orderFlowInfoCard orderFlowAchDecisionLane">
             <p class="orderFlowLaneTitle">Pay now with ACH</p>
-            <p class="orderFlowLaneCopy" id="orderFlowAchDecisionCopy">Choose a saved bank preference or connect another bank securely through Stripe. Stripe will confirm the bank and authorization before payment is initiated.</p>
-            <div class="orderFlowAchBankList" id="orderFlowAchBankList"></div>
+            <p class="orderFlowLaneCopy" id="orderFlowAchDecisionCopy">Pay securely from a US bank account through Stripe. Stripe may show saved bank accounts, ask you to confirm a bank, or ask you to connect a bank before payment is initiated. Red Threads never sees or stores your full bank account number.</p>
             <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowAchContinueBtn" type="button">Continue to secure ACH checkout</button>
           </div>
           <div class="orderFlowInfoCard orderFlowAchDecisionLane">
@@ -20261,38 +20428,171 @@
     return 'isNotStarted';
   }
 
-  function buildDashboardAchPaymentMethodCard_(method, account){
+  function getDashboardAchReadinessSummary_(account){
+    const safeAccount = normalizeAccountSummary(account);
+    const visibleMethods = getDashboardVisibleAchPaymentMethodsForUi_(safeAccount);
+    const readyMethods = visibleMethods.filter(isAchPaymentMethodUsableForCheckout_);
+    const unavailableMethods = visibleMethods.filter(method => getDashboardAchMethodCardTone_(method) === 'isRejected');
+    const needsActionMethods = visibleMethods.filter(method => {
+      if (isAchPaymentMethodUsableForCheckout_(method)) return false;
+      return getDashboardAchMethodCardTone_(method) !== 'isRejected';
+    });
+    if (readyMethods.length) {
+      return {
+        state: 'ready',
+        stateClass: 'isApproved',
+        status: 'Ready for Stripe checkout',
+        body: 'Your account has verified ACH bank information available for Stripe checkout.' +
+          (needsActionMethods.length ? (' ' + needsActionMethods.length + ' ' + (needsActionMethods.length === 1 ? 'bank needs' : 'banks need') + ' verification.') : '') +
+          (unavailableMethods.length ? (' ' + unavailableMethods.length + ' ' + (unavailableMethods.length === 1 ? 'bank needs' : 'banks need') + ' attention.') : ''),
+        visibleMethods: visibleMethods,
+        readyMethods: readyMethods,
+        needsActionMethods: needsActionMethods,
+        unavailableMethods: unavailableMethods
+      };
+    }
+    if (visibleMethods.length) {
+      return {
+        state: 'action_needed',
+        stateClass: unavailableMethods.length ? 'isRejected' : 'isPending',
+        status: 'Action needed',
+        body: unavailableMethods.length
+          ? 'One or more ACH bank connections need attention. Manage ACH banks to retry setup or connect another bank.'
+          : 'ACH bank verification is pending. Verify your bank before relying on saved ACH checkout.',
+        visibleMethods: visibleMethods,
+        readyMethods: readyMethods,
+        needsActionMethods: needsActionMethods,
+        unavailableMethods: unavailableMethods
+      };
+    }
+    return {
+      state: 'not_set_up',
+      stateClass: 'isNotStarted',
+      status: 'Not set up',
+      body: 'Connect a bank to prepare ACH payments through Stripe.',
+      visibleMethods: [],
+      readyMethods: [],
+      needsActionMethods: [],
+      unavailableMethods: []
+    };
+  }
+
+  function buildDashboardAchReadinessCard_(account){
+    const summary = getDashboardAchReadinessSummary_(account);
+    const card = document.createElement('div');
+    card.className = 'dashboardAccountCard dashboardAchReadinessCard isInteractive ' + summary.stateClass;
+    card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH Bank Payments'));
+    const wrap = createEl('div', 'dashboardAccountCardValueWrap');
+    wrap.appendChild(createEl('span', 'dashboardAccountCardValue', summary.status));
+    wrap.appendChild(createEl('span', 'dashboardAchReadinessBody', summary.body));
+    card.appendChild(wrap);
+    const actions = createEl('div', 'dashboardAchReadinessActions');
+    if (summary.visibleMethods.length) {
+      const manageBtn = createEl('button', 'dashboardAchReadinessAction', 'Manage ACH banks');
+      manageBtn.type = 'button';
+      manageBtn.addEventListener('click', openDashboardAchManageModal_);
+      actions.appendChild(manageBtn);
+    }
+    const addBtn = createEl('button', 'dashboardAchReadinessAction', 'Add ACH bank');
+    addBtn.type = 'button';
+    addBtn.addEventListener('click', startDashboardAchSetupSession_);
+    actions.appendChild(addBtn);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function buildDashboardAchManageRow_(method, account){
     const item = (method && typeof method === 'object') ? method : {};
     const isDefault = item.isDefault === true || String(item.paymentMethodId || '') === String(account.defaultAchPaymentMethodId || '');
     const microdepositPending = isAchMicrodepositVerificationPendingForUi_(item);
     const usable = isAchPaymentMethodUsableForCheckout_(item);
-    const tone = getDashboardAchMethodCardTone_(item);
-    const label = microdepositPending
-      ? 'ACH Bank Verification'
-      : (tone === 'isRejected'
-        ? 'ACH Bank Action Needed'
-        : (isDefault ? 'Default ACH Bank' : 'Saved ACH Bank'));
+    const row = createEl('div', 'dashboardAchManageRow');
+    const bank = createEl('div', 'dashboardAchManageBank');
+    bank.appendChild(createEl('div', 'dashboardAchManageBankName', formatAchBankLabelForUi_(item, account)));
     const statusLabel = getAchVerificationLabelForUi_(item.verificationStatus || item.status);
-    const card = buildDashboardAccountCard_(
-      label,
-      formatAchBankLabelForUi_(item, account),
-      {
-        interactive: microdepositPending || (!isDefault && usable),
-        hoverValue: microdepositPending ? 'Verify with Stripe' : (!isDefault && usable ? 'Set as default' : statusLabel),
-        stateClass: tone,
-        ariaLabel: microdepositPending ? 'Verify pending ACH bank account with Stripe' : (!isDefault && usable ? 'Set saved ACH bank as default' : 'Saved ACH bank')
-      }
-    );
+    bank.appendChild(createEl('div', 'dashboardAchManageMeta', statusLabel + '. Stripe may still ask the payer to confirm, choose, or connect a bank during checkout.'));
+    if (isDefault && usable) {
+      bank.appendChild(createEl('span', 'dashboardAchManageBadge', 'Default'));
+    }
+    row.appendChild(bank);
+    const actions = createEl('div', 'dashboardAchManageActions');
     if (microdepositPending) {
-      card.addEventListener('click', startDashboardAchMicrodepositVerification_);
-    } else if (!isDefault && usable) {
-      card.addEventListener('click', () => {
-        setDashboardDefaultAchPaymentMethod_(item.paymentMethodId).catch(err => {
+      const verifyBtn = createEl('button', 'dashboardAchManageBtn is-primary', 'Verify with Stripe');
+      verifyBtn.type = 'button';
+      verifyBtn.addEventListener('click', () => {
+        startDashboardAchMicrodepositVerification_().catch(err => {
           setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
         });
       });
+      actions.appendChild(verifyBtn);
     }
-    return card;
+    if (usable && !isDefault) {
+      const defaultBtn = createEl('button', 'dashboardAchManageBtn', 'Set Default');
+      defaultBtn.type = 'button';
+      defaultBtn.addEventListener('click', () => {
+        setDashboardDefaultAchPaymentMethod_(item.paymentMethodId).then(() => {
+          renderDashboardAchManageModal_();
+        }).catch(err => {
+          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+        });
+      });
+      actions.appendChild(defaultBtn);
+    }
+    row.appendChild(actions);
+    return row;
+  }
+
+  function appendDashboardAchManageSection_(title, methods, emptyText, account){
+    const section = createEl('section', 'dashboardAchManageSection');
+    section.appendChild(createEl('h3', 'dashboardAchManageSectionTitle', title));
+    if (!methods.length) {
+      section.appendChild(createEl('p', 'dashboardAchManageEmpty', emptyText));
+      return section;
+    }
+    const rows = createEl('div', 'dashboardAchManageRows');
+    methods.forEach(method => {
+      rows.appendChild(buildDashboardAchManageRow_(method, account));
+    });
+    section.appendChild(rows);
+    return section;
+  }
+
+  function renderDashboardAchManageModal_(){
+    if (!dashboardAchManageBody) return;
+    const account = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
+    const summary = getDashboardAchReadinessSummary_(account);
+    dashboardAchManageBody.innerHTML = '';
+    dashboardAchManageBody.appendChild(appendDashboardAchManageSection_(
+      'Ready',
+      summary.readyMethods,
+      'No verified ACH bank information is ready yet.',
+      account
+    ));
+    dashboardAchManageBody.appendChild(appendDashboardAchManageSection_(
+      'Needs action',
+      summary.needsActionMethods,
+      'No ACH bank verification actions are pending.',
+      account
+    ));
+    dashboardAchManageBody.appendChild(appendDashboardAchManageSection_(
+      'Unavailable',
+      summary.unavailableMethods,
+      'No failed or blocked ACH banks are on this account.',
+      account
+    ));
+  }
+
+  function openDashboardAchManageModal_(){
+    if (!dashboardAchManageBackdrop) return;
+    renderDashboardAchManageModal_();
+    dashboardAchManageBackdrop.hidden = false;
+    requestAnimationFrame(() => {
+      if (dashboardAchManageCloseBtn) dashboardAchManageCloseBtn.focus();
+    });
+  }
+
+  function closeDashboardAchManageModal_(){
+    if (dashboardAchManageBackdrop) dashboardAchManageBackdrop.hidden = true;
   }
 
   function renderDashboardAccountStatus(summary){
@@ -20333,22 +20633,7 @@
     bindDashboardDocumentCard_(termsCard, 'credit_terms');
     bindDashboardDocumentCard_(taxCard, 'tax_exempt');
     if (isClientAchPaymentEnabled_()) {
-      const visibleAchMethods = getDashboardVisibleAchPaymentMethodsForUi_(account);
-      visibleAchMethods.forEach(method => {
-        dashboardAccountMeta.appendChild(buildDashboardAchPaymentMethodCard_(method, account));
-      });
-      const addAchCard = buildDashboardAccountCard_(
-        visibleAchMethods.length ? 'Add ACH Bank' : 'ACH Bank Account',
-        visibleAchMethods.length ? 'Connect another bank' : 'Connect ACH bank',
-        {
-          interactive: true,
-          hoverValue: 'Add ACH bank',
-          stateClass: 'isNotStarted',
-          ariaLabel: 'Add ACH bank account'
-        }
-      );
-      addAchCard.addEventListener('click', startDashboardAchSetupSession_);
-      dashboardAccountMeta.appendChild(addAchCard);
+      dashboardAccountMeta.appendChild(buildDashboardAchReadinessCard_(account));
     }
     dashboardAccountMeta.appendChild(termsCard);
     dashboardAccountMeta.appendChild(taxCard);
@@ -20368,17 +20653,12 @@
       appendBullet('Credit terms are on file for your organization. You can now submit orders via purchase orders.');
     }
     if (isClientAchPaymentEnabled_()) {
-      const defaultAch = getDefaultAchPaymentMethodForUi_(account);
-      const microdepositAch = getMicrodepositPendingAchPaymentMethodForUi_(account);
-      const displayAch = defaultAch || microdepositAch || getMostRelevantAchPaymentMethodForUi_(account);
-      appendBullet(defaultAch
-        ? ('ACH bank on file: ' + formatAchBankLabelForUi_(defaultAch, account) + '. Red Threads never stores full bank account numbers.')
-        : (microdepositAch
-          ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(microdepositAch, account) + '. Select ACH Bank Account to verify securely with Stripe.')
-          : (displayAch
-          ? ('ACH bank verification pending: ' + formatAchBankLabelForUi_(displayAch, account) + '. Use Stripe email if microdeposit verification is required.')
-          : 'Securely connect a bank account for faster ACH checkout later. Red Threads never sees or stores your full bank account number.')
-        ));
+      const achReadiness = getDashboardAchReadinessSummary_(account);
+      appendBullet(achReadiness.state === 'ready'
+        ? 'ACH bank payments are ready for Stripe checkout. Stripe may still ask the payer to confirm, choose, or connect a bank.'
+        : (achReadiness.state === 'action_needed'
+          ? 'ACH bank payments need attention. Use Manage ACH banks to verify, retry setup, or connect another bank.'
+          : 'Connect a bank account to prepare ACH payments through Stripe. Red Threads never sees or stores your full bank account number.'));
     }
 
   }
@@ -20768,6 +21048,12 @@
   const dashboardAccountBadge = document.getElementById('dashboardAccountBadge');
   const dashboardAccountMeta = document.getElementById('dashboardAccountMeta');
   const dashboardAccountBullets = document.getElementById('dashboardAccountBullets');
+  const dashboardAchManageBackdrop = document.getElementById('dashboardAchManageBackdrop');
+  const dashboardAchManageModal = document.getElementById('dashboardAchManageModal');
+  const dashboardAchManageBody = document.getElementById('dashboardAchManageBody');
+  const dashboardAchManageCloseBtn = document.getElementById('dashboardAchManageCloseBtn');
+  const dashboardAchManageDoneBtn = document.getElementById('dashboardAchManageDoneBtn');
+  const dashboardAchManageAddBtn = document.getElementById('dashboardAchManageAddBtn');
   const dashboardApplyTermsBtn = document.getElementById('dashboardApplyTermsBtn');
   const dashboardTaxExemptBtn = document.getElementById('dashboardTaxExemptBtn');
   const projectView = document.getElementById('projectView');
@@ -21103,7 +21389,6 @@
   const orderFlowPoSection = document.getElementById('orderFlowPoSection');
   const orderFlowAchDecisionSection = document.getElementById('orderFlowAchDecisionSection');
   const orderFlowAchDecisionCopy = document.getElementById('orderFlowAchDecisionCopy');
-  const orderFlowAchBankList = document.getElementById('orderFlowAchBankList');
   const orderFlowAchContinueBtn = document.getElementById('orderFlowAchContinueBtn');
   const orderFlowApEmailInput = document.getElementById('orderFlowApEmailInput');
   const orderFlowApNameInput = document.getElementById('orderFlowApNameInput');
@@ -21338,8 +21623,6 @@
   let ORDER_FLOW_SHIPPING_CHARGE_CENTS = 0;
   let ORDER_FLOW_SHIPPING_MODE_LABEL = '';
   let ORDER_FLOW_SELECTED_METHOD = '';
-  let ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = '';
-  let ORDER_FLOW_ACH_CHECKOUT_INTENT = 'unspecified';
   let ORDER_FLOW_AP_STATUS = { tone: '', message: '' };
   let ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
   let ORDER_FLOW_CHECKOUT_URL = '';
@@ -35457,97 +35740,12 @@
     orderFlowApStatus.classList.toggle('is-ok', tone === 'ok');
   }
 
-  function getOrderFlowAchDecisionDefaultMethod_(usableMethods){
-    const methods = Array.isArray(usableMethods) ? usableMethods : [];
-    const defaultId = String(getOrderFlowAchAccountSummaryForUi_().defaultAchPaymentMethodId || '').trim();
-    return methods.find(item => item && item.isDefault === true)
-      || methods.find(item => item && defaultId && String(item.paymentMethodId || '').trim() === defaultId)
-      || methods[0]
-      || null;
-  }
-
-  function syncOrderFlowAchDecisionSelection_(usableMethods){
-    const methods = Array.isArray(usableMethods) ? usableMethods : getUsableAchPaymentMethodsForCheckoutUi_(getOrderFlowAchAccountSummaryForUi_());
-    const selectedExists = methods.some(item => String(item && item.paymentMethodId || '').trim() === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID);
-    if (!selectedExists) {
-      const defaultMethod = getOrderFlowAchDecisionDefaultMethod_(methods);
-      ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = defaultMethod ? String(defaultMethod.paymentMethodId || '').trim() : '';
-    }
-    ORDER_FLOW_ACH_CHECKOUT_INTENT = ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID ? 'saved_bank' : 'new_bank';
-  }
-
-  function createOrderFlowAchBankOption_(method, options){
-    const opts = (options && typeof options === 'object') ? options : {};
-    const item = (method && typeof method === 'object') ? method : {};
-    const selectable = opts.selectable === true;
-    const accountSummary = opts.accountSummary || getOrderFlowAchAccountSummaryForUi_();
-    const methodId = String(item.paymentMethodId || '').trim();
-    const label = createEl(selectable ? 'label' : 'div', 'orderFlowAchBankOption' + (selectable && methodId === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID ? ' is-selected' : '') + (!selectable ? ' is-disabled' : ''));
-    if (selectable) {
-      const input = document.createElement('input');
-      input.className = 'orderFlowAchBankRadio';
-      input.type = 'radio';
-      input.name = 'orderFlowAchPreferredBank';
-      input.value = methodId;
-      input.checked = methodId === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID;
-      input.addEventListener('change', () => {
-        ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = methodId;
-        ORDER_FLOW_ACH_CHECKOUT_INTENT = methodId ? 'saved_bank' : 'new_bank';
-        renderOrderFlowAchDecisionSection_();
-      });
-      label.appendChild(input);
-    } else {
-      label.appendChild(createEl('span', 'orderFlowAchBankRadio', ''));
-    }
-    const main = createEl('div', 'orderFlowAchBankMain');
-    main.appendChild(createEl('div', 'orderFlowAchBankName', formatAchBankLabelForUi_(item, accountSummary)));
-    const statusLabel = getAchVerificationLabelForUi_(item.verificationStatus || item.status);
-    const selectedCopy = methodId === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID
-      ? 'Preferred bank — Stripe may ask you to confirm this bank or choose another bank before payment is initiated.'
-      : 'Verified — Select as your preferred bank. Stripe will confirm the bank before payment is initiated.';
-    main.appendChild(createEl('div', 'orderFlowAchBankMeta', selectable
-      ? selectedCopy
-      : (statusLabel + ' — This saved bank is visible in Dashboard but is not ready for checkout. Verify it from Dashboard or connect another bank through Stripe Checkout.')));
-    if (item.isDefault === true && selectable) {
-      main.appendChild(createEl('span', 'orderFlowAchBankBadge', 'Default'));
-    }
-    label.appendChild(main);
-    return label;
-  }
-
   function renderOrderFlowAchDecisionSection_(){
-    const achAccount = getOrderFlowAchAccountSummaryForUi_();
-    const usableMethods = getUsableAchPaymentMethodsForCheckoutUi_(achAccount);
-    const unavailableMethods = getUnavailableAchPaymentMethodsForCheckoutUi_(achAccount, usableMethods);
-    syncOrderFlowAchDecisionSelection_(usableMethods);
     if (orderFlowAchDecisionCopy) {
-      if (usableMethods.length > 1) {
-        const selected = usableMethods.find(item => String(item && item.paymentMethodId || '').trim() === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID) || usableMethods[0];
-        orderFlowAchDecisionCopy.textContent = 'Saved ACH banks are available for this account. Choose a preferred bank below. Default preference: ' + formatAchBankLabelForUi_(selected, achAccount) + '. Stripe may ask you to confirm it or choose another bank before payment is initiated.';
-      } else if (usableMethods.length === 1) {
-        orderFlowAchDecisionCopy.textContent = 'Saved ACH bank available: ' + formatAchBankLabelForUi_(usableMethods[0], achAccount) + '. Stripe may ask you to confirm this bank or choose another bank before payment is initiated.';
-      } else if (unavailableMethods.length) {
-        orderFlowAchDecisionCopy.textContent = 'Bank verification is still pending. Verify from Dashboard or connect another bank securely through Stripe Checkout.';
-      } else {
-        orderFlowAchDecisionCopy.textContent = 'Securely connect a bank account in Stripe Checkout. Red Threads never sees or stores your full bank account number.';
-      }
-    }
-    if (orderFlowAchBankList) {
-      orderFlowAchBankList.innerHTML = '';
-      usableMethods.forEach(method => {
-        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: true, accountSummary: achAccount }));
-      });
-      unavailableMethods.forEach(method => {
-        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: false, accountSummary: achAccount }));
-      });
-      if (!usableMethods.length && !unavailableMethods.length) {
-        orderFlowAchBankList.appendChild(createEl('div', 'orderFlowAchBankMeta', 'No saved ACH banks are ready for checkout.'));
-      }
+      orderFlowAchDecisionCopy.textContent = 'Pay securely from a US bank account through Stripe. Stripe may show saved bank accounts, ask you to confirm a bank, or ask you to connect a bank before payment is initiated. Red Threads never sees or stores your full bank account number.';
     }
     if (orderFlowAchContinueBtn) {
-      orderFlowAchContinueBtn.textContent = usableMethods.length
-        ? 'Continue to secure ACH checkout'
-        : (unavailableMethods.length ? 'Connect or verify bank in Stripe Checkout' : 'Continue to secure ACH checkout');
+      orderFlowAchContinueBtn.textContent = 'Continue to secure ACH checkout';
     }
     renderOrderFlowApStatus_();
   }
@@ -35569,10 +35767,8 @@
 
   function handleOrderFlowAchContinue_(){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
-    const preferredId = String(ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID || '').trim();
     startOrderFlowCheckout(PAYMENT_METHODS.ach, {
-      preferredAchPaymentMethodId: preferredId,
-      achCheckoutIntent: preferredId ? 'saved_bank' : 'new_bank'
+      achCheckoutIntent: 'unspecified'
     });
   }
 
@@ -35749,8 +35945,6 @@
       const achFoot = orderFlowAchBtn.querySelector('.orderFlowChoiceFoot');
       const achBody = orderFlowAchBtn.querySelector('.orderFlowChoiceBody');
       const achAccount = getOrderFlowAchAccountSummaryForUi_();
-      const defaultAch = getDefaultAchPaymentMethodForUi_(achAccount);
-      const usableAchMethods = getUsableAchPaymentMethodsForCheckoutUi_(achAccount);
       if (achTitle) achTitle.textContent = 'ACH Bank Payment';
       if (achFoot) {
         achFoot.textContent = achAccount.achPendingProductionApproved
@@ -35760,11 +35954,7 @@
         achFoot.classList.toggle('is-red', achAccount.achPendingProductionApproved !== true);
       }
       if (achBody) {
-        achBody.textContent = usableAchMethods.length > 1
-          ? ('Saved ACH banks available. Default preference: ' + formatAchBankLabelForUi_(defaultAch || usableAchMethods[0], achAccount) + '. Stripe may ask you to confirm or choose a bank during checkout.')
-          : (defaultAch
-            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, achAccount) + '. Stripe may ask you to confirm or choose a bank during checkout.')
-            : 'Securely pay from your bank account. Red Threads never sees or stores your full bank account number.');
+        achBody.textContent = 'Pay securely from a US bank account through Stripe. Stripe may ask you to confirm or connect a bank before payment is initiated.';
       }
     }
     if (orderFlowCheckBtn) orderFlowCheckBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
@@ -36348,8 +36538,6 @@
     ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
     ORDER_FLOW_RESULT_KIND = 'info';
     ORDER_FLOW_DONE_TARGET = 'snapshot';
-    ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = '';
-    ORDER_FLOW_ACH_CHECKOUT_INTENT = 'unspecified';
     ORDER_FLOW_AP_STATUS = { tone: '', message: '' };
     ORDER_FLOW_FULFILLMENT_ERROR = false;
     ORDER_FLOW_METHOD_ERROR = false;
@@ -36620,8 +36808,11 @@
         portalState: clickedPortalStateJson
       };
       if (normalizedMethod === PAYMENT_METHODS.ach) {
-        requestPayload.preferredAchPaymentMethodId = String(opts.preferredAchPaymentMethodId || ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID || '').trim();
-        requestPayload.achCheckoutIntent = String(opts.achCheckoutIntent || ORDER_FLOW_ACH_CHECKOUT_INTENT || 'unspecified').trim();
+        const preferredAchPaymentMethodId = String(opts.preferredAchPaymentMethodId || '').trim();
+        if (preferredAchPaymentMethodId) {
+          requestPayload.preferredAchPaymentMethodId = preferredAchPaymentMethodId;
+        }
+        requestPayload.achCheckoutIntent = String(opts.achCheckoutIntent || (preferredAchPaymentMethodId ? 'saved_bank' : 'unspecified')).trim();
         requestPayload.paymentOrigin = String(opts.paymentOrigin || '').trim();
       }
       const resp = await callServer('createCheckoutAttempt', requestPayload);
@@ -41449,10 +41640,7 @@
         if (achAvailable) {
           const achLine = createEl('div', 'summaryEstimatePaymentNoteLine');
           achLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'ACH Payment: '));
-          const defaultAch = getDefaultAchPaymentMethodForUi_(ACCOUNT_SUMMARY);
-          achLine.appendChild(document.createTextNode(defaultAch
-            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + '. Stripe may ask you to confirm or choose a bank during checkout.')
-            : 'Securely connect your bank in Stripe Checkout. Red Threads never stores your full bank account number.'));
+          achLine.appendChild(document.createTextNode('Stripe securely confirms the bank during ACH checkout. Red Threads never stores your full bank account number.'));
           paymentNote.appendChild(achLine);
         }
 
@@ -43729,6 +43917,22 @@
         if (target.closest('#artworkPreviewNext')) return;
         if (target.closest('#artworkPreviewClose')) return;
         closeArtworkPreviewLightbox();
+      });
+    }
+    if (dashboardAchManageCloseBtn) dashboardAchManageCloseBtn.addEventListener('click', closeDashboardAchManageModal_);
+    if (dashboardAchManageDoneBtn) dashboardAchManageDoneBtn.addEventListener('click', closeDashboardAchManageModal_);
+    if (dashboardAchManageAddBtn) {
+      dashboardAchManageAddBtn.addEventListener('click', () => {
+        closeDashboardAchManageModal_();
+        startDashboardAchSetupSession_().catch(err => {
+          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+        });
+      });
+    }
+    if (dashboardAchManageBackdrop) {
+      dashboardAchManageBackdrop.addEventListener('click', evt => {
+        if (evt.target !== dashboardAchManageBackdrop) return;
+        closeDashboardAchManageModal_();
       });
     }
     if (orderFlowClose) {

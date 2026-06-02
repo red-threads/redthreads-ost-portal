@@ -113,17 +113,16 @@ ACH payment sessions for normal portal account checkout include `saved_payment_m
 
 ### ACH Pre-Checkout Decision Step
 
-When a client selects ACH Bank Payment in the order modal, the first Place Order action opens a portal decision step instead of immediately creating a Stripe Checkout Session.
+When a client selects ACH Bank Payment in the order modal, the first Place Order action opens a portal decision step instead of immediately creating a Stripe Checkout Session. The decision step explains payment path options, not a portal-side wallet selection.
 
 Lane 1, Pay now with ACH:
 
-- Shows only usable `dashboard_saved` bank summaries as selectable preferences.
-- Pending, failed, blocked, removed, hidden, order-only, and AP-link banks are not selectable.
-- Pending dashboard setup banks can be shown as verification-pending status notes.
-- The selected `preferredAchPaymentMethodId` and `achCheckoutIntent` are validated server-side before Checkout creation.
-- The validated preference is written only to safe Checkout Session / PaymentIntent metadata and order draft context.
-- Before normal non-AP Checkout, the server makes a non-blocking best-effort update to the selected dashboard-saved Stripe PaymentMethod with `allow_redisplay=always` plus safe billing name/email, so eligible saved banks have the best chance to redisplay in Checkout.
-- Stripe Checkout remains the final bank confirmation, mandate, and payment-initiation surface; the portal does not claim it can force or visibly preselect a specific saved bank.
+- Uses generic copy: the payer will continue to hosted Stripe Checkout, where Stripe may show saved bank accounts, ask the payer to confirm a bank, or ask the payer to connect a bank before payment is initiated.
+- Does not render bank names, last4, default-bank labels, or a saved-bank selector in the order modal.
+- Does not require or send a UI-selected `preferredAchPaymentMethodId` from the current client experience.
+- The server still accepts and validates `preferredAchPaymentMethodId` for backward compatibility and future internal callers, but the current UI treats Stripe as the final bank-selection surface.
+- Normal non-AP Checkout still uses the portal account Stripe Customer, saved-payment redisplay filters, and future-save settings where allowed, so eligible saved banks have the best chance to redisplay in Checkout.
+- Stripe Checkout remains the final bank confirmation, mandate, verification, and payment-initiation surface; the portal does not claim it can force or visibly preselect a specific saved bank.
 
 Lane 2, Send ACH payment link to Accounts Payable:
 
@@ -163,7 +162,13 @@ The repo and live Squarespace wrappers forward `setupResult` and account-dashboa
 
 If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The server retrieves the relevant PaymentIntent or SetupIntent, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, or microdeposit values in Sheets or logs.
 
-Dashboard Payment Methods lists only dashboard-saved records. Multiple dashboard-saved banks can be shown with bank display name, last4, verification/status, default badge, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. The Add Bank action is a separate card/action, not a duplicate representation of the current bank. Hidden/order-only/AP banks do not appear in the Dashboard list.
+The top Dashboard summary renders one compact `ACH Bank Payments` readiness card, not one card per saved bank. The readiness card uses generic account-level copy only:
+
+- `Ready for Stripe checkout` when at least one usable `dashboard_saved` method exists.
+- `Action needed` when visible ACH methods exist but pending, failed, blocked, or otherwise unavailable methods require attention.
+- `Not set up` when no dashboard-visible ACH methods exist.
+
+`Manage ACH banks` opens a dashboard modal with safe details for dashboard-saved records only. The modal can show bank display name, last4, verification/status, default badge, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. Its copy states that Stripe may still ask the payer to confirm, choose, or connect a bank during Checkout. Hidden/order-only/AP banks do not appear in Dashboard Payment Methods.
 
 Stripe setup returns must land on a canonical account dashboard route, preferably `https://www.redthreads.com/portal?dashboard=1&accountAccessToken=<account-link-token>`, plus one-time `setupResult` and `stripeSessionId` parameters. Setup return URLs should not preserve stale project `t` parameters once an account dashboard bearer route is available, because that can cause the client to hydrate the wrong dashboard context.
 
