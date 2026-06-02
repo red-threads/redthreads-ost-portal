@@ -109,7 +109,7 @@ Active ACH payment uses hosted Checkout:
 
 Saved bank reuse is hosted-Checkout-mediated in V1. The portal shows dashboard-saved bank summaries, but Stripe Checkout controls saved or new bank selection.
 
-ACH payment sessions for normal portal account checkout include `saved_payment_method_options[allow_redisplay_filters]` for `unspecified` and `always` so dashboard-saved verified Customer bank accounts can redisplay in Checkout. Portal default-bank fields are reserved for usable verified/active `dashboard_saved` ACH methods; pending, failed, blocked, removed, order-only, AP-link, or microdeposit-required methods are not treated as the default checkout bank.
+ACH payment sessions for normal portal account checkout include `saved_payment_method_options[allow_redisplay_filters]` for `unspecified` and `always` so dashboard-saved verified Customer bank accounts can redisplay in Checkout. When normal ACH checkout is configured to save for future use, the session also sets `payment_method_data[allow_redisplay]=always` for newly created bank PaymentMethods. Portal default-bank fields are reserved for usable verified/active `dashboard_saved` ACH methods; pending, failed, blocked, removed, order-only, AP-link, or microdeposit-required methods are not treated as the default checkout bank.
 
 ### ACH Pre-Checkout Decision Step
 
@@ -122,7 +122,8 @@ Lane 1, Pay now with ACH:
 - Pending dashboard setup banks can be shown as verification-pending status notes.
 - The selected `preferredAchPaymentMethodId` and `achCheckoutIntent` are validated server-side before Checkout creation.
 - The validated preference is written only to safe Checkout Session / PaymentIntent metadata and order draft context.
-- Stripe Checkout remains the final bank confirmation, mandate, and payment-initiation surface; the portal does not claim it can force a specific saved bank.
+- Before normal non-AP Checkout, the server makes a non-blocking best-effort update to the selected dashboard-saved Stripe PaymentMethod with `allow_redisplay=always` plus safe billing name/email, so eligible saved banks have the best chance to redisplay in Checkout.
+- Stripe Checkout remains the final bank confirmation, mandate, and payment-initiation surface; the portal does not claim it can force or visibly preselect a specific saved bank.
 
 Lane 2, Send ACH payment link to Accounts Payable:
 

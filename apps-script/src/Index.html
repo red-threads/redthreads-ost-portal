@@ -16570,7 +16570,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 35">35</div>
+  <div class="devRevisionBadge" aria-label="Development revision 36">36</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -35477,8 +35477,11 @@
     const main = createEl('div', 'orderFlowAchBankMain');
     main.appendChild(createEl('div', 'orderFlowAchBankName', formatAchBankLabelForUi_(item, accountSummary)));
     const statusLabel = getAchVerificationLabelForUi_(item.verificationStatus || item.status);
+    const selectedCopy = methodId === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID
+      ? 'Preferred bank — Stripe may ask you to confirm this bank or choose another bank before payment is initiated.'
+      : 'Verified — Select as your preferred bank. Stripe will confirm the bank before payment is initiated.';
     main.appendChild(createEl('div', 'orderFlowAchBankMeta', selectable
-      ? (statusLabel + ' — Stripe will securely confirm which bank to use during checkout.')
+      ? selectedCopy
       : (statusLabel + ' — This saved bank is visible in Dashboard but is not ready for checkout. Verify it from Dashboard or connect another bank through Stripe Checkout.')));
     if (item.isDefault === true && selectable) {
       main.appendChild(createEl('span', 'orderFlowAchBankBadge', 'Default'));
@@ -35495,9 +35498,9 @@
     if (orderFlowAchDecisionCopy) {
       if (usableMethods.length > 1) {
         const selected = usableMethods.find(item => String(item && item.paymentMethodId || '').trim() === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID) || usableMethods[0];
-        orderFlowAchDecisionCopy.textContent = 'Saved ACH banks are available for this account. Choose a preferred bank below. Default: ' + formatAchBankLabelForUi_(selected, achAccount) + '. Stripe will securely confirm which bank to use during checkout.';
+        orderFlowAchDecisionCopy.textContent = 'Saved ACH banks are available for this account. Choose a preferred bank below. Default preference: ' + formatAchBankLabelForUi_(selected, achAccount) + '. Stripe may ask you to confirm it or choose another bank before payment is initiated.';
       } else if (usableMethods.length === 1) {
-        orderFlowAchDecisionCopy.textContent = 'Saved ACH bank available: ' + formatAchBankLabelForUi_(usableMethods[0], achAccount) + '. Stripe will securely confirm which bank to use during checkout.';
+        orderFlowAchDecisionCopy.textContent = 'Saved ACH bank available: ' + formatAchBankLabelForUi_(usableMethods[0], achAccount) + '. Stripe may ask you to confirm this bank or choose another bank before payment is initiated.';
       } else if (unavailableMethods.length) {
         orderFlowAchDecisionCopy.textContent = 'Bank verification is still pending. Verify from Dashboard or connect another bank securely through Stripe Checkout.';
       } else {
@@ -35733,9 +35736,9 @@
       }
       if (achBody) {
         achBody.textContent = usableAchMethods.length > 1
-          ? ('Saved ACH banks available. Default: ' + formatAchBankLabelForUi_(defaultAch || usableAchMethods[0], achAccount) + '. Stripe will securely confirm which bank to use during checkout.')
+          ? ('Saved ACH banks available. Default preference: ' + formatAchBankLabelForUi_(defaultAch || usableAchMethods[0], achAccount) + '. Stripe may ask you to confirm or choose a bank during checkout.')
           : (defaultAch
-            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, achAccount) + '. Stripe will securely confirm which bank to use during checkout.')
+            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, achAccount) + '. Stripe may ask you to confirm or choose a bank during checkout.')
             : 'Securely pay from your bank account. Red Threads never sees or stores your full bank account number.');
       }
     }
@@ -41423,7 +41426,7 @@
           achLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'ACH Payment: '));
           const defaultAch = getDefaultAchPaymentMethodForUi_(ACCOUNT_SUMMARY);
           achLine.appendChild(document.createTextNode(defaultAch
-            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.')
+            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + '. Stripe may ask you to confirm or choose a bank during checkout.')
             : 'Securely connect your bank in Stripe Checkout. Red Threads never stores your full bank account number.'));
           paymentNote.appendChild(achLine);
         }

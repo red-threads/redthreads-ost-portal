@@ -82,7 +82,7 @@ The second command should show only redaction, safety, or documentation referenc
 45. Checkout saved-bank copy appears only when a usable `dashboard_saved` bank exists.
 46. Selecting ACH Bank Payment and clicking Place Order opens the ACH pre-checkout decision step in its own full-screen modal container that replaces the checkout-flow modal instead of appending below the payment cards.
 47. No saved bank: the decision step shows no selector and the continue button launches hosted ACH Checkout.
-48. One usable dashboard-saved bank: the decision step shows it as the selected preference and copy says Stripe will securely confirm which bank to use.
+48. One usable dashboard-saved bank: the decision step shows it as the selected preference and copy says Stripe may ask the client to confirm this bank or choose another bank before payment is initiated.
 49. Multiple usable dashboard-saved banks: all usable records appear, the default is selected first, and choosing another bank sends `preferredAchPaymentMethodId` plus `achCheckoutIntent=saved_bank`.
 50. Checkout decision account merge: when a project is opened from Dashboard, the ACH decision step shows every dashboard-visible ACH bank for the same account, even if the project payload only carried the default bank.
 51. Pending, unavailable, or status-missing dashboard ACH banks appear as disabled decision-step rows; they are not selectable and remain visible from Dashboard Payment Methods for verification/default actions.
@@ -94,6 +94,7 @@ The second command should show only redaction, safety, or documentation referenc
 57. AP-link ACH Customer/session creation happens only after the latest order is confirmed locked and unpaid; missing, unlocked, or already-paid orders fail before Stripe side effects.
 58. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
 59. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+60. Normal saved-bank ACH Checkout hardening: the selected dashboard-saved preferred bank is validated, the Stripe PaymentMethod redisplay/billing-details update is attempted without blocking Checkout, the Session includes `payment_method_data[allow_redisplay]=always` when future save is enabled, and client copy remains truthful even if hosted Checkout renders generic bank-entry UI.
 
 ## ACH Event Smokes
 

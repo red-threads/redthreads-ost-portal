@@ -7609,6 +7609,9 @@ function createCheckoutAttempt(payload) {
         paymentMethodSelected: paymentMethodSelected
       });
     }
+    if (paymentMethodSelected === PAYMENT_METHODS.ach) {
+      maybeHardenPreferredAchPaymentMethodForCheckout_(ctx, timing);
+    }
 
     markCheckoutTiming_(timing, 'checkout_identity_build_start');
     const checkoutIdentity = buildCheckoutAttemptIdentity_();
@@ -14158,6 +14161,57 @@ function retrieveStripePaymentMethod_(paymentMethodId, options) {
   return stripeApiRequest_('/v1/payment_methods/' + encodeURIComponent(id), {}, Object.assign({}, options || {}, {
     method: 'get'
   }));
+}
+
+function updateStripePaymentMethodDashboardRedisplay_(paymentMethodId, accountSummary, options) {
+  const id = trimString_(paymentMethodId);
+  if (!id || id.indexOf('pm_') !== 0) {
+    return {
+      ok: false,
+      skipped: true,
+      code: 'missing_payment_method',
+      error: 'Missing Stripe PaymentMethod ID.'
+    };
+  }
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const name = trimString_(account.billingContactName || account.primaryContactName || account.orgName);
+  const email = normalizeEmail_(account.billingContactEmail || account.primaryEmail);
+  const params = {
+    allow_redisplay: 'always'
+  };
+  if (name) params['billing_details[name]'] = name;
+  if (email) params['billing_details[email]'] = email;
+  return stripeApiRequest_('/v1/payment_methods/' + encodeURIComponent(id), params, Object.assign({}, options || {}, {
+    method: 'post'
+  }));
+}
+
+function maybeHardenPreferredAchPaymentMethodForCheckout_(ctx, timing) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const preferredId = trimString_(context.preferredAchPaymentMethodId);
+  if (!preferredId) return;
+  const paymentOrigin = normalizeAchPaymentSource_(context.paymentOrigin || (context.payload && (context.payload.paymentOrigin || context.payload.checkoutOrigin)));
+  if (paymentOrigin === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link) return;
+  const preferredMethod = context.preferredAchPaymentMethod || null;
+  if (!preferredMethod ||
+      !isDashboardSavedAchPaymentMethod_(preferredMethod) ||
+      !isAchPaymentMethodUsableForCheckout_(preferredMethod)) {
+    return;
+  }
+  const accountSummary = context.accountInfo && context.accountInfo.summary ? context.accountInfo.summary : {};
+  markCheckoutTiming_(timing, 'ach_preferred_payment_method_update_start');
+  const result = updateStripePaymentMethodDashboardRedisplay_(preferredId, accountSummary, { cfg: context.cfg });
+  markCheckoutTiming_(timing, 'ach_preferred_payment_method_update_end', {
+    ok: !!(result && result.ok === true),
+    statusCode: Number(result && result.statusCode || 0) || 0
+  });
+  if (!result || result.ok !== true) {
+    console.log('[RT-STRIPE-ACH-PM-REDISPLAY] ' + JSON.stringify({
+      ok: false,
+      code: trimString_(result && result.code) || 'stripe_payment_method_update_failed',
+      statusCode: Number(result && result.statusCode || 0) || 0
+    }));
+  }
 }
 
 function retrieveStripeCharge_(chargeId, options) {
@@ -21008,6 +21062,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     const permissions = Array.isArray(cfg.stripeAchFinancialConnectionsPermissions) && cfg.stripeAchFinancialConnectionsPermissions.length
       ? cfg.stripeAchFinancialConnectionsPermissions
       : DEFAULT_STRIPE_ACH_FINANCIAL_CONNECTIONS_PERMISSIONS;
+    const shouldSaveAchForFuture = cfg.stripeAchSaveForFuture === true && opts.saveAchForFuture !== false;
     payload['payment_method_options[us_bank_account][verification_method]'] = trimString_(cfg.stripeAchVerificationMethod) || DEFAULT_STRIPE_ACH_VERIFICATION_METHOD;
     permissions.forEach(function(permission, idx) {
       payload['payment_method_options[us_bank_account][financial_connections][permissions][' + idx + ']'] = trimString_(permission);
@@ -21015,8 +21070,11 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     if (opts.allowSavedPaymentMethodRedisplay !== false) {
       payload['saved_payment_method_options[allow_redisplay_filters][0]'] = 'unspecified';
       payload['saved_payment_method_options[allow_redisplay_filters][1]'] = 'always';
+      if (shouldSaveAchForFuture) {
+        payload['payment_method_data[allow_redisplay]'] = 'always';
+      }
     }
-    if (cfg.stripeAchSaveForFuture === true && opts.saveAchForFuture !== false) {
+    if (shouldSaveAchForFuture) {
       payload['payment_intent_data[setup_future_usage]'] = 'off_session';
     }
   }
