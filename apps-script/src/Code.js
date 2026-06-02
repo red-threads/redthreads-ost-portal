@@ -352,6 +352,12 @@ const ACH_PAYMENT_VISIBILITY_SCOPES = {
   removed: 'removed'
 };
 
+const ACH_CHECKOUT_INTENTS = {
+  saved_bank: 'saved_bank',
+  new_bank: 'new_bank',
+  unspecified: 'unspecified'
+};
+
 const ACH_DETAIL_STATES = {
   not_started: 'ach_not_started',
   checkout_started: 'ach_checkout_started',
@@ -1439,6 +1445,12 @@ function doPost(e) {
     }
     if (action === 'create_checkout_attempt') {
       return jsonOutput_(createCheckoutAttempt(payload));
+    }
+    if (action === 'prepare_ach_payment_link_to_ap') {
+      return jsonOutput_(prepareAchPaymentLinkToAp(payload));
+    }
+    if (action === 'send_ach_payment_link_to_ap') {
+      return jsonOutput_(sendAchPaymentLinkToAp(payload));
     }
     if (action === 'initiate_manual_payment') {
       return jsonOutput_(initiateManualPayment(payload));
@@ -6636,6 +6648,12 @@ function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkout
     paymentOrigin: paymentOrigin,
     saveAchForFuture: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
     allowSavedPaymentMethodRedisplay: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    preferredAchPaymentMethodId: paymentMethodSelected === PAYMENT_METHODS.ach
+      ? trimString_(ctx.preferredAchPaymentMethodId || payload.preferredAchPaymentMethodId)
+      : '',
+    achCheckoutIntent: paymentMethodSelected === PAYMENT_METHODS.ach
+      ? normalizeAchCheckoutIntent_(ctx.achCheckoutIntent || payload.achCheckoutIntent)
+      : '',
     checkoutAttemptId: trimString_(checkoutIdentity && checkoutIdentity.checkoutAttemptId),
     orderId: trimString_(checkoutIdentity && checkoutIdentity.orderId),
     returnUrl: trimString_(dashboardReturnUrl || payload.returnUrl || buildExternalPortalUrl_(token) || ctx.cfg.stripeReturnUrl || buildPortalDirectUrl_(token))
@@ -6730,7 +6748,13 @@ function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, che
     paymentState: PAYMENT_STATES.checkout_created,
     orderState: ORDER_STATES.payment_in_progress,
     productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-    portalLockState: PORTAL_LOCK_STATES.editable
+    portalLockState: PORTAL_LOCK_STATES.editable,
+    preferredAchPaymentMethodId: paymentMethodSelected === PAYMENT_METHODS.ach
+      ? trimString_(ctx.preferredAchPaymentMethodId)
+      : '',
+    achCheckoutIntent: paymentMethodSelected === PAYMENT_METHODS.ach
+      ? normalizeAchCheckoutIntent_(ctx.achCheckoutIntent)
+      : ''
   }), stripeResult);
   return Object.assign({}, ctx, {
     orderDraft: orderDraft,
@@ -7549,6 +7573,22 @@ function createCheckoutAttempt(payload) {
     }
     markCheckoutTiming_(timing, 'payment_method_validation_end', { ok: true, paymentMethodSelected: paymentMethodSelected });
     if (paymentMethodSelected === PAYMENT_METHODS.ach) {
+      markCheckoutTiming_(timing, 'ach_preference_validation_start');
+      const preferredAch = validatePreferredAchPaymentMethodForCheckout_(ctx);
+      markCheckoutTiming_(timing, 'ach_preference_validation_end', {
+        ok: !!(preferredAch && preferredAch.ok === true),
+        hasPreferredAchPaymentMethod: !!(preferredAch && trimString_(preferredAch.preferredAchPaymentMethodId)),
+        achCheckoutIntent: trimString_(preferredAch && preferredAch.achCheckoutIntent)
+      });
+      if (!preferredAch || preferredAch.ok !== true) {
+        return attachCheckoutTiming_(preferredAch, timing, {
+          ok: false,
+          stage: 'ach_preference_validation',
+          paymentMethodSelected: paymentMethodSelected,
+          code: trimString_(preferredAch && preferredAch.code)
+        });
+      }
+      applyAchCheckoutPreferenceToContext_(ctx, preferredAch);
       const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
       if (!achCustomer || achCustomer.ok !== true) {
         return attachCheckoutTiming_(achCustomer, timing, {
@@ -7768,6 +7808,284 @@ function initiateManualPaymentOrder_(payload) {
 function initiateManualPayment(payload) {
   try {
     return initiateManualPaymentOrder_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function buildAchApPaymentOrderCreateOptions_(ctx, invoiceArtifacts, options) {
+  const invoiceInfo = invoiceArtifacts.invoiceInfo || {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const now = trimString_(invoiceArtifacts.nowIso) || nowIso_();
+  const orderDraft = Object.assign({}, ctx.orderDraft, {
+    paymentMethodSelected: PAYMENT_METHODS.ach,
+    paymentState: PAYMENT_STATES.not_started,
+    orderState: ORDER_STATES.awaiting_payment_confirmation,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    paymentOrigin: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    checkoutOrigin: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    achPaymentSource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only
+  });
+  return Object.assign({}, ctx, {
+    orderDraft: orderDraft,
+    paymentMethodSelected: PAYMENT_METHODS.ach,
+    paymentState: PAYMENT_STATES.not_started,
+    orderState: ORDER_STATES.awaiting_payment_confirmation,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    lockedAt: now,
+    invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
+    invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl),
+    invoiceSentToEmail: '',
+    invoiceSentAt: '',
+    achPaymentSource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    notes: trimString_(opts.notes) || 'Prepared ACH payment link for Accounts Payable. Payment is not started and production is not authorized.'
+  });
+}
+
+function redactEmailForDisplay_(email) {
+  const normalized = normalizeEmail_(email);
+  if (!normalized || normalized.indexOf('@') < 0) return '';
+  const parts = normalized.split('@');
+  const local = parts[0] || '';
+  const domain = parts.slice(1).join('@');
+  if (!domain) return normalized;
+  const visibleLocal = local.length <= 2 ? local.charAt(0) : local.charAt(0) + '***' + local.charAt(local.length - 1);
+  return visibleLocal + '@' + domain;
+}
+
+function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const apName = trimString_(opts.apName);
+  const purchaserName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.personName);
+  const note = trimString_(opts.note).slice(0, 1200);
+  const paymentLink = trimString_(opts.apPaymentLink);
+  const invoiceNumber = trimString_(summary.invoiceNumber);
+  const projectName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.projectName);
+  const dealNumber = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.dealNumber);
+  const amountDue = formatUsdAmount_(summary.amountGrandTotal);
+  const greeting = apName ? ('Hi ' + apName + ',') : 'Hello,';
+  const reference = [
+    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+    dealNumber ? ('Project #: ' + dealNumber) : '',
+    projectName ? ('Project: ' + projectName) : '',
+    'Amount due: ' + amountDue
+  ].filter(Boolean);
+  const bodyLines = [
+    greeting,
+    '',
+    'A secure Red Threads ACH payment link is ready for this order.',
+    '',
+    reference.join('\n'),
+    '',
+    'Pay by ACH: ' + paymentLink,
+    '',
+    'Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.',
+    note ? ('\nNote from ' + (purchaserName || 'the purchaser') + ':\n' + note) : '',
+    '',
+    NOTIFICATION_REPLY_NOTICE
+  ].filter(Boolean);
+  const htmlBody = [
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
+    '  <p style="margin:0 0 14px;">' + escapeHtml_(greeting) + '</p>',
+    '  <p style="margin:0 0 14px;">A secure Red Threads ACH payment link is ready for this order.</p>',
+    '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">',
+    invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
+    dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
+    projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
+    '    <div><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</div>',
+    '  </div>',
+    paymentLink
+      ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(paymentLink) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">Open secure ACH payment link</a></p>')
+      : '',
+    '  <p style="margin:0 0 14px;color:#475569;">Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.</p>',
+    note
+      ? ('  <div style="margin:0 0 16px;padding:14px 16px;border-left:4px solid #be123c;background:#fff1f2;"><strong>Note from ' + escapeHtml_(purchaserName || 'the purchaser') + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
+      : '',
+    '  <p style="margin:0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+  return {
+    subject: invoiceNumber
+      ? ('Red Threads ACH payment link - ' + invoiceNumber)
+      : 'Red Threads ACH payment link',
+    body: bodyLines.join('\n'),
+    htmlBody: htmlBody
+  };
+}
+
+function sendAchApPaymentLinkEmail_(ctx, orderSummary, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipients = normalizeEmailRecipients_(opts.apEmail);
+  if (!recipients.length) {
+    return {
+      ok: false,
+      code: 'ach_ap_email_required',
+      error: 'Enter a valid Accounts Payable email address.'
+    };
+  }
+  const content = buildAchApPaymentLinkEmailContent_(ctx, orderSummary, opts);
+  const attachment = buildFinalInvoiceAttachment_(orderSummary, '');
+  const attachments = attachment ? [attachment] : [];
+  return sendNotificationEmail_({
+    toList: recipients,
+    subject: content.subject,
+    body: content.body,
+    htmlBody: content.htmlBody,
+    attachments: attachments,
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+}
+
+function prepareAchApPaymentLink_(payload, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const ctx = buildPreparedOrderActionContext_(payload);
+  const orderFlowAccessError = validateEditableOrderInitiationForAction_(ctx);
+  if (orderFlowAccessError) return orderFlowAccessError;
+  if (ctx.cfg.stripeAchEnabled !== true) {
+    return buildOrderActionError_(
+      'ach_checkout_disabled',
+      'ACH bank payments are not currently available.'
+    );
+  }
+  if (readPurchaseOrderDraftFromPortalState_(ctx.portalState)) {
+    persistContextPortalState_(ctx, clearPurchaseOrderDraftFromPortalState_(ctx.portalState), {
+      locked: false,
+      currentOrderState: ORDER_STATES.draft,
+      currentPaymentState: PAYMENT_STATES.not_started,
+      currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+      currentPaymentMethod: ''
+    });
+  }
+  const validationError = validateOrderPlacementForAction_(ctx, { requirePositiveCheckoutTotal: true });
+  if (validationError) return validationError;
+  let invoiceArtifacts;
+  try {
+    invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx, payload);
+  } catch (err) {
+    return buildOrderActionError_(
+      'ach_ap_invoice_artifact_failed',
+      'Unable to create the invoice needed for the AP payment link. Please try again.',
+      {
+        stage: 'invoice_artifact',
+        warnings: [String((err && err.message) || err)]
+      }
+    );
+  }
+  let created;
+  try {
+    supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
+      revisionReason: 'payment_method_superseded_to_ap_ach_link',
+      notes: 'Superseded by AP ACH payment link preparation.'
+    });
+    created = createPortalOrder_(
+      buildAchApPaymentOrderCreateOptions_(ctx, invoiceArtifacts, {
+        notes: opts.sendEmail === true
+          ? 'Prepared ACH payment link and email for Accounts Payable. Payment is not started and production is not authorized.'
+          : ''
+      })
+    );
+  } catch (err) {
+    return buildOrderActionError_(
+      'ach_ap_order_create_failed',
+      'Unable to prepare the ACH payment link. Please try again.',
+      {
+        stage: 'order_create',
+        warnings: [String((err && err.message) || err)]
+      }
+    );
+  }
+  let finalized;
+  try {
+    finalized = finalizeLockedOrderTransition_(ctx, created);
+  } catch (err) {
+    return buildOrderActionError_(
+      'ach_ap_order_finalize_failed',
+      'Unable to finalize the ACH payment link. Please try again.',
+      {
+        stage: 'order_finalize',
+        warnings: [String((err && err.message) || err)]
+      }
+    );
+  }
+  const apPaymentLink = buildAchApPaymentPortalUrl_(ctx.orderDraft.token);
+  let orderSummary = created.summary || {};
+  let emailResult = null;
+  let emailSentAt = '';
+  if (opts.sendEmail === true) {
+    emailResult = sendAchApPaymentLinkEmail_(ctx, orderSummary, {
+      apEmail: payload && payload.apEmail,
+      apName: payload && payload.apName,
+      note: payload && payload.note,
+      apPaymentLink: apPaymentLink
+    });
+    if (emailResult && emailResult.ok === true) {
+      emailSentAt = nowIso_();
+      const updatedOrder = updatePortalOrderState_({
+        cfg: ctx.cfg,
+        ss: ctx.ss,
+        infra: ctx.infra,
+        orderRowInfo: created.rowInfo,
+        invoiceSentToEmail: normalizeEmailRecipients_(payload && payload.apEmail).join(', '),
+        invoiceSentAt: emailSentAt
+      });
+      created = {
+        rowInfo: updatedOrder,
+        summary: buildPortalOrderSummary_(updatedOrder.rowObjNormalized)
+      };
+      orderSummary = created.summary || {};
+      finalized.portalPayload = buildOrderActionPortalPayload_(ctx, finalized.exportRowInfo);
+    }
+  }
+  const baseResponse = buildLockedOrderTransitionResponse_(
+    ctx,
+    created,
+    invoiceArtifacts.invoiceInfo,
+    finalized.portalPayload,
+    {
+      message: opts.sendEmail === true
+        ? 'ACH payment link prepared for Accounts Payable.'
+        : 'ACH payment link prepared.',
+      paymentLinks: {
+        achApUrl: apPaymentLink
+      }
+    }
+  );
+  baseResponse.apPaymentLink = apPaymentLink;
+  baseResponse.apPaymentLinkPrepared = true;
+  baseResponse.paymentOrigin = ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  baseResponse.apEmailRedacted = redactEmailForDisplay_(payload && payload.apEmail);
+  baseResponse.emailSentAt = emailSentAt;
+  if (emailResult) {
+    baseResponse.email = Object.assign({}, emailResult, {
+      email: emailResult.email ? redactEmailForDisplay_(emailResult.email) : '',
+      emails: Array.isArray(emailResult.emails) ? emailResult.emails.map(redactEmailForDisplay_) : []
+    });
+    if (emailResult.ok !== true) {
+      baseResponse.ok = false;
+      baseResponse.code = trimString_(emailResult.code) || 'ach_ap_email_failed';
+      baseResponse.error = 'The AP payment link was prepared, but the email could not be sent. Copy the AP payment link instead.';
+    }
+  }
+  return baseResponse;
+}
+
+function prepareAchPaymentLinkToAp(payload) {
+  try {
+    return prepareAchApPaymentLink_(payload, { sendEmail: false });
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function sendAchPaymentLinkToAp(payload) {
+  try {
+    return prepareAchApPaymentLink_(payload, { sendEmail: true });
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -13633,6 +13951,22 @@ function normalizeAchPaymentSource_(value) {
   return raw;
 }
 
+function normalizeAchCheckoutIntent_(value) {
+  const raw = trimString_(value).toLowerCase();
+  if (raw === ACH_CHECKOUT_INTENTS.saved_bank ||
+      raw === ACH_CHECKOUT_INTENTS.new_bank ||
+      raw === ACH_CHECKOUT_INTENTS.unspecified) {
+    return raw;
+  }
+  if (raw === 'saved' || raw === 'saved_payment_method' || raw === 'default_bank') {
+    return ACH_CHECKOUT_INTENTS.saved_bank;
+  }
+  if (raw === 'new' || raw === 'connect_bank' || raw === 'new_payment_method') {
+    return ACH_CHECKOUT_INTENTS.new_bank;
+  }
+  return ACH_CHECKOUT_INTENTS.unspecified;
+}
+
 function normalizeAchVisibilityScope_(value) {
   const raw = trimString_(value).toLowerCase();
   if (!raw) return '';
@@ -14014,6 +14348,58 @@ function isAchPaymentMethodUsableForDefault_(achMethod) {
   }
   return status === 'active' || status === 'verified' || status === 'succeeded' ||
     verificationStatus === 'active' || verificationStatus === 'verified' || verificationStatus === 'succeeded';
+}
+
+function isAchPaymentMethodUsableForCheckout_(achMethod) {
+  return isAchPaymentMethodUsableForDefault_(achMethod);
+}
+
+function validatePreferredAchPaymentMethodForCheckout_(ctx) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const payload = (context.payload && typeof context.payload === 'object') ? context.payload : {};
+  const preferredId = trimString_(payload.preferredAchPaymentMethodId);
+  const requestedIntent = normalizeAchCheckoutIntent_(payload.achCheckoutIntent);
+  if (!preferredId) {
+    return {
+      ok: true,
+      preferredAchPaymentMethodId: '',
+      achCheckoutIntent: requestedIntent === ACH_CHECKOUT_INTENTS.saved_bank
+        ? ACH_CHECKOUT_INTENTS.unspecified
+        : requestedIntent,
+      preferredAchPaymentMethod: null
+    };
+  }
+  const account = context.accountInfo && context.accountInfo.summary ? context.accountInfo.summary : {};
+  const methods = normalizeAchPaymentMethodsJson_(account.achPaymentMethods || account.achPaymentMethodsJson);
+  const method = methods.find(function(item) {
+    return trimString_(item && item.paymentMethodId) === preferredId;
+  }) || null;
+  if (!method || !isDashboardSavedAchPaymentMethod_(method) || !isAchPaymentMethodUsableForCheckout_(method)) {
+    return {
+      ok: false,
+      code: 'preferred_ach_payment_method_invalid',
+      error: 'The selected saved ACH bank is no longer available. Choose another bank or continue through Stripe Checkout.'
+    };
+  }
+  return {
+    ok: true,
+    preferredAchPaymentMethodId: preferredId,
+    achCheckoutIntent: ACH_CHECKOUT_INTENTS.saved_bank,
+    preferredAchPaymentMethod: method
+  };
+}
+
+function applyAchCheckoutPreferenceToContext_(ctx, preference) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const pref = (preference && typeof preference === 'object') ? preference : {};
+  context.preferredAchPaymentMethodId = trimString_(pref.preferredAchPaymentMethodId);
+  context.achCheckoutIntent = normalizeAchCheckoutIntent_(pref.achCheckoutIntent);
+  context.preferredAchPaymentMethod = pref.preferredAchPaymentMethod || null;
+  context.orderDraft = Object.assign({}, context.orderDraft || {}, {
+    preferredAchPaymentMethodId: context.preferredAchPaymentMethodId,
+    achCheckoutIntent: context.achCheckoutIntent
+  });
+  return context;
 }
 
 function writeAchPaymentMethodsForPortalAccount_(accountInfo, methods, options) {
@@ -14870,6 +15256,13 @@ function buildLockedOrderPaymentPortalUrl_(token, paymentMethodSelected) {
   if (method !== PAYMENT_METHODS.card && method !== PAYMENT_METHODS.ach) return '';
   return buildPortalSummaryUrl_(token, {
     payNow: method
+  });
+}
+
+function buildAchApPaymentPortalUrl_(token) {
+  return buildPortalSummaryUrl_(token, {
+    payNow: PAYMENT_METHODS.ach,
+    paymentOrigin: 'ap'
   });
 }
 
@@ -16163,7 +16556,11 @@ function createPortalOrder_(opts) {
   const orderRevision = Math.max(1, parseInt(String(options.orderRevision || 1), 10) || 1);
   const invoiceNumber = trimString_(options.invoiceNumber);
   const invoicePdfUrl = trimString_(options.invoicePdfUrl);
-  const invoiceSentToEmail = normalizeEmail_(options.invoiceSentToEmail || draft.personEmail);
+  const invoiceSentToEmail = normalizeEmail_(
+    Object.prototype.hasOwnProperty.call(options, 'invoiceSentToEmail')
+      ? options.invoiceSentToEmail
+      : draft.personEmail
+  );
   const invoiceSentAt = trimString_(options.invoiceSentAt);
 
   const valuesByHeader = {
@@ -20564,6 +20961,12 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     orderId: trimString_(opts.orderId),
     paymentMethodSelected: paymentMethodSelected,
     paymentOrigin: paymentOrigin,
+    preferredAchPaymentMethodId: paymentMethodSelected === PAYMENT_METHODS.ach
+      ? trimString_(opts.preferredAchPaymentMethodId || orderDraft.preferredAchPaymentMethodId)
+      : '',
+    achCheckoutIntent: paymentMethodSelected === PAYMENT_METHODS.ach
+      ? normalizeAchCheckoutIntent_(opts.achCheckoutIntent || orderDraft.achCheckoutIntent)
+      : '',
     accountId: trimString_(accountSummary.accountId),
     orgId: trimString_(accountSummary.orgId),
     fulfillmentMethod: fulfillmentMethod,

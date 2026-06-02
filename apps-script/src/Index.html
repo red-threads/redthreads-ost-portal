@@ -13012,6 +13012,7 @@
     .orderFlowModal.isBlocking #orderFlowMethodSection,
     .orderFlowModal.isBlocking #orderFlowManualSection,
     .orderFlowModal.isBlocking #orderFlowPoSection,
+    .orderFlowModal.isBlocking #orderFlowAchDecisionSection,
     .orderFlowModal.isBlocking #orderFlowCheckoutSection{
       display:none !important;
     }
@@ -13650,6 +13651,157 @@
     }
     .orderFlowInfoCard p:last-child{
       margin-bottom:0;
+    }
+    .orderFlowAchDecisionLayout{
+      width:100%;
+      max-width:900px;
+      align-self:center;
+      display:grid;
+      grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+      gap:14px;
+    }
+    .orderFlowAchDecisionLane{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .orderFlowLaneTitle{
+      margin:0;
+      font-size:18px;
+      line-height:1.2;
+      font-weight:900;
+      color:#51ffb7;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+    }
+    .orderFlowLaneCopy{
+      margin:0;
+      color:#dbeafe;
+      font-size:13px;
+      line-height:1.55;
+      font-weight:700;
+    }
+    .orderFlowAchBankList{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .orderFlowAchBankOption{
+      display:grid;
+      grid-template-columns:auto minmax(0,1fr);
+      gap:10px;
+      align-items:start;
+      width:100%;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:14px;
+      background:rgba(15,23,42,.52);
+      color:#f8fafc;
+      padding:11px 12px;
+      box-sizing:border-box;
+      cursor:pointer;
+    }
+    .orderFlowAchBankOption.is-selected{
+      border-color:rgba(81,255,183,.7);
+      background:rgba(20,184,166,.18);
+      box-shadow:0 0 0 1px rgba(81,255,183,.18);
+    }
+    .orderFlowAchBankOption.is-disabled{
+      cursor:default;
+      opacity:.78;
+    }
+    .orderFlowAchBankRadio{
+      margin-top:2px;
+      accent-color:#51ffb7;
+    }
+    .orderFlowAchBankMain{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .orderFlowAchBankName{
+      color:#fff;
+      font-size:14px;
+      line-height:1.25;
+      font-weight:900;
+      overflow-wrap:anywhere;
+    }
+    .orderFlowAchBankMeta{
+      color:#cbd5e1;
+      font-size:12px;
+      line-height:1.35;
+      font-weight:700;
+    }
+    .orderFlowAchBankBadge{
+      display:inline-flex;
+      align-items:center;
+      width:max-content;
+      max-width:100%;
+      min-height:22px;
+      padding:0 8px;
+      border-radius:999px;
+      border:1px solid rgba(81,255,183,.35);
+      background:rgba(81,255,183,.1);
+      color:#9fffd0;
+      font-size:11px;
+      line-height:1;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    .orderFlowApFieldGrid{
+      display:grid;
+      grid-template-columns:minmax(0,1fr);
+      gap:10px;
+    }
+    .orderFlowApFieldRow{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .orderFlowApFieldLabel{
+      color:#f8fafc;
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .orderFlowApField{
+      width:100%;
+      min-height:42px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(15,23,42,.52);
+      color:#fff;
+      font-size:14px;
+      font-weight:700;
+      padding:10px 12px;
+      box-sizing:border-box;
+      outline:none;
+      resize:vertical;
+    }
+    .orderFlowApField::placeholder{
+      color:rgba(226,232,240,.58);
+    }
+    .orderFlowApStatus{
+      min-height:18px;
+      color:#cbd5e1;
+      font-size:12px;
+      line-height:1.45;
+      font-weight:800;
+      white-space:pre-wrap;
+    }
+    .orderFlowApStatus.is-error{
+      color:#fecaca;
+    }
+    .orderFlowApStatus.is-ok{
+      color:#bbf7d0;
+    }
+    @media (max-width: 820px){
+      .orderFlowAchDecisionLayout{
+        grid-template-columns:minmax(0,1fr);
+      }
     }
     .orderFlowCheckoutMeta{
       font-size:12px;
@@ -16340,7 +16492,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 32">32</div>
+  <div class="devRevisionBadge" aria-label="Development revision 33">33</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17308,6 +17460,42 @@
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowPoBackBtn" type="button">Back</button>
           <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowPoConfirmBtn" type="button">Continue with P.O.</button>
+        </div>
+      </div>
+      <div id="orderFlowAchDecisionSection" hidden>
+        <div class="orderFlowAchDecisionLayout">
+          <div class="orderFlowInfoCard orderFlowAchDecisionLane">
+            <p class="orderFlowLaneTitle">Pay now with ACH</p>
+            <p class="orderFlowLaneCopy" id="orderFlowAchDecisionCopy">Choose a saved bank preference or connect another bank securely through Stripe. Stripe will confirm the bank and authorization before payment is initiated.</p>
+            <div class="orderFlowAchBankList" id="orderFlowAchBankList"></div>
+            <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowAchContinueBtn" type="button">Continue to secure ACH checkout</button>
+          </div>
+          <div class="orderFlowInfoCard orderFlowAchDecisionLane">
+            <p class="orderFlowLaneTitle">Send ACH payment link to Accounts Payable</p>
+            <p class="orderFlowLaneCopy">Send a secure Red Threads payment link to the person or department that handles payment. Bank details entered by Accounts Payable will be used for this order only and will not be saved to your dashboard.</p>
+            <div class="orderFlowApFieldGrid">
+              <div class="orderFlowApFieldRow">
+                <label class="orderFlowApFieldLabel" for="orderFlowApEmailInput">AP Email</label>
+                <input class="orderFlowApField" id="orderFlowApEmailInput" type="email" autocomplete="email" placeholder="ap@example.com">
+              </div>
+              <div class="orderFlowApFieldRow">
+                <label class="orderFlowApFieldLabel" for="orderFlowApNameInput">AP Recipient Name</label>
+                <input class="orderFlowApField" id="orderFlowApNameInput" type="text" autocomplete="name" placeholder="Optional">
+              </div>
+              <div class="orderFlowApFieldRow">
+                <label class="orderFlowApFieldLabel" for="orderFlowApNoteInput">Note</label>
+                <textarea class="orderFlowApField" id="orderFlowApNoteInput" rows="3" placeholder="Optional note for Accounts Payable"></textarea>
+              </div>
+            </div>
+            <div class="orderFlowInlineActions">
+              <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowApEmailBtn" type="button">Email ACH payment link</button>
+              <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowApCopyBtn" type="button">Copy ACH payment link</button>
+            </div>
+            <div class="orderFlowApStatus" id="orderFlowApStatus" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="orderFlowActions">
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowAchDecisionBackBtn" type="button">Back to payment selection</button>
         </div>
       </div>
       <div id="orderFlowBlockingSection" hidden>
@@ -19735,6 +19923,25 @@
       verificationStatus === 'active' || verificationStatus === 'verified' || verificationStatus === 'succeeded';
   }
 
+  function getUsableAchPaymentMethodsForCheckoutUi_(account){
+    return getDashboardVisibleAchPaymentMethodsForUi_(account)
+      .filter(isAchPaymentMethodUsableForCheckout_)
+      .sort((a, b) => {
+        const defaultA = a && a.isDefault === true ? 1 : 0;
+        const defaultB = b && b.isDefault === true ? 1 : 0;
+        if (defaultA !== defaultB) return defaultB - defaultA;
+        return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
+      });
+  }
+
+  function getPendingAchPaymentMethodsForCheckoutUi_(account){
+    return getDashboardVisibleAchPaymentMethodsForUi_(account)
+      .filter(item => item && !isAchPaymentMethodUsableForCheckout_(item) && isAchMicrodepositVerificationPendingForUi_(item))
+      .sort((a, b) => {
+        return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
+      });
+  }
+
   function isAchMicrodepositVerificationPendingForUi_(method){
     const item = (method && typeof method === 'object') ? method : {};
     const signal = [
@@ -20701,6 +20908,17 @@
   const orderFlowMethodSection = document.getElementById('orderFlowMethodSection');
   const orderFlowManualSection = document.getElementById('orderFlowManualSection');
   const orderFlowPoSection = document.getElementById('orderFlowPoSection');
+  const orderFlowAchDecisionSection = document.getElementById('orderFlowAchDecisionSection');
+  const orderFlowAchDecisionCopy = document.getElementById('orderFlowAchDecisionCopy');
+  const orderFlowAchBankList = document.getElementById('orderFlowAchBankList');
+  const orderFlowAchContinueBtn = document.getElementById('orderFlowAchContinueBtn');
+  const orderFlowApEmailInput = document.getElementById('orderFlowApEmailInput');
+  const orderFlowApNameInput = document.getElementById('orderFlowApNameInput');
+  const orderFlowApNoteInput = document.getElementById('orderFlowApNoteInput');
+  const orderFlowApEmailBtn = document.getElementById('orderFlowApEmailBtn');
+  const orderFlowApCopyBtn = document.getElementById('orderFlowApCopyBtn');
+  const orderFlowApStatus = document.getElementById('orderFlowApStatus');
+  const orderFlowAchDecisionBackBtn = document.getElementById('orderFlowAchDecisionBackBtn');
   const orderFlowBlockingSection = document.getElementById('orderFlowBlockingSection');
   const orderFlowBlockingAlert = document.getElementById('orderFlowBlockingAlert');
   const orderFlowCheckoutSection = document.getElementById('orderFlowCheckoutSection');
@@ -20926,6 +21144,9 @@
   let ORDER_FLOW_SHIPPING_CHARGE_CENTS = 0;
   let ORDER_FLOW_SHIPPING_MODE_LABEL = '';
   let ORDER_FLOW_SELECTED_METHOD = '';
+  let ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = '';
+  let ORDER_FLOW_ACH_CHECKOUT_INTENT = 'unspecified';
+  let ORDER_FLOW_AP_STATUS = { tone: '', message: '' };
   let ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
   let ORDER_FLOW_CHECKOUT_URL = '';
   let ORDER_FLOW_RESULT_KIND = 'info';
@@ -35021,6 +35242,227 @@
     openTaxExemptWorkspace_({ context: 'project' });
   }
 
+  function clearOrderFlowApStatus_(){
+    ORDER_FLOW_AP_STATUS = { tone: '', message: '' };
+    renderOrderFlowApStatus_();
+  }
+
+  function setOrderFlowApStatus_(message, tone){
+    ORDER_FLOW_AP_STATUS = {
+      tone: String(tone || '').trim(),
+      message: String(message || '').trim()
+    };
+    renderOrderFlowApStatus_();
+  }
+
+  function renderOrderFlowApStatus_(){
+    if (!orderFlowApStatus) return;
+    const tone = String(ORDER_FLOW_AP_STATUS && ORDER_FLOW_AP_STATUS.tone || '').trim();
+    orderFlowApStatus.textContent = String(ORDER_FLOW_AP_STATUS && ORDER_FLOW_AP_STATUS.message || '').trim();
+    orderFlowApStatus.classList.toggle('is-error', tone === 'error');
+    orderFlowApStatus.classList.toggle('is-ok', tone === 'ok');
+  }
+
+  function getOrderFlowAchDecisionDefaultMethod_(usableMethods){
+    const methods = Array.isArray(usableMethods) ? usableMethods : [];
+    const defaultId = String(normalizeAccountSummary(ACCOUNT_SUMMARY).defaultAchPaymentMethodId || '').trim();
+    return methods.find(item => item && item.isDefault === true)
+      || methods.find(item => item && defaultId && String(item.paymentMethodId || '').trim() === defaultId)
+      || methods[0]
+      || null;
+  }
+
+  function syncOrderFlowAchDecisionSelection_(usableMethods){
+    const methods = Array.isArray(usableMethods) ? usableMethods : getUsableAchPaymentMethodsForCheckoutUi_(ACCOUNT_SUMMARY);
+    const selectedExists = methods.some(item => String(item && item.paymentMethodId || '').trim() === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID);
+    if (!selectedExists) {
+      const defaultMethod = getOrderFlowAchDecisionDefaultMethod_(methods);
+      ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = defaultMethod ? String(defaultMethod.paymentMethodId || '').trim() : '';
+    }
+    ORDER_FLOW_ACH_CHECKOUT_INTENT = ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID ? 'saved_bank' : 'new_bank';
+  }
+
+  function createOrderFlowAchBankOption_(method, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const item = (method && typeof method === 'object') ? method : {};
+    const selectable = opts.selectable === true;
+    const methodId = String(item.paymentMethodId || '').trim();
+    const label = createEl(selectable ? 'label' : 'div', 'orderFlowAchBankOption' + (selectable && methodId === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID ? ' is-selected' : '') + (!selectable ? ' is-disabled' : ''));
+    if (selectable) {
+      const input = document.createElement('input');
+      input.className = 'orderFlowAchBankRadio';
+      input.type = 'radio';
+      input.name = 'orderFlowAchPreferredBank';
+      input.value = methodId;
+      input.checked = methodId === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID;
+      input.addEventListener('change', () => {
+        ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = methodId;
+        ORDER_FLOW_ACH_CHECKOUT_INTENT = methodId ? 'saved_bank' : 'new_bank';
+        renderOrderFlowAchDecisionSection_();
+      });
+      label.appendChild(input);
+    } else {
+      label.appendChild(createEl('span', 'orderFlowAchBankRadio', ''));
+    }
+    const main = createEl('div', 'orderFlowAchBankMain');
+    main.appendChild(createEl('div', 'orderFlowAchBankName', formatAchBankLabelForUi_(item, ACCOUNT_SUMMARY)));
+    const statusLabel = getAchVerificationLabelForUi_(item.verificationStatus || item.status);
+    main.appendChild(createEl('div', 'orderFlowAchBankMeta', selectable
+      ? (statusLabel + ' — Stripe will securely confirm which bank to use during checkout.')
+      : (statusLabel + ' — Verify from Dashboard or connect another bank through Stripe Checkout.')));
+    if (item.isDefault === true && selectable) {
+      main.appendChild(createEl('span', 'orderFlowAchBankBadge', 'Default'));
+    }
+    label.appendChild(main);
+    return label;
+  }
+
+  function renderOrderFlowAchDecisionSection_(){
+    const usableMethods = getUsableAchPaymentMethodsForCheckoutUi_(ACCOUNT_SUMMARY);
+    const pendingMethods = getPendingAchPaymentMethodsForCheckoutUi_(ACCOUNT_SUMMARY);
+    syncOrderFlowAchDecisionSelection_(usableMethods);
+    if (orderFlowAchDecisionCopy) {
+      if (usableMethods.length > 1) {
+        const selected = usableMethods.find(item => String(item && item.paymentMethodId || '').trim() === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID) || usableMethods[0];
+        orderFlowAchDecisionCopy.textContent = 'Saved ACH banks are available for this account. Choose a preferred bank below. Default: ' + formatAchBankLabelForUi_(selected, ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.';
+      } else if (usableMethods.length === 1) {
+        orderFlowAchDecisionCopy.textContent = 'Saved ACH bank available: ' + formatAchBankLabelForUi_(usableMethods[0], ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.';
+      } else if (pendingMethods.length) {
+        orderFlowAchDecisionCopy.textContent = 'Bank verification is still pending. Verify from Dashboard or connect another bank securely through Stripe Checkout.';
+      } else {
+        orderFlowAchDecisionCopy.textContent = 'Securely connect a bank account in Stripe Checkout. Red Threads never sees or stores your full bank account number.';
+      }
+    }
+    if (orderFlowAchBankList) {
+      orderFlowAchBankList.innerHTML = '';
+      usableMethods.forEach(method => {
+        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: true }));
+      });
+      pendingMethods.forEach(method => {
+        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: false }));
+      });
+      if (!usableMethods.length && !pendingMethods.length) {
+        orderFlowAchBankList.appendChild(createEl('div', 'orderFlowAchBankMeta', 'No saved ACH banks are ready for checkout.'));
+      }
+    }
+    if (orderFlowAchContinueBtn) {
+      orderFlowAchContinueBtn.textContent = usableMethods.length
+        ? 'Continue to secure ACH checkout'
+        : (pendingMethods.length ? 'Connect or verify bank in Stripe Checkout' : 'Continue to secure ACH checkout');
+    }
+    renderOrderFlowApStatus_();
+  }
+
+  function enterOrderFlowAchDecision_(){
+    if (maybeBlockOrderFlow()) return;
+    if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
+      setOrderFlowStatePill('Fulfillment');
+      setOrderFlowMode('fulfillment');
+      return;
+    }
+    ORDER_FLOW_SELECTED_METHOD = PAYMENT_METHODS.ach;
+    clearOrderFlowApStatus_();
+    renderOrderFlowAchDecisionSection_();
+    setOrderFlowStatePill('ACH');
+    setOrderFlowMode('achDecision');
+    if (orderFlowAchContinueBtn) orderFlowAchContinueBtn.focus();
+  }
+
+  function handleOrderFlowAchContinue_(){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    const preferredId = String(ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID || '').trim();
+    startOrderFlowCheckout(PAYMENT_METHODS.ach, {
+      preferredAchPaymentMethodId: preferredId,
+      achCheckoutIntent: preferredId ? 'saved_bank' : 'new_bank'
+    });
+  }
+
+  function buildOrderFlowApBasePayload_(clickedPortalState){
+    return {
+      token: CURRENT_TOKEN,
+      paymentMethodSelected: PAYMENT_METHODS.ach,
+      paymentOrigin: 'ap_payment_link',
+      portalState: JSON.stringify(clickedPortalState || buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })),
+      clientArtifactStrategy: 'server_fallback'
+    };
+  }
+
+  async function handleOrderFlowApPaymentLink_(sendEmail){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    if (maybeBlockOrderFlow()) return;
+    if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
+      setOrderFlowStatePill('Fulfillment');
+      setOrderFlowMode('fulfillment');
+      return;
+    }
+    const apEmail = String(orderFlowApEmailInput && orderFlowApEmailInput.value || '').trim();
+    const apName = String(orderFlowApNameInput && orderFlowApNameInput.value || '').trim();
+    const note = String(orderFlowApNoteInput && orderFlowApNoteInput.value || '').trim();
+    if (sendEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(apEmail)) {
+      setOrderFlowApStatus_('Enter a valid AP email before sending.', 'error');
+      if (orderFlowApEmailInput) orderFlowApEmailInput.focus();
+      return;
+    }
+    setOrderFlowButtonsBusy(true);
+    setOrderFlowApStatus_(sendEmail ? 'Preparing and emailing AP payment link...' : 'Preparing AP payment link...', '');
+    try {
+      const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+      const payload = Object.assign(buildOrderFlowApBasePayload_(clickedPortalState), {
+        apEmail: apEmail,
+        apName: apName,
+        note: note
+      });
+      const resp = await callServer(sendEmail ? 'sendAchPaymentLinkToAp' : 'prepareAchPaymentLinkToAp', payload);
+      syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
+      const link = String(resp && resp.apPaymentLink || resp && resp.paymentLinks && resp.paymentLinks.achApUrl || '').trim();
+      if (!resp || resp.ok !== true) {
+        if (link) {
+          const copied = await copyTextToClipboard_(link).catch(() => false);
+          if (!copied) window.prompt('Copy this ACH payment link:', link);
+          ORDER_FLOW_DONE_TARGET = 'summary';
+          showOrderFlowResult(
+            'ACH payment link prepared',
+            'The AP payment link was prepared, but the email could not be sent. The Red Threads portal payment link is available to copy.',
+            [
+              resp && resp.invoice && resp.invoice.invoiceNumber ? ('Invoice: ' + resp.invoice.invoiceNumber) : '',
+              'AP bank details will be order-only and will not be saved to Dashboard Payment Methods.'
+            ].filter(Boolean).join('\n'),
+            { kind: 'error', doneTarget: 'summary' }
+          );
+          showNotice('AP email could not be sent. The payment link is ready to copy.', 'err', { persist: true });
+          return;
+        }
+        throw new Error(String((resp && resp.error) || 'Unable to prepare AP payment link.'));
+      }
+      if (!link) throw new Error('AP payment link was prepared, but the URL was not returned.');
+      if (!sendEmail) {
+        const copied = await copyTextToClipboard_(link).catch(() => false);
+        if (!copied) window.prompt('Copy this ACH payment link:', link);
+      }
+      ORDER_FLOW_DONE_TARGET = 'summary';
+      showOrderFlowResult(
+        sendEmail ? 'ACH payment link emailed' : 'ACH payment link copied',
+        sendEmail
+          ? 'The order is locked as awaiting ACH payment. Accounts Payable received a Red Threads portal payment link; no Stripe Checkout URL was emailed.'
+          : 'The order is locked as awaiting ACH payment. The copied link opens the Red Threads portal for Accounts Payable.',
+        [
+          resp.invoice && resp.invoice.invoiceNumber ? ('Invoice: ' + resp.invoice.invoiceNumber) : '',
+          sendEmail && resp.apEmailRedacted ? ('Sent to: ' + resp.apEmailRedacted) : '',
+          'AP bank details will be order-only and will not be saved to Dashboard Payment Methods.'
+        ].filter(Boolean).join('\n'),
+        { kind: 'success', doneTarget: 'summary' }
+      );
+      showNotice(sendEmail ? 'ACH payment link emailed to Accounts Payable.' : 'ACH payment link copied.', 'ok');
+    } catch (err) {
+      const message = normalizeUiErrorMessage_(err, 'Unable to prepare AP payment link.');
+      setOrderFlowApStatus_(message, 'error');
+      showNotice(message, 'err', { persist: true });
+    } finally {
+      setOrderFlowButtonsBusy(false);
+      renderOrderFlowAchDecisionSection_();
+    }
+  }
+
   function submitOrderFlowSelection_(){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
     if (maybeBlockOrderFlow()) return;
@@ -35044,8 +35486,12 @@
       }
       return;
     }
-    if (ORDER_FLOW_SELECTED_METHOD === 'card' || ORDER_FLOW_SELECTED_METHOD === 'ach') {
+    if (ORDER_FLOW_SELECTED_METHOD === 'card') {
       startOrderFlowCheckout(ORDER_FLOW_SELECTED_METHOD);
+      return;
+    }
+    if (ORDER_FLOW_SELECTED_METHOD === PAYMENT_METHODS.ach) {
+      enterOrderFlowAchDecision_();
       return;
     }
     if (ORDER_FLOW_SELECTED_METHOD === 'purchase_order') {
@@ -35114,7 +35560,7 @@
       }
       if (achBody) {
         achBody.textContent = defaultAch
-          ? ('Use ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + ' or connect a different bank in Stripe Checkout.')
+          ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.')
           : 'Securely pay from your bank account. Red Threads never sees or stores your full bank account number.';
       }
     }
@@ -35143,7 +35589,7 @@
   }
 
   function setOrderFlowMode(mode){
-    const validModes = new Set(['fulfillment', 'method', 'manual', 'po', 'blocking', 'checkout', 'result']);
+    const validModes = new Set(['fulfillment', 'method', 'manual', 'po', 'achDecision', 'blocking', 'checkout', 'result']);
     // Legacy compatibility layer — keep until Tranche 4D deletion pass.
     // `method` is retained as a quarantined compatibility mode. The shipped
     // compact flow uses `fulfillment` as the active delivery/payment surface.
@@ -35161,6 +35607,7 @@
     if (orderFlowMethodSection) orderFlowMethodSection.hidden = ORDER_FLOW_MODE !== 'method';
     if (orderFlowManualSection) orderFlowManualSection.hidden = ORDER_FLOW_MODE !== 'manual';
     if (orderFlowPoSection) orderFlowPoSection.hidden = ORDER_FLOW_MODE !== 'po';
+    if (orderFlowAchDecisionSection) orderFlowAchDecisionSection.hidden = ORDER_FLOW_MODE !== 'achDecision';
     if (orderFlowBlockingSection) orderFlowBlockingSection.hidden = ORDER_FLOW_MODE !== 'blocking';
     if (orderFlowCheckoutSection) orderFlowCheckoutSection.hidden = ORDER_FLOW_MODE !== 'checkout';
     if (orderFlowResultSection) orderFlowResultSection.hidden = ORDER_FLOW_MODE !== 'result';
@@ -35172,6 +35619,8 @@
       renderOrderFlowBlockingJobs();
     } else if (ORDER_FLOW_MODE === 'fulfillment') {
       renderOrderFlowFulfillmentSection();
+    } else if (ORDER_FLOW_MODE === 'achDecision') {
+      renderOrderFlowAchDecisionSection_();
     }
   }
 
@@ -35189,6 +35638,10 @@
       orderFlowManualViewerBackBtn,
       orderFlowManualViewerSubmitBtn,
       orderFlowPoConfirmBtn,
+      orderFlowAchDecisionBackBtn,
+      orderFlowAchContinueBtn,
+      orderFlowApEmailBtn,
+      orderFlowApCopyBtn,
       orderFlowSubmitTermsBtn,
       orderFlowCheckoutBackBtn,
       orderFlowCheckoutLaunchBtn,
@@ -35689,6 +36142,9 @@
     ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
     ORDER_FLOW_RESULT_KIND = 'info';
     ORDER_FLOW_DONE_TARGET = 'snapshot';
+    ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID = '';
+    ORDER_FLOW_ACH_CHECKOUT_INTENT = 'unspecified';
+    ORDER_FLOW_AP_STATUS = { tone: '', message: '' };
     ORDER_FLOW_FULFILLMENT_ERROR = false;
     ORDER_FLOW_METHOD_ERROR = false;
     ORDER_FLOW_PO_UNLOCK_ERROR = false;
@@ -35700,6 +36156,7 @@
     setOrderFlowButtonsBusy(false);
     renderOrderFlowFulfillmentSection();
     renderOrderFlowPoSection();
+    renderOrderFlowAchDecisionSection_();
     setOrderFlowMode('fulfillment');
     setOrderFlowStatePill('Fulfillment');
     renderOrderFlowSummaryCard();
@@ -35891,8 +36348,9 @@
     openAccountDocumentModal_('credit_terms', { context: 'project' });
   }
 
-  async function startOrderFlowCheckout(method){
+  async function startOrderFlowCheckout(method, options){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    const opts = (options && typeof options === 'object') ? options : {};
     const normalizedMethod = String(method || '').trim().toLowerCase();
     const checkoutStartedAt = Date.now();
     const checkoutTiming = createClientCheckoutTimingTrace_('createCheckoutAttempt', normalizedMethod);
@@ -35950,11 +36408,17 @@
         bytes: clickedPortalStateJson.length
       });
       markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_start');
-      const resp = await callServer('createCheckoutAttempt', {
+      const requestPayload = {
         token: CURRENT_TOKEN,
         paymentMethodSelected: normalizedMethod,
         portalState: clickedPortalStateJson
-      });
+      };
+      if (normalizedMethod === PAYMENT_METHODS.ach) {
+        requestPayload.preferredAchPaymentMethodId = String(opts.preferredAchPaymentMethodId || ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID || '').trim();
+        requestPayload.achCheckoutIntent = String(opts.achCheckoutIntent || ORDER_FLOW_ACH_CHECKOUT_INTENT || 'unspecified').trim();
+        requestPayload.paymentOrigin = String(opts.paymentOrigin || '').trim();
+      }
+      const resp = await callServer('createCheckoutAttempt', requestPayload);
       markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_end', {
         ok: !!(resp && resp.ok === true),
         checkoutReady: !!(resp && resp.checkoutReady === true)
@@ -40781,7 +41245,7 @@
           achLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'ACH Payment: '));
           const defaultAch = getDefaultAchPaymentMethodForUi_(ACCOUNT_SUMMARY);
           achLine.appendChild(document.createTextNode(defaultAch
-            ? ('Use ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + ' or connect a different bank in Stripe Checkout.')
+            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.')
             : 'Securely connect your bank in Stripe Checkout. Red Threads never stores your full bank account number.'));
           paymentNote.appendChild(achLine);
         }
@@ -43112,6 +43576,35 @@
       });
     }
     if (orderFlowPoConfirmBtn) orderFlowPoConfirmBtn.addEventListener('click', submitOrderFlowPo);
+    if (orderFlowAchDecisionBackBtn) {
+      orderFlowAchDecisionBackBtn.addEventListener('click', () => {
+        setOrderFlowStatePill('Checkout');
+        setOrderFlowMode('fulfillment');
+      });
+    }
+    if (orderFlowAchContinueBtn) orderFlowAchContinueBtn.addEventListener('click', handleOrderFlowAchContinue_);
+    if (orderFlowApCopyBtn) {
+      orderFlowApCopyBtn.addEventListener('click', () => {
+        handleOrderFlowApPaymentLink_(false).catch(err => {
+          const message = normalizeUiErrorMessage_(err, 'Unable to copy ACH payment link.');
+          setOrderFlowApStatus_(message, 'error');
+          showNotice(message, 'err', { persist: true });
+        });
+      });
+    }
+    if (orderFlowApEmailBtn) {
+      orderFlowApEmailBtn.addEventListener('click', () => {
+        handleOrderFlowApPaymentLink_(true).catch(err => {
+          const message = normalizeUiErrorMessage_(err, 'Unable to email ACH payment link.');
+          setOrderFlowApStatus_(message, 'error');
+          showNotice(message, 'err', { persist: true });
+        });
+      });
+    }
+    [orderFlowApEmailInput, orderFlowApNameInput, orderFlowApNoteInput].forEach(input => {
+      if (!input) return;
+      input.addEventListener('input', clearOrderFlowApStatus_);
+    });
     if (orderFlowSubmitTermsBtn) orderFlowSubmitTermsBtn.addEventListener('click', submitOrderFlowTermsPlaceholder);
     if (orderFlowCheckoutBackBtn) {
       orderFlowCheckoutBackBtn.addEventListener('click', () => {

@@ -111,6 +111,27 @@ Saved bank reuse is hosted-Checkout-mediated in V1. The portal shows dashboard-s
 
 ACH payment sessions for normal portal account checkout include `saved_payment_method_options[allow_redisplay_filters]` for `unspecified` and `always` so dashboard-saved verified Customer bank accounts can redisplay in Checkout. Portal default-bank fields are reserved for usable verified/active `dashboard_saved` ACH methods; pending, failed, blocked, removed, order-only, AP-link, or microdeposit-required methods are not treated as the default checkout bank.
 
+### ACH Pre-Checkout Decision Step
+
+When a client selects ACH Bank Payment in the order modal, the first Place Order action opens a portal decision step instead of immediately creating a Stripe Checkout Session.
+
+Lane 1, Pay now with ACH:
+
+- Shows only usable `dashboard_saved` bank summaries as selectable preferences.
+- Pending, failed, blocked, removed, hidden, order-only, and AP-link banks are not selectable.
+- Pending dashboard setup banks can be shown as verification-pending status notes.
+- The selected `preferredAchPaymentMethodId` and `achCheckoutIntent` are validated server-side before Checkout creation.
+- The validated preference is written only to safe Checkout Session / PaymentIntent metadata and order draft context.
+- Stripe Checkout remains the final bank confirmation, mandate, and payment-initiation surface; the portal does not claim it can force a specific saved bank.
+
+Lane 2, Send ACH payment link to Accounts Payable:
+
+- Prepares and locks an awaiting-payment ACH order before returning or emailing the AP link.
+- Payment remains `not_started`, production remains `not_authorized`, and the portal is locked to avoid stale editable duplicate orders.
+- The AP link is a Red Threads portal URL, not a Stripe Checkout URL.
+- Email content includes safe order reference, amount due, optional purchaser note, and AP-only bank-storage copy.
+- Invoice PDF attachment is best effort: when the generated invoice artifact can be attached safely, it is attached; otherwise the AP link and safe summary remain the V1 deliverable.
+
 AP payment links use:
 
 - Public route: `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`
