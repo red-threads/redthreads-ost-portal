@@ -6149,7 +6149,7 @@ function getAchMicrodepositVerificationLink_(payload) {
     return {
       ok: false,
       code: 'ach_microdeposit_verification_unavailable',
-      error: 'Stripe-hosted bank verification is not available yet. Check the Stripe email link or retry ACH with a different bank.'
+      error: 'Stripe did not provide a hosted verification link for this saved bank. Add this bank again from Dashboard, or ask Red Threads to verify the SetupIntent in Stripe test tooling.'
     };
   }
   return candidate;

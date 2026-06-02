@@ -62,14 +62,14 @@ The second command should show only redaction, safety, or documentation referenc
 25. Login from public `/portal` replaces the parent URL with `?dashboard=1&accountAccessToken=<account-access-token>` after dashboard hydration.
 26. Refreshing the account dashboard URL reloads the dashboard without returning to the login view.
 27. Opening a project from the dashboard pushes `?t=<project-token>`, and browser Back/Forward reloads the matching dashboard/project iframe route after the live wrapper has been refreshed from the repo copy.
-28. Pending/unverified ACH banks keep the same compact `ACH payment accounts` card; clicking it opens Manage ACH banks, where pending rows show Verify with Stripe when a safe SetupIntent/PaymentIntent/PaymentMethod linkage can be validated. Rows without safe linkage show verification-unavailable guidance, and the same PaymentMethod is not rendered twice in the top dashboard summary.
+28. Pending/unverified ACH banks keep the same compact `ACH payment accounts` card; clicking it opens Manage ACH banks, where pending rows show Verify with Stripe only when safe SetupIntent/Setup Session or PaymentIntent linkage exists. Legacy rows with only a PaymentMethod ID show verification-unavailable guidance, and the same PaymentMethod is not rendered twice in the top dashboard summary.
 29. Pending/unverified ACH banks are not promoted as the default saved checkout bank.
 30. ACH Checkout Session payload requests saved bank redisplay for normal Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
 31. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
 32. Stale tab cannot overwrite paid, failed, locked, or superseded state.
 33. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
 34. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
-35. Dashboard Payment Methods shows a pending microdeposit bank as an action and opens Stripe-hosted verification through `getAchMicrodepositVerificationLink` for the clicked pending bank.
+35. Dashboard Payment Methods shows a pending microdeposit bank as an action only when the clicked pending bank has enough safe intent/session linkage for `getAchMicrodepositVerificationLink`; otherwise the modal remains closable and shows Add-bank/test-tooling guidance without promising a Stripe email link.
 36. The hosted verification URL is returned only to the browser for immediate navigation and is not stored in Sheets, docs, logs, browser state, or committed files.
 37. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
 38. ACH cancel return lets the user retry ACH through Stripe-hosted instant verification/manual entry or choose another payment method.
@@ -117,7 +117,7 @@ For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID an
 - `setup_intent.setup_failed`: setup failed with retry path.
 - AP-link payment events: order-level ACH fields update, but `PORTAL_ACCOUNTS.achPaymentMethodsJson` is not expanded with a dashboard-visible bank.
 - PaymentIntent or SetupIntent `requires_action` with `next_action.verify_with_microdeposits`: verification status shown as microdeposit pending; no microdeposit values stored.
-- Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink` returns a Stripe-hosted verification URL only when ACH payment/setup evidence is present and the clicked pending bank matches the authorized account/order context.
+- Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink` returns a Stripe-hosted verification URL only when ACH payment/setup evidence is present, the clicked pending bank matches the authorized account/order context, and Stripe exposes a hosted verification URL. A bare PaymentMethod ID is not enough for the dashboard to render the Verify with Stripe action.
 - Tokenized Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink({ token })` accepts a valid job dashboard token but rejects invalid or cross-account token context.
 
 ## Internal Test-Mode Microdeposit Verification

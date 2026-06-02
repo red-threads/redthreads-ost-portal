@@ -2299,6 +2299,25 @@
     .dashboardAchManageMeta.isWarning{
       color:#fbbf24;
     }
+    .dashboardAchManageNotice{
+      margin:0 0 14px;
+      border:1px solid rgba(81,255,183,.26);
+      border-radius:10px;
+      background:rgba(81,255,183,.08);
+      color:#dbeafe;
+      padding:10px 12px;
+      font-size:12px;
+      line-height:1.45;
+      font-weight:800;
+    }
+    .dashboardAchManageNotice[hidden]{
+      display:none !important;
+    }
+    .dashboardAchManageNotice.isError{
+      border-color:rgba(251,113,133,.42);
+      background:rgba(251,113,133,.12);
+      color:#fecdd3;
+    }
     .dashboardAchManageBadge{
       display:inline-flex;
       width:max-content;
@@ -16693,7 +16712,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 41">41</div>
+  <div class="devRevisionBadge" aria-label="Development revision 42">42</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -16804,6 +16823,7 @@
             </div>
             <button class="dashboardAchManageClose" id="dashboardAchManageCloseBtn" type="button" aria-label="Close ACH bank management">X</button>
           </div>
+          <div class="dashboardAchManageNotice" id="dashboardAchManageNotice" hidden></div>
           <div class="dashboardAchManageBody" id="dashboardAchManageBody"></div>
           <div class="dashboardAchManageFooter">
             <button class="dashboardAchManageBtn" id="dashboardAchManageDoneBtn" type="button">Done</button>
@@ -20275,7 +20295,6 @@
   function hasAchMicrodepositVerificationLinkageForUi_(method){
     const item = (method && typeof method === 'object') ? method : {};
     return Boolean(
-      String(item.paymentMethodId || '').trim() ||
       String(item.setupIntentId || '').trim() ||
       String(item.setupSessionId || '').trim() ||
       String(item.paymentIntentId || '').trim()
@@ -20352,12 +20371,12 @@
 
   async function startDashboardAchMicrodepositVerification_(method){
     if (!isClientAchPaymentEnabled_()) {
-      showDashboardWorkflowError_('ACH bank verification is not available yet.');
+      setDashboardAchManageNotice_('ACH bank verification is not available yet.', true);
       return;
     }
     const requestPayload = await ensureDashboardAccountDocumentContextReady_();
     if (!requestPayload) {
-      showDashboardWorkflowError_('Unable to load this account payment workflow right now.');
+      setDashboardAchManageNotice_('Unable to load this account payment workflow right now.', true);
       return;
     }
     const item = (method && typeof method === 'object') ? method : {};
@@ -20368,7 +20387,7 @@
       setupSessionId: String(item.setupSessionId || '').trim(),
       paymentIntentId: String(item.paymentIntentId || '').trim()
     });
-    setAuthMessage('Opening secure Stripe bank verification...', false, { view: VIEW_DASHBOARD, persist: true });
+    setDashboardAchManageNotice_('Opening secure Stripe bank verification...', false);
     try {
       const resp = await callServer('getAchMicrodepositVerificationLink', payload);
       if (!resp || resp.ok !== true) {
@@ -20377,12 +20396,13 @@
       if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
       const verificationUrl = String(resp.verificationUrl || '').trim();
       if (!verificationUrl) throw new Error('Secure bank verification URL missing.');
+      clearDashboardAchManageNotice_();
       const launched = navigateToPortalStripeCheckout_(verificationUrl, { token: CURRENT_TOKEN || DASHBOARD_CONTEXT_TOKEN || '' });
       if (!launched) {
-        setAuthMessage('Secure bank verification is ready. Allow pop-ups or try again.', true, { view: VIEW_DASHBOARD, persist: true });
+        setDashboardAchManageNotice_('Secure bank verification is ready. Allow pop-ups or try again.', true);
       }
     } catch (err) {
-      setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+      setDashboardAchManageNotice_(String((err && err.message) || err), true);
     }
   }
 
@@ -20503,9 +20523,14 @@
       if (hasAchMicrodepositVerificationLinkageForUi_(item)) {
         const verifyBtn = createEl('button', 'dashboardAchManageBtn is-primary', 'Verify with Stripe');
         verifyBtn.type = 'button';
-        verifyBtn.addEventListener('click', () => {
+        verifyBtn.addEventListener('click', evt => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          verifyBtn.disabled = true;
           startDashboardAchMicrodepositVerification_(item).catch(err => {
-            setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+            setDashboardAchManageNotice_(String((err && err.message) || err), true);
+          }).finally(() => {
+            verifyBtn.disabled = false;
           });
         });
         actions.appendChild(verifyBtn);
@@ -20569,8 +20594,21 @@
     ));
   }
 
+  function setDashboardAchManageNotice_(message, isError){
+    if (!dashboardAchManageNotice) return;
+    const text = String(message || '').trim();
+    dashboardAchManageNotice.textContent = text;
+    dashboardAchManageNotice.hidden = !text;
+    dashboardAchManageNotice.classList.toggle('isError', !!isError);
+  }
+
+  function clearDashboardAchManageNotice_(){
+    setDashboardAchManageNotice_('', false);
+  }
+
   function openDashboardAchManageModal_(){
     if (!dashboardAchManageBackdrop) return;
+    clearDashboardAchManageNotice_();
     renderDashboardAchManageModal_();
     dashboardAchManageBackdrop.hidden = false;
     requestAnimationFrame(() => {
@@ -20578,8 +20616,12 @@
     });
   }
 
-  function closeDashboardAchManageModal_(){
+  function closeDashboardAchManageModal_(evt){
+    if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+    if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
+    clearDashboardAchManageNotice_();
     if (dashboardAchManageBackdrop) dashboardAchManageBackdrop.hidden = true;
+    setAuthMessage('', false, { view: VIEW_DASHBOARD });
   }
 
   function renderDashboardAccountStatus(summary){
@@ -21037,6 +21079,7 @@
   const dashboardAccountBullets = document.getElementById('dashboardAccountBullets');
   const dashboardAchManageBackdrop = document.getElementById('dashboardAchManageBackdrop');
   const dashboardAchManageModal = document.getElementById('dashboardAchManageModal');
+  const dashboardAchManageNotice = document.getElementById('dashboardAchManageNotice');
   const dashboardAchManageBody = document.getElementById('dashboardAchManageBody');
   const dashboardAchManageCloseBtn = document.getElementById('dashboardAchManageCloseBtn');
   const dashboardAchManageDoneBtn = document.getElementById('dashboardAchManageDoneBtn');
@@ -43906,8 +43949,16 @@
         closeArtworkPreviewLightbox();
       });
     }
-    if (dashboardAchManageCloseBtn) dashboardAchManageCloseBtn.addEventListener('click', closeDashboardAchManageModal_);
-    if (dashboardAchManageDoneBtn) dashboardAchManageDoneBtn.addEventListener('click', closeDashboardAchManageModal_);
+    if (dashboardAchManageCloseBtn) {
+      dashboardAchManageCloseBtn.addEventListener('click', evt => {
+        closeDashboardAchManageModal_(evt);
+      });
+    }
+    if (dashboardAchManageDoneBtn) {
+      dashboardAchManageDoneBtn.addEventListener('click', evt => {
+        closeDashboardAchManageModal_(evt);
+      });
+    }
     if (dashboardAchManageAddBtn) {
       dashboardAchManageAddBtn.addEventListener('click', () => {
         closeDashboardAchManageModal_();
@@ -43919,9 +43970,14 @@
     if (dashboardAchManageBackdrop) {
       dashboardAchManageBackdrop.addEventListener('click', evt => {
         if (evt.target !== dashboardAchManageBackdrop) return;
-        closeDashboardAchManageModal_();
+        closeDashboardAchManageModal_(evt);
       });
     }
+    document.addEventListener('keydown', evt => {
+      if (evt.key !== 'Escape') return;
+      if (!dashboardAchManageBackdrop || dashboardAchManageBackdrop.hidden) return;
+      closeDashboardAchManageModal_(evt);
+    });
     if (orderFlowClose) {
       orderFlowClose.addEventListener('click', () => {
         closeOrderFlowModal();
