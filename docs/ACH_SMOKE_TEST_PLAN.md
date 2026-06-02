@@ -76,25 +76,27 @@ The second command should show only redaction, safety, or documentation referenc
 39. ACH success return calls `reconcile_checkout_return` before URL cleanup and immediately shows locked pending-not-paid state if the webhook has not finalized yet.
 40. ACH return reconciliation disables Save, Place Order, and payment controls while it is refreshing server state.
 41. ACH pending-not-paid hydration is accepted as a post-checkout canonical state and routes the user to Summary/Invoice copy without waiting for a paid/finalized signal.
-42. ACH cancel return reconciliation preserves locked/pending canonical state if the order had already been placed, otherwise leaves retry/alternate payment available.
-43. Dashboard Payment Methods lists multiple `dashboard_saved` records only; hidden/order-only/AP records do not render.
-44. Usable non-default dashboard-saved banks can be selected as default; pending, failed, blocked, removed, and order-only records cannot.
-45. Checkout saved-bank copy appears only when a usable `dashboard_saved` bank exists.
-46. Selecting ACH Bank Payment and clicking Place Order opens the ACH pre-checkout decision step in its own full-screen modal container that replaces the checkout-flow modal instead of appending below the payment cards.
-47. No saved bank: the decision step shows no selector and the continue button launches hosted ACH Checkout.
-48. One usable dashboard-saved bank: the decision step shows it as the selected preference and copy says Stripe may ask the client to confirm this bank or choose another bank before payment is initiated.
-49. Multiple usable dashboard-saved banks: all usable records appear, the default is selected first, and choosing another bank sends `preferredAchPaymentMethodId` plus `achCheckoutIntent=saved_bank`.
-50. Checkout decision account merge: when a project is opened from Dashboard, the ACH decision step shows every dashboard-visible ACH bank for the same account, even if the project payload only carried the default bank.
-51. Pending, unavailable, or status-missing dashboard ACH banks appear as disabled decision-step rows; they are not selectable and remain visible from Dashboard Payment Methods for verification/default actions.
-52. Invalid or stale preferred bank IDs are rejected server-side before Stripe Checkout creation.
-53. Copy ACH payment link from the decision step prepares/locks an awaiting-payment ACH order and copies `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`, never a private Stripe Checkout URL.
-54. Email ACH payment link validates an AP email address, prepares/locks an awaiting-payment ACH order, sends a Red Threads portal AP link with safe order summary copy, and does not email a Stripe Checkout URL.
-55. AP email attachment behavior is best effort: if the invoice PDF artifact is available it can attach; if not, the AP link plus safe summary remains sufficient.
-56. AP payment links launch hosted ACH from the locked invoice/payment-due surface, use an order-scoped Stripe Customer, omit future-save/redisplay settings, and write `achPaymentSource=ap_payment_link` plus `achPaymentVisibilityScope=order_only`.
-57. AP-link ACH Customer/session creation happens only after the latest order is confirmed locked and unpaid; missing, unlocked, or already-paid orders fail before Stripe side effects.
-58. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
-59. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
-60. Normal saved-bank ACH Checkout hardening: the selected dashboard-saved preferred bank is validated, the Stripe PaymentMethod redisplay/billing-details update is attempted without blocking Checkout, the Session includes `payment_method_data[allow_redisplay]=always` when future save is enabled, and client copy remains truthful even if hosted Checkout renders generic bank-entry UI.
+42. ACH checkout success return with stale `mode=team` or `teamReview` params does not show the Team Mode password gate; it forces client mode, cleans one-time/team params, and lands on Summary/Invoice.
+43. ACH checkout cancel return with stale `mode=team` or `teamReview` params does not show the Team Mode password gate; it returns to retry/alternate-payment context without auto-relaunching Checkout.
+44. ACH cancel return reconciliation preserves locked/pending canonical state if the order had already been placed, otherwise leaves retry/alternate payment available.
+45. Dashboard Payment Methods lists multiple `dashboard_saved` records only; hidden/order-only/AP records do not render.
+46. Usable non-default dashboard-saved banks can be selected as default; pending, failed, blocked, removed, and order-only records cannot.
+47. Checkout saved-bank copy appears only when a usable `dashboard_saved` bank exists.
+48. Selecting ACH Bank Payment and clicking Place Order opens the ACH pre-checkout decision step in its own full-screen modal container that replaces the checkout-flow modal instead of appending below the payment cards.
+49. No saved bank: the decision step shows no selector and the continue button launches hosted ACH Checkout.
+50. One usable dashboard-saved bank: the decision step shows it as the selected preference and copy says Stripe may ask the client to confirm this bank or choose another bank before payment is initiated.
+51. Multiple usable dashboard-saved banks: all usable records appear, the default is selected first, and choosing another bank sends `preferredAchPaymentMethodId` plus `achCheckoutIntent=saved_bank`.
+52. Checkout decision account merge: when a project is opened from Dashboard, the ACH decision step shows every dashboard-visible ACH bank for the same account, even if the project payload only carried the default bank.
+53. Pending, unavailable, or status-missing dashboard ACH banks appear as disabled decision-step rows; they are not selectable and remain visible from Dashboard Payment Methods for verification/default actions.
+54. Invalid or stale preferred bank IDs are rejected server-side before Stripe Checkout creation.
+55. Copy ACH payment link from the decision step prepares/locks an awaiting-payment ACH order and copies `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`, never a private Stripe Checkout URL.
+56. Email ACH payment link validates an AP email address, prepares/locks an awaiting-payment ACH order, sends a Red Threads portal AP link with safe order summary copy, and does not email a Stripe Checkout URL.
+57. AP email attachment behavior is best effort: if the invoice PDF artifact is available it can attach; if not, the AP link plus safe summary remains sufficient.
+58. AP payment links launch hosted ACH from the locked invoice/payment-due surface, use an order-scoped Stripe Customer, omit future-save/redisplay settings, and write `achPaymentSource=ap_payment_link` plus `achPaymentVisibilityScope=order_only`.
+59. AP-link ACH Customer/session creation happens only after the latest order is confirmed locked and unpaid; missing, unlocked, or already-paid orders fail before Stripe side effects.
+60. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
+61. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
+62. Normal saved-bank ACH Checkout hardening: the selected dashboard-saved preferred bank is validated, the Stripe PaymentMethod redisplay/billing-details update is attempted without blocking Checkout, the Session includes `payment_method_data[allow_redisplay]=always` when future save is enabled, and client copy remains truthful even if hosted Checkout renders generic bank-entry UI.
 
 ## ACH Event Smokes
 

@@ -16570,7 +16570,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 36">36</div>
+  <div class="devRevisionBadge" aria-label="Development revision 37">37</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19321,13 +19321,18 @@
     refreshRuntimeBootFlags();
   }
 
+  function isCheckoutPaymentReturnIntent_(){
+    const value = String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+    return value === 'success' || value === 'cancel';
+  }
+
   function isCheckoutCancelReturnIntent_(){
     const value = String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
     return value === 'cancel';
   }
 
-  function forceClientModeForCheckoutCancelReturn_(){
-    if (!isCheckoutCancelReturnIntent_()) return false;
+  function forceClientModeForCheckoutReturn_(){
+    if (!isCheckoutPaymentReturnIntent_()) return false;
     PORTAL_MODE = 'client';
     IS_TEAM = false;
     TEAM_MODE_UNLOCKED = false;
@@ -19336,6 +19341,11 @@
       closeTeamModeGate({ immediate: true });
     } catch (_) {}
     return true;
+  }
+
+  function forceClientModeForCheckoutCancelReturn_(){
+    if (!isCheckoutCancelReturnIntent_()) return false;
+    return forceClientModeForCheckoutReturn_();
   }
 
   function clearTeamModeRuntimeStateForToken_(token){
@@ -20489,7 +20499,7 @@
       const url = new URL(window.location.href);
       let changed = false;
       const clearKeys = ['checkoutResult', 'setupResult', 'stripeSessionId'];
-      if (opts.checkoutCancel === true) {
+      if (opts.checkoutReturn === true || opts.checkoutCancel === true) {
         clearKeys.push('payNow', 'paymentOrigin', 'mode', 'teamReview');
       }
       clearKeys.forEach(key => {
@@ -20501,7 +20511,9 @@
       const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
       window.history.replaceState({}, document.title, nextUrl);
     } catch (_) {}
-    syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+    if (opts.checkoutReturn !== true) {
+      syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+    }
   }
 
   function getCheckoutReturnResult_(){
@@ -20586,7 +20598,7 @@
       setupResult: setupResult,
       stripeSessionId: getStripeReturnSessionId_(),
       sessionId: String(AUTH_SESSION_ID || readStoredSessionId() || '').trim(),
-      mode: PORTAL_MODE || 'client'
+      mode: getCheckoutReturnResult_() ? 'client' : (PORTAL_MODE || 'client')
     };
     const dashboardContext = getDashboardContextRequestPayload_();
     if (dashboardContext && typeof dashboardContext === 'object') {
@@ -20633,10 +20645,11 @@
   async function reconcileCheckoutReturnOnBoot_(){
     if (!hasCheckoutReturnIntent_() || CHECKOUT_RETURN_RECONCILE_IN_FLIGHT) return false;
     if (getCheckoutReturnResult_() === 'cancel') {
-      forceClientModeForCheckoutCancelReturn_();
+      forceClientModeForCheckoutReturn_();
       handleCheckoutReturnNotice({ checkoutCancel: true });
       return true;
     }
+    forceClientModeForCheckoutReturn_();
     const payload = buildCheckoutReturnReconciliationPayload_();
     if (!payload.token && !payload.setupResult) return false;
     CHECKOUT_RETURN_RECONCILE_IN_FLIGHT = true;
@@ -20653,14 +20666,24 @@
         if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
         if (resp.portalPayload) {
           CHECKOUT_RETURN_INTENT_CONSUMED = true;
-          clearConsumedCheckoutReturnParams();
+          clearConsumedCheckoutReturnParams({ checkoutReturn: !!payload.checkoutResult });
           applyPortalPayloadInPlace(resp.portalPayload, {
             source: 'checkout-return-reconcile',
             reason: 'checkout-return-reconcile',
-            preserveTeamMode: true
+            forceClientMode: !!payload.checkoutResult,
+            preserveTeamMode: !payload.checkoutResult
           });
           showNotice(getCheckoutReturnNoticeFromResponse_(resp), 'ok', { persist: true });
           if (resp.reconciliationStatus !== 'pending_webhook' || hasLockedAchPendingReturnSignal_(resp.portalPayload) || hasStrongPaidFinalizedSignal_(resp.portalPayload)) {
+            if (payload.checkoutResult && CURRENT_TOKEN) {
+              replaceCurrentPortalProjectRoute_(CURRENT_TOKEN, {
+                summary: '1',
+                forceClientMode: true
+              });
+              requestAnimationFrame(() => {
+                setActiveSummaryPanel({ render: true });
+              });
+            }
             return true;
           }
         }
@@ -20688,12 +20711,14 @@
     if (!notice) return;
     if (result === 'success' || result === 'cancel') {
       SUPPRESS_NEXT_AUTO_INTRO = true;
+      forceClientModeForCheckoutReturn_();
     }
     if (result === 'cancel' || opts.checkoutCancel === true) {
       forceClientModeForCheckoutCancelReturn_();
     }
     showNotice(notice.message, notice.type || 'ok');
     clearConsumedCheckoutReturnParams({
+      checkoutReturn: result === 'success' || result === 'cancel',
       checkoutCancel: result === 'cancel' || opts.checkoutCancel === true
     });
   }
@@ -21683,7 +21708,7 @@
   }
 
   function routeCurrentPaidFinalizedProjectToInvoice_(reason){
-    if (!hasStrongPaidFinalizedSignal_(VM)) return false;
+    if (!hasStrongPaidFinalizedSignal_(VM) && !hasLockedAchPendingReturnSignal_(VM)) return false;
     if (!PORTAL_STATE || typeof PORTAL_STATE !== 'object') return false;
     activePanel = 'summary';
     PORTAL_STATE.activePanel = 'summary';
@@ -23435,7 +23460,7 @@
   }
 
   function syncTeamModeUi(){
-    forceClientModeForCheckoutCancelReturn_();
+    forceClientModeForCheckoutReturn_();
     const isTeam = IS_TEAM;
     const isLocked = isTeamModeLocked();
     const authorName = getVisibleTeamAuthorName();
@@ -44094,10 +44119,11 @@
     const hasReturnIntent = hasCheckoutReturnIntent_();
     const isCheckoutCancelReturn = checkoutReturnResult === 'cancel';
     const shouldReconcileReturn = hasReturnIntent && !isCheckoutCancelReturn;
-    if (isCheckoutCancelReturn) {
-      forceClientModeForCheckoutCancelReturn_();
+    if (checkoutReturnResult) {
+      forceClientModeForCheckoutReturn_();
       SUPPRESS_NEXT_AUTO_INTRO = true;
-    } else if (shouldReconcileReturn) {
+    }
+    if (shouldReconcileReturn) {
       beginCheckoutReturnUiLock_(getCheckoutReturnReconciliationMessage_());
       SUPPRESS_NEXT_AUTO_INTRO = true;
     }
@@ -44125,7 +44151,8 @@
     }
     if (CURRENT_TOKEN) {
       replaceCurrentPortalProjectRoute_(CURRENT_TOKEN, {
-        summary: isCheckoutCancelReturn && SUMMARY_DEEPLINK_REQUEST ? '1' : ''
+        summary: checkoutReturnResult === 'success' || (isCheckoutCancelReturn && SUMMARY_DEEPLINK_REQUEST) ? '1' : '',
+        forceClientMode: !!checkoutReturnResult
       });
     }
     if (
