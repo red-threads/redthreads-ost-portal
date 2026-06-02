@@ -5893,6 +5893,107 @@ function buildAchMicrodepositVerificationCandidate_(intentType, intentObj, optio
   };
 }
 
+function isStripeIntentCustomerLinkedToPortalAccount_(intentObj, accountSummary) {
+  const intent = (intentObj && typeof intentObj === 'object') ? intentObj : {};
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const intentCustomerId = stripeIdFromObject_(intent.customer);
+  const accountCustomerId = trimString_(account.stripeCustomerId);
+  return !!(intentCustomerId && accountCustomerId && intentCustomerId === accountCustomerId);
+}
+
+function resolveSpecificAchSetupMicrodepositVerificationCandidate_(ctx, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const cfg = ctx.cfg || getConfig_();
+  const accountInfo = ctx.accountInfo || null;
+  const accountSummary = accountInfo && accountInfo.summary ? accountInfo.summary : {};
+  const requestedSetupIntentId = trimString_(p.setupIntentId || p.setupintentid);
+  const requestedSetupSessionId = trimString_(p.setupSessionId || p.setupsessionid);
+  const requestedPaymentMethodId = trimString_(p.paymentMethodId || p.paymentmethodid);
+  const accountMethods = normalizeAchPaymentMethodsJson_(accountSummary.achPaymentMethods);
+  const requestedMethod = requestedPaymentMethodId
+    ? accountMethods.find(function(item) {
+        return trimString_(item.paymentMethodId) === requestedPaymentMethodId && isDashboardSavedAchPaymentMethod_(item);
+      }) || null
+    : null;
+  if (requestedPaymentMethodId && !requestedMethod) return null;
+
+  let setupIntentId = requestedSetupIntentId;
+  const methodSetupSessionId = trimString_(requestedMethod && requestedMethod.setupSessionId);
+  const methodSetupIntentId = trimString_(requestedMethod && requestedMethod.setupIntentId);
+  let setupSessionId = requestedSetupSessionId || methodSetupSessionId;
+  if (!setupIntentId) setupIntentId = methodSetupIntentId;
+  if (!setupIntentId && setupSessionId) {
+    const sessionResult = retrieveStripeCheckoutSession_(setupSessionId, { cfg: cfg });
+    if (sessionResult && sessionResult.ok === true && sessionResult.body) {
+      const session = sessionResult.body;
+      const sessionCustomerId = stripeIdFromObject_(session.customer);
+      if (sessionCustomerId && sessionCustomerId !== trimString_(accountSummary.stripeCustomerId)) return null;
+      setupIntentId = stripeIdFromObject_(session.setup_intent);
+    }
+  }
+  if (!setupIntentId && requestedMethod) setupIntentId = trimString_(accountSummary.achSetupIntentId);
+  if (!setupIntentId && requestedMethod && trimString_(accountSummary.achSetupSessionId)) {
+    setupSessionId = trimString_(accountSummary.achSetupSessionId);
+    const sessionResult = retrieveStripeCheckoutSession_(accountSummary.achSetupSessionId, { cfg: cfg });
+    if (sessionResult && sessionResult.ok === true && sessionResult.body) {
+      const session = sessionResult.body;
+      const sessionCustomerId = stripeIdFromObject_(session.customer);
+      if (sessionCustomerId && sessionCustomerId !== trimString_(accountSummary.stripeCustomerId)) return null;
+      setupIntentId = stripeIdFromObject_(session.setup_intent);
+    }
+  }
+  if (!setupIntentId) return null;
+
+  const setupIntentResult = retrieveStripeSetupIntent_(setupIntentId, { cfg: cfg });
+  if (!setupIntentResult || setupIntentResult.ok !== true || !setupIntentResult.body) return null;
+  const setupIntent = setupIntentResult.body;
+  if (!isStripeIntentCustomerLinkedToPortalAccount_(setupIntent, accountSummary)) return null;
+  const intentPaymentMethodId = stripeIdFromObject_(setupIntent.payment_method);
+  if (requestedPaymentMethodId && intentPaymentMethodId && intentPaymentMethodId !== requestedPaymentMethodId) return null;
+  const achSummary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntent, {
+    cfg: cfg,
+    setupIntentId: setupIntentId,
+    setupSessionId: setupSessionId
+  });
+  const achEvidence = buildAchStripeEventEvidence_({
+    eventType: 'setup_intent.microdeposit_verification',
+    setupIntent: setupIntent,
+    achSummary: achSummary
+  });
+  if (achEvidence.isAchSetup !== true) return null;
+  return buildAchMicrodepositVerificationCandidate_('setup', setupIntent, {
+    accountInfo: accountInfo
+  });
+}
+
+function resolveSpecificAchPaymentMicrodepositVerificationCandidate_(ctx, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const paymentIntentId = trimString_(p.paymentIntentId || p.paymentintentid);
+  if (!paymentIntentId) return null;
+  const cfg = ctx.cfg || getConfig_();
+  const ss = ctx.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = ctx.infra || ensurePortalInfrastructure_(ss, cfg);
+  const orderInfo = getPortalOrderByStripePaymentIntentId_(paymentIntentId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  if (!orderInfo) return null;
+  const token = trimString_(p.token);
+  const orderToken = trimString_(orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.token);
+  if (token && orderToken && token !== orderToken) return null;
+  const paymentIntentResult = retrieveStripePaymentIntent_(paymentIntentId, { cfg: cfg });
+  if (!paymentIntentResult || paymentIntentResult.ok !== true || !paymentIntentResult.body) return null;
+  const achSummary = resolveAchPaymentMethodSummaryFromPaymentIntent_(paymentIntentResult.body, { cfg: cfg, source: 'checkout_payment' });
+  const achEvidence = buildAchStripeEventEvidence_({
+    eventType: 'payment_intent.microdeposit_verification',
+    orderInfo: orderInfo,
+    paymentIntent: paymentIntentResult.body,
+    achSummary: achSummary
+  });
+  if (achEvidence.isAchPayment !== true) return null;
+  return buildAchMicrodepositVerificationCandidate_('payment', paymentIntentResult.body, {
+    orderInfo: orderInfo,
+    accountInfo: ctx.accountInfo || null
+  });
+}
+
 function findLatestAchVerificationOrderForAccount_(accountSummary, options) {
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
   const opts = (options && typeof options === 'object') ? options : {};
@@ -6026,10 +6127,22 @@ function getAchMicrodepositVerificationLink_(payload) {
 
   const requestedType = trimString_(p.intentType).toLowerCase();
   let candidate = null;
+  const specificCandidateRequested = !!(
+    trimString_(p.paymentMethodId || p.paymentmethodid) ||
+    trimString_(p.setupIntentId || p.setupintentid) ||
+    trimString_(p.setupSessionId || p.setupsessionid) ||
+    trimString_(p.paymentIntentId || p.paymentintentid)
+  );
   if (requestedType !== 'payment') {
-    candidate = resolveAchSetupMicrodepositVerificationCandidate_(ctx);
+    candidate = resolveSpecificAchSetupMicrodepositVerificationCandidate_(ctx, p);
   }
   if (!candidate && requestedType !== 'setup') {
+    candidate = resolveSpecificAchPaymentMicrodepositVerificationCandidate_(ctx, p);
+  }
+  if (!candidate && !specificCandidateRequested && requestedType !== 'payment') {
+    candidate = candidate || resolveAchSetupMicrodepositVerificationCandidate_(ctx);
+  }
+  if (!candidate && !specificCandidateRequested && requestedType !== 'setup') {
     candidate = resolveAchPaymentMicrodepositVerificationCandidate_(ctx, p);
   }
   if (!candidate || !candidate.verificationUrl) {
@@ -11645,7 +11758,10 @@ function resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, options)
   return paymentMethod ? extractAchPaymentMethodSummaryFromStripe_(paymentMethod, {
     source: 'dashboard_setup',
     verificationStatus: verificationStatus,
-    status: mapAchPaymentMethodStatusFromVerification_(verificationStatus, 'active')
+    status: mapAchPaymentMethodStatusFromVerification_(verificationStatus, 'active'),
+    setupIntentId: trimString_(opts.setupIntentId) || trimString_(setupIntent.id),
+    setupSessionId: trimString_(opts.setupSessionId),
+    setupStatus: trimString_(setupIntent.status)
   }) : null;
 }
 
@@ -11923,7 +12039,11 @@ function handleCheckoutSetupSessionCompleted_(sessionObj, options) {
     const setupResult = retrieveStripeSetupIntent_(setupIntentId, { cfg: cfg });
     if (setupResult.ok) setupIntent = setupResult.body;
   }
-  const achSummary = setupIntent ? resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntent, { cfg: cfg }) : null;
+  const achSummary = setupIntent ? resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntent, {
+    cfg: cfg,
+    setupIntentId: setupIntentId,
+    setupSessionId: trimString_(session.id)
+  }) : null;
   const achEvidence = buildAchStripeEventEvidence_({
     eventType: 'checkout.session.completed',
     session: session,
@@ -11950,7 +12070,11 @@ function handleCheckoutSetupSessionCompleted_(sessionObj, options) {
     return { ok: false, error: 'Portal account not found for ACH setup session.' };
   }
   if (achSummary) {
-    accountInfo = upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, achSummary, {
+    accountInfo = upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, Object.assign({}, achSummary, {
+      setupIntentId: setupIntentId,
+      setupSessionId: trimString_(session.id),
+      setupStatus: trimString_(setupIntent && setupIntent.status) || 'completed'
+    }), {
       cfg: cfg,
       ss: ss,
       infra: infra
@@ -12531,7 +12655,10 @@ function handleSetupIntentSucceeded_(setupIntentObj) {
   let accountInfo = accountId ? getPortalAccountByAccountId_(accountId, { cfg: cfg, ss: ss, infra: infra }) : null;
   if (!accountInfo && customerId) accountInfo = getPortalAccountByStripeCustomerId_(customerId, { cfg: cfg, ss: ss, infra: infra });
   if (!accountInfo) return { ok: false, error: 'Portal account not found for setup intent.' };
-  const summary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, { cfg: cfg });
+  const summary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, {
+    cfg: cfg,
+    setupIntentId: trimString_(setupIntentObj && setupIntentObj.id)
+  });
   const achEvidence = buildAchStripeEventEvidence_({
     eventType: 'setup_intent.succeeded',
     setupIntent: setupIntentObj,
@@ -14030,7 +14157,11 @@ function normalizeAchPaymentMethodSummary_(value) {
     visibilityScope: inferAchVisibilityScope_(methodSource, status, source.visibilityScope || source.visibilityscope),
     linkedOrderId: trimString_(source.linkedOrderId || source.linkedorderid),
     linkedCheckoutAttemptId: trimString_(source.linkedCheckoutAttemptId || source.linkedcheckoutattemptid),
-    linkedBy: trimString_(source.linkedBy || source.linkedby)
+    linkedBy: trimString_(source.linkedBy || source.linkedby),
+    setupIntentId: trimString_(source.setupIntentId || source.setupintentid),
+    setupSessionId: trimString_(source.setupSessionId || source.setupsessionid),
+    paymentIntentId: trimString_(source.paymentIntentId || source.paymentintentid),
+    setupStatus: trimString_(source.setupStatus || source.setupstatus)
   };
 }
 
@@ -14358,7 +14489,11 @@ function extractAchPaymentMethodSummaryFromStripe_(paymentMethodObj, options) {
     visibilityScope: opts.visibilityScope,
     linkedOrderId: opts.linkedOrderId,
     linkedCheckoutAttemptId: opts.linkedCheckoutAttemptId,
-    linkedBy: opts.linkedBy
+    linkedBy: opts.linkedBy,
+    setupIntentId: opts.setupIntentId,
+    setupSessionId: opts.setupSessionId,
+    paymentIntentId: opts.paymentIntentId,
+    setupStatus: opts.setupStatus
   });
 }
 

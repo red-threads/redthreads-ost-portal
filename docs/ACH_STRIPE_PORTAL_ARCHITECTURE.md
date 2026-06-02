@@ -32,13 +32,13 @@ Status: implementation notes for ACH V1. This document describes repo behavior a
 - `achPendingProductionApprovedBy`
 - `achPendingProductionApprovalNotes`
 
-`achPaymentMethodsJson` is an array of safe records containing Stripe IDs, bank name, last4, holder/type metadata, verification/status metadata, timestamps, source, and visibility scope.
+`achPaymentMethodsJson` is an array of safe records containing Stripe IDs, bank name, last4, holder/type metadata, verification/status metadata, timestamps, source, visibility scope, and row-level setup/payment linkage when needed for Stripe-hosted verification.
 
 Saved-bank scope rules:
 
 - `source=dashboard_setup` and `visibilityScope=dashboard_saved` are visible in Dashboard Payment Methods and default-eligible when usable.
 - `source=order_checkout`, `source=checkout_payment`, `source=ap_payment_link`, or unknown legacy records are order-only/hidden unless an existing dashboard-saved method with the same Stripe PaymentMethod ID is being updated.
-- Safe linkage metadata may include `linkedOrderId`, `linkedCheckoutAttemptId`, and `linkedBy`. It must not include bank routing/account numbers, bank tokens, raw Financial Connections payloads, hosted verification URLs, or microdeposit values.
+- Safe linkage metadata may include `linkedOrderId`, `linkedCheckoutAttemptId`, `linkedBy`, `setupIntentId`, `setupSessionId`, `paymentIntentId`, and `setupStatus`. It must not include bank routing/account numbers, bank tokens, raw Financial Connections payloads, hosted verification URLs, client secrets, or microdeposit values.
 
 `PORTAL_ORDERS` stores ACH order metadata:
 
@@ -160,11 +160,11 @@ Tokenized project dashboard links, such as `?t=<job-token>&dashboard=1`, are als
 
 The repo and live Squarespace wrappers forward `setupResult` and account-dashboard route parameters into the Apps Script iframe.
 
-If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The server retrieves the relevant PaymentIntent or SetupIntent, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, or microdeposit values in Sheets or logs.
+If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient Stripe-hosted verification handoff through `getAchMicrodepositVerificationLink`. The client sends safe row identifiers for the clicked pending bank. The server validates the authorized account context, retrieves the specific PaymentIntent or SetupIntent when possible, confirms the Stripe Customer/PaymentMethod matches the portal account row, requires ACH evidence, returns the hosted verification URL only to the browser response, and never stores the URL, routing/account numbers, client secrets, or microdeposit values in Sheets or logs.
 
 The top Dashboard summary renders one compact `ACH payment accounts` card, not one card per saved bank. The card body is limited to `Manage connected accounts` and acts as the single entry point to ACH management. It does not show readiness paragraphs, bank counts, bank names, last4, or separate Manage/Add buttons.
 
-`Manage ACH banks` opens a dashboard modal with safe details for dashboard-saved records only. The modal can show bank display name, last4, verification/status, default badge, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. Its copy states that Stripe may still ask the payer to confirm, choose, or connect a bank during Checkout. Hidden/order-only/AP banks do not appear in Dashboard Payment Methods.
+`Manage ACH banks` opens a dashboard modal with safe details for dashboard-saved records only. The modal can show bank display name, last4, verification/status, default badge, Verify with Stripe for pending microdeposit setup, and Set Default for usable non-default banks. Pending rows with enough safe linkage expose Verify with Stripe; older rows that cannot be matched safely show verification-unavailable guidance and should be re-added or reviewed by Red Threads. Its copy states that Stripe may still ask the payer to confirm, choose, or connect a bank during Checkout. Hidden/order-only/AP banks do not appear in Dashboard Payment Methods.
 
 Stripe setup returns must land on a canonical account dashboard route, preferably `https://www.redthreads.com/portal?dashboard=1&accountAccessToken=<account-link-token>`, plus one-time `setupResult` and `stripeSessionId` parameters. Setup return URLs should not preserve stale project `t` parameters once an account dashboard bearer route is available, because that can cause the client to hydrate the wrong dashboard context.
 

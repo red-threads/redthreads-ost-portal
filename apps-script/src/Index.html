@@ -2296,6 +2296,9 @@
       line-height:1.4;
       font-weight:700;
     }
+    .dashboardAchManageMeta.isWarning{
+      color:#fbbf24;
+    }
     .dashboardAchManageBadge{
       display:inline-flex;
       width:max-content;
@@ -16690,7 +16693,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 39">39</div>
+  <div class="devRevisionBadge" aria-label="Development revision 40">40</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19194,7 +19197,11 @@
         visibilityScope: String(source.visibilityScope || '').trim(),
         linkedOrderId: String(source.linkedOrderId || '').trim(),
         linkedCheckoutAttemptId: String(source.linkedCheckoutAttemptId || '').trim(),
-        linkedBy: String(source.linkedBy || '').trim()
+        linkedBy: String(source.linkedBy || '').trim(),
+        setupIntentId: String(source.setupIntentId || '').trim(),
+        setupSessionId: String(source.setupSessionId || '').trim(),
+        paymentIntentId: String(source.paymentIntentId || '').trim(),
+        setupStatus: String(source.setupStatus || '').trim()
       };
     }).filter(item => item.paymentMethodId);
     const rawWorkflows = (raw.documentWorkflows && typeof raw.documentWorkflows === 'object') ? raw.documentWorkflows : {};
@@ -20259,9 +20266,20 @@
     const signal = [
       item.status,
       item.verificationStatus,
+      item.setupStatus,
       item.source
     ].map(value => String(value || '').trim().toLowerCase()).join(' ');
-    return /\b(microdeposit|requires_action)\b/i.test(signal);
+    return /(^|[^a-z0-9])(microdeposit|requires_action)([^a-z0-9]|$)|microdeposit_pending|requires_action/i.test(signal);
+  }
+
+  function hasAchMicrodepositVerificationLinkageForUi_(method){
+    const item = (method && typeof method === 'object') ? method : {};
+    return Boolean(
+      String(item.paymentMethodId || '').trim() ||
+      String(item.setupIntentId || '').trim() ||
+      String(item.setupSessionId || '').trim() ||
+      String(item.paymentIntentId || '').trim()
+    );
   }
 
   function getMicrodepositPendingAchPaymentMethodForUi_(account){
@@ -20332,7 +20350,7 @@
     }
   }
 
-  async function startDashboardAchMicrodepositVerification_(){
+  async function startDashboardAchMicrodepositVerification_(method){
     if (!isClientAchPaymentEnabled_()) {
       showDashboardWorkflowError_('ACH bank verification is not available yet.');
       return;
@@ -20342,8 +20360,13 @@
       showDashboardWorkflowError_('Unable to load this account payment workflow right now.');
       return;
     }
+    const item = (method && typeof method === 'object') ? method : {};
     const payload = Object.assign({}, requestPayload, {
-      intentType: 'auto'
+      intentType: String(item.paymentIntentId || '').trim() ? 'payment' : 'setup',
+      paymentMethodId: String(item.paymentMethodId || '').trim(),
+      setupIntentId: String(item.setupIntentId || '').trim(),
+      setupSessionId: String(item.setupSessionId || '').trim(),
+      paymentIntentId: String(item.paymentIntentId || '').trim()
     });
     setAuthMessage('Opening secure Stripe bank verification...', false, { view: VIEW_DASHBOARD, persist: true });
     try {
@@ -20477,14 +20500,18 @@
     row.appendChild(bank);
     const actions = createEl('div', 'dashboardAchManageActions');
     if (microdepositPending) {
-      const verifyBtn = createEl('button', 'dashboardAchManageBtn is-primary', 'Verify with Stripe');
-      verifyBtn.type = 'button';
-      verifyBtn.addEventListener('click', () => {
-        startDashboardAchMicrodepositVerification_().catch(err => {
-          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+      if (hasAchMicrodepositVerificationLinkageForUi_(item)) {
+        const verifyBtn = createEl('button', 'dashboardAchManageBtn is-primary', 'Verify with Stripe');
+        verifyBtn.type = 'button';
+        verifyBtn.addEventListener('click', () => {
+          startDashboardAchMicrodepositVerification_(item).catch(err => {
+            setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+          });
         });
-      });
-      actions.appendChild(verifyBtn);
+        actions.appendChild(verifyBtn);
+      } else {
+        bank.appendChild(createEl('div', 'dashboardAchManageMeta isWarning', 'Verification link unavailable. Add this bank again or contact Red Threads.'));
+      }
     }
     if (usable && !isDefault) {
       const defaultBtn = createEl('button', 'dashboardAchManageBtn', 'Set Default');
