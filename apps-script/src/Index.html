@@ -12256,6 +12256,67 @@
       color:var(--rt-text);
       text-align:center;
     }
+    .orderFlowModal[hidden],
+    .orderFlowAchDecisionModal[hidden]{
+      display:none !important;
+    }
+    .orderFlowAchDecisionModal{
+      width:min(1060px, calc(100% - 44px));
+      max-height:calc(100vh - 44px);
+      overflow:hidden;
+      position:relative;
+      background:rgba(4,7,16,.86);
+      border:1px solid var(--rt-glassBorder);
+      border-radius:22px;
+      box-shadow:0 34px 66px rgba(0,0,0,.58), inset 0 1px 0 rgba(255,255,255,.08);
+      backdrop-filter:blur(20px) saturate(145%);
+      -webkit-backdrop-filter:blur(20px) saturate(145%);
+      padding:18px;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      color:var(--rt-text);
+    }
+    .orderFlowAchDecisionHead{
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      min-height:64px;
+      padding:2px 52px 4px;
+      text-align:center;
+    }
+    .orderFlowAchDecisionTitle{
+      margin:0;
+      color:#51ffb7;
+      font-size:32px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:-.02em;
+      text-shadow:0 0 16px rgba(81,255,183,.18);
+    }
+    .orderFlowAchDecisionSub{
+      width:min(780px, 100%);
+      margin:8px 0 0;
+      color:#dbeafe;
+      font-size:14px;
+      line-height:1.45;
+      font-weight:700;
+    }
+    .orderFlowAchDecisionHead .orderFlowClose{
+      position:absolute;
+      top:0;
+      right:0;
+    }
+    .orderFlowAchDecisionBody{
+      min-height:0;
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      padding:2px 4px 4px;
+    }
     .orderFlowHead{
       display:flex;
       align-items:center;
@@ -13660,6 +13721,11 @@
       grid-template-columns:minmax(0,1fr) minmax(0,1fr);
       gap:14px;
     }
+    .orderFlowAchDecisionModal .orderFlowAchDecisionLayout{
+      max-width:100%;
+      align-self:stretch;
+      gap:16px;
+    }
     .orderFlowAchDecisionLane{
       min-width:0;
       display:flex;
@@ -13801,6 +13867,18 @@
     @media (max-width: 820px){
       .orderFlowAchDecisionLayout{
         grid-template-columns:minmax(0,1fr);
+      }
+      .orderFlowAchDecisionModal{
+        width:min(100%, calc(100% - 24px));
+        max-height:calc(100vh - 24px);
+        padding:14px;
+      }
+      .orderFlowAchDecisionHead{
+        padding-left:44px;
+        padding-right:44px;
+      }
+      .orderFlowAchDecisionTitle{
+        font-size:24px;
       }
     }
     .orderFlowCheckoutMeta{
@@ -16492,7 +16570,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 33">33</div>
+  <div class="devRevisionBadge" aria-label="Development revision 34">34</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17462,7 +17540,45 @@
           <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowPoConfirmBtn" type="button">Continue with P.O.</button>
         </div>
       </div>
-      <div id="orderFlowAchDecisionSection" hidden>
+      <div id="orderFlowBlockingSection" hidden>
+        <p class="orderFlowBlockingAlert" id="orderFlowBlockingAlert">Order cannot be placed until all artwork is approved</p>
+        <div class="orderFlowBlockingJobs" id="orderFlowBlockingJobs"></div>
+        <div class="orderFlowActions orderFlowBlockingActions">
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowBlockingBackBtn" type="button">Go Back</button>
+        </div>
+      </div>
+      <div id="orderFlowCheckoutSection" hidden>
+        <p class="orderFlowBody" id="orderFlowCheckoutBody">Creating your checkout session...</p>
+        <div class="orderFlowInfoCard">
+          <div class="orderFlowCheckoutMeta" id="orderFlowCheckoutMeta"></div>
+        </div>
+        <p class="orderFlowBody" id="orderFlowCheckoutHint" hidden>Continue to open Stripe Checkout in this window. Return with the browser Back button if needed.</p>
+        <div class="orderFlowInlineActions" id="orderFlowCheckoutActions" hidden>
+          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowCheckoutLaunchBtn" type="button">Open secure payment</button>
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutCopyBtn" type="button">Copy payment link</button>
+          <a class="orderFlowBtn orderFlowBtnBack orderFlowInlineLink" id="orderFlowCheckoutOpenLink" href="#" target="_top">Continue secure payment</a>
+        </div>
+        <div class="orderFlowActions">
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutBackBtn" type="button">Back</button>
+        </div>
+      </div>
+      <div id="orderFlowResultSection" hidden>
+        <div class="orderFlowSuccessIcon" aria-hidden="true">✓</div>
+        <p class="orderFlowSuccessTitle" id="orderFlowResultTitle">Order status updated.</p>
+        <p class="orderFlowBody" id="orderFlowResultBody">We saved the latest order state.</p>
+        <div class="orderFlowResultMeta" id="orderFlowResultMeta"></div>
+        <div class="orderFlowActions">
+          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowDoneBtn" type="button">Return to Snapshot</button>
+        </div>
+      </div>
+    </div>
+    <div class="orderFlowAchDecisionModal" id="orderFlowAchDecisionModal" role="dialog" aria-modal="true" aria-labelledby="orderFlowAchDecisionTitle" hidden>
+      <div class="orderFlowAchDecisionHead">
+        <h2 class="orderFlowAchDecisionTitle" id="orderFlowAchDecisionTitle">ACH Bank Payment</h2>
+        <p class="orderFlowAchDecisionSub">Choose how this order should move forward. Stripe remains the secure bank confirmation, authorization, and payment initiation surface.</p>
+        <button class="orderFlowClose" id="orderFlowAchDecisionCloseBtn" type="button" aria-label="Close ACH payment options">X</button>
+      </div>
+      <div class="orderFlowAchDecisionBody" id="orderFlowAchDecisionSection" hidden>
         <div class="orderFlowAchDecisionLayout">
           <div class="orderFlowInfoCard orderFlowAchDecisionLane">
             <p class="orderFlowLaneTitle">Pay now with ACH</p>
@@ -17496,37 +17612,6 @@
         </div>
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowAchDecisionBackBtn" type="button">Back to payment selection</button>
-        </div>
-      </div>
-      <div id="orderFlowBlockingSection" hidden>
-        <p class="orderFlowBlockingAlert" id="orderFlowBlockingAlert">Order cannot be placed until all artwork is approved</p>
-        <div class="orderFlowBlockingJobs" id="orderFlowBlockingJobs"></div>
-        <div class="orderFlowActions orderFlowBlockingActions">
-          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowBlockingBackBtn" type="button">Go Back</button>
-        </div>
-      </div>
-      <div id="orderFlowCheckoutSection" hidden>
-        <p class="orderFlowBody" id="orderFlowCheckoutBody">Creating your checkout session...</p>
-        <div class="orderFlowInfoCard">
-          <div class="orderFlowCheckoutMeta" id="orderFlowCheckoutMeta"></div>
-        </div>
-        <p class="orderFlowBody" id="orderFlowCheckoutHint" hidden>Continue to open Stripe Checkout in this window. Return with the browser Back button if needed.</p>
-        <div class="orderFlowInlineActions" id="orderFlowCheckoutActions" hidden>
-          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowCheckoutLaunchBtn" type="button">Open secure payment</button>
-          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutCopyBtn" type="button">Copy payment link</button>
-          <a class="orderFlowBtn orderFlowBtnBack orderFlowInlineLink" id="orderFlowCheckoutOpenLink" href="#" target="_top">Continue secure payment</a>
-        </div>
-        <div class="orderFlowActions">
-          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowCheckoutBackBtn" type="button">Back</button>
-        </div>
-      </div>
-      <div id="orderFlowResultSection" hidden>
-        <div class="orderFlowSuccessIcon" aria-hidden="true">✓</div>
-        <p class="orderFlowSuccessTitle" id="orderFlowResultTitle">Order status updated.</p>
-        <p class="orderFlowBody" id="orderFlowResultBody">We saved the latest order state.</p>
-        <div class="orderFlowResultMeta" id="orderFlowResultMeta"></div>
-        <div class="orderFlowActions">
-          <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowDoneBtn" type="button">Return to Snapshot</button>
         </div>
       </div>
     </div>
@@ -20883,6 +20968,7 @@
   const artworkPreviewImageWrap = document.getElementById('artworkPreviewImageWrap');
   const orderFlowBackdrop = document.getElementById('orderFlowBackdrop');
   const orderFlowModal = document.getElementById('orderFlowModal');
+  const orderFlowAchDecisionModal = document.getElementById('orderFlowAchDecisionModal');
   const orderFlowAccountBanner = document.getElementById('orderFlowAccountBanner');
   const orderFlowHead = orderFlowModal ? orderFlowModal.querySelector('.orderFlowHead') : null;
   const orderFlowClose = document.getElementById('orderFlowClose');
@@ -20918,6 +21004,7 @@
   const orderFlowApEmailBtn = document.getElementById('orderFlowApEmailBtn');
   const orderFlowApCopyBtn = document.getElementById('orderFlowApCopyBtn');
   const orderFlowApStatus = document.getElementById('orderFlowApStatus');
+  const orderFlowAchDecisionCloseBtn = document.getElementById('orderFlowAchDecisionCloseBtn');
   const orderFlowAchDecisionBackBtn = document.getElementById('orderFlowAchDecisionBackBtn');
   const orderFlowBlockingSection = document.getElementById('orderFlowBlockingSection');
   const orderFlowBlockingAlert = document.getElementById('orderFlowBlockingAlert');
@@ -35594,6 +35681,9 @@
     // `method` is retained as a quarantined compatibility mode. The shipped
     // compact flow uses `fulfillment` as the active delivery/payment surface.
     ORDER_FLOW_MODE = validModes.has(mode) ? mode : 'fulfillment';
+    const isAchDecisionMode = ORDER_FLOW_MODE === 'achDecision';
+    if (orderFlowModal) orderFlowModal.hidden = isAchDecisionMode;
+    if (orderFlowAchDecisionModal) orderFlowAchDecisionModal.hidden = !isAchDecisionMode;
     if (orderFlowModal) orderFlowModal.classList.toggle('isBlocking', ORDER_FLOW_MODE === 'blocking');
     if (orderFlowModal) orderFlowModal.classList.toggle('isSelection', ORDER_FLOW_MODE === 'fulfillment');
     if (orderFlowModal) orderFlowModal.classList.toggle('isMinimumsBlocking', ORDER_FLOW_MODE === 'blocking' && ORDER_FLOW_BLOCKING_KIND === 'minimums');
@@ -35607,7 +35697,7 @@
     if (orderFlowMethodSection) orderFlowMethodSection.hidden = ORDER_FLOW_MODE !== 'method';
     if (orderFlowManualSection) orderFlowManualSection.hidden = ORDER_FLOW_MODE !== 'manual';
     if (orderFlowPoSection) orderFlowPoSection.hidden = ORDER_FLOW_MODE !== 'po';
-    if (orderFlowAchDecisionSection) orderFlowAchDecisionSection.hidden = ORDER_FLOW_MODE !== 'achDecision';
+    if (orderFlowAchDecisionSection) orderFlowAchDecisionSection.hidden = !isAchDecisionMode;
     if (orderFlowBlockingSection) orderFlowBlockingSection.hidden = ORDER_FLOW_MODE !== 'blocking';
     if (orderFlowCheckoutSection) orderFlowCheckoutSection.hidden = ORDER_FLOW_MODE !== 'checkout';
     if (orderFlowResultSection) orderFlowResultSection.hidden = ORDER_FLOW_MODE !== 'result';
@@ -43527,6 +43617,11 @@
     }
     if (orderFlowClose) {
       orderFlowClose.addEventListener('click', () => {
+        closeOrderFlowModal();
+      });
+    }
+    if (orderFlowAchDecisionCloseBtn) {
+      orderFlowAchDecisionCloseBtn.addEventListener('click', () => {
         closeOrderFlowModal();
       });
     }

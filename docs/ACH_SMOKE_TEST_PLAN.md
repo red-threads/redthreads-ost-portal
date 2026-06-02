@@ -80,7 +80,7 @@ The second command should show only redaction, safety, or documentation referenc
 43. Dashboard Payment Methods lists multiple `dashboard_saved` records only; hidden/order-only/AP records do not render.
 44. Usable non-default dashboard-saved banks can be selected as default; pending, failed, blocked, removed, and order-only records cannot.
 45. Checkout saved-bank copy appears only when a usable `dashboard_saved` bank exists.
-46. Selecting ACH Bank Payment and clicking Place Order opens the ACH pre-checkout decision step instead of immediately creating Stripe Checkout.
+46. Selecting ACH Bank Payment and clicking Place Order opens the ACH pre-checkout decision step in its own full-screen modal container that replaces the checkout-flow modal instead of appending below the payment cards.
 47. No saved bank: the decision step shows no selector and the continue button launches hosted ACH Checkout.
 48. One usable dashboard-saved bank: the decision step shows it as the selected preference and copy says Stripe will securely confirm which bank to use.
 49. Multiple usable dashboard-saved banks: all usable records appear, the default is selected first, and choosing another bank sends `preferredAchPaymentMethodId` plus `achCheckoutIntent=saved_bank`.
