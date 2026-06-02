@@ -16570,7 +16570,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 34">34</div>
+  <div class="devRevisionBadge" aria-label="Development revision 35">35</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20015,6 +20015,88 @@
         const defaultA = a && a.isDefault === true ? 1 : 0;
         const defaultB = b && b.isDefault === true ? 1 : 0;
         if (defaultA !== defaultB) return defaultB - defaultA;
+        return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
+      });
+  }
+
+  function areAccountSummariesSameForAchUi_(left, right){
+    const a = normalizeAccountSummary(left);
+    const b = normalizeAccountSummary(right);
+    if (a.accountId && b.accountId && a.accountId === b.accountId) return true;
+    if (a.orgId && b.orgId && a.orgId === b.orgId) return true;
+    if (a.stripeCustomerId && b.stripeCustomerId && a.stripeCustomerId === b.stripeCustomerId) return true;
+    const aEmails = [a.primaryEmail, a.billingContactEmail].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
+    const bEmails = [b.primaryEmail, b.billingContactEmail].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
+    return aEmails.some(value => bEmails.indexOf(value) >= 0);
+  }
+
+  function mergeAchPaymentMethodForUi_(existing, incoming){
+    const merged = Object.assign({}, existing || {});
+    const source = (incoming && typeof incoming === 'object') ? incoming : {};
+    Object.keys(source).forEach(key => {
+      const value = source[key];
+      if (value === undefined || value === null || value === '') return;
+      merged[key] = value;
+    });
+    merged.isDefault = (existing && existing.isDefault === true) || source.isDefault === true;
+    return merged;
+  }
+
+  function mergeAccountSummariesForAchCheckoutUi_(primary, secondary){
+    const base = normalizeAccountSummary(primary);
+    const extra = normalizeAccountSummary(secondary);
+    if (!areAccountSummariesSameForAchUi_(base, extra)) return base;
+    const merged = Object.assign({}, base);
+    [
+      'accountId',
+      'orgId',
+      'orgName',
+      'primaryEmail',
+      'billingContactEmail',
+      'stripeCustomerId',
+      'defaultAchPaymentMethodId',
+      'defaultAchBankName',
+      'defaultAchLast4',
+      'defaultAchVerificationStatus'
+    ].forEach(key => {
+      if (!merged[key] && extra[key]) merged[key] = extra[key];
+    });
+    const byId = new Map();
+    (Array.isArray(base.achPaymentMethods) ? base.achPaymentMethods : []).forEach(method => {
+      const id = String(method && method.paymentMethodId || '').trim();
+      if (id) byId.set(id, Object.assign({}, method));
+    });
+    (Array.isArray(extra.achPaymentMethods) ? extra.achPaymentMethods : []).forEach(method => {
+      const id = String(method && method.paymentMethodId || '').trim();
+      if (!id) return;
+      byId.set(id, mergeAchPaymentMethodForUi_(byId.get(id), method));
+    });
+    const defaultId = String(merged.defaultAchPaymentMethodId || '').trim();
+    merged.achPaymentMethods = Array.from(byId.values()).map(method => {
+      const item = Object.assign({}, method);
+      if (defaultId && String(item.paymentMethodId || '').trim() === defaultId) item.isDefault = true;
+      return item;
+    });
+    return merged;
+  }
+
+  function getOrderFlowAchAccountSummaryForUi_(){
+    const projectAccount = normalizeAccountSummary(ACCOUNT_SUMMARY);
+    const dashboardAccount = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
+    if (!projectAccount.achPaymentMethods.length) {
+      return mergeAccountSummariesForAchCheckoutUi_(projectAccount, dashboardAccount);
+    }
+    const merged = mergeAccountSummariesForAchCheckoutUi_(projectAccount, dashboardAccount);
+    return merged.achPaymentMethods.length >= projectAccount.achPaymentMethods.length ? merged : projectAccount;
+  }
+
+  function getUnavailableAchPaymentMethodsForCheckoutUi_(account, usableMethods){
+    const usableIds = new Set((Array.isArray(usableMethods) ? usableMethods : [])
+      .map(item => String(item && item.paymentMethodId || '').trim())
+      .filter(Boolean));
+    return getDashboardVisibleAchPaymentMethodsForUi_(account)
+      .filter(item => item && !usableIds.has(String(item.paymentMethodId || '').trim()))
+      .sort((a, b) => {
         return String(b && b.updatedAt || b && b.createdAt || '').localeCompare(String(a && a.updatedAt || a && a.createdAt || ''));
       });
   }
@@ -35352,7 +35434,7 @@
 
   function getOrderFlowAchDecisionDefaultMethod_(usableMethods){
     const methods = Array.isArray(usableMethods) ? usableMethods : [];
-    const defaultId = String(normalizeAccountSummary(ACCOUNT_SUMMARY).defaultAchPaymentMethodId || '').trim();
+    const defaultId = String(getOrderFlowAchAccountSummaryForUi_().defaultAchPaymentMethodId || '').trim();
     return methods.find(item => item && item.isDefault === true)
       || methods.find(item => item && defaultId && String(item.paymentMethodId || '').trim() === defaultId)
       || methods[0]
@@ -35360,7 +35442,7 @@
   }
 
   function syncOrderFlowAchDecisionSelection_(usableMethods){
-    const methods = Array.isArray(usableMethods) ? usableMethods : getUsableAchPaymentMethodsForCheckoutUi_(ACCOUNT_SUMMARY);
+    const methods = Array.isArray(usableMethods) ? usableMethods : getUsableAchPaymentMethodsForCheckoutUi_(getOrderFlowAchAccountSummaryForUi_());
     const selectedExists = methods.some(item => String(item && item.paymentMethodId || '').trim() === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID);
     if (!selectedExists) {
       const defaultMethod = getOrderFlowAchDecisionDefaultMethod_(methods);
@@ -35373,6 +35455,7 @@
     const opts = (options && typeof options === 'object') ? options : {};
     const item = (method && typeof method === 'object') ? method : {};
     const selectable = opts.selectable === true;
+    const accountSummary = opts.accountSummary || getOrderFlowAchAccountSummaryForUi_();
     const methodId = String(item.paymentMethodId || '').trim();
     const label = createEl(selectable ? 'label' : 'div', 'orderFlowAchBankOption' + (selectable && methodId === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID ? ' is-selected' : '') + (!selectable ? ' is-disabled' : ''));
     if (selectable) {
@@ -35392,11 +35475,11 @@
       label.appendChild(createEl('span', 'orderFlowAchBankRadio', ''));
     }
     const main = createEl('div', 'orderFlowAchBankMain');
-    main.appendChild(createEl('div', 'orderFlowAchBankName', formatAchBankLabelForUi_(item, ACCOUNT_SUMMARY)));
+    main.appendChild(createEl('div', 'orderFlowAchBankName', formatAchBankLabelForUi_(item, accountSummary)));
     const statusLabel = getAchVerificationLabelForUi_(item.verificationStatus || item.status);
     main.appendChild(createEl('div', 'orderFlowAchBankMeta', selectable
       ? (statusLabel + ' — Stripe will securely confirm which bank to use during checkout.')
-      : (statusLabel + ' — Verify from Dashboard or connect another bank through Stripe Checkout.')));
+      : (statusLabel + ' — This saved bank is visible in Dashboard but is not ready for checkout. Verify it from Dashboard or connect another bank through Stripe Checkout.')));
     if (item.isDefault === true && selectable) {
       main.appendChild(createEl('span', 'orderFlowAchBankBadge', 'Default'));
     }
@@ -35405,16 +35488,17 @@
   }
 
   function renderOrderFlowAchDecisionSection_(){
-    const usableMethods = getUsableAchPaymentMethodsForCheckoutUi_(ACCOUNT_SUMMARY);
-    const pendingMethods = getPendingAchPaymentMethodsForCheckoutUi_(ACCOUNT_SUMMARY);
+    const achAccount = getOrderFlowAchAccountSummaryForUi_();
+    const usableMethods = getUsableAchPaymentMethodsForCheckoutUi_(achAccount);
+    const unavailableMethods = getUnavailableAchPaymentMethodsForCheckoutUi_(achAccount, usableMethods);
     syncOrderFlowAchDecisionSelection_(usableMethods);
     if (orderFlowAchDecisionCopy) {
       if (usableMethods.length > 1) {
         const selected = usableMethods.find(item => String(item && item.paymentMethodId || '').trim() === ORDER_FLOW_ACH_PREFERRED_PAYMENT_METHOD_ID) || usableMethods[0];
-        orderFlowAchDecisionCopy.textContent = 'Saved ACH banks are available for this account. Choose a preferred bank below. Default: ' + formatAchBankLabelForUi_(selected, ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.';
+        orderFlowAchDecisionCopy.textContent = 'Saved ACH banks are available for this account. Choose a preferred bank below. Default: ' + formatAchBankLabelForUi_(selected, achAccount) + '. Stripe will securely confirm which bank to use during checkout.';
       } else if (usableMethods.length === 1) {
-        orderFlowAchDecisionCopy.textContent = 'Saved ACH bank available: ' + formatAchBankLabelForUi_(usableMethods[0], ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.';
-      } else if (pendingMethods.length) {
+        orderFlowAchDecisionCopy.textContent = 'Saved ACH bank available: ' + formatAchBankLabelForUi_(usableMethods[0], achAccount) + '. Stripe will securely confirm which bank to use during checkout.';
+      } else if (unavailableMethods.length) {
         orderFlowAchDecisionCopy.textContent = 'Bank verification is still pending. Verify from Dashboard or connect another bank securely through Stripe Checkout.';
       } else {
         orderFlowAchDecisionCopy.textContent = 'Securely connect a bank account in Stripe Checkout. Red Threads never sees or stores your full bank account number.';
@@ -35423,19 +35507,19 @@
     if (orderFlowAchBankList) {
       orderFlowAchBankList.innerHTML = '';
       usableMethods.forEach(method => {
-        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: true }));
+        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: true, accountSummary: achAccount }));
       });
-      pendingMethods.forEach(method => {
-        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: false }));
+      unavailableMethods.forEach(method => {
+        orderFlowAchBankList.appendChild(createOrderFlowAchBankOption_(method, { selectable: false, accountSummary: achAccount }));
       });
-      if (!usableMethods.length && !pendingMethods.length) {
+      if (!usableMethods.length && !unavailableMethods.length) {
         orderFlowAchBankList.appendChild(createEl('div', 'orderFlowAchBankMeta', 'No saved ACH banks are ready for checkout.'));
       }
     }
     if (orderFlowAchContinueBtn) {
       orderFlowAchContinueBtn.textContent = usableMethods.length
         ? 'Continue to secure ACH checkout'
-        : (pendingMethods.length ? 'Connect or verify bank in Stripe Checkout' : 'Continue to secure ACH checkout');
+        : (unavailableMethods.length ? 'Connect or verify bank in Stripe Checkout' : 'Continue to secure ACH checkout');
     }
     renderOrderFlowApStatus_();
   }
@@ -35636,19 +35720,23 @@
       const achTitle = orderFlowAchBtn.querySelector('.orderFlowChoiceTitle');
       const achFoot = orderFlowAchBtn.querySelector('.orderFlowChoiceFoot');
       const achBody = orderFlowAchBtn.querySelector('.orderFlowChoiceBody');
-      const defaultAch = getDefaultAchPaymentMethodForUi_(ACCOUNT_SUMMARY);
+      const achAccount = getOrderFlowAchAccountSummaryForUi_();
+      const defaultAch = getDefaultAchPaymentMethodForUi_(achAccount);
+      const usableAchMethods = getUsableAchPaymentMethodsForCheckoutUi_(achAccount);
       if (achTitle) achTitle.textContent = 'ACH Bank Payment';
       if (achFoot) {
-        achFoot.textContent = normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved
+        achFoot.textContent = achAccount.achPendingProductionApproved
           ? 'Production approved while payment processes'
           : 'Production begins after payment clears';
-        achFoot.classList.toggle('is-green', normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved === true);
-        achFoot.classList.toggle('is-red', normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved !== true);
+        achFoot.classList.toggle('is-green', achAccount.achPendingProductionApproved === true);
+        achFoot.classList.toggle('is-red', achAccount.achPendingProductionApproved !== true);
       }
       if (achBody) {
-        achBody.textContent = defaultAch
-          ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, ACCOUNT_SUMMARY) + '. Stripe will securely confirm which bank to use during checkout.')
-          : 'Securely pay from your bank account. Red Threads never sees or stores your full bank account number.';
+        achBody.textContent = usableAchMethods.length > 1
+          ? ('Saved ACH banks available. Default: ' + formatAchBankLabelForUi_(defaultAch || usableAchMethods[0], achAccount) + '. Stripe will securely confirm which bank to use during checkout.')
+          : (defaultAch
+            ? ('Saved ACH bank available: ' + formatAchBankLabelForUi_(defaultAch, achAccount) + '. Stripe will securely confirm which bank to use during checkout.')
+            : 'Securely pay from your bank account. Red Threads never sees or stores your full bank account number.');
       }
     }
     if (orderFlowCheckBtn) orderFlowCheckBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
