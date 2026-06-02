@@ -16717,7 +16717,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 44">44</div>
+  <div class="devRevisionBadge" aria-label="Development revision 45">45</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20636,10 +20636,17 @@
     }
     if (dashboardAchManageBackdrop) {
       dashboardAchManageBackdrop.addEventListener('click', evt => {
-        if (evt.target !== dashboardAchManageBackdrop) return;
+        const target = evt.target;
+        if (dashboardAchManageModal && target instanceof Node && dashboardAchManageModal.contains(target)) return;
         closeDashboardAchManageModal_(evt);
       });
     }
+    document.addEventListener('pointerdown', evt => {
+      if (!dashboardAchManageBackdrop || dashboardAchManageBackdrop.hidden) return;
+      const target = evt.target;
+      if (dashboardAchManageModal && target instanceof Node && dashboardAchManageModal.contains(target)) return;
+      closeDashboardAchManageModal_(evt);
+    }, true);
     document.addEventListener('keydown', evt => {
       if (evt.key !== 'Escape') return;
       if (!dashboardAchManageBackdrop || dashboardAchManageBackdrop.hidden) return;
@@ -20647,9 +20654,17 @@
     });
   }
 
+  function ensureDashboardAchManageBackdropMounted_(){
+    if (!dashboardAchManageBackdrop || !document.body) return;
+    if (dashboardAchManageBackdrop.parentNode !== document.body) {
+      document.body.appendChild(dashboardAchManageBackdrop);
+    }
+  }
+
   function openDashboardAchManageModal_(){
     if (!dashboardAchManageBackdrop) return;
     bindDashboardAchManageModalEvents_();
+    ensureDashboardAchManageBackdropMounted_();
     clearDashboardAchManageNotice_();
     renderDashboardAchManageModal_();
     dashboardAchManageBackdrop.hidden = false;
