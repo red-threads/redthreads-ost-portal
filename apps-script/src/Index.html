@@ -16717,7 +16717,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 43">43</div>
+  <div class="devRevisionBadge" aria-label="Development revision 44">44</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20611,8 +20611,45 @@
     setDashboardAchManageNotice_('', false);
   }
 
+  function bindDashboardAchManageModalEvents_(){
+    if (bindDashboardAchManageModalEvents_.isBound === true) return;
+    bindDashboardAchManageModalEvents_.isBound = true;
+    if (dashboardAchManageCloseBtn) {
+      dashboardAchManageCloseBtn.addEventListener('click', evt => {
+        closeDashboardAchManageModal_(evt);
+      });
+    }
+    if (dashboardAchManageDoneBtn) {
+      dashboardAchManageDoneBtn.addEventListener('click', evt => {
+        closeDashboardAchManageModal_(evt);
+      });
+    }
+    if (dashboardAchManageAddBtn) {
+      dashboardAchManageAddBtn.addEventListener('click', evt => {
+        if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+        if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
+        closeDashboardAchManageModal_();
+        startDashboardAchSetupSession_().catch(err => {
+          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+        });
+      });
+    }
+    if (dashboardAchManageBackdrop) {
+      dashboardAchManageBackdrop.addEventListener('click', evt => {
+        if (evt.target !== dashboardAchManageBackdrop) return;
+        closeDashboardAchManageModal_(evt);
+      });
+    }
+    document.addEventListener('keydown', evt => {
+      if (evt.key !== 'Escape') return;
+      if (!dashboardAchManageBackdrop || dashboardAchManageBackdrop.hidden) return;
+      closeDashboardAchManageModal_(evt);
+    });
+  }
+
   function openDashboardAchManageModal_(){
     if (!dashboardAchManageBackdrop) return;
+    bindDashboardAchManageModalEvents_();
     clearDashboardAchManageNotice_();
     renderDashboardAchManageModal_();
     dashboardAchManageBackdrop.hidden = false;
@@ -43954,35 +43991,7 @@
         closeArtworkPreviewLightbox();
       });
     }
-    if (dashboardAchManageCloseBtn) {
-      dashboardAchManageCloseBtn.addEventListener('click', evt => {
-        closeDashboardAchManageModal_(evt);
-      });
-    }
-    if (dashboardAchManageDoneBtn) {
-      dashboardAchManageDoneBtn.addEventListener('click', evt => {
-        closeDashboardAchManageModal_(evt);
-      });
-    }
-    if (dashboardAchManageAddBtn) {
-      dashboardAchManageAddBtn.addEventListener('click', () => {
-        closeDashboardAchManageModal_();
-        startDashboardAchSetupSession_().catch(err => {
-          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
-        });
-      });
-    }
-    if (dashboardAchManageBackdrop) {
-      dashboardAchManageBackdrop.addEventListener('click', evt => {
-        if (evt.target !== dashboardAchManageBackdrop) return;
-        closeDashboardAchManageModal_(evt);
-      });
-    }
-    document.addEventListener('keydown', evt => {
-      if (evt.key !== 'Escape') return;
-      if (!dashboardAchManageBackdrop || dashboardAchManageBackdrop.hidden) return;
-      closeDashboardAchManageModal_(evt);
-    });
+    bindDashboardAchManageModalEvents_();
     if (orderFlowClose) {
       orderFlowClose.addEventListener('click', () => {
         closeOrderFlowModal();
