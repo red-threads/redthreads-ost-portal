@@ -4087,6 +4087,9 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
   const paymentMethod = trimString_(ctx.paymentMethod || ctx.paymentMethodSelected).toLowerCase();
   const paymentPath = trimString_(ctx.paymentPath).toLowerCase();
   const achDetailState = trimString_(ctx.achDetailState).toLowerCase();
+  const achPaymentSource = normalizeAchPaymentSource_(ctx.achPaymentSource || ctx.paymentOrigin || ctx.checkoutOrigin);
+  const orderState = trimString_(ctx.orderState).toLowerCase();
+  const paymentState = trimString_(ctx.paymentState).toLowerCase();
   const paymentDue = ctx.paymentDue === true;
   const paymentReceived = ctx.paymentReceived === true || ctx.isPaymentReceived === true;
   const productionAuthorized = ctx.productionAuthorized === true || ctx.isProductionAuthorized === true;
@@ -4094,6 +4097,11 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
   const productionComplete = ctx.productionComplete === true;
   const achPendingApproved = ctx.achPaymentPendingProductionApproved === true;
   const nextClientAction = trimString_(ctx.nextClientAction).toLowerCase();
+  const isApPaymentLink = achPaymentSource === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  const isApPaymentLinkAwaitingPayment = ctx.isApPaymentLinkAwaitingPayment === true
+    || (isApPaymentLink && paymentState === PAYMENT_STATES.not_started && paymentReceived !== true);
+  const isApPaymentLinkCheckoutStarted = ctx.isApPaymentLinkCheckoutStarted === true
+    || (isApPaymentLink && (paymentState === PAYMENT_STATES.checkout_created || achDetailState === ACH_DETAIL_STATES.checkout_started));
   const isAch = paymentMethod === PAYMENT_METHODS.ach
     || achDetailState.indexOf('ach_') === 0
     || lifecycleState.indexOf('ach_payment_') === 0;
@@ -4114,9 +4122,11 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
     || lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started;
   const isBankVerificationPending = achDetailState === ACH_DETAIL_STATES.bank_verification_pending;
   const isMicrodepositPending = achDetailState === ACH_DETAIL_STATES.microdeposit_pending;
-  const isProcessing = achDetailState === ACH_DETAIL_STATES.processing
+  const isProcessing = !isApPaymentLinkAwaitingPayment && !isApPaymentLinkCheckoutStarted && (
+    achDetailState === ACH_DETAIL_STATES.processing
     || lifecycleState === PORTAL_LIFECYCLE_STATES.ach_payment_pending
-    || (paymentDue && !paymentReceived);
+    || (paymentDue && !paymentReceived)
+  );
   const isPaid = paymentReceived === true || achDetailState === ACH_DETAIL_STATES.paid;
   const pendingWithProductionApproved = !paymentReceived
     && (achPendingApproved || productionAuthorized || productionCurrent)
@@ -4165,6 +4175,13 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
     productionHover = productionComplete
       ? 'Production is complete.'
       : 'ACH payment was confirmed. Production is authorized.';
+  } else if (isApPaymentLinkAwaitingPayment) {
+    statusKey = 'ap_awaiting_payment';
+    tone = 'current';
+    subtext = 'Waiting for Accounts Payable to complete ACH payment.';
+    helper = 'The AP payment link has been prepared, but Stripe ACH checkout has not been completed yet. Production will not begin until payment is submitted and confirmed.';
+    paymentHover = helper;
+    productionHover = 'Production begins after Accounts Payable completes ACH payment through Stripe and payment is confirmed.';
   } else if (pendingWithProductionApproved) {
     statusKey = 'pending_production_approved';
     tone = 'current';
@@ -4189,8 +4206,12 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
   } else if (isCheckoutStarted) {
     statusKey = 'checkout_started';
     tone = 'current';
-    subtext = 'Your next action: complete ACH checkout with Stripe or restart payment.';
-    helper = 'ACH checkout was started but payment has not been submitted. Open the project to complete Stripe checkout or choose a payment path again.';
+    subtext = isApPaymentLinkCheckoutStarted
+      ? 'Waiting for Accounts Payable to complete Stripe ACH checkout.'
+      : 'Your next action: complete ACH checkout with Stripe or restart payment.';
+    helper = isApPaymentLinkCheckoutStarted
+      ? 'Accounts Payable has opened the payment flow and a Stripe ACH checkout session was created, but payment has not been submitted yet.'
+      : 'ACH checkout was started but payment has not been submitted. Open the project to complete Stripe checkout or choose a payment path again.';
     paymentHover = helper;
     productionHover = 'Production begins after ACH payment is submitted and confirmed.';
   }
@@ -4208,6 +4229,11 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
     paymentMethod: paymentMethod,
     paymentPath: paymentPath,
     achDetailState: achDetailState,
+    achPaymentSource: achPaymentSource,
+    orderState: orderState,
+    paymentState: paymentState,
+    isApPaymentLinkAwaitingPayment: isApPaymentLinkAwaitingPayment,
+    isApPaymentLinkCheckoutStarted: isApPaymentLinkCheckoutStarted,
     achPaymentPendingProductionApproved: achPendingApproved,
     paymentDue: paymentDue,
     paymentReceived: paymentReceived,
@@ -4245,6 +4271,11 @@ function buildDashboardStatusCopyLifecycleMeta_(workflowContext, achProgress) {
     paymentMethod: trimString_(ctx.paymentMethod || ctx.paymentMethodSelected),
     paymentPath: trimString_(ctx.paymentPath),
     achDetailState: trimString_(ctx.achDetailState),
+    achPaymentSource: trimString_(ctx.achPaymentSource),
+    orderState: trimString_(ctx.orderState),
+    paymentState: trimString_(ctx.paymentState),
+    isApPaymentLinkAwaitingPayment: ctx.isApPaymentLinkAwaitingPayment === true,
+    isApPaymentLinkCheckoutStarted: ctx.isApPaymentLinkCheckoutStarted === true,
     achPaymentPendingProductionApproved: ctx.achPaymentPendingProductionApproved === true,
     paymentDue: ctx.paymentDue === true,
     paymentReceived: ctx.paymentReceived === true || ctx.isPaymentReceived === true,
@@ -8416,6 +8447,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const dealNumber = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.dealNumber);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const greeting = apName ? ('Hi ' + apName + ',') : 'Hello,';
+  const footer = 'This inbox is not monitored. Please use the secure payment page above or contact the purchaser / Red Threads team if you need help.';
   const reference = [
     invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
     dealNumber ? ('Project #: ' + dealNumber) : '',
@@ -8425,21 +8457,22 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const bodyLines = [
     greeting,
     '',
-    'A secure Red Threads ACH payment link is ready for this order.',
+    'A secure Red Threads ACH payment page is ready for this invoice.',
     '',
     reference.join('\n'),
     '',
-    'Pay by ACH: ' + paymentLink,
+    'Open secure ACH payment page:',
+    paymentLink,
     '',
-    'Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.',
+    'You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.',
     note ? ('\nNote from ' + (purchaserName || 'the purchaser') + ':\n' + note) : '',
     '',
-    NOTIFICATION_REPLY_NOTICE
+    footer
   ].filter(Boolean);
   const htmlBody = [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
     '  <p style="margin:0 0 14px;">' + escapeHtml_(greeting) + '</p>',
-    '  <p style="margin:0 0 14px;">A secure Red Threads ACH payment link is ready for this order.</p>',
+    '  <p style="margin:0 0 14px;">A secure Red Threads ACH payment page is ready for this invoice.</p>',
     '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">',
     invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
     dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
@@ -8447,13 +8480,13 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     '    <div><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</div>',
     '  </div>',
     paymentLink
-      ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(paymentLink) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">Open secure ACH payment link</a></p>')
+      ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(paymentLink) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">Open secure ACH payment page</a></p>')
       : '',
-    '  <p style="margin:0 0 14px;color:#475569;">Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.</p>',
+    '  <p style="margin:0 0 14px;color:#475569;">You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.</p>',
     note
       ? ('  <div style="margin:0 0 16px;padding:14px 16px;border-left:4px solid #be123c;background:#fff1f2;"><strong>Note from ' + escapeHtml_(purchaserName || 'the purchaser') + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
       : '',
-    '  <p style="margin:0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '  <p style="margin:0;color:#64748b;">' + escapeHtml_(footer) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
   return {
@@ -8511,6 +8544,16 @@ function prepareAchApPaymentLink_(payload, options) {
   }
   const validationError = validateOrderPlacementForAction_(ctx, { requirePositiveCheckoutTotal: true });
   if (validationError) return validationError;
+  if (opts.sendEmail === true && !trimString_(payload && payload.base64Data)) {
+    return buildOrderActionError_(
+      'ach_ap_invoice_artifact_required',
+      'Unable to generate the current invoice PDF for the AP email. Please try again.',
+      {
+        stage: 'invoice_artifact',
+        warnings: ['AP email requires a client-rendered Summary/Invoice PDF payload.']
+      }
+    );
+  }
   let invoiceArtifacts;
   try {
     invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx, payload);
@@ -17546,9 +17589,14 @@ function deriveAchLifecycleState_(context) {
   const latest = (ctx.latest && typeof ctx.latest === 'object') ? ctx.latest : {};
   const paymentState = trimString_(ctx.paymentState || latest.paymentState).toLowerCase();
   const orderState = trimString_(ctx.orderState || latest.orderState).toLowerCase();
+  const achPaymentSource = normalizeAchPaymentSource_(ctx.achPaymentSource || latest.achPaymentSource);
+  const stripeSessionId = trimString_(ctx.stripeSessionId || latest.stripeSessionId);
+  const checkoutAttemptId = trimString_(ctx.checkoutAttemptId || latest.checkoutAttemptId);
   const verificationStatus = trimString_(latest.achVerificationStatus).toLowerCase();
   const failureCode = trimString_(latest.achFailureCode).toLowerCase();
   const eventType = trimString_(latest.stripeLatestEventType).toLowerCase();
+  const isApPaymentLink = achPaymentSource === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  const hasCheckoutSignal = !!stripeSessionId || !!checkoutAttemptId;
   if (paymentState === PAYMENT_STATES.paid) return ACH_DETAIL_STATES.paid;
   if (eventType === 'charge.dispute.created' || failureCode.indexOf('dispute') >= 0) return ACH_DETAIL_STATES.disputed;
   if (paymentState === PAYMENT_STATES.failed) {
@@ -17563,11 +17611,14 @@ function deriveAchLifecycleState_(context) {
   if (verificationStatus.indexOf('pending') >= 0 || verificationStatus === 'unverified') {
     return ACH_DETAIL_STATES.bank_verification_pending;
   }
-  if (paymentState === PAYMENT_STATES.pending || orderState === ORDER_STATES.awaiting_payment_confirmation) {
-    return ACH_DETAIL_STATES.processing;
-  }
   if (paymentState === PAYMENT_STATES.checkout_created || orderState === ORDER_STATES.payment_in_progress) {
     return ACH_DETAIL_STATES.checkout_started;
+  }
+  if (isApPaymentLink && paymentState === PAYMENT_STATES.not_started && !hasCheckoutSignal) {
+    return ACH_DETAIL_STATES.not_started;
+  }
+  if (paymentState === PAYMENT_STATES.pending || orderState === ORDER_STATES.awaiting_payment_confirmation) {
+    return ACH_DETAIL_STATES.processing;
   }
   return ACH_DETAIL_STATES.not_started;
 }
@@ -17621,6 +17672,24 @@ function derivePortalLifecycle_(context) {
     latest.orderId ||
     row.activeorderid
   );
+  const latestCheckoutAttemptId = trimString_(
+    current.latestCheckoutAttemptId ||
+    latest.checkoutAttemptId ||
+    row.latestcheckoutattemptid
+  );
+  const stripeSessionId = trimString_(
+    latest.stripeSessionId ||
+    row.stripesessionid
+  );
+  const stripePaymentIntentId = trimString_(
+    latest.stripePaymentIntentId ||
+    row.stripepaymentintentid
+  );
+  const achPaymentSource = normalizeAchPaymentSource_(
+    latest.achPaymentSource ||
+    row.achpaymentsource ||
+    current.achPaymentSource
+  );
   const purchaseOrderDraft = normalizePurchaseOrderDraftState_(
     current.purchaseOrderDraft
     || readPurchaseOrderDraftFromPortalState_(safeJsonParse_(row.portalstatejson, {}))
@@ -17649,6 +17718,13 @@ function derivePortalLifecycle_(context) {
   const isStripeMethod = paymentMethodSelected === PAYMENT_METHODS.card || paymentMethodSelected === PAYMENT_METHODS.ach;
   const isAchMethod = paymentMethodSelected === PAYMENT_METHODS.ach;
   const isManualMethod = paymentMethodSelected === PAYMENT_METHODS.check || paymentMethodSelected === PAYMENT_METHODS.cash;
+  const isApPaymentLinkAch = isAchMethod && achPaymentSource === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  const hasStripeCheckoutSignal = !!stripeSessionId || !!latestCheckoutAttemptId || !!stripePaymentIntentId;
+  const isApPaymentLinkAwaitingPayment = isApPaymentLinkAch
+    && paymentState === PAYMENT_STATES.not_started
+    && !hasStripeCheckoutSignal;
+  const isApPaymentLinkCheckoutStarted = isApPaymentLinkAch
+    && paymentState === PAYMENT_STATES.checkout_created;
   const paymentPath = isPoFlow
     ? PAYMENT_METHODS.purchase_order
     : (isManualMethod ? 'manual' : (isStripeMethod ? 'stripe' : 'none'));
@@ -17707,6 +17783,7 @@ function derivePortalLifecycle_(context) {
   const isCheckoutStarted = !isPoFlow
     && !isPaymentReceived
     && !isProductionAuthorized
+    && !isApPaymentLinkAwaitingPayment
     && (
       orderState === ORDER_STATES.payment_in_progress ||
       paymentState === PAYMENT_STATES.checkout_created ||
@@ -17727,7 +17804,10 @@ function derivePortalLifecycle_(context) {
     ? deriveAchLifecycleState_({
       latest: latest,
       paymentState: paymentState,
-      orderState: orderState
+      orderState: orderState,
+      achPaymentSource: achPaymentSource,
+      stripeSessionId: stripeSessionId,
+      checkoutAttemptId: latestCheckoutAttemptId
     })
     : ACH_DETAIL_STATES.not_started;
   const isAchPaymentPendingLocked = !isPoFlow
@@ -17898,7 +17978,9 @@ function derivePortalLifecycle_(context) {
     paymentDue: paymentDue,
     productionCurrent: productionCurrent,
     productionComplete: productionComplete,
-    achDetailState: achDetailState
+    achDetailState: achDetailState,
+    isApPaymentLinkAwaitingPayment: isApPaymentLinkAwaitingPayment,
+    isApPaymentLinkCheckoutStarted: isApPaymentLinkCheckoutStarted
   });
   const nextTeamAction = derivePortalLifecycleNextTeamAction_({
     lifecycleState: lifecycleState,
@@ -17953,6 +18035,9 @@ function derivePortalLifecycle_(context) {
     paymentPath: paymentPath,
     paymentMethod: paymentMethodSelected,
     achDetailState: achDetailState,
+    achPaymentSource: achPaymentSource,
+    isApPaymentLinkAwaitingPayment: isApPaymentLinkAwaitingPayment,
+    isApPaymentLinkCheckoutStarted: isApPaymentLinkCheckoutStarted,
     achPaymentPendingProductionApproved: isAchMethod && isProductionAuthorized && !isPaymentReceived,
     orderPlaced: hasPlacedOrder,
     orderPlacedAt: orderPlacedAt,
@@ -18008,6 +18093,9 @@ function derivePortalLifecycle_(context) {
     paymentState: paymentState,
     productionAuthorizationState: productionAuthorizationState,
     activeOrderId: activeOrderId,
+    latestCheckoutAttemptId: latestCheckoutAttemptId,
+    stripeSessionId: stripeSessionId,
+    stripePaymentIntentId: stripePaymentIntentId,
     paidAt: paidAt,
     paymentReceivedManuallyAt: paymentReceivedManuallyAt,
     poSubmittedAt: poSubmittedAt,
@@ -18124,6 +18212,8 @@ function derivePortalLifecycleNextClientAction_(context) {
   const ctx = (context && typeof context === 'object') ? context : {};
   const state = trimString_(ctx.lifecycleState);
   if (state === PORTAL_LIFECYCLE_STATES.ach_payment_failed || state === PORTAL_LIFECYCLE_STATES.ach_payment_disputed) return 'retry_payment';
+  if (ctx.isApPaymentLinkAwaitingPayment === true) return 'wait_for_ap_payment';
+  if (ctx.isApPaymentLinkCheckoutStarted === true) return 'wait_for_ap_checkout';
   if (state === PORTAL_LIFECYCLE_STATES.ach_payment_pending) return 'wait_for_payment';
   if (state === PORTAL_LIFECYCLE_STATES.estimate_empty
       || state === PORTAL_LIFECYCLE_STATES.estimate_quantities_incomplete) return 'enter_quantities';

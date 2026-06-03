@@ -16823,7 +16823,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 51">51</div>
+  <div class="devRevisionBadge" aria-label="Development revision 52">52</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19465,6 +19465,9 @@
       achFinancialConnectionsAccountId: String(raw.achFinancialConnectionsAccountId || '').trim(),
       achVerificationStatus: String(raw.achVerificationStatus || '').trim(),
       achVerificationFlow: String(raw.achVerificationFlow || '').trim(),
+      achPaymentSource: String(raw.achPaymentSource || '').trim(),
+      achPaymentVisibilityScope: String(raw.achPaymentVisibilityScope || '').trim(),
+      stripeAchCustomerId: String(raw.stripeAchCustomerId || '').trim(),
       achExpectedDebitDate: String(raw.achExpectedDebitDate || '').trim(),
       achFailureCode: String(raw.achFailureCode || '').trim(),
       achFailureMessage: String(raw.achFailureMessage || '').trim(),
@@ -24947,6 +24950,11 @@
       paymentMethod: String(copy.paymentMethod || '').trim(),
       paymentPath: String(copy.paymentPath || '').trim(),
       achDetailState: String(copy.achDetailState || '').trim(),
+      achPaymentSource: String(copy.achPaymentSource || '').trim(),
+      orderState: String(copy.orderState || '').trim(),
+      paymentState: String(copy.paymentState || '').trim(),
+      isApPaymentLinkAwaitingPayment: copy.isApPaymentLinkAwaitingPayment === true,
+      isApPaymentLinkCheckoutStarted: copy.isApPaymentLinkCheckoutStarted === true,
       achPaymentPendingProductionApproved: copy.achPaymentPendingProductionApproved === true,
       paymentDue: copy.paymentDue === true,
       paymentReceived: copy.paymentReceived === true,
@@ -36292,6 +36300,26 @@
     };
   }
 
+  async function buildOrderFlowApEmailInvoiceArtifactPayload_(){
+    const friendlyArtifactFailure = 'Unable to generate the current invoice PDF for the AP email. Please try again.';
+    const pdfResult = await buildOrderFlowSummaryViewerPdf_({
+      fileName: buildOrderFlowPurchaseOrderFileName_(),
+      fallbackMessage: friendlyArtifactFailure
+    });
+    const base64Data = await readBlobAsBase64_(pdfResult.blob);
+    if (!base64Data) {
+      throw new Error(friendlyArtifactFailure);
+    }
+    return {
+      source: 'rendered_summary_invoice',
+      payload: {
+        fileName: pdfResult.fileName,
+        mimeType: 'application/pdf',
+        base64Data: base64Data
+      }
+    };
+  }
+
   async function handleOrderFlowApPaymentLink_(sendEmail){
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
     if (maybeBlockOrderFlow()) return;
@@ -36312,10 +36340,17 @@
     setOrderFlowApStatus_(sendEmail ? 'Preparing and emailing AP payment link...' : 'Preparing AP payment link...', '');
     try {
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+      const artifact = sendEmail
+        ? await buildOrderFlowApEmailInvoiceArtifactPayload_()
+        : null;
       const payload = Object.assign(buildOrderFlowApBasePayload_(clickedPortalState), {
         apEmail: apEmail,
         apName: apName,
-        note: note
+        note: note,
+        clientArtifactStrategy: artifact ? artifact.source : 'server_fallback',
+        fileName: artifact && artifact.payload ? artifact.payload.fileName : '',
+        mimeType: artifact && artifact.payload ? artifact.payload.mimeType : '',
+        base64Data: artifact && artifact.payload ? artifact.payload.base64Data : ''
       });
       const resp = await callServer(sendEmail ? 'sendAchPaymentLinkToAp' : 'prepareAchPaymentLinkToAp', payload);
       syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
@@ -40304,6 +40339,23 @@
             : (paymentMethodSelected === PAYMENT_METHODS.check ? 'Check'
               : (paymentMethodSelected === PAYMENT_METHODS.cash ? 'Cash' : ''))))
     );
+    const achPaymentSource = String(workflow.achPaymentSource || order.achPaymentSource || '').trim().toLowerCase();
+    const orderState = String(workflow.orderState || order.orderState || current.currentOrderState || '').trim().toLowerCase();
+    const paymentState = String(workflow.paymentState || order.paymentState || current.currentPaymentState || '').trim().toLowerCase();
+    const hasStripeCheckoutSignal = !!String(order.stripeSessionId || order.stripePaymentIntentId || order.checkoutAttemptId || current.latestCheckoutAttemptId || '').trim();
+    const isApPaymentLinkAwaitingPayment = workflow.isApPaymentLinkAwaitingPayment === true
+      || (
+        paymentMethodSelected === PAYMENT_METHODS.ach
+        && achPaymentSource === 'ap_payment_link'
+        && paymentState === 'not_started'
+        && !hasStripeCheckoutSignal
+      );
+    const isApPaymentLinkCheckoutStarted = workflow.isApPaymentLinkCheckoutStarted === true
+      || (
+        paymentMethodSelected === PAYMENT_METHODS.ach
+        && achPaymentSource === 'ap_payment_link'
+        && paymentState === 'checkout_created'
+      );
     return {
       workflow: workflow,
       order: order,
@@ -40315,6 +40367,8 @@
       paymentPath: paymentPath,
       paymentMethodSelected: paymentMethodSelected,
       paymentMethodLabel: paymentMethodLabel,
+      orderState: orderState,
+      paymentState: paymentState,
       paymentDue: paymentDue,
       paymentReceived: paymentReceived,
       paymentReceivedAt: paymentReceivedAt,
@@ -40325,6 +40379,9 @@
       productionCompletionAt: String(workflow.productionCompletionAt || '').trim(),
       productionCompletionSource: String(workflow.productionCompletionSource || '').trim().toLowerCase(),
       achDetailState: String(workflow.achDetailState || '').trim(),
+      achPaymentSource: achPaymentSource,
+      isApPaymentLinkAwaitingPayment: isApPaymentLinkAwaitingPayment,
+      isApPaymentLinkCheckoutStarted: isApPaymentLinkCheckoutStarted,
       achPaymentPendingProductionApproved: workflow.achPaymentPendingProductionApproved === true,
       nextClientAction: String(workflow.nextClientAction || '').trim().toLowerCase(),
       nextTeamAction: String(workflow.nextTeamAction || '').trim().toLowerCase(),
@@ -40575,19 +40632,29 @@
         String(lifecycle.achDetailState || '').trim().toLowerCase().indexOf('failed') >= 0;
       const achDetailState = String(lifecycle.achDetailState || '').trim().toLowerCase();
       const verificationPending = achDetailState === 'ach_microdeposit_pending' || achDetailState === 'ach_bank_verification_pending';
+      const apAwaitingPayment = lifecycle.isApPaymentLinkAwaitingPayment === true;
+      const apCheckoutStarted = lifecycle.isApPaymentLinkCheckoutStarted === true;
+      let noteText = '';
+      if (achFailed) {
+        noteText = 'Action needed — ACH payment failed. Retry payment from this invoice or choose another payment method.';
+      } else if (apAwaitingPayment) {
+        noteText = 'Waiting for Accounts Payable to complete ACH payment. Production begins after payment is submitted and confirmed.';
+      } else if (apCheckoutStarted) {
+        noteText = 'Accounts Payable checkout has started. Waiting for Stripe ACH checkout to be completed.';
+      } else if (verificationPending) {
+        noteText = lifecycle.productionCurrent === true
+          ? 'Bank verification pending. Use Stripe email if microdeposit verification is required. Red Threads has approved production to begin while payment settles.'
+          : 'Bank verification pending. Use Stripe email if microdeposit verification is required. Production will begin after payment is confirmed.';
+      } else {
+        noteText = lifecycle.productionCurrent === true
+          ? 'ACH payment processing. Red Threads has approved production to begin while payment settles.'
+          : 'ACH payment processing. Production will begin after payment is confirmed.';
+      }
       return {
         isLocked: true,
         freeze: true,
         noteTone: achFailed ? 'alert' : (lifecycle.productionCurrent === true ? 'info' : 'alert'),
-        noteText: achFailed
-          ? 'Action needed — ACH payment failed. Retry payment from this invoice or choose another payment method.'
-          : (verificationPending
-            ? (lifecycle.productionCurrent === true
-              ? 'Bank verification pending. Use Stripe email if microdeposit verification is required. Red Threads has approved production to begin while payment settles.'
-              : 'Bank verification pending. Use Stripe email if microdeposit verification is required. Production will begin after payment is confirmed.')
-            : (lifecycle.productionCurrent === true
-              ? 'ACH payment processing. Red Threads has approved production to begin while payment settles.'
-              : 'ACH payment processing. Production will begin after payment is confirmed.')),
+        noteText: noteText,
         referenceDate: productionStartAt || submittedAt || null,
         submittedAt: submittedAt,
         paidAt: '',

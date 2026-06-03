@@ -127,15 +127,18 @@ Lane 1, Pay now with ACH:
 Lane 2, Send ACH payment link to Accounts Payable:
 
 - Prepares and locks an awaiting-payment ACH order before returning or emailing the AP link.
-- Payment remains `not_started`, production remains `not_authorized`, and the portal is locked to avoid stale editable duplicate orders.
-- The AP link is a Red Threads portal URL, not a Stripe Checkout URL.
-- Email content includes safe order reference, amount due, optional purchaser note, and AP-only bank-storage copy.
-- Invoice PDF attachment is best effort: when the generated invoice artifact can be attached safely, it is attached; otherwise the AP link and safe summary remain the V1 deliverable.
+- Payment remains `not_started`, production remains `not_authorized`, and the portal is locked to avoid stale editable duplicate orders. Dashboard/project progress copy treats this as waiting for Accounts Payable, not Stripe ACH processing.
+- The AP link is a stable Red Threads portal URL, not a raw Stripe Checkout URL. A new order-scoped hosted ACH Checkout Session is created only after AP opens the portal payment page and starts payment.
+- Email content includes safe order reference, amount due, optional purchaser note, AP-only bank-storage copy, and the CTA text `Open secure ACH payment page`.
+- AP email requires the current browser-rendered Summary/Invoice PDF payload from the client export helper. If that rendered PDF cannot be generated, the email action returns a clear preparation error instead of silently attaching an older server fallback artifact. Copy-link flow may still prepare the locked AP payment link without an attachment.
 
 AP payment links use:
 
 - Public route: `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`
 - Hosted Checkout only after AP opens the public portal order link and starts payment.
+- Dashboard copy before AP starts Checkout: `Waiting for Accounts Payable to complete ACH payment.`
+- Dashboard copy after an AP Checkout Session is created but before completion: `Waiting for Accounts Payable to complete Stripe ACH checkout.`
+- Stripe ACH processing copy is shown only after Checkout completion or an ACH pending/processing Stripe event.
 - `metadata[paymentOrigin]=ap_payment_link`
 - `PORTAL_ORDERS.achPaymentSource=ap_payment_link`
 - `PORTAL_ORDERS.achPaymentVisibilityScope=order_only`
