@@ -16806,7 +16806,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 47">47</div>
+  <div class="devRevisionBadge" aria-label="Development revision 48">48</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20553,13 +20553,19 @@
       setupSessionId: String(item.setupSessionId || '').trim(),
       paymentIntentId: String(item.paymentIntentId || '').trim()
     });
-    setDashboardAchManageNotice_('Opening secure Stripe bank verification...', false);
+    setDashboardAchManageNotice_('Verifying bank with Stripe...', false);
     try {
       const resp = await callServer('getAchMicrodepositVerificationLink', payload);
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Stripe bank verification is not ready yet.'));
       }
       if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
+      if (resp.verified === true) {
+        renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY);
+        renderDashboardAchManageModal_();
+        setDashboardAchManageNotice_(String(resp.message || 'Bank verified in Stripe test mode.'), false);
+        return;
+      }
       const verificationUrl = String(resp.verificationUrl || '').trim();
       if (!verificationUrl) throw new Error('Secure bank verification URL missing.');
       clearDashboardAchManageNotice_();
