@@ -9856,6 +9856,40 @@
       box-shadow:0 24px 48px rgba(15,23,42,.22);
       overflow:hidden;
     }
+    .termsReviewModal.is-client-view-mode .termsReviewShell{
+      grid-template-columns:minmax(0,1fr);
+      padding:0 26px 26px;
+    }
+    .termsReviewModal.is-client-view-mode .termsReviewRail{
+      display:none !important;
+    }
+    .termsReviewModal.is-client-view-mode .termsReviewStage{
+      display:block;
+      overflow:auto;
+      border:none;
+      background:transparent;
+      padding:0;
+    }
+    .termsReviewModal.is-client-view-mode .termsReviewClientPages,
+    .termsReviewModal.is-client-view-mode .termsReviewFrame,
+    .termsReviewModal.is-client-view-mode .termsReviewImage{
+      width:min(100%,980px);
+      margin:0 auto;
+    }
+    .termsReviewModal.is-client-view-mode .termsReviewClientPages{
+      padding-bottom:20px;
+    }
+    .termsReviewModal.is-client-view-mode .termsReviewFrame,
+    .termsReviewModal.is-client-view-mode .termsReviewImage{
+      border-radius:22px;
+      border:1px solid rgba(255,255,255,.09);
+      background:#fff;
+      box-shadow:0 24px 48px rgba(15,23,42,.22);
+      overflow:hidden;
+    }
+    .termsReviewModal.is-client-view-mode .termsReviewFrame{
+      min-height:min(82vh,1120px);
+    }
     .termsReviewStage.is-review-doc .termsReviewFrame{
       min-height:min(78vh,1120px);
     }
@@ -16823,7 +16857,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 52">52</div>
+  <div class="devRevisionBadge" aria-label="Development revision 53">53</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -29103,7 +29137,7 @@
     TERMS_DOC_CLIENT_VIEW_REASON = '';
     TERMS_DOC_CLIENT_VIEW_ACCOUNT_SUMMARY = null;
     TERMS_DOC_CLIENT_VIEW_WORKFLOW = null;
-    if (termsReviewModal) termsReviewModal.classList.remove('is-review-mode');
+    if (termsReviewModal) termsReviewModal.classList.remove('is-review-mode', 'is-client-view-mode');
     if (termsReviewImage) {
       termsReviewImage.hidden = true;
       termsReviewImage.removeAttribute('src');
@@ -29121,6 +29155,54 @@
 
   function isTermsClientViewMode_(){
     return TERMS_DOC_CLIENT_VIEW_MODE === true;
+  }
+
+  function handleTermsDocumentCloseRequest_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (isTermsTeamReviewMode_()) {
+      closeTermsTeamReviewAndReturn_({ immediate: opts.immediate === true });
+      return;
+    }
+    closeCreditTermsWorkspace_({ immediate: opts.immediate === true || isTermsClientViewMode_() });
+  }
+
+  function isTermsDocumentOutsideCloseTarget_(target){
+    if (!termsReviewBackdrop || termsReviewBackdrop.hidden) return false;
+    if (typeof Node !== 'undefined' && target instanceof Node) {
+      if (termsReviewClose && termsReviewClose.contains(target)) return false;
+      if (termsReviewModal && !termsReviewModal.contains(target)) return true;
+      if (termsReviewModal && termsReviewModal.contains(target) && isTermsClientViewMode_()) {
+        const headActions = termsReviewModal.querySelector('.termsReviewHeadActions');
+        if (headActions && headActions.contains(target)) return false;
+        if (termsReviewClientPages && termsReviewClientPages.contains(target)) return false;
+        if (termsReviewFrame && termsReviewFrame.contains(target)) return false;
+        if (termsReviewImage && termsReviewImage.contains(target)) return false;
+        return true;
+      }
+    }
+    return target === termsReviewBackdrop;
+  }
+
+  function handleTermsDocumentBackdropClick_(event){
+    if (!event || !isTermsDocumentOutsideCloseTarget_(event.target)) return;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    handleTermsDocumentCloseRequest_({ immediate: true });
+  }
+
+  function handleTermsDocumentKeydown_(event){
+    if (!event || event.key !== 'Escape') return;
+    if (!termsReviewBackdrop || termsReviewBackdrop.hidden || !termsReviewBackdrop.classList.contains('open')) return;
+    if (termsReviewDecisionBackdrop && !termsReviewDecisionBackdrop.hidden) return;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    handleTermsDocumentCloseRequest_({ immediate: true });
+  }
+
+  function bindTermsDocumentWorkspaceEvents_(){
+    if (bindTermsDocumentWorkspaceEvents_.isBound === true) return;
+    bindTermsDocumentWorkspaceEvents_.isBound = true;
+    if (termsReviewClose) termsReviewClose.addEventListener('click', () => handleTermsDocumentCloseRequest_());
+    if (termsReviewBackdrop) termsReviewBackdrop.addEventListener('click', handleTermsDocumentBackdropClick_);
+    document.addEventListener('keydown', handleTermsDocumentKeydown_);
   }
 
   function setTermsClientViewerLoading_(isLoading){
@@ -29148,6 +29230,7 @@
 
   async function openCreditTermsWorkspace_(options){
     if (!termsReviewBackdrop) return;
+    bindTermsDocumentWorkspaceEvents_();
     const opts = (options && typeof options === 'object') ? options : {};
     ACCOUNT_DOC_MODAL_TYPE = 'credit_terms';
     ACCOUNT_DOC_MODAL_CONTEXT = String(opts.context || (CURRENT_VIEW === VIEW_DASHBOARD ? 'dashboard' : 'project')).trim() || 'project';
@@ -29713,6 +29796,9 @@
       termsReviewStage.classList.toggle('is-client', isTermsClientWorkspaceMode_() || isTermsClientViewMode_());
       termsReviewStage.classList.toggle('is-review-doc', isTermsClientViewMode_() || isTermsTeamReviewMode_());
     }
+    if (termsReviewModal) {
+      termsReviewModal.classList.toggle('is-client-view-mode', isTermsClientViewMode_());
+    }
     if (isTermsClientViewMode_()) {
       const artifact = (TERMS_DOC_CLIENT_VIEW_ARTIFACT && typeof TERMS_DOC_CLIENT_VIEW_ARTIFACT === 'object')
         ? TERMS_DOC_CLIENT_VIEW_ARTIFACT
@@ -29733,7 +29819,7 @@
       const showFrame = !hasImageStack && !isImage && !!resolvedFrameSrc;
       const showImage = !hasImageStack && isImage && !!resolvedImageSrc;
       const showUnavailable = !TERMS_DOC_CLIENT_VIEW_LOADING && !hasImageStack && !showImage && !showFrame;
-      if (termsReviewModal) termsReviewModal.classList.add('is-review-mode');
+      if (termsReviewModal) termsReviewModal.classList.add('is-review-mode', 'is-client-view-mode');
       if (termsReviewEyebrow) {
         termsReviewEyebrow.hidden = false;
         termsReviewEyebrow.textContent = 'Account Document';
@@ -30512,10 +30598,12 @@
       openTeamModeGate({ preserveMessage: true, resetValue: true });
       return;
     }
+    bindTermsDocumentWorkspaceEvents_();
     closeAccountDocumentModal({ immediate: true });
     closeTaxExemptWorkspace({ immediate: true });
     closeTermsReviewDecisionModal_();
     resetTermsClientWorkspaceState_();
+    resetTermsClientViewState_();
     TERMS_DOC_TEAM_REVIEW_MODE = true;
     TERMS_DOC_TEAM_REVIEW_LOADING = true;
     TERMS_DOC_TEAM_ACTION_IN_FLIGHT = false;
@@ -30566,6 +30654,7 @@
 
   async function openCreditTermsClientViewer_(options){
     if (!termsReviewBackdrop) return;
+    bindTermsDocumentWorkspaceEvents_();
     const opts = (options && typeof options === 'object') ? options : {};
     ACCOUNT_DOC_MODAL_TYPE = 'credit_terms';
     ACCOUNT_DOC_MODAL_CONTEXT = String(opts.context || (CURRENT_VIEW === VIEW_DASHBOARD ? 'dashboard' : 'project')).trim() || 'project';
@@ -44044,11 +44133,7 @@
         }
         if (termsReviewBackdrop && !termsReviewBackdrop.hidden && termsReviewBackdrop.classList.contains('open')) {
           e.preventDefault();
-          if (isTermsTeamReviewMode_()) {
-            closeTermsTeamReviewAndReturn_({ immediate: true });
-          } else {
-            closeCreditTermsWorkspace_({ immediate: true });
-          }
+          handleTermsDocumentCloseRequest_({ immediate: true });
           return;
         }
         if (taxSignatureBackdrop && !taxSignatureBackdrop.hidden) {
@@ -44115,7 +44200,7 @@
       });
     }
     if (termsReviewBackBtn) termsReviewBackBtn.addEventListener('click', () => closeTermsTeamReviewAndReturn_({ immediate: true }));
-    if (termsReviewClose) termsReviewClose.addEventListener('click', () => closeCreditTermsWorkspace_({ immediate: true }));
+    bindTermsDocumentWorkspaceEvents_();
     if (termsReviewApproveBtn) termsReviewApproveBtn.addEventListener('click', approveCreditTermsTeamReview_);
     if (termsReviewRequestChangesBtn) {
       termsReviewRequestChangesBtn.addEventListener('click', () => openTermsReviewDecisionModal_('request_changes'));
@@ -44145,16 +44230,6 @@
         if (e.target === termsReviewDecisionBackdrop && !TERMS_DOC_TEAM_DENIAL_IN_FLIGHT) {
           closeTermsReviewDecisionModal_();
         }
-      });
-    }
-    if (termsReviewBackdrop) {
-      termsReviewBackdrop.addEventListener('click', e => {
-        if (e.target !== termsReviewBackdrop) return;
-        if (isTermsTeamReviewMode_()) {
-          closeTermsTeamReviewAndReturn_({ immediate: true });
-          return;
-        }
-        closeCreditTermsWorkspace_({ immediate: true });
       });
     }
     if (teamAccountAdminCloseBtn) teamAccountAdminCloseBtn.addEventListener('click', closeTeamAccountAdminModal_);
