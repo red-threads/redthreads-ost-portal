@@ -1743,6 +1743,21 @@
       border-color:var(--rt-red);
       box-shadow:0 0 0 3px var(--rt-redRing);
     }
+    #loginView .authInput:-webkit-autofill,
+    #loginView .authInput:-webkit-autofill:hover,
+    #loginView .authInput:-webkit-autofill:focus,
+    #resetRequestView .authInput:-webkit-autofill,
+    #resetRequestView .authInput:-webkit-autofill:hover,
+    #resetRequestView .authInput:-webkit-autofill:focus,
+    #resetConfirmView .authInput:-webkit-autofill,
+    #resetConfirmView .authInput:-webkit-autofill:hover,
+    #resetConfirmView .authInput:-webkit-autofill:focus{
+      -webkit-text-fill-color:var(--rt-text);
+      caret-color:var(--rt-text);
+      border-color:var(--rt-inputBorder);
+      box-shadow:0 0 0 1000px var(--rt-input) inset;
+      transition:background-color 9999s ease-out;
+    }
     #loginView .authPasswordToggle{
       border:1px solid rgba(255,255,255,.14);
       background:rgba(255,255,255,.03);
@@ -16717,7 +16732,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 45">45</div>
+  <div class="devRevisionBadge" aria-label="Development revision 46">46</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
