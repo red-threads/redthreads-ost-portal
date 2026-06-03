@@ -2362,7 +2362,9 @@
     }
     .dashboardAchManageActions{
       display:flex;
-      flex-wrap:wrap;
+      flex-direction:column;
+      flex-wrap:nowrap;
+      align-items:flex-end;
       justify-content:flex-end;
       gap:8px;
     }
@@ -2384,6 +2386,11 @@
       border-color:rgba(81,255,183,.5);
       background:rgba(81,255,183,.12);
       color:#9fffd0;
+    }
+    .dashboardAchManageBtn.is-danger{
+      border-color:rgba(244,63,94,.38);
+      background:rgba(244,63,94,.1);
+      color:#fecdd3;
     }
     .dashboardAchManageFooter{
       display:flex;
@@ -16857,7 +16864,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 53">53</div>
+  <div class="devRevisionBadge" aria-label="Development revision 54">54</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -16963,8 +16970,8 @@
         <div class="dashboardAchManageModal" id="dashboardAchManageModal" role="dialog" aria-modal="true" aria-labelledby="dashboardAchManageTitle">
           <div class="dashboardAchManageHead">
             <div>
-              <h2 class="dashboardAchManageTitle" id="dashboardAchManageTitle">Manage ACH banks</h2>
-              <p class="dashboardAchManageSub">Stripe may ask the payer to confirm, choose, or connect a bank during checkout. Red Threads does not store full bank account numbers.</p>
+              <h2 class="dashboardAchManageTitle" id="dashboardAchManageTitle">Manage Accounts for ACH Payments</h2>
+              <p class="dashboardAchManageSub">You will set up your bank connection securely through Stripe. Red Threads never stores banking information.</p>
             </div>
             <button class="dashboardAchManageClose" id="dashboardAchManageCloseBtn" type="button" aria-label="Close ACH bank management">X</button>
           </div>
@@ -16972,7 +16979,7 @@
           <div class="dashboardAchManageBody" id="dashboardAchManageBody"></div>
           <div class="dashboardAchManageFooter" id="dashboardAchManageFooter">
             <button class="dashboardAchManageBtn" id="dashboardAchManageDoneBtn" type="button">Done</button>
-            <button class="dashboardAchManageBtn is-primary" id="dashboardAchManageAddBtn" type="button">Add ACH bank</button>
+            <button class="dashboardAchManageBtn is-primary" id="dashboardAchManageAddBtn" type="button">Link Account to Make ACH Payments</button>
           </div>
         </div>
       </div>
@@ -20656,6 +20663,31 @@
     }
   }
 
+  async function hideDashboardAchPaymentMethodFromView_(paymentMethodId){
+    const methodId = String(paymentMethodId || '').trim();
+    if (!methodId) return;
+    const requestPayload = await ensureDashboardAccountDocumentContextReady_();
+    if (!requestPayload) {
+      setDashboardAchManageNotice_('Unable to load this account payment workflow right now.', true);
+      return;
+    }
+    setDashboardAchManageNotice_('Removing account from dashboard view...', false);
+    try {
+      const resp = await callServer('hideAchPaymentMethodFromDashboard', Object.assign({}, requestPayload, {
+        paymentMethodId: methodId
+      }));
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to remove this ACH account from view.'));
+      }
+      if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
+      renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY);
+      renderDashboardAchManageModal_();
+      setDashboardAchManageNotice_('ACH payment account removed from dashboard view.', false);
+    } catch (err) {
+      setDashboardAchManageNotice_(String((err && err.message) || err), true);
+    }
+  }
+
   function getDashboardAchMethodCardTone_(method){
     const item = (method && typeof method === 'object') ? method : {};
     const signal = [item.status, item.verificationStatus].map(value => String(value || '').trim().toLowerCase()).join(' ');
@@ -20776,17 +20808,30 @@
       });
       actions.appendChild(defaultBtn);
     }
+    const removeBtn = createEl('button', 'dashboardAchManageBtn is-danger', 'Remove');
+    removeBtn.type = 'button';
+    removeBtn.setAttribute('aria-label', 'Remove ' + formatAchBankLabelForUi_(item, account) + ' from dashboard view');
+    removeBtn.addEventListener('click', evt => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      removeBtn.disabled = true;
+      removeBtn.textContent = 'Removing...';
+      hideDashboardAchPaymentMethodFromView_(item.paymentMethodId).catch(err => {
+        setDashboardAchManageNotice_(String((err && err.message) || err), true);
+      }).finally(() => {
+        removeBtn.disabled = false;
+        removeBtn.textContent = 'Remove';
+      });
+    });
+    actions.appendChild(removeBtn);
     row.appendChild(actions);
     return row;
   }
 
   function appendDashboardAchManageSection_(title, methods, emptyText, account){
+    if (!methods.length) return null;
     const section = createEl('section', 'dashboardAchManageSection');
     section.appendChild(createEl('h3', 'dashboardAchManageSectionTitle', title));
-    if (!methods.length) {
-      section.appendChild(createEl('p', 'dashboardAchManageEmpty', emptyText));
-      return section;
-    }
     const rows = createEl('div', 'dashboardAchManageRows');
     methods.forEach(method => {
       rows.appendChild(buildDashboardAchManageRow_(method, account));
@@ -20803,24 +20848,14 @@
     const account = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
     const summary = getDashboardAchReadinessSummary_(account);
     dashboardAchManageBody.innerHTML = '';
-    dashboardAchManageBody.appendChild(appendDashboardAchManageSection_(
-      'Ready',
-      summary.readyMethods,
-      'No verified ACH bank information is ready yet.',
-      account
-    ));
-    dashboardAchManageBody.appendChild(appendDashboardAchManageSection_(
-      'Needs action',
-      summary.needsActionMethods,
-      'No ACH bank verification actions are pending.',
-      account
-    ));
-    dashboardAchManageBody.appendChild(appendDashboardAchManageSection_(
-      'Unavailable',
-      summary.unavailableMethods,
-      'No failed or blocked ACH banks are on this account.',
-      account
-    ));
+    [
+      ['Ready', summary.readyMethods],
+      ['Needs action', summary.needsActionMethods],
+      ['Unavailable', summary.unavailableMethods]
+    ].forEach(entry => {
+      const section = appendDashboardAchManageSection_(entry[0], entry[1], '', account);
+      if (section) dashboardAchManageBody.appendChild(section);
+    });
   }
 
   function setDashboardAchManageNotice_(message, isError){

@@ -1476,6 +1476,9 @@ function doPost(e) {
     if (action === 'set_default_ach_payment_method') {
       return jsonOutput_(setDefaultAchPaymentMethod(payload));
     }
+    if (action === 'hide_ach_payment_method_from_dashboard' || action === 'remove_ach_payment_method_from_dashboard') {
+      return jsonOutput_(hideAchPaymentMethodFromDashboard(payload));
+    }
     if (action === 'get_dashboard_project_peek') {
       return jsonOutput_(getDashboardProjectPeek(payload));
     }
@@ -6662,6 +6665,45 @@ function setDefaultAchPaymentMethod_(payload) {
 function setDefaultAchPaymentMethod(payload) {
   try {
     return setDefaultAchPaymentMethod_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function hideAchPaymentMethodFromDashboard_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const paymentMethodId = trimString_(p.paymentMethodId);
+  if (!paymentMethodId) {
+    return { ok: false, code: 'ach_payment_method_required', error: 'Choose a saved bank before removing it from view.' };
+  }
+  const ctx = buildAccountDocumentContext_(p);
+  if (!ctx || ctx.ok !== true) return ctx || { ok: false, error: 'Unable to load account.' };
+  if (ctx.cfg.stripeAchEnabled !== true) {
+    return { ok: false, code: 'ach_setup_disabled', error: 'ACH bank setup is not currently available.' };
+  }
+  const authResult = validateAchSetupDashboardAuthorization_(ctx, p);
+  if (!authResult || authResult.ok !== true) return authResult;
+  const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const method = normalizeAchPaymentMethodsJson_(accountSummary.achPaymentMethods).find(function(item) {
+    return item.paymentMethodId === paymentMethodId;
+  }) || null;
+  if (!method || !isDashboardSavedAchPaymentMethod_(method)) {
+    return { ok: false, code: 'ach_payment_method_not_dashboard_saved', error: 'Only dashboard-saved ACH banks can be removed from view.' };
+  }
+  const updated = hideAchPaymentMethodFromDashboardForAccount_(ctx.accountInfo, paymentMethodId, {
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra
+  });
+  return {
+    ok: true,
+    accountSummary: updated && updated.summary ? updated.summary : accountSummary
+  };
+}
+
+function hideAchPaymentMethodFromDashboard(payload) {
+  try {
+    return hideAchPaymentMethodFromDashboard_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -15286,6 +15328,35 @@ function setDefaultAchPaymentMethodForAccount_(accountInfo, paymentMethodId, opt
     rowInfo: refreshed,
     summary: buildPortalAccountSummary_(refreshed.rowObjNormalized, cfg)
   };
+}
+
+function hideAchPaymentMethodFromDashboardForAccount_(accountInfo, paymentMethodId, options) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : {};
+  const rowInfo = info.rowInfo || null;
+  const targetId = trimString_(paymentMethodId);
+  if (!rowInfo || !targetId) return info;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const account = buildPortalAccountSummary_(rowInfo.rowObjNormalized || {}, cfg);
+  let changed = false;
+  const methods = normalizeAchPaymentMethodsJson_(account.achPaymentMethods).map(function(item) {
+    if (item.paymentMethodId !== targetId || !isDashboardSavedAchPaymentMethod_(item)) return item;
+    changed = true;
+    return normalizeAchPaymentMethodSummary_(Object.assign({}, item, {
+      visibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.hidden_from_dashboard,
+      isDefault: false,
+      updatedAt: nowIso_()
+    }));
+  }).filter(Boolean);
+  if (!changed) return info;
+  return writeAchPaymentMethodsForPortalAccount_(info, methods, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    accountsSheet: opts.accountsSheet || infra.accountsSheet
+  });
 }
 
 function markAchPaymentMethodUnusable_(accountInfo, paymentMethodId, reason, options) {
