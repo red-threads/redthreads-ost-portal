@@ -54,7 +54,7 @@ The second command should show only redaction, safety, or documentation referenc
 17. Setup success stores a safe saved bank summary with `source=dashboard_setup` and `visibilityScope=dashboard_saved`.
 18. Dashboard shows one `ACH payment accounts` card with body text `Manage accounts`; bank names/last4 appear only inside Manage ACH banks, not in the top card or checkout copy, and no ready-state ACH checkout bullet appears below the dashboard cards.
 19. Direct account dashboard links load without password gate for `?dashboard=1&accountId=<account-id>` and `?dashboard=1&accountAccessToken=<account-access-token>`.
-20. Stripe ACH setup success/cancel returns to the same account dashboard URL rather than the Apps Script iframe sandbox URL.
+20. Stripe ACH setup success/cancel returns to the same account dashboard URL rather than the Apps Script iframe sandbox URL; setup cancel returns silently with no dashboard notification/message bar.
 21. Tokenized dashboard links, such as `?t=<job-token>&dashboard=1`, can launch Dashboard ACH setup without requiring a separate dashboard login.
 22. Dashboard ACH setup sessions are created only when server-built `success_url` and `cancel_url` are non-empty public portal URLs, and the server accepts Stripe's literal `{CHECKOUT_SESSION_ID}` placeholder during validation.
 23. Tokenized or logged-in session dashboard ACH setup returns with `dashboard=1`, `setupResult`, `stripeSessionId`, and an account bearer context when available.

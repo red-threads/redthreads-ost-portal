@@ -16806,7 +16806,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 48">48</div>
+  <div class="devRevisionBadge" aria-label="Development revision 49">49</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20959,12 +20959,7 @@
         type: 'ok'
       };
     }
-    if (setupResult === 'cancel') {
-      return {
-        message: 'Bank account setup canceled. You can add an ACH bank account later from the dashboard.',
-        type: 'ok'
-      };
-    }
+    if (setupResult === 'cancel') return null;
     const result = getCheckoutReturnResult_();
     if (!result) return null;
     const workflow = getPortalWorkflowContext_();
@@ -21022,9 +21017,6 @@
     const value = String(result || getSetupReturnResult_() || '').trim().toLowerCase();
     if (value === 'success') {
       return 'Bank account setup started. Stripe will update verification status as it completes.';
-    }
-    if (value === 'cancel') {
-      return 'Bank account setup canceled.';
     }
     return '';
   }
@@ -21130,6 +21122,7 @@
 
   function getCheckoutReturnReconciliationMessage_(){
     const setupResult = getSetupReturnResult_();
+    if (setupResult === 'cancel') return '';
     if (setupResult) return 'Refreshing bank setup status...';
     const checkoutResult = getCheckoutReturnResult_();
     if (checkoutResult === 'success') return 'Order placed — confirming payment status...';
@@ -21169,7 +21162,7 @@
     const method = String(workflow.paymentMethod || current.currentPaymentMethod || order.paymentMethodSelected || '').trim().toLowerCase();
     const paymentState = String(current.currentPaymentState || order.paymentState || '').trim().toLowerCase();
     const achDetailState = String(workflow.achDetailState || '').trim().toLowerCase();
-    if (setupResult === 'cancel' || status === 'cancel') return 'Checkout status refreshed.';
+    if (setupResult === 'cancel' || status === 'cancel') return '';
     if (setupResult === 'success' || status === 'setup_processed' || status === 'setup_pending') {
       return 'Bank account setup status refreshed.';
     }
@@ -21220,7 +21213,8 @@
             forceClientMode: !!payload.checkoutResult,
             preserveTeamMode: !payload.checkoutResult
           });
-          showNotice(getCheckoutReturnNoticeFromResponse_(resp), 'ok', { persist: true });
+          const responseNotice = getCheckoutReturnNoticeFromResponse_(resp);
+          if (responseNotice) showNotice(responseNotice, 'ok', { persist: true });
           if (resp.reconciliationStatus !== 'pending_webhook' || hasLockedAchPendingReturnSignal_(resp.portalPayload) || hasStrongPaidFinalizedSignal_(resp.portalPayload)) {
             if (payload.checkoutResult && CURRENT_TOKEN) {
               replaceCurrentPortalProjectRoute_(CURRENT_TOKEN, {
@@ -21238,7 +21232,8 @@
         await waitMs_(2500);
       }
       if (lastResp) {
-        showNotice(getCheckoutReturnNoticeFromResponse_(lastResp), 'ok', { persist: true });
+        const lastNotice = getCheckoutReturnNoticeFromResponse_(lastResp);
+        if (lastNotice) showNotice(lastNotice, 'ok', { persist: true });
       }
       return !!lastResp;
     } catch (err) {
