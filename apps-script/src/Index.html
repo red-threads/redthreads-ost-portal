@@ -2255,6 +2255,11 @@
       font-weight:900;
       cursor:pointer;
     }
+    .dashboardAchManageClose:disabled,
+    .dashboardAchManageBtn:disabled{
+      opacity:.58;
+      cursor:wait;
+    }
     .dashboardAchManageBody{
       display:flex;
       flex-direction:column;
@@ -2385,6 +2390,75 @@
       justify-content:flex-end;
       gap:10px;
       margin-top:18px;
+    }
+    .dashboardAchSetupLoading{
+      min-height:360px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:16px;
+      border:1px solid rgba(81,255,183,.22);
+      border-radius:16px;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(81,255,183,.14), transparent 48%),
+        linear-gradient(180deg, rgba(15,23,42,.72) 0%, rgba(4,7,16,.76) 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.06),
+        0 0 0 1px rgba(81,255,183,.06);
+      text-align:center;
+      padding:34px 24px;
+    }
+    .dashboardAchSetupSpinner{
+      position:relative;
+      display:grid;
+      place-items:center;
+      width:88px;
+      height:88px;
+      filter:drop-shadow(0 0 18px rgba(81,255,183,.3));
+    }
+    .dashboardAchSetupSpinner::before{
+      content:'';
+      position:absolute;
+      inset:0;
+      border-radius:999px;
+      background:
+        conic-gradient(from 210deg,
+          rgba(81,255,183,.16) 0deg,
+          rgba(81,255,183,.28) 78deg,
+          rgba(126,255,205,.98) 78deg,
+          rgba(46,216,155,.98) 186deg,
+          rgba(81,255,183,.16) 186deg,
+          rgba(81,255,183,.16) 360deg);
+      -webkit-mask:radial-gradient(circle, transparent 58%, #000 60%);
+      mask:radial-gradient(circle, transparent 58%, #000 60%);
+      animation:rtSpin 1180ms linear infinite;
+    }
+    .dashboardAchSetupLogo{
+      position:relative;
+      z-index:1;
+      width:52px;
+      height:52px;
+      object-fit:contain;
+      user-select:none;
+      -webkit-user-drag:none;
+      animation:rtPulse 1200ms ease-in-out infinite;
+      filter:drop-shadow(0 1px 5px rgba(0,0,0,.34));
+    }
+    .dashboardAchSetupLoadingTitle{
+      color:#7effcd;
+      font-size:22px;
+      line-height:1.15;
+      font-weight:950;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .dashboardAchSetupLoadingSub{
+      max-width:42ch;
+      color:#dbeafe;
+      font-size:14px;
+      line-height:1.45;
+      font-weight:800;
     }
     .dashboardAccountBullets{
       margin:0;
@@ -16732,7 +16806,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 46">46</div>
+  <div class="devRevisionBadge" aria-label="Development revision 47">47</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -16845,7 +16919,7 @@
           </div>
           <div class="dashboardAchManageNotice" id="dashboardAchManageNotice" hidden></div>
           <div class="dashboardAchManageBody" id="dashboardAchManageBody"></div>
-          <div class="dashboardAchManageFooter">
+          <div class="dashboardAchManageFooter" id="dashboardAchManageFooter">
             <button class="dashboardAchManageBtn" id="dashboardAchManageDoneBtn" type="button">Done</button>
             <button class="dashboardAchManageBtn is-primary" id="dashboardAchManageAddBtn" type="button">Add ACH bank</button>
           </div>
@@ -19085,6 +19159,7 @@
   let LATEST_ORDER_SUMMARY = {};
   let CURRENT_STATE_SUMMARY = {};
   let DASHBOARD_ACCOUNT_SUMMARY = {};
+  let DASHBOARD_ACH_SETUP_BUSY = false;
   let ACCOUNT_DOC_MODAL_TYPE = '';
   let ACCOUNT_DOC_MODAL_CONTEXT = '';
   let ACCOUNT_DOC_MODAL_HIDE_TIMER = 0;
@@ -20357,21 +20432,82 @@
     return raw.replace(/_/g, ' ');
   }
 
-  async function startDashboardAchSetupSession_(){
+  function setDashboardAchManageControlsDisabled_(disabled){
+    const isDisabled = disabled === true;
+    [dashboardAchManageCloseBtn, dashboardAchManageDoneBtn, dashboardAchManageAddBtn].forEach(btn => {
+      if (!btn) return;
+      btn.disabled = isDisabled;
+    });
+  }
+
+  function renderDashboardAchSetupLoading_(){
+    DASHBOARD_ACH_SETUP_BUSY = true;
+    clearDashboardAchManageNotice_();
+    setDashboardAchManageControlsDisabled_(true);
+    if (dashboardAchManageModal) dashboardAchManageModal.setAttribute('aria-busy', 'true');
+    if (dashboardAchManageFooter) dashboardAchManageFooter.hidden = true;
+    if (!dashboardAchManageBody) return;
+    dashboardAchManageBody.innerHTML = '';
+    const loading = createEl('div', 'dashboardAchSetupLoading');
+    loading.setAttribute('role', 'status');
+    loading.setAttribute('aria-live', 'polite');
+    const spinner = createEl('div', 'dashboardAchSetupSpinner');
+    const loadingLogo = createEl('img', 'dashboardAchSetupLogo');
+    loadingLogo.alt = '';
+    loadingLogo.referrerPolicy = 'no-referrer';
+    setImageSrcWithFallback(
+      loadingLogo,
+      'https://logos.redthreads.work/CALC_PORTAL/GREEN_LOADING.png',
+      'https://logos.redthreads.work/CALC_PORTAL/GREEN_LOADING.png'
+    );
+    spinner.appendChild(loadingLogo);
+    loading.appendChild(spinner);
+    loading.appendChild(createEl('div', 'dashboardAchSetupLoadingTitle', 'Opening secure Stripe bank setup'));
+    loading.appendChild(createEl('div', 'dashboardAchSetupLoadingSub', 'Taking you to Stripe to connect a bank account.'));
+    dashboardAchManageBody.appendChild(loading);
+  }
+
+  function restoreDashboardAchManageFromSetupLoading_(message, isError){
+    DASHBOARD_ACH_SETUP_BUSY = false;
+    if (dashboardAchManageModal) dashboardAchManageModal.setAttribute('aria-busy', 'false');
+    setDashboardAchManageControlsDisabled_(false);
+    if (dashboardAchManageFooter) dashboardAchManageFooter.hidden = false;
+    renderDashboardAchManageModal_();
+    if (message) setDashboardAchManageNotice_(message, isError === true);
+  }
+
+  async function startDashboardAchSetupSession_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const isManageModalSource = String(opts.source || '').trim() === 'achManageModal';
+    if (isManageModalSource) {
+      renderDashboardAchSetupLoading_();
+    }
     if (!isClientAchPaymentEnabled_()) {
-      showDashboardWorkflowError_('ACH bank setup is not available yet.');
+      const message = 'ACH bank setup is not available yet.';
+      if (isManageModalSource) {
+        restoreDashboardAchManageFromSetupLoading_(message, true);
+      } else {
+        showDashboardWorkflowError_(message);
+      }
       return;
     }
     const requestPayload = await ensureDashboardAccountDocumentContextReady_();
     if (!requestPayload) {
-      showDashboardWorkflowError_('Unable to load this account payment workflow right now.');
+      const message = 'Unable to load this account payment workflow right now.';
+      if (isManageModalSource) {
+        restoreDashboardAchManageFromSetupLoading_(message, true);
+      } else {
+        showDashboardWorkflowError_(message);
+      }
       return;
     }
     const payload = Object.assign({}, requestPayload, {
       returnUrl: buildExternalPortalDashboardUrlForClient_(),
       returnToDashboard: true
     });
-    setAuthMessage('Opening secure Stripe bank setup...', false, { view: VIEW_DASHBOARD, persist: true });
+    if (!isManageModalSource) {
+      setAuthMessage('Opening secure Stripe bank setup...', false, { view: VIEW_DASHBOARD, persist: true });
+    }
     try {
       const resp = await callServer('createAchSetupSession', payload);
       if (!resp || resp.ok !== true) {
@@ -20382,10 +20518,20 @@
       if (!checkoutUrl) throw new Error('Secure bank setup URL missing.');
       const launched = navigateToPortalStripeCheckout_(checkoutUrl, { token: CURRENT_TOKEN || DASHBOARD_CONTEXT_TOKEN || '' });
       if (!launched) {
-        setAuthMessage('Secure bank setup is ready. Allow pop-ups or try again.', true, { view: VIEW_DASHBOARD, persist: true });
+        const message = 'Secure bank setup is ready. Allow pop-ups or try again.';
+        if (isManageModalSource) {
+          restoreDashboardAchManageFromSetupLoading_(message, true);
+        } else {
+          setAuthMessage(message, true, { view: VIEW_DASHBOARD, persist: true });
+        }
       }
     } catch (err) {
-      setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+      const message = String((err && err.message) || err);
+      if (isManageModalSource) {
+        restoreDashboardAchManageFromSetupLoading_(message, true);
+      } else {
+        setAuthMessage(message, true, { view: VIEW_DASHBOARD, persist: true });
+      }
     }
   }
 
@@ -20591,6 +20737,9 @@
 
   function renderDashboardAchManageModal_(){
     if (!dashboardAchManageBody) return;
+    if (dashboardAchManageModal) dashboardAchManageModal.setAttribute('aria-busy', 'false');
+    setDashboardAchManageControlsDisabled_(false);
+    if (dashboardAchManageFooter) dashboardAchManageFooter.hidden = false;
     const account = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
     const summary = getDashboardAchReadinessSummary_(account);
     dashboardAchManageBody.innerHTML = '';
@@ -20643,14 +20792,15 @@
       dashboardAchManageAddBtn.addEventListener('click', evt => {
         if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
         if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
-        closeDashboardAchManageModal_();
-        startDashboardAchSetupSession_().catch(err => {
-          setAuthMessage(String((err && err.message) || err), true, { view: VIEW_DASHBOARD, persist: true });
+        if (DASHBOARD_ACH_SETUP_BUSY) return;
+        startDashboardAchSetupSession_({ source: 'achManageModal' }).catch(err => {
+          restoreDashboardAchManageFromSetupLoading_(String((err && err.message) || err), true);
         });
       });
     }
     if (dashboardAchManageBackdrop) {
       dashboardAchManageBackdrop.addEventListener('click', evt => {
+        if (DASHBOARD_ACH_SETUP_BUSY) return;
         const target = evt.target;
         if (dashboardAchManageModal && target instanceof Node && dashboardAchManageModal.contains(target)) return;
         closeDashboardAchManageModal_(evt);
@@ -20658,6 +20808,7 @@
     }
     document.addEventListener('pointerdown', evt => {
       if (!dashboardAchManageBackdrop || dashboardAchManageBackdrop.hidden) return;
+      if (DASHBOARD_ACH_SETUP_BUSY) return;
       const target = evt.target;
       if (dashboardAchManageModal && target instanceof Node && dashboardAchManageModal.contains(target)) return;
       closeDashboardAchManageModal_(evt);
@@ -20665,6 +20816,7 @@
     document.addEventListener('keydown', evt => {
       if (evt.key !== 'Escape') return;
       if (!dashboardAchManageBackdrop || dashboardAchManageBackdrop.hidden) return;
+      if (DASHBOARD_ACH_SETUP_BUSY) return;
       closeDashboardAchManageModal_(evt);
     });
   }
@@ -20680,6 +20832,10 @@
     if (!dashboardAchManageBackdrop) return;
     bindDashboardAchManageModalEvents_();
     ensureDashboardAchManageBackdropMounted_();
+    DASHBOARD_ACH_SETUP_BUSY = false;
+    setDashboardAchManageControlsDisabled_(false);
+    if (dashboardAchManageFooter) dashboardAchManageFooter.hidden = false;
+    if (dashboardAchManageModal) dashboardAchManageModal.setAttribute('aria-busy', 'false');
     clearDashboardAchManageNotice_();
     renderDashboardAchManageModal_();
     dashboardAchManageBackdrop.hidden = false;
@@ -20691,6 +20847,10 @@
   function closeDashboardAchManageModal_(evt){
     if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
     if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
+    if (DASHBOARD_ACH_SETUP_BUSY) return;
+    setDashboardAchManageControlsDisabled_(false);
+    if (dashboardAchManageFooter) dashboardAchManageFooter.hidden = false;
+    if (dashboardAchManageModal) dashboardAchManageModal.setAttribute('aria-busy', 'false');
     clearDashboardAchManageNotice_();
     if (dashboardAchManageBackdrop) dashboardAchManageBackdrop.hidden = true;
     setAuthMessage('', false, { view: VIEW_DASHBOARD });
@@ -21156,6 +21316,7 @@
   const dashboardAchManageCloseBtn = document.getElementById('dashboardAchManageCloseBtn');
   const dashboardAchManageDoneBtn = document.getElementById('dashboardAchManageDoneBtn');
   const dashboardAchManageAddBtn = document.getElementById('dashboardAchManageAddBtn');
+  const dashboardAchManageFooter = document.getElementById('dashboardAchManageFooter');
   const dashboardApplyTermsBtn = document.getElementById('dashboardApplyTermsBtn');
   const dashboardTaxExemptBtn = document.getElementById('dashboardTaxExemptBtn');
   const projectView = document.getElementById('projectView');
