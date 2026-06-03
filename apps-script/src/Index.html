@@ -2506,6 +2506,23 @@
     #dashboardView .authProjectsDetailsValue{
       color:var(--rt-text);
     }
+    #dashboardView .authProjectsDetails,
+    #dashboardView .authProjectsStatusHelper,
+    #dashboardView .authProjectsStatusFallback{
+      cursor:default;
+      -webkit-user-select:none;
+      -moz-user-select:none;
+      -ms-user-select:none;
+      user-select:none;
+    }
+    #dashboardView .authProjectsDetails *,
+    #dashboardView .authProjectsStatusHelper *{
+      cursor:default;
+      -webkit-user-select:none;
+      -moz-user-select:none;
+      -ms-user-select:none;
+      user-select:none;
+    }
     #dashboardView .authProjectsDetailsLabel,
     #dashboardView .authProjectsStatusFallback{
       color:var(--rt-muted);
@@ -16806,7 +16823,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 49">49</div>
+  <div class="devRevisionBadge" aria-label="Development revision 50">50</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19579,12 +19596,12 @@
   }
 
   function isCheckoutPaymentReturnIntent_(){
-    const value = String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+    const value = getCheckoutReturnResult_();
     return value === 'success' || value === 'cancel';
   }
 
   function isCheckoutCancelReturnIntent_(){
-    const value = String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+    const value = getCheckoutReturnResult_();
     return value === 'cancel';
   }
 
@@ -21040,6 +21057,8 @@
       const clearKeys = ['checkoutResult', 'setupResult', 'stripeSessionId'];
       if (opts.checkoutReturn === true || opts.checkoutCancel === true) {
         clearKeys.push('payNow', 'paymentOrigin', 'mode', 'teamReview');
+      } else if (opts.setupReturn === true || opts.clearTeamRoute === true) {
+        clearKeys.push('mode', 'teamReview');
       }
       clearKeys.forEach(key => {
         if (!url.searchParams.has(key)) return;
@@ -21057,21 +21076,62 @@
 
   function getCheckoutReturnResult_(){
     if (CHECKOUT_RETURN_INTENT_CONSUMED) return '';
-    return String(PARENT_CHECKOUT_RETURN_RESULT || CHECKOUT_RETURN_RESULT || '').trim().toLowerCase();
+    return String(
+      PARENT_CHECKOUT_RETURN_RESULT ||
+      normalizeCheckoutReturnResultValue_(getLivePortalRouteParam_('checkoutResult')) ||
+      ''
+    ).trim().toLowerCase();
   }
 
   function getSetupReturnResult_(){
     if (CHECKOUT_RETURN_INTENT_CONSUMED) return '';
-    return String(PARENT_SETUP_RETURN_RESULT || SETUP_RETURN_RESULT || '').trim().toLowerCase();
+    return String(
+      PARENT_SETUP_RETURN_RESULT ||
+      normalizeSetupReturnResultValue_(getLivePortalRouteParam_('setupResult')) ||
+      ''
+    ).trim().toLowerCase();
   }
 
   function getStripeReturnSessionId_(){
     if (CHECKOUT_RETURN_INTENT_CONSUMED) return '';
-    return String(PARENT_STRIPE_SESSION_ID || VM_REQUEST_ROUTE_META.stripeSessionId || URL_QUERY_PARAMS.get('stripeSessionId') || '').trim();
+    const liveStripeSessionId = getLivePortalRouteParam_('stripeSessionId');
+    if (PARENT_STRIPE_SESSION_ID || liveStripeSessionId) {
+      return String(PARENT_STRIPE_SESSION_ID || liveStripeSessionId || '').trim();
+    }
+    if (!getCheckoutReturnResult_() && !getSetupReturnResult_()) return '';
+    return String(VM_REQUEST_ROUTE_META.stripeSessionId || URL_QUERY_PARAMS.get('stripeSessionId') || '').trim();
   }
 
   function hasCheckoutReturnIntent_(){
     return !!(getCheckoutReturnResult_() || getSetupReturnResult_());
+  }
+
+  function hasExplicitTeamRouteIntent_(){
+    if (hasCheckoutReturnIntent_()) return false;
+    const mode = String(getLivePortalRouteParam_('mode') || '').trim().toLowerCase();
+    const teamReview = String(getLivePortalRouteParam_('teamReview') || '').trim();
+    return mode === 'team' || !!teamReview;
+  }
+
+  function shouldForceClientModeForProjectOpen_(source, requireAuthSession, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (opts.forceClientMode === true) return true;
+    if (opts.explicitTeamMode === true || hasExplicitTeamRouteIntent_()) return false;
+    const normalizedSource = String(source || '').trim().toLowerCase();
+    return !!(
+      requireAuthSession ||
+      normalizedSource === 'dashboard' ||
+      normalizedSource === 'parent-message' ||
+      normalizedSource === 'parent-route'
+    );
+  }
+
+  function forceClientModeForOrdinaryProjectRoute_(){
+    if (hasCheckoutReturnIntent_() || hasExplicitTeamRouteIntent_()) return false;
+    const token = String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim();
+    if (VM && typeof VM === 'object') VM.mode = 'client';
+    clearTeamModeRuntimeStateForToken_(token);
+    return true;
   }
 
   function beginCheckoutReturnUiLock_(message){
@@ -21192,6 +21252,7 @@
     forceClientModeForCheckoutReturn_();
     const payload = buildCheckoutReturnReconciliationPayload_();
     if (!payload.token && !payload.setupResult) return false;
+    const isSetupReturn = !!payload.setupResult;
     CHECKOUT_RETURN_RECONCILE_IN_FLIGHT = true;
     beginCheckoutReturnUiLock_(getCheckoutReturnReconciliationMessage_());
     let lastResp = null;
@@ -21204,14 +21265,26 @@
         }
         lastResp = resp;
         if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
+        if (isSetupReturn && !resp.portalPayload) {
+          CHECKOUT_RETURN_INTENT_CONSUMED = true;
+          clearConsumedCheckoutReturnParams({
+            setupReturn: true,
+            clearTeamRoute: true
+          });
+          return true;
+        }
         if (resp.portalPayload) {
           CHECKOUT_RETURN_INTENT_CONSUMED = true;
-          clearConsumedCheckoutReturnParams({ checkoutReturn: !!payload.checkoutResult });
+          clearConsumedCheckoutReturnParams({
+            checkoutReturn: !!payload.checkoutResult,
+            setupReturn: isSetupReturn,
+            clearTeamRoute: isSetupReturn
+          });
           applyPortalPayloadInPlace(resp.portalPayload, {
             source: 'checkout-return-reconcile',
             reason: 'checkout-return-reconcile',
-            forceClientMode: !!payload.checkoutResult,
-            preserveTeamMode: !payload.checkoutResult
+            forceClientMode: !!payload.checkoutResult || isSetupReturn,
+            preserveTeamMode: false
           });
           const responseNotice = getCheckoutReturnNoticeFromResponse_(resp);
           if (responseNotice) showNotice(responseNotice, 'ok', { persist: true });
@@ -21782,6 +21855,15 @@
   function normalizeSetupReturnResultValue_(value){
     const normalized = String(value || '').trim().toLowerCase();
     return (normalized === 'success' || normalized === 'cancel') ? normalized : '';
+  }
+  function getLivePortalRouteParam_(key){
+    if (typeof window === 'undefined' || !window.location) return '';
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      return String(params.get(key) || '').trim();
+    } catch (_) {
+      return '';
+    }
   }
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
   const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
@@ -22801,24 +22883,53 @@
   function getTokenFromPortalMessage_(message){
     if (!message || typeof message !== 'object') return '';
     const payload = (message.payload && typeof message.payload === 'object') ? message.payload : {};
-    return String(payload.token || message.token || '').trim();
+    const params = getPortalMessageRouteParams_(message);
+    return String(payload.token || message.token || params.t || params.token || '').trim();
+  }
+
+  function clearParentCheckoutReturnMeta_(){
+    PARENT_CHECKOUT_RETURN_RESULT = '';
+    PARENT_SETUP_RETURN_RESULT = '';
+    PARENT_STRIPE_SESSION_ID = '';
+  }
+
+  function getPortalMessageRouteParams_(message){
+    const msg = (message && typeof message === 'object') ? message : {};
+    const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+    const params = (msg.params && typeof msg.params === 'object')
+      ? msg.params
+      : ((payload.params && typeof payload.params === 'object') ? payload.params : payload);
+    return (params && typeof params === 'object') ? params : {};
+  }
+
+  function hasPortalMessageReturnMeta_(message){
+    const params = getPortalMessageRouteParams_(message);
+    const checkoutResult = normalizeCheckoutReturnResultValue_(params.checkoutResult);
+    const setupResult = normalizeSetupReturnResultValue_(params.setupResult);
+    const stripeSessionId = String(params.stripeSessionId || '').trim();
+    return !!(checkoutResult || setupResult || stripeSessionId);
+  }
+
+  function isExplicitTeamRouteMessage_(message){
+    if (hasPortalMessageReturnMeta_(message)) return false;
+    const params = getPortalMessageRouteParams_(message);
+    const mode = String(params.mode || '').trim().toLowerCase();
+    const teamReview = String(params.teamReview || '').trim();
+    return mode === 'team' || !!teamReview;
   }
 
   function applyCheckoutReturnMetaFromPortalMessage_(message){
-    const msg = (message && typeof message === 'object') ? message : {};
-    const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
-    const checkoutResult = String(payload.checkoutResult || msg.checkoutResult || '').trim().toLowerCase();
-    const setupResult = String(payload.setupResult || msg.setupResult || '').trim().toLowerCase();
-    const stripeSessionId = String(payload.stripeSessionId || msg.stripeSessionId || '').trim();
-    if (checkoutResult === 'success' || checkoutResult === 'cancel') {
-      PARENT_CHECKOUT_RETURN_RESULT = checkoutResult;
+    const params = getPortalMessageRouteParams_(message);
+    const checkoutResult = normalizeCheckoutReturnResultValue_(params.checkoutResult);
+    const setupResult = normalizeSetupReturnResultValue_(params.setupResult);
+    const stripeSessionId = String(params.stripeSessionId || '').trim();
+    if (!checkoutResult && !setupResult && !stripeSessionId) {
+      clearParentCheckoutReturnMeta_();
+      return;
     }
-    if (setupResult === 'success' || setupResult === 'cancel') {
-      PARENT_SETUP_RETURN_RESULT = setupResult;
-    }
-    if (stripeSessionId) {
-      PARENT_STRIPE_SESSION_ID = stripeSessionId;
-    }
+    PARENT_CHECKOUT_RETURN_RESULT = checkoutResult;
+    PARENT_SETUP_RETURN_RESULT = setupResult;
+    PARENT_STRIPE_SESSION_ID = stripeSessionId;
   }
 
   function initPortalParentBridge(){
@@ -22838,10 +22949,12 @@
 
       const token = getTokenFromPortalMessage_(data);
       if (!token) return;
+      const explicitTeamMode = isExplicitTeamRouteMessage_(data);
       applyCheckoutReturnMetaFromPortalMessage_(data);
       loadProjectTokenInPlace(token, {
         source: 'parent-message',
-        requireAuthSession: false
+        requireAuthSession: false,
+        explicitTeamMode: explicitTeamMode
       }).catch(() => {});
     });
   }
@@ -23306,17 +23419,25 @@
     const cleanToken = String(token || params.t || params.token || '').trim();
     const extra = (extraParams && typeof extraParams === 'object') ? extraParams : {};
     const forceClientRoute = extra.forceClientMode === true || extra.clientMode === true;
+    const explicitTeamRoute = extra.explicitTeamMode === true
+      || String(extra.mode || '').trim().toLowerCase() === 'team'
+      || !!String(extra.teamReview || '').trim();
     delete params.forceClientMode;
     delete params.clientMode;
+    delete params.explicitTeamMode;
+    delete params.checkoutResult;
+    delete params.setupResult;
+    delete params.stripeSessionId;
     if (cleanToken) params.t = cleanToken;
     if (extra.summary === '1') params.summary = '1';
     if (extra.payNow) params.payNow = extra.payNow;
     if (extra.paymentOrigin) params.paymentOrigin = extra.paymentOrigin;
-    if (forceClientRoute) {
+    if (forceClientRoute || !explicitTeamRoute) {
       delete params.mode;
       delete params.teamReview;
-    } else if (extra.mode) {
-      params.mode = extra.mode;
+    } else {
+      if (extra.mode) params.mode = extra.mode;
+      if (extra.teamReview) params.teamReview = extra.teamReview;
     }
     return normalizePortalRouteParams_(params);
   }
@@ -24008,6 +24129,9 @@
 
   function syncTeamModeUi(){
     forceClientModeForCheckoutReturn_();
+    if (CURRENT_VIEW === VIEW_SNAPSHOT) {
+      forceClientModeForOrdinaryProjectRoute_();
+    }
     const isTeam = IS_TEAM;
     const isLocked = isTeamModeLocked();
     const authorName = getVisibleTeamAuthorName();
@@ -24433,8 +24557,9 @@
     const payloadToken = String(payload.token || '').trim();
     if (!payloadToken) throw new Error('Project payload token missing.');
     const forceClientMode = opts.forceClientMode === true;
+    const explicitTeamMode = opts.explicitTeamMode === true || hasExplicitTeamRouteIntent_();
     const shouldPreserveTeamMode =
-      forceClientMode !== true && (
+      forceClientMode !== true && explicitTeamMode && (
         opts.preserveTeamMode === true ||
         (IS_TEAM && payloadToken && payloadToken === String(CURRENT_TOKEN || INITIAL_TOKEN || '').trim())
       );
@@ -24492,6 +24617,7 @@
 
     const openBtn = opts.openBtn || null;
     const source = String(opts.source || 'unknown').trim() || 'unknown';
+    const forceClientProjectMode = shouldForceClientModeForProjectOpen_(source, requireAuthSession, opts);
     const loadingTitle = String(opts.loadingTitle || 'Loading project');
     const loadingSub = Object.prototype.hasOwnProperty.call(opts, 'loadingSub')
       ? String(opts.loadingSub == null ? '' : opts.loadingSub)
@@ -24547,14 +24673,16 @@
       if (source === 'dashboard' || normalizePortalRouteHistoryMode_(opts.historyMode) === 'push') {
         replaceCurrentPortalProjectRoute_(cleanToken, {
           historyMode: 'push',
-          forceClientMode: source === 'dashboard' || requireAuthSession
+          forceClientMode: forceClientProjectMode,
+          explicitTeamMode: opts.explicitTeamMode === true
         });
       }
       applyPortalPayloadInPlace(resp.portalPayload, {
         source: source,
         fromAuthShell: requireAuthSession,
         reason: source,
-        forceClientMode: source === 'dashboard' || requireAuthSession
+        forceClientMode: forceClientProjectMode,
+        explicitTeamMode: opts.explicitTeamMode === true
       });
       rtDebugStep('OPEN:done', {
         source: source,
@@ -44643,6 +44771,9 @@
     const hasReturnIntent = hasCheckoutReturnIntent_();
     const isCheckoutCancelReturn = checkoutReturnResult === 'cancel';
     const shouldReconcileReturn = hasReturnIntent && !isCheckoutCancelReturn;
+    if (!hasReturnIntent) {
+      forceClientModeForOrdinaryProjectRoute_();
+    }
     if (checkoutReturnResult) {
       forceClientModeForCheckoutReturn_();
       SUPPRESS_NEXT_AUTO_INTRO = true;

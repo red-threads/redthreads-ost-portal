@@ -70,7 +70,7 @@ The second command should show only redaction, safety, or documentation referenc
 33. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
 34. Microdeposit-required ACH flows show bank verification pending/action-needed copy without storing microdeposit values.
 35. Dashboard Payment Methods shows a pending microdeposit bank as an action only when the clicked pending bank has enough safe intent/session linkage for `getAchMicrodepositVerificationLink`; otherwise the modal remains closable and shows Add-bank/test-tooling guidance without promising a Stripe email link.
-36. The hosted verification URL is returned only to the browser for immediate navigation and is not stored in Sheets, docs, logs, browser state, or committed files. If Stripe does not provide a hosted URL and `STRIPE_MODE=test`, the server may verify the validated SetupIntent/PaymentIntent through Stripe's official test `verify_microdeposits` API path, refresh the account/order state, and keep all test amounts server-side.
+36. The hosted verification URL is returned only to the browser for immediate navigation and is not stored in Sheets, docs, logs, browser state, or committed files. If Stripe does not provide a hosted URL and `STRIPE_MODE=test`, the server may verify the validated SetupIntent/PaymentIntent through Stripe's official test `verify_microdeposits` API path, using Stripe's descriptor-code test value when the intent asks for descriptor verification or test amounts when it asks for amount verification. The portal refreshes the account/order state and keeps all verification values server-side.
 37. ACH dispute, late-return, mandate invalid, account closed, debit-not-authorized, and microdeposit timeout/exceeded failures mark unsafe saved banks unusable instead of leaving them as default active methods.
 38. ACH cancel return lets the user retry ACH through Stripe-hosted instant verification/manual entry or choose another payment method.
 39. ACH success return calls `reconcile_checkout_return` before URL cleanup and immediately shows locked pending-not-paid state if the webhook has not finalized yet.
@@ -114,7 +114,7 @@ For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID an
 - `charge.updated`: expected debit date and safe bank summary fields updated when available.
 - `charge.dispute.created`: failed/team review, no silent retry, saved bank marked unusable.
 - `setup_intent.succeeded`: saved bank summary stored.
-- `setup_intent.setup_failed`: setup failed with retry path.
+- `setup_intent.setup_failed`: setup failed with retry path; if exactly one matching `dashboard_saved` ACH row can be identified by safe setup/payment method/customer/account linkage, that row moves to failed/unavailable and is not default-eligible.
 - AP-link payment events: order-level ACH fields update, but `PORTAL_ACCOUNTS.achPaymentMethodsJson` is not expanded with a dashboard-visible bank.
 - PaymentIntent or SetupIntent `requires_action` with `next_action.verify_with_microdeposits`: verification status shown as microdeposit pending; no microdeposit values stored.
 - Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink` returns a Stripe-hosted verification URL only when ACH payment/setup evidence is present, the clicked pending bank matches the authorized account/order context, and Stripe exposes a hosted verification URL. If that URL is unavailable in `STRIPE_MODE=test`, the server-only fallback may complete official Stripe test verification and return refreshed safe account/order state. A bare PaymentMethod ID is not enough for the dashboard to render the Verify with Stripe action.
@@ -130,7 +130,7 @@ amounts[]=32
 amounts[]=45
 ```
 
-Failure-path test amounts are `10` and `11`; timeout-path test amounts are `40` and `41`. These values are testing instructions only and must not be collected from clients or stored by the portal.
+If Stripe reports descriptor-code verification, the server-only test fallback uses `descriptor_code=SM11AA` instead of amounts. Failure-path test amounts are `10` and `11`; timeout-path test amounts are `40` and `41`. These values are testing instructions only and must not be collected from clients or stored by the portal.
 
 ## Deployment Smoke Order
 

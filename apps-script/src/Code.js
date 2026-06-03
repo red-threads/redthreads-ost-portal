@@ -6058,14 +6058,18 @@ function isSafeStripeHostedVerificationUrl_(value) {
   }
 }
 
-function getStripeHostedMicrodepositVerificationUrl_(intentObj) {
+function getStripeMicrodepositVerificationDetails_(intentObj) {
   const intent = (intentObj && typeof intentObj === 'object') ? intentObj : {};
   const nextAction = (intent.next_action && typeof intent.next_action === 'object')
     ? intent.next_action
     : ((intent.nextAction && typeof intent.nextAction === 'object') ? intent.nextAction : {});
-  const verification = (nextAction.verify_with_microdeposits && typeof nextAction.verify_with_microdeposits === 'object')
+  return (nextAction.verify_with_microdeposits && typeof nextAction.verify_with_microdeposits === 'object')
     ? nextAction.verify_with_microdeposits
     : ((nextAction.verifyWithMicrodeposits && typeof nextAction.verifyWithMicrodeposits === 'object') ? nextAction.verifyWithMicrodeposits : {});
+}
+
+function getStripeHostedMicrodepositVerificationUrl_(intentObj) {
+  const verification = getStripeMicrodepositVerificationDetails_(intentObj);
   const hostedUrl = trimString_(verification.hosted_verification_url || verification.hostedVerificationUrl);
   return isSafeStripeHostedVerificationUrl_(hostedUrl) ? hostedUrl : '';
 }
@@ -6120,28 +6124,37 @@ function isStripeTestMode_(cfg) {
   return trimString_((cfg || getConfig_()).stripeMode).toLowerCase() === 'test';
 }
 
-function buildStripeMicrodepositTestVerifyParams_() {
-  return {
-    'amounts[0]': '32',
-    'amounts[1]': '45',
+function buildStripeMicrodepositTestVerifyParams_(intentObj) {
+  const verification = getStripeMicrodepositVerificationDetails_(intentObj);
+  const microdepositType = trimString_(verification.microdeposit_type || verification.microdepositType).toLowerCase();
+  const params = {
     'expand[0]': 'payment_method'
   };
+  if (microdepositType === 'descriptor_code' || microdepositType.indexOf('descriptor') >= 0) {
+    params.descriptor_code = 'SM11AA';
+    return params;
+  }
+  params['amounts[0]'] = '32';
+  params['amounts[1]'] = '45';
+  return params;
 }
 
 function verifyStripeSetupIntentMicrodeposits_(setupIntentId, options) {
   const id = trimString_(setupIntentId);
   if (!id) return { ok: false, code: 'setup_intent_required', error: 'Missing SetupIntent.' };
+  const opts = (options && typeof options === 'object') ? options : {};
   return stripeApiRequest_('/v1/setup_intents/' + encodeURIComponent(id) + '/verify_microdeposits',
-    buildStripeMicrodepositTestVerifyParams_(),
-    Object.assign({}, options || {}, { method: 'post' }));
+    buildStripeMicrodepositTestVerifyParams_(opts.intentObj),
+    Object.assign({}, opts, { method: 'post' }));
 }
 
 function verifyStripePaymentIntentMicrodeposits_(paymentIntentId, options) {
   const id = trimString_(paymentIntentId);
   if (!id) return { ok: false, code: 'payment_intent_required', error: 'Missing PaymentIntent.' };
+  const opts = (options && typeof options === 'object') ? options : {};
   return stripeApiRequest_('/v1/payment_intents/' + encodeURIComponent(id) + '/verify_microdeposits',
-    buildStripeMicrodepositTestVerifyParams_(),
-    Object.assign({}, options || {}, { method: 'post' }));
+    buildStripeMicrodepositTestVerifyParams_(opts.intentObj),
+    Object.assign({}, opts, { method: 'post' }));
 }
 
 function getRefreshedAccountSummaryForAchMicrodepositCandidate_(candidate, ctx) {
@@ -6270,8 +6283,8 @@ function verifyAchMicrodepositsInStripeTestMode_(candidate, ctx) {
   }
 
   const result = intentType === 'setup'
-    ? verifyStripeSetupIntentMicrodeposits_(intentId, { cfg: cfg })
-    : verifyStripePaymentIntentMicrodeposits_(intentId, { cfg: cfg });
+    ? verifyStripeSetupIntentMicrodeposits_(intentId, { cfg: cfg, intentObj: c.intentObj })
+    : verifyStripePaymentIntentMicrodeposits_(intentId, { cfg: cfg, intentObj: c.intentObj });
   if (!result || result.ok !== true || !result.body) {
     return {
       ok: false,
@@ -13126,13 +13139,26 @@ function handleSetupIntentFailed_(setupIntentObj) {
       reason: 'non_ach_setup_intent'
     };
   }
+  const failedRowUpdate = markMatchingDashboardSavedAchSetupMethodFailed_(accountInfo, setupIntentObj, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  if (failedRowUpdate && failedRowUpdate.matched === true && failedRowUpdate.accountInfo) {
+    accountInfo = failedRowUpdate.accountInfo;
+  }
   setRowValuesByHeaderMap_(infra.accountsSheet, accountInfo.rowInfo.row, accountInfo.rowInfo.colMap, {
     achSetupIntentId: trimString_(setupIntentObj && setupIntentObj.id),
     achSetupStatus: 'failed',
     achSetupLastUpdatedAt: nowIso_(),
     updatedAt: nowIso_()
   });
-  return { ok: true };
+  return {
+    ok: true,
+    matchedSavedBankRow: failedRowUpdate && failedRowUpdate.matched === true,
+    ambiguousSavedBankRow: failedRowUpdate && failedRowUpdate.ambiguous === true,
+    accountSummary: buildPortalAccountSummary_(buildRowInfoFromSheet_(infra.accountsSheet, accountInfo.rowInfo.row).rowObjNormalized, cfg)
+  };
 }
 
 /* ---------------- Stripe Event Processing + Portal Finalization ---------------- */
@@ -14679,6 +14705,42 @@ function retrieveStripeCustomer_(stripeCustomerId, options) {
   }));
 }
 
+function buildStripeCustomerSafeProfile_(accountSummary) {
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  return {
+    email: normalizeEmail_(account.primaryEmail || account.billingContactEmail),
+    name: trimString_(account.primaryContactName || account.orgName)
+  };
+}
+
+function refreshStripeCustomerSafeProfile_(stripeCustomerId, accountSummary, options) {
+  const customerId = trimString_(stripeCustomerId);
+  if (!customerId) return { ok: false, code: 'stripe_customer_required', error: 'Missing Stripe Customer ID.' };
+  const opts = (options && typeof options === 'object') ? options : {};
+  const current = (opts.customer && typeof opts.customer === 'object') ? opts.customer : {};
+  const profile = buildStripeCustomerSafeProfile_(accountSummary);
+  const params = {};
+  if (profile.email && normalizeEmail_(current.email) !== profile.email) params.email = profile.email;
+  if (profile.name && trimString_(current.name) !== profile.name) params.name = profile.name;
+  if (!Object.keys(params).length) {
+    return {
+      ok: true,
+      customerId: customerId,
+      customer: current,
+      refreshed: false
+    };
+  }
+  const result = stripeApiRequest_('/v1/customers/' + encodeURIComponent(customerId), params, Object.assign({}, opts, {
+    method: 'post'
+  }));
+  if (!result.ok) return result;
+  return Object.assign({}, result, {
+    customerId: customerId,
+    customer: result.body,
+    refreshed: true
+  });
+}
+
 function retrieveStripeCheckoutSession_(stripeSessionId, options) {
   const sessionId = trimString_(stripeSessionId);
   if (!sessionId) return { ok: false, error: 'Missing Stripe Checkout Session ID.' };
@@ -14776,8 +14838,9 @@ function retrieveStripeCharge_(chargeId, options) {
 
 function createStripeCustomer_(accountSummary, options) {
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
-  const email = normalizeEmail_(account.primaryEmail || account.billingContactEmail);
-  const name = trimString_(account.primaryContactName || account.orgName || account.billingContactName);
+  const profile = buildStripeCustomerSafeProfile_(account);
+  const email = profile.email;
+  const name = profile.name;
   const params = {
     'metadata[source]': 'red_threads_portal'
   };
@@ -14846,10 +14909,21 @@ function ensureStripeCustomerForPortalAccount_(ctxOrAccountSummary, options) {
   if (customerId) {
     const retrieved = retrieveStripeCustomer_(customerId, opts);
     if (retrieved.ok === true && !(retrieved.body && retrieved.body.deleted === true)) {
+      const refreshed = refreshStripeCustomerSafeProfile_(customerId, accountSummary, Object.assign({}, opts, {
+        customer: retrieved.body
+      }));
+      if (!refreshed || refreshed.ok !== true) {
+        return Object.assign({}, refreshed || {}, {
+          customerId: customerId,
+          accountInfo: accountInfo,
+          code: trimString_(refreshed && refreshed.code) || 'stripe_customer_profile_refresh_failed',
+          error: trimString_(refreshed && refreshed.error) || 'Unable to refresh Stripe Customer profile for ACH setup.'
+        });
+      }
       return {
         ok: true,
         customerId: customerId,
-        customer: retrieved.body,
+        customer: refreshed.customer || retrieved.body,
         accountInfo: accountInfo
       };
     }
@@ -15208,6 +15282,75 @@ function markAchPaymentMethodUnusable_(accountInfo, paymentMethodId, reason, opt
   return {
     rowInfo: refreshed,
     summary: buildPortalAccountSummary_(refreshed.rowObjNormalized, cfg)
+  };
+}
+
+function markMatchingDashboardSavedAchSetupMethodFailed_(accountInfo, setupIntentObj, options) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : {};
+  const rowInfo = info.rowInfo || null;
+  if (!rowInfo || !rowInfo.row || !rowInfo.colMap) {
+    return { matched: false, ambiguous: false, accountInfo: info };
+  }
+  const intent = (setupIntentObj && typeof setupIntentObj === 'object') ? setupIntentObj : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const account = info.summary || buildPortalAccountSummary_(rowInfo.rowObjNormalized || {}, cfg);
+  const customerId = stripeIdFromObject_(intent.customer);
+  const accountCustomerId = trimString_(account.stripeCustomerId);
+  if (customerId && accountCustomerId && customerId !== accountCustomerId) {
+    return { matched: false, ambiguous: false, accountInfo: info };
+  }
+
+  const setupIntentId = trimString_(intent.id);
+  const paymentMethodId = stripeIdFromObject_(intent.payment_method);
+  const accountSetupIntentId = trimString_(account.achSetupIntentId);
+  const setupSessionId = setupIntentId && setupIntentId === accountSetupIntentId
+    ? trimString_(account.achSetupSessionId)
+    : '';
+  const methods = normalizeAchPaymentMethodsJson_(account.achPaymentMethods);
+  const matches = methods.filter(function(item) {
+    if (!item || !isDashboardSavedAchPaymentMethod_(item)) return false;
+    if (setupIntentId && trimString_(item.setupIntentId) === setupIntentId) return true;
+    if (setupSessionId && trimString_(item.setupSessionId) === setupSessionId) return true;
+    return !!(paymentMethodId && trimString_(item.paymentMethodId) === paymentMethodId);
+  });
+  if (matches.length !== 1) {
+    return {
+      matched: false,
+      ambiguous: matches.length > 1,
+      accountInfo: info
+    };
+  }
+
+  const targetPaymentMethodId = trimString_(matches[0].paymentMethodId) || paymentMethodId;
+  const targetSetupIntentId = trimString_(matches[0].setupIntentId) || setupIntentId;
+  const targetSetupSessionId = trimString_(matches[0].setupSessionId) || setupSessionId;
+  const now = nowIso_();
+  const failedMethods = methods.map(function(item) {
+    const itemPaymentMethodId = trimString_(item.paymentMethodId);
+    const itemSetupIntentId = trimString_(item.setupIntentId);
+    const itemSetupSessionId = trimString_(item.setupSessionId);
+    const isTarget =
+      (targetPaymentMethodId && itemPaymentMethodId === targetPaymentMethodId) ||
+      (targetSetupIntentId && itemSetupIntentId === targetSetupIntentId) ||
+      (targetSetupSessionId && itemSetupSessionId === targetSetupSessionId);
+    if (!isTarget) return item;
+    return normalizeAchPaymentMethodSummary_(Object.assign({}, item, {
+      status: 'failed',
+      verificationStatus: 'failed',
+      setupStatus: 'failed',
+      setupIntentId: trimString_(item.setupIntentId) || setupIntentId,
+      setupSessionId: trimString_(item.setupSessionId) || setupSessionId,
+      isDefault: false,
+      updatedAt: now
+    }));
+  }).filter(Boolean);
+  const updated = writeAchPaymentMethodsForPortalAccount_(info, failedMethods, opts);
+  return {
+    matched: true,
+    ambiguous: false,
+    paymentMethodId: targetPaymentMethodId,
+    accountInfo: updated || info
   };
 }
 
