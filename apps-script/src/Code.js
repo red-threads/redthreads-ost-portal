@@ -6434,12 +6434,23 @@ function resolveSpecificAchSetupMicrodepositVerificationCandidate_(ctx, payload)
 
 function resolveSpecificAchPaymentMicrodepositVerificationCandidate_(ctx, payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
-  const paymentIntentId = trimString_(p.paymentIntentId || p.paymentintentid);
-  if (!paymentIntentId) return null;
   const cfg = ctx.cfg || getConfig_();
+  let paymentIntentId = trimString_(p.paymentIntentId || p.paymentintentid);
+  const requestedSessionId = trimString_(p.stripeSessionId || p.stripesessionid);
+  if (!paymentIntentId && requestedSessionId) {
+    const sessionResult = retrieveStripeCheckoutSession_(requestedSessionId, { cfg: cfg });
+    if (sessionResult && sessionResult.ok === true && sessionResult.body) {
+      const sessionToken = trimString_(extractStripeMetadataValue_(sessionResult.body, 'token'));
+      const requestToken = trimString_(p.token);
+      if (sessionToken && requestToken && sessionToken !== requestToken) return null;
+      paymentIntentId = stripeIdFromObject_(sessionResult.body.payment_intent);
+    }
+  }
+  if (!paymentIntentId) return null;
   const ss = ctx.ss || SpreadsheetApp.openById(cfg.sheetId);
   const infra = ctx.infra || ensurePortalInfrastructure_(ss, cfg);
-  const orderInfo = getPortalOrderByStripePaymentIntentId_(paymentIntentId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+  const orderInfo = getPortalOrderByStripePaymentIntentId_(paymentIntentId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet })
+    || (requestedSessionId ? getPortalOrderByStripeSessionId_(requestedSessionId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null);
   if (!orderInfo) return null;
   const token = trimString_(p.token);
   const orderToken = trimString_(orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.token);
@@ -7269,6 +7280,9 @@ function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkout
     paymentOrigin: paymentOrigin,
     saveAchForFuture: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
     allowSavedPaymentMethodRedisplay: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    collectPayerEmailInCheckout: paymentMethodSelected === PAYMENT_METHODS.ach ? true : undefined,
+    paymentActorEmail: normalizeEmail_(payload.paymentActorEmail || payload.apPayerEmail),
+    apPayerEmail: normalizeEmail_(payload.apPayerEmail || payload.paymentActorEmail),
     preferredAchPaymentMethodId: paymentMethodSelected === PAYMENT_METHODS.ach
       ? trimString_(ctx.preferredAchPaymentMethodId || payload.preferredAchPaymentMethodId)
       : '',
@@ -7281,13 +7295,57 @@ function buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkout
   };
 }
 
+function firstNormalizedEmailFromValues_(values) {
+  const candidates = [];
+  (Array.isArray(values) ? values : [values]).forEach(function(value) {
+    if (Array.isArray(value)) {
+      Array.prototype.push.apply(candidates, value);
+      return;
+    }
+    const text = trimString_(value);
+    if (!text) return;
+    text.split(/[\s,;]+/).forEach(function(part) {
+      if (part) candidates.push(part);
+    });
+  });
+  for (let i = 0; i < candidates.length; i += 1) {
+    const email = normalizeEmail_(candidates[i]);
+    if (email) return email;
+  }
+  return '';
+}
+
+function resolveOrderScopedAchCustomerEmail_(ctx, options) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const payload = (context.payload && typeof context.payload === 'object') ? context.payload : {};
+  const latestSummary = context.latestOrderSummary || {};
+  const latestRow = context.latestOrderInfo && context.latestOrderInfo.rowObjNormalized
+    ? context.latestOrderInfo.rowObjNormalized
+    : {};
+  const draft = context.orderDraft || {};
+  const account = context.accountInfo && context.accountInfo.summary ? context.accountInfo.summary : {};
+  return firstNormalizedEmailFromValues_([
+    latestSummary.invoiceSentToEmail,
+    latestRow.invoicesenttoemail,
+    opts.apPayerEmail,
+    opts.paymentActorEmail,
+    payload.apPayerEmail,
+    payload.paymentActorEmail,
+    payload.apEmail,
+    draft.personEmail,
+    account.billingContactEmail,
+    account.primaryEmail
+  ]);
+}
+
 function ensureOrderScopedStripeCustomerForAchCheckout_(ctx, options) {
   const context = (ctx && typeof ctx === 'object') ? ctx : {};
   const opts = (options && typeof options === 'object') ? options : {};
   const cfg = opts.cfg || context.cfg || getConfig_();
   const draft = context.orderDraft || {};
   const account = context.accountInfo && context.accountInfo.summary ? context.accountInfo.summary : {};
-  const email = normalizeEmail_(draft.personEmail || account.billingContactEmail || account.primaryEmail);
+  const email = resolveOrderScopedAchCustomerEmail_(context, opts);
   const name = trimString_(draft.personName || account.billingContactName || account.primaryContactName || account.orgName || draft.orgName);
   const params = {
     'metadata[source]': 'red_threads_portal',
@@ -7330,7 +7388,11 @@ function prepareAchStripeCustomerForCheckout_(ctx, timing, stageName) {
   const payload = (context.payload && typeof context.payload === 'object') ? context.payload : {};
   const paymentOrigin = normalizeAchPaymentSource_(payload.paymentOrigin || payload.checkoutOrigin);
   const customerResult = paymentOrigin === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link
-    ? ensureOrderScopedStripeCustomerForAchCheckout_(context, { cfg: cfg })
+    ? ensureOrderScopedStripeCustomerForAchCheckout_(context, {
+      cfg: cfg,
+      paymentActorEmail: payload.paymentActorEmail,
+      apPayerEmail: payload.apPayerEmail
+    })
     : ensureStripeCustomerForPortalAccount_(context, {
       cfg: cfg,
       ss: context.ss,
@@ -7359,6 +7421,21 @@ function prepareAchStripeCustomerForCheckout_(ctx, timing, stageName) {
     accountInfo: context.accountInfo,
     orderScoped: context.stripeCustomerOrderScoped === true
   };
+}
+
+function shouldCollectPayerEmailInCheckout_(paymentMethodSelected, options) {
+  const method = trimString_(paymentMethodSelected).toLowerCase();
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (Object.prototype.hasOwnProperty.call(opts, 'collectPayerEmailInCheckout')) {
+    return opts.collectPayerEmailInCheckout !== false;
+  }
+  return method === PAYMENT_METHODS.card || method === PAYMENT_METHODS.ach;
+}
+
+function shouldAttachStripeCustomerToPaymentCheckout_(paymentMethodSelected, options) {
+  const method = trimString_(paymentMethodSelected).toLowerCase();
+  if (method !== PAYMENT_METHODS.ach) return false;
+  return shouldCollectPayerEmailInCheckout_(method, options) !== true;
 }
 
 function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe) {
@@ -8210,14 +8287,16 @@ function createCheckoutAttempt(payload) {
         });
       }
       applyAchCheckoutPreferenceToContext_(ctx, preferredAch);
-      const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
-      if (!achCustomer || achCustomer.ok !== true) {
-        return attachCheckoutTiming_(achCustomer, timing, {
-          ok: false,
-          stage: 'ach_customer',
-          paymentMethodSelected: paymentMethodSelected,
-          code: trimString_(achCustomer && achCustomer.code)
-        });
+      if (shouldAttachStripeCustomerToPaymentCheckout_(paymentMethodSelected, ctx.payload)) {
+        const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
+        if (!achCustomer || achCustomer.ok !== true) {
+          return attachCheckoutTiming_(achCustomer, timing, {
+            ok: false,
+            stage: 'ach_customer',
+            paymentMethodSelected: paymentMethodSelected,
+            code: trimString_(achCustomer && achCustomer.code)
+          });
+        }
       }
     }
     markCheckoutTiming_(timing, 'order_validation_start', { paymentMethodSelected: paymentMethodSelected });
@@ -20186,7 +20265,9 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     });
   }
   markCheckoutTiming_(timing, 'locked_order_validation_end', { ok: true, paymentMethodSelected: method });
-  if (method === PAYMENT_METHODS.ach) {
+  ctx.latestOrderInfo = latestOrder;
+  ctx.latestOrderSummary = latestSummary;
+  if (method === PAYMENT_METHODS.ach && shouldAttachStripeCustomerToPaymentCheckout_(method, p)) {
     const achCustomer = prepareAchStripeCustomerForCheckout_(ctx, timing, 'ach_customer');
     if (!achCustomer || achCustomer.ok !== true) {
       return attachCheckoutTiming_(achCustomer, timing, {
@@ -20224,6 +20305,9 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     paymentOrigin: paymentOrigin,
     saveAchForFuture: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
     allowSavedPaymentMethodRedisplay: paymentOrigin !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    collectPayerEmailInCheckout: method === PAYMENT_METHODS.ach ? true : undefined,
+    paymentActorEmail: normalizeEmail_(p.paymentActorEmail || p.apPayerEmail),
+    apPayerEmail: normalizeEmail_(p.apPayerEmail || p.paymentActorEmail),
     checkoutAttemptId: checkoutAttemptId,
     orderId: trimString_(latestOrder.rowObjNormalized.orderid),
     returnUrl: lockedReturnUrl,
@@ -21932,6 +22016,11 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     : '';
   const isApPaymentLink = paymentOrigin === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
   const stripeCustomerId = trimString_(opts.stripeCustomerId);
+  const prefillPayerEmail = opts.prefillPayerEmail === true;
+  const collectPayerEmailInCheckout = shouldCollectPayerEmailInCheckout_(paymentMethodSelected, opts);
+  const shouldAttachCustomerToCheckout = paymentMethodType === 'us_bank_account'
+    && collectPayerEmailInCheckout !== true
+    && !!stripeCustomerId;
   const accountSummary = (opts.accountSummary && typeof opts.accountSummary === 'object') ? opts.accountSummary : {};
   const suppressShippingAddressCollection = opts.suppressShippingAddressCollection === true;
   const returnBaseUrl = buildStripeReturnBaseUrl_(orderDraft.token, { returnUrl: opts.returnUrl });
@@ -22003,9 +22092,10 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     'payment_method_types[0]': paymentMethodType
   };
   if (paymentMethodType === 'card') {
-    payload.customer_email = normalizeEmail_(orderDraft.personEmail);
+    const payerEmail = prefillPayerEmail ? normalizeEmail_(opts.paymentActorEmail || opts.payerEmail || orderDraft.personEmail) : '';
+    if (payerEmail) payload.customer_email = payerEmail;
     payload['wallet_options[link][display]'] = 'never';
-  } else {
+  } else if (shouldAttachCustomerToCheckout) {
     payload.customer = stripeCustomerId;
   }
   checkoutLineItems.forEach((lineItem, idx) => {
@@ -22029,12 +22119,12 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     const permissions = Array.isArray(cfg.stripeAchFinancialConnectionsPermissions) && cfg.stripeAchFinancialConnectionsPermissions.length
       ? cfg.stripeAchFinancialConnectionsPermissions
       : DEFAULT_STRIPE_ACH_FINANCIAL_CONNECTIONS_PERMISSIONS;
-    const shouldSaveAchForFuture = cfg.stripeAchSaveForFuture === true && opts.saveAchForFuture !== false;
+    const shouldSaveAchForFuture = shouldAttachCustomerToCheckout && cfg.stripeAchSaveForFuture === true && opts.saveAchForFuture !== false;
     payload['payment_method_options[us_bank_account][verification_method]'] = trimString_(cfg.stripeAchVerificationMethod) || DEFAULT_STRIPE_ACH_VERIFICATION_METHOD;
     permissions.forEach(function(permission, idx) {
       payload['payment_method_options[us_bank_account][financial_connections][permissions][' + idx + ']'] = trimString_(permission);
     });
-    if (opts.allowSavedPaymentMethodRedisplay !== false) {
+    if (shouldAttachCustomerToCheckout && opts.allowSavedPaymentMethodRedisplay !== false) {
       payload['saved_payment_method_options[allow_redisplay_filters][0]'] = 'unspecified';
       payload['saved_payment_method_options[allow_redisplay_filters][1]'] = 'always';
       if (shouldSaveAchForFuture) {
@@ -22096,7 +22186,9 @@ function createStripeCheckoutSession_(orderDraft, options) {
         code: 'ach_checkout_disabled'
       };
     }
-    if (cfg.stripeAchRequireCustomer === true && !trimString_(opts.stripeCustomerId)) {
+    if (cfg.stripeAchRequireCustomer === true &&
+        shouldAttachStripeCustomerToPaymentCheckout_(PAYMENT_METHODS.ach, opts) &&
+        !trimString_(opts.stripeCustomerId)) {
       return {
         ok: false,
         configured: true,
@@ -22251,8 +22343,7 @@ function createStripeCheckoutSession_(orderDraft, options) {
     amountChargedTotal: sessionRequestData.chargeSummary.amountChargedTotal,
     stripeAmountSubtotalCents: sessionRequestData.chargeSummary.stripeAmountSubtotalCents,
     stripeAmountTotalCents: sessionRequestData.chargeSummary.stripeAmountTotalCents,
-    chargeSummary: sessionRequestData.chargeSummary,
-    raw: body
+    chargeSummary: sessionRequestData.chargeSummary
   };
 }
 

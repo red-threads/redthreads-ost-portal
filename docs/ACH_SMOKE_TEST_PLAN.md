@@ -44,7 +44,7 @@ The second command should show only redaction, safety, or documentation referenc
 7. Public wrapper loads and forwards `t`, `checkoutResult`, `setupResult`, `stripeSessionId`, `dashboard`, `accountId`, `accountAccessToken`, and `paymentOrigin`.
 8. ACH remains hidden while `STRIPE_ACH_ENABLED` is false.
 9. ACH first-time hosted Checkout launches when `STRIPE_ACH_ENABLED` is true.
-10. ACH Checkout Session includes `customer` and `us_bank_account`.
+10. ACH payment Checkout Session includes `us_bank_account` and does not attach an emailed Customer by default, so Stripe asks the payer to enter contact email.
 11. ACH return says "Order placed - ACH payment initiated," not "Paid."
 12. Normal ACH pending does not authorize production.
 13. Approved-account ACH pending authorizes production.
@@ -64,7 +64,7 @@ The second command should show only redaction, safety, or documentation referenc
 27. Opening a project from the dashboard pushes `?t=<project-token>`, and browser Back/Forward reloads the matching dashboard/project iframe route after the live wrapper has been refreshed from the repo copy.
 28. Pending/unverified ACH banks keep the same compact `ACH payment accounts` card; clicking it opens Manage ACH banks, where pending rows show Verify with Stripe only when safe SetupIntent/Setup Session or PaymentIntent linkage exists. Legacy rows with only a PaymentMethod ID show verification-unavailable guidance, and the same PaymentMethod is not rendered twice in the top dashboard summary.
 29. Pending/unverified ACH banks are not promoted as the default saved checkout bank.
-30. ACH Checkout Session payload requests saved bank redisplay for normal Customer bank accounts with `allow_redisplay_filters` of `unspecified` and `always`.
+30. Dashboard ACH setup still uses hosted Stripe setup mode and the portal account Customer; ACH payment Checkout is Customer-free by default to keep Stripe's payer email field editable.
 31. Replayed webhook event ID does not duplicate side effects, including near-simultaneous duplicate deliveries that contend for the Apps Script webhook lock.
 32. Stale tab cannot overwrite paid, failed, locked, or superseded state.
 33. Stale ACH pending events, including late `checkout.session.completed` or `payment_intent.processing`, do not move paid, failed, disputed, team-hold, in-production, or closed orders backward.
@@ -92,12 +92,12 @@ The second command should show only redaction, safety, or documentation referenc
 55. Copy ACH payment link from the decision step prepares/locks an awaiting-payment ACH order and copies `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`, never a private Stripe Checkout URL. Dashboard/project copy should say waiting for Accounts Payable, not Stripe processing.
 56. Email ACH payment link validates an AP email address, prepares/locks an awaiting-payment ACH order, sends a Red Threads portal AP link with AP-specific copy and the CTA `Open secure ACH payment page`, and does not email a Stripe Checkout URL.
 57. AP email attachment behavior requires the current browser-rendered Summary/Invoice PDF payload. If the rendered PDF cannot be generated, the email action should return a clear preparation error instead of silently attaching an older generated fallback artifact. Copy-link flow does not require an attachment.
-58. AP payment links launch hosted ACH from the locked invoice/payment-due surface, use an order-scoped Stripe Customer, omit future-save/redisplay settings, and write `achPaymentSource=ap_payment_link` plus `achPaymentVisibilityScope=order_only`.
+58. AP payment links launch hosted ACH from the locked invoice/payment-due surface, omit Customer attachment/future-save/redisplay settings so Stripe collects payer contact email, and write `achPaymentSource=ap_payment_link` plus `achPaymentVisibilityScope=order_only`.
 59. AP-link ACH Customer/session creation happens only after the latest order is confirmed locked and unpaid; missing, unlocked, or already-paid orders fail before Stripe side effects.
 60. After AP opens the link and a Stripe Checkout Session is created, Dashboard/project copy may say Accounts Payable checkout has started; only after Checkout completion or ACH pending/processing Stripe evidence should copy say ACH payment is processing with Stripe.
 61. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
 62. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
-63. Normal saved-bank ACH Checkout hardening: normal Customer checkout still requests saved-payment redisplay, includes `payment_method_data[allow_redisplay]=always` when future save is enabled, and client copy remains truthful even if hosted Checkout renders generic bank-entry UI.
+63. ACH payment Checkout email policy: normal owner and AP/order-only ACH payment sessions do not pass `customer` or `customer_email` by default; Stripe collects payer contact email in Checkout. Dashboard bank setup remains the saved-bank readiness path.
 
 ## ACH Event Smokes
 

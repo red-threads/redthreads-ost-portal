@@ -91,25 +91,24 @@ Customer metadata is limited to portal identifiers:
 - `orgName`
 - `source=red_threads_portal`
 
-ACH payment Checkout Sessions require a Customer. Card checkout preserves the existing behavior.
+ACH payment Checkout Sessions are Customer-free by default so Stripe asks the payer to enter contact email on every payment attempt. Card checkout follows the same payer-email collection policy. Dashboard ACH setup still uses the portal account Stripe Customer because that flow is account readiness/setup, not payment initiation.
 
-Order-scoped AP payment links use an ephemeral/order-scoped Stripe Customer and do not write that Customer ID to `PORTAL_ACCOUNTS`. This prevents Accounts Payable bank details from becoming dashboard-visible saved banks.
+Order-scoped AP payment links do not attach a Customer to hosted ACH payment Checkout by default and do not write AP bank evidence to `PORTAL_ACCOUNTS`. This prevents Accounts Payable bank details from becoming dashboard-visible saved banks.
 
 ## ACH Payment Checkout
 
 Active ACH payment uses hosted Checkout:
 
 - `mode=payment`
-- `customer=<stripeCustomerId>`
+- no `customer` and no `customer_email` by default, so Stripe collects payer contact email
 - `payment_method_types[0]=us_bank_account`
 - `payment_method_options[us_bank_account][verification_method]=automatic` by default
 - Financial Connections permission `payment_method`
-- `payment_intent_data[setup_future_usage]=off_session` by default
 - Existing token, order, checkout attempt, fulfillment, and amount metadata
 
-Saved bank reuse is hosted-Checkout-mediated in V1. The portal shows dashboard-saved bank summaries, but Stripe Checkout controls saved or new bank selection.
+Saved bank readiness is managed from Dashboard setup. Payment-mode ACH Checkout intentionally does not attach an emailed Customer by default because Stripe locks the email field when a Customer already has a valid email.
 
-ACH payment sessions for normal portal account checkout include `saved_payment_method_options[allow_redisplay_filters]` for `unspecified` and `always` so dashboard-saved verified Customer bank accounts can redisplay in Checkout. When normal ACH checkout is configured to save for future use, the session also sets `payment_method_data[allow_redisplay]=always` for newly created bank PaymentMethods. Portal default-bank fields are reserved for usable verified/active `dashboard_saved` ACH methods; pending, failed, blocked, removed, order-only, AP-link, or microdeposit-required methods are not treated as the default checkout bank.
+ACH payment sessions suppress Customer-based saved-payment redisplay and future-save settings unless a future explicit internal option opts back into attaching a Customer. Portal default-bank fields are reserved for usable verified/active `dashboard_saved` ACH methods; pending, failed, blocked, removed, order-only, AP-link, or microdeposit-required methods are not treated as the default checkout bank.
 
 ### ACH Pre-Checkout Decision Step
 
@@ -117,11 +116,11 @@ When a client selects ACH Bank Payment in the order modal, the first Place Order
 
 Lane 1, Pay now with ACH:
 
-- Uses generic copy: the payer will continue to hosted Stripe Checkout, where Stripe may show saved bank accounts, ask the payer to confirm a bank, or ask the payer to connect a bank before payment is initiated.
+- Uses generic copy: the payer will continue to hosted Stripe Checkout, where Stripe asks for contact email and securely confirms or connects a bank before payment is initiated.
 - Does not render bank names, last4, default-bank labels, or a saved-bank selector in the order modal.
 - Does not require or send a UI-selected `preferredAchPaymentMethodId` from the current client experience.
 - The server still accepts and validates `preferredAchPaymentMethodId` for backward compatibility and future internal callers, but the current UI treats Stripe as the final bank-selection surface.
-- Normal non-AP Checkout still uses the portal account Stripe Customer, saved-payment redisplay filters, and future-save settings where allowed, so eligible saved banks have the best chance to redisplay in Checkout.
+- Normal non-AP ACH payment Checkout does not attach the portal account Stripe Customer by default, so Stripe can collect an editable payer contact email. Dashboard ACH setup remains available for account readiness and microdeposit verification management.
 - Stripe Checkout remains the final bank confirmation, mandate, verification, and payment-initiation surface; the portal does not claim it can force or visibly preselect a specific saved bank.
 
 Lane 2, Send ACH payment link to Accounts Payable:
@@ -142,10 +141,11 @@ AP payment links use:
 - `metadata[paymentOrigin]=ap_payment_link`
 - `PORTAL_ORDERS.achPaymentSource=ap_payment_link`
 - `PORTAL_ORDERS.achPaymentVisibilityScope=order_only`
+- No Customer attachment by default
 - No `payment_intent_data[setup_future_usage]`
 - No saved-payment redisplay filters
 - No account-level ACH saved-bank creation
-- Order-scoped Stripe Customer preparation happens only after the server confirms the latest order exists, is locked, and is not already paid.
+- ACH Checkout preparation happens only after the server confirms the latest order exists, is locked, and is not already paid.
 
 ## Dashboard Bank Setup
 

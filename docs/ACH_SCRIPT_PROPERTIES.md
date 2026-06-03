@@ -21,8 +21,8 @@ Status: configuration reference only. Do not write secret values in code, docs, 
 | `STRIPE_ACH_ENABLED` | `false` | Controls ACH visibility and server-side ACH checkout/setup availability. Keep false until smoke tests pass. |
 | `STRIPE_ACH_VERIFICATION_METHOD` | `automatic` | Supported values: `automatic`, `instant`, `microdeposits`. V1 default is automatic. |
 | `STRIPE_ACH_FINANCIAL_CONNECTIONS_PERMISSIONS` | `payment_method` | V1 only honors `payment_method`. Balances, ownership, and transaction permissions are intentionally ignored. |
-| `STRIPE_ACH_SAVE_FOR_FUTURE` | `true` | Adds `payment_intent_data[setup_future_usage]=off_session` for ACH payment Checkout. |
-| `STRIPE_ACH_REQUIRE_CUSTOMER` | `true` | Requires a persisted Stripe Customer before ACH checkout/setup. |
+| `STRIPE_ACH_SAVE_FOR_FUTURE` | `true` | Applies only to explicit Customer-attached ACH payment Checkout. Default ACH payment Checkout is Customer-free so Stripe can collect editable payer email; Dashboard setup remains the saved-bank path. |
+| `STRIPE_ACH_REQUIRE_CUSTOMER` | `true` | Applies only when an explicit ACH payment Checkout path opts into Customer attachment. Dashboard ACH setup still requires the portal account Customer. |
 | `STRIPE_ACH_DEFAULT_PENDING_PRODUCTION_APPROVED` | `false` | Default account-level value for new portal accounts. Keep false unless deliberately piloting approved-account behavior. |
 
 ## Stripe Dashboard Actions
@@ -37,4 +37,3 @@ Status: configuration reference only. Do not write secret values in code, docs, 
 ## Squarespace Wrapper Action
 
 After Apps Script deployment, manually update the production Squarespace `/portal` code block from `web/squarespace-portal-code-block.html` so `setupResult` is forwarded into the iframe and cleaned from the parent URL after the portal consumes it.
-

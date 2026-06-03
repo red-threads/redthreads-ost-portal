@@ -16874,7 +16874,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 57">57</div>
+  <div class="devRevisionBadge" aria-label="Development revision 58">58</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17904,7 +17904,7 @@
         <div class="orderFlowAchDecisionLayout">
           <div class="orderFlowInfoCard orderFlowAchDecisionLane">
             <p class="orderFlowLaneTitle">Pay now with ACH</p>
-            <p class="orderFlowLaneCopy" id="orderFlowAchDecisionCopy">Pay securely from a US bank account through Stripe. Stripe may show saved bank accounts, ask you to confirm a bank, or ask you to connect a bank before payment is initiated. Red Threads never sees or stores your full bank account number.</p>
+            <p class="orderFlowLaneCopy" id="orderFlowAchDecisionCopy">Pay securely from a US bank account through Stripe. Stripe will ask for the payer contact email and securely confirm or connect a bank before payment is initiated. Red Threads never sees or stores your full bank account number.</p>
             <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowAchContinueBtn" type="button">Continue to secure ACH checkout</button>
           </div>
           <div class="orderFlowInfoCard orderFlowAchDecisionLane">
@@ -36498,7 +36498,7 @@
 
   function renderOrderFlowAchDecisionSection_(){
     if (orderFlowAchDecisionCopy) {
-      orderFlowAchDecisionCopy.textContent = 'Pay securely from a US bank account through Stripe. Stripe may show saved bank accounts, ask you to confirm a bank, or ask you to connect a bank before payment is initiated. Red Threads never sees or stores your full bank account number.';
+      orderFlowAchDecisionCopy.textContent = 'Pay securely from a US bank account through Stripe. Stripe will ask for the payer contact email and securely confirm or connect a bank before payment is initiated. Red Threads never sees or stores your full bank account number.';
     }
     if (orderFlowAchContinueBtn) {
       orderFlowAchContinueBtn.textContent = 'Continue to secure ACH checkout';
@@ -40807,14 +40807,74 @@
     return lifecycle.isLockedInvoice && lifecycle.paymentDue === true && lifecycle.paymentReceived !== true;
   }
 
+  function getSummaryAchVerificationContext_(lifecycleState){
+    const lifecycle = (lifecycleState && typeof lifecycleState === 'object') ? lifecycleState : getSummaryLifecycleUiState_();
+    const order = normalizeOrderSummary(lifecycle.order || LATEST_ORDER_SUMMARY);
+    const current = normalizeCurrentStateSummary(lifecycle.current || CURRENT_STATE_SUMMARY);
+    const orderId = String(order.orderId || current.activeOrderId || '').trim();
+    const stripePaymentIntentId = String(order.stripePaymentIntentId || '').trim();
+    const stripeSessionId = String(order.stripeSessionId || '').trim();
+    return {
+      token: String(CURRENT_TOKEN || INITIAL_TOKEN || '').trim(),
+      orderId: orderId,
+      activeOrderId: String(current.activeOrderId || order.orderId || '').trim(),
+      stripePaymentIntentId: stripePaymentIntentId,
+      paymentIntentId: stripePaymentIntentId,
+      stripeSessionId: stripeSessionId,
+      paymentOrigin: String(lifecycle.achPaymentSource || order.achPaymentSource || PAYMENT_ORIGIN_PARAM || '').trim().toLowerCase() === 'ap_payment_link' || PAYMENT_ORIGIN_PARAM === 'ap'
+        ? 'ap_payment_link'
+        : ''
+    };
+  }
+
+  function hasSummaryAchVerificationLinkage_(lifecycleState){
+    const ctx = getSummaryAchVerificationContext_(lifecycleState);
+    return Boolean(ctx.token && (ctx.stripePaymentIntentId || ctx.stripeSessionId || ctx.orderId || ctx.activeOrderId));
+  }
+
+  async function handleSummaryAchVerifyWithStripe_(lifecycleState){
+    const payload = getSummaryAchVerificationContext_(lifecycleState);
+    if (!payload.token || !(payload.stripePaymentIntentId || payload.stripeSessionId || payload.orderId || payload.activeOrderId)) {
+      showNotice('Verification link unavailable. Request a new ACH payment link or contact Red Threads.', 'err', { persist: true });
+      return;
+    }
+    setSummaryShareBusyAction_('verify_ach');
+    try {
+      const resp = await callServer('getAchMicrodepositVerificationLink', payload);
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Verification link unavailable. Request a new ACH payment link or contact Red Threads.'));
+      }
+      const verificationUrl = String(resp.verificationUrl || '').trim();
+      if (verificationUrl) {
+        window.location.assign(verificationUrl);
+        return;
+      }
+      if (resp.verified === true) {
+        syncOrderFlowLifecycleFromResponse_(resp, { renderOrderFlowSummaryViewer: true });
+        setActiveSummaryPanel({ render: true });
+        showNotice(String(resp.message || 'Bank verification completed.'), 'ok', { persist: true });
+        return;
+      }
+      throw new Error(String(resp.message || 'Verification link unavailable. Request a new ACH payment link or contact Red Threads.'));
+    } finally {
+      SUMMARY_SHARE_BUSY_ACTION = '';
+      rerenderSummaryEstimateControls_();
+    }
+  }
+
   function getSummaryAchInFlightControlModel_(lifecycleState){
     const lifecycle = (lifecycleState && typeof lifecycleState === 'object')
       ? lifecycleState
       : getSummaryLifecycleUiState_();
-    if (!lifecycle.isLockedInvoice || lifecycle.paymentMethodSelected !== PAYMENT_METHODS.ach) return null;
     const achDetailState = String(lifecycle.achDetailState || '').trim().toLowerCase();
     const paymentState = String(lifecycle.paymentState || '').trim().toLowerCase();
     const lifecycleStateName = String(lifecycle.lifecycleState || '').trim().toLowerCase();
+    const achPaymentSource = String(lifecycle.achPaymentSource || '').trim().toLowerCase();
+    const isAchLifecycle = lifecycle.paymentMethodSelected === PAYMENT_METHODS.ach
+      || achDetailState.indexOf('ach_') === 0
+      || lifecycleStateName.indexOf('ach_') === 0
+      || achPaymentSource === 'ap_payment_link';
+    if (!lifecycle.isLockedInvoice || !isAchLifecycle) return null;
     const isPaid = lifecycle.paymentReceived === true || paymentState === 'paid' || achDetailState === 'ach_paid';
     const isFailed = paymentState === 'failed' || achDetailState === 'ach_failed';
     const isDisputed = achDetailState === 'ach_disputed' || lifecycleStateName === 'ach_payment_disputed';
@@ -40827,6 +40887,7 @@
     const isApAwaiting = lifecycle.isApPaymentLinkAwaitingPayment === true;
     const isApCheckoutStarted = lifecycle.isApPaymentLinkCheckoutStarted === true;
     const isApRecipientPage = PAYMENT_ORIGIN_PARAM === 'ap';
+    const hasVerificationLinkage = hasSummaryAchVerificationLinkage_(lifecycle);
     if (isPaid) {
       return {
         key: 'ach_paid',
@@ -40887,6 +40948,8 @@
           ? 'Stripe is waiting for bank verification to finish ACH payment. Use Stripe email or Manage ACH Banks where available; Red Threads does not collect microdeposit values.'
           : 'Stripe needs bank verification before ACH payment can finish. Production will not begin until ACH is verified and payment is confirmed unless Red Threads approves production while ACH is pending.',
         suppressNormalPaymentControls: true,
+        showVerify: hasVerificationLinkage,
+        verificationUnavailable: !hasVerificationLinkage,
         showRefresh: true
       };
     }
@@ -40947,6 +41010,21 @@
       });
       actions.appendChild(continueBtn);
     }
+    if (model.showVerify) {
+      const verifyBtn = createEl(
+        'button',
+        'summaryEstimateInlineEmailBtn isPrimary',
+        SUMMARY_SHARE_BUSY_ACTION === 'verify_ach' ? 'Verifying...' : 'Verify with Stripe'
+      );
+      verifyBtn.type = 'button';
+      verifyBtn.disabled = Boolean(SUMMARY_SHARE_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
+      verifyBtn.addEventListener('click', () => {
+        handleSummaryAchVerifyWithStripe_(lifecycleState).catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to start bank verification.'), 'err', { persist: true });
+        });
+      });
+      actions.appendChild(verifyBtn);
+    }
     if (model.showApCopy) {
       const copyBtn = createEl(
         'button',
@@ -40976,6 +41054,9 @@
       actions.appendChild(refreshBtn);
     }
     if (actions.children.length) card.appendChild(actions);
+    if (model.verificationUnavailable) {
+      card.appendChild(createEl('div', 'summaryEstimateInlineEmailHelp isSecondary', 'Verification link unavailable. Request a new ACH payment link or contact Red Threads.'));
+    }
     if (model.suppressNormalPaymentControls && model.key !== 'ap_waiting') {
       card.appendChild(createEl('div', 'summaryEstimateInlineEmailHelp isSecondary', 'Contact Red Threads if the payment method needs to change.'));
     }
@@ -41214,7 +41295,8 @@
     };
   }
 
-  async function startLockedSummaryPaymentCheckout_(method){
+  async function startLockedSummaryPaymentCheckout_(method, options){
+    const opts = (options && typeof options === 'object') ? options : {};
     const paymentMethodSelected = String(method || '').trim().toLowerCase();
     const checkoutStartedAt = Date.now();
     const checkoutTiming = createClientCheckoutTimingTrace_('createLockedOrderPaymentCheckout', paymentMethodSelected);
@@ -41242,7 +41324,9 @@
         paymentMethodSelected: paymentMethodSelected,
         paymentOrigin: paymentMethodSelected === PAYMENT_METHODS.ach && PAYMENT_ORIGIN_PARAM === 'ap'
           ? 'ap_payment_link'
-          : ''
+          : '',
+        paymentActorEmail: opts.paymentActorEmail || '',
+        apPayerEmail: opts.apPayerEmail || ''
       });
       markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_end', {
         ok: !!(resp && resp.ok === true)
