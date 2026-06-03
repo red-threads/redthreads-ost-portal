@@ -16874,7 +16874,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 58">58</div>
+  <div class="devRevisionBadge" aria-label="Development revision 59">59</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20707,6 +20707,12 @@
       }
       if (resp.accountSummary) applyReturnedAccountSummary_(resp.accountSummary);
       if (resp.verified === true) {
+        if (resp.portalPayload) {
+          applyPortalPayloadInPlace(resp.portalPayload, {
+            source: 'dashboard-ach-verification',
+            reason: 'dashboard-ach-verification'
+          });
+        }
         renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY);
         renderDashboardAchManageModal_();
         setDashboardAchManageNotice_(String(resp.message || 'Bank verified in Stripe test mode.'), false);
@@ -20833,10 +20839,11 @@
     card.className = 'dashboardAccountCard dashboardAchReadinessCard isInteractive ' + summary.stateClass;
     card.setAttribute('role', 'button');
     card.setAttribute('tabindex', '0');
-    card.setAttribute('aria-label', 'Manage ACH payment accounts');
+    card.setAttribute('aria-label', 'Manage reusable ACH payment accounts. Order checkout and Accounts Payable banks are order-only and do not appear here.');
     card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH payment accounts'));
     const wrap = createEl('div', 'dashboardAccountCardValueWrap');
     wrap.appendChild(createEl('span', 'dashboardAccountCardValue', 'Manage accounts'));
+    wrap.appendChild(createEl('span', 'dashboardAchReadinessBody', 'Manage reusable ACH banks for future checkout readiness. Order checkout and Accounts Payable banks are order-only.'));
     card.appendChild(wrap);
     card.addEventListener('click', openDashboardAchManageModal_);
     card.addEventListener('keydown', evt => {
@@ -20933,6 +20940,13 @@
     const account = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
     const summary = getDashboardAchReadinessSummary_(account);
     dashboardAchManageBody.innerHTML = '';
+    if (!summary.visibleMethods.length) {
+      const empty = createEl('section', 'dashboardAchManageSection dashboardAchManageEmptyState');
+      empty.appendChild(createEl('h3', 'dashboardAchManageSectionTitle', 'No dashboard-saved ACH banks yet'));
+      empty.appendChild(createEl('div', 'dashboardAchManageEmpty', 'Banks entered during order checkout are used for that order only. To add a reusable bank for future ACH readiness, use Link Account to Make ACH Payments from this dashboard.'));
+      dashboardAchManageBody.appendChild(empty);
+      return;
+    }
     [
       ['Ready', summary.readyMethods],
       ['Needs action', summary.needsActionMethods],
@@ -21365,7 +21379,7 @@
     ).trim().toLowerCase();
     if (method === PAYMENT_METHODS.ach) return true;
     const achDetailState = String(workflow.achDetailState || '').trim().toLowerCase();
-    return achDetailState.indexOf('ach_') === 0;
+    return method === PAYMENT_METHODS.ach && achDetailState.indexOf('ach_') === 0;
   }
 
   function buildCheckoutReturnReconciliationPayload_(){
@@ -22017,6 +22031,7 @@
   const COMPARE_GUIDANCE_EMPHASIS = 'Buy in bulk and save.';
   const COMPARE_GUIDANCE_TEXT = COMPARE_GUIDANCE_PREFIX + COMPARE_GUIDANCE_EMPHASIS;
   const POST_PAYMENT_HYDRATION_MESSAGE = 'Payment has been received. This order is now locked. Reloading your invoice…';
+  const POST_ACH_PENDING_HYDRATION_MESSAGE = 'ACH payment submitted. Bank verification/payment confirmation is pending.';
   const POST_PAYMENT_HYDRATION_DEBOUNCE_MS = 400;
   const POST_PAYMENT_HYDRATION_THROTTLE_MS = 20000;
   let ORDER_FLOW_PO_STATE_MENU_OPEN = false;
@@ -22507,6 +22522,13 @@
     return Number(latest.amountChargedTotal) > 0 || Number(latest.stripeAmountTotalCents) > 0;
   }
 
+  function getPostPaymentHydrationNotice_(portalPayload){
+    const payload = (portalPayload && typeof portalPayload === 'object') ? portalPayload : {};
+    if (hasStrongPaidFinalizedSignal_(payload)) return POST_PAYMENT_HYDRATION_MESSAGE;
+    if (hasLockedAchPendingReturnSignal_(payload)) return POST_ACH_PENDING_HYDRATION_MESSAGE;
+    return POST_PAYMENT_HYDRATION_MESSAGE;
+  }
+
   function routePaidFinalizedPayloadToInvoice_(portalPayload){
     const payload = clonePlainObject(portalPayload);
     const payloadState = normalizePortalState(payload.portalState || {});
@@ -22528,7 +22550,7 @@
 
   function applyFinalizedPaymentPayload_(portalPayload, reason){
     const payload = routePaidFinalizedPayloadToInvoice_(portalPayload);
-    showNotice(POST_PAYMENT_HYDRATION_MESSAGE, 'ok', { persist: true });
+    showNotice(getPostPaymentHydrationNotice_(payload), 'ok', { persist: true });
     applyPortalPayloadInPlace(payload, {
       source: String(reason || 'post-payment-hydration'),
       reason: String(reason || 'post-payment-hydration')
@@ -22593,7 +22615,7 @@
 
   async function handleFinalizedSaveFailure_(err){
     console.warn('Save rejected because portal is finalized; refreshing canonical project state.', err);
-    showNotice(POST_PAYMENT_HYDRATION_MESSAGE, 'ok', { persist: true });
+    showNotice('Project status changed. Refreshing your invoice…', 'ok', { persist: true });
     if (saveBtnMini) {
       saveBtnMini.disabled = true;
       saveBtnMini.textContent = 'Refreshing...';
@@ -25274,11 +25296,11 @@
     const paymentMethodLabel = String(safeCopy.paymentMethodLabel || '').trim().toLowerCase();
     const achProgress = (safeCopy.achProgress && typeof safeCopy.achProgress === 'object') ? safeCopy.achProgress : {};
     const achProgressActive = achProgress.active === true && !!String(achProgress.subtext || achProgress.helper || '').trim();
-    const isAchPayment = paymentMethod === PAYMENT_METHODS.ach
+    const hasAchPaymentMethod = paymentMethod === PAYMENT_METHODS.ach;
+    const hasConcreteAchEvidence = (achDetailState && achDetailState !== 'ach_not_started')
       || lifecycleState.indexOf('ach_payment_') === 0
-      || achDetailState.indexOf('ach_') === 0
-      || paymentMethodLabel.indexOf('ach') >= 0
-      || paymentMethodLabel.indexOf('bank') >= 0;
+      || achProgressActive;
+    const isAchPayment = hasAchPaymentMethod && hasConcreteAchEvidence;
     const completeText = 'Project complete. All orders were completed on {{completionDate|the final completion date}}.';
     const commonStandardPending = {
       order: 'Click [blue]Place Order[/blue] on the right to choose delivery and payment methods.',
@@ -40850,9 +40872,22 @@
         return;
       }
       if (resp.verified === true) {
-        syncOrderFlowLifecycleFromResponse_(resp, { renderOrderFlowSummaryViewer: true });
+        const synced = syncOrderFlowLifecycleFromResponse_(resp, { renderOrderFlowSummaryViewer: true });
+        if (resp.portalPayload && !synced) {
+          applyPortalPayloadInPlace(resp.portalPayload, {
+            source: 'summary-ach-verification',
+            reason: 'summary-ach-verification'
+          });
+        }
         setActiveSummaryPanel({ render: true });
         showNotice(String(resp.message || 'Bank verification completed.'), 'ok', { persist: true });
+        if (!resp.portalPayload && !synced) {
+          refreshSummaryPaymentStatus_().catch(err => {
+            showNotice(String((err && err.message) || err || 'Unable to refresh payment status.'), 'err', { persist: true });
+          });
+        } else if (!resp.portalPayload) {
+          refreshSummaryPaymentStatus_().catch(() => {});
+        }
         return;
       }
       throw new Error(String(resp.message || 'Verification link unavailable. Request a new ACH payment link or contact Red Threads.'));
@@ -40870,10 +40905,16 @@
     const paymentState = String(lifecycle.paymentState || '').trim().toLowerCase();
     const lifecycleStateName = String(lifecycle.lifecycleState || '').trim().toLowerCase();
     const achPaymentSource = String(lifecycle.achPaymentSource || '').trim().toLowerCase();
-    const isAchLifecycle = lifecycle.paymentMethodSelected === PAYMENT_METHODS.ach
-      || achDetailState.indexOf('ach_') === 0
+    const hasAchPaymentMethod = lifecycle.paymentMethodSelected === PAYMENT_METHODS.ach;
+    const isAchLifecycle = hasAchPaymentMethod && (
+      achDetailState.indexOf('ach_') === 0
       || lifecycleStateName.indexOf('ach_') === 0
-      || achPaymentSource === 'ap_payment_link';
+      || achPaymentSource === 'ap_payment_link'
+      || paymentState === 'pending'
+      || paymentState === 'paid'
+      || paymentState === 'failed'
+      || paymentState === 'checkout_created'
+    );
     if (!lifecycle.isLockedInvoice || !isAchLifecycle) return null;
     const isPaid = lifecycle.paymentReceived === true || paymentState === 'paid' || achDetailState === 'ach_paid';
     const isFailed = paymentState === 'failed' || achDetailState === 'ach_failed';

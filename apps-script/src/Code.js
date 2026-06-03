@@ -230,7 +230,10 @@ const PORTAL_EMAIL_QUEUE_HEADERS = [
   'leaseUntil'
 ];
 const PORTAL_EMAIL_QUEUE_JOB_TYPES = {
-  purchase_order_invoice_email: 'purchase_order_invoice_email'
+  purchase_order_invoice_email: 'purchase_order_invoice_email',
+  ach_payment_submitted_invoice_email: 'ach_payment_submitted_invoice_email',
+  ach_payment_confirmed_receipt_email: 'ach_payment_confirmed_receipt_email',
+  ach_payment_failed_action_email: 'ach_payment_failed_action_email'
 };
 const PORTAL_EMAIL_QUEUE_STATUSES = {
   queued: 'queued',
@@ -4109,9 +4112,17 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
     || (isApPaymentLink && paymentState === PAYMENT_STATES.not_started && paymentReceived !== true);
   const isApPaymentLinkCheckoutStarted = ctx.isApPaymentLinkCheckoutStarted === true
     || (isApPaymentLink && (paymentState === PAYMENT_STATES.checkout_created || achDetailState === ACH_DETAIL_STATES.checkout_started));
-  const isAch = paymentMethod === PAYMENT_METHODS.ach
-    || achDetailState.indexOf('ach_') === 0
-    || lifecycleState.indexOf('ach_payment_') === 0;
+  const hasAchPaymentMethod = paymentMethod === PAYMENT_METHODS.ach;
+  const hasConcreteAchEvidence = (achDetailState && achDetailState !== ACH_DETAIL_STATES.not_started)
+    || lifecycleState.indexOf('ach_payment_') === 0
+    || paymentState === PAYMENT_STATES.checkout_created
+    || paymentState === PAYMENT_STATES.pending
+    || paymentState === PAYMENT_STATES.paid
+    || paymentState === PAYMENT_STATES.failed
+    || orderState === ORDER_STATES.payment_in_progress
+    || orderState === ORDER_STATES.awaiting_payment_confirmation
+    || isApPaymentLink;
+  const isAch = hasAchPaymentMethod && hasConcreteAchEvidence;
   if (!isAch) {
     return {
       active: false,
@@ -5684,6 +5695,18 @@ function reconcileAchCheckoutReturnOrderToPending_(orderInfo, sessionObj, rowInf
   setPortalClientLockForRow_(infra.exportSheet, lockedRowInfo, true, {
     token: trimString_(rowInfo.rowObjNormalized.token)
   });
+  queueAchLifecycleClientEmailSafely_(
+    updatedOrder,
+    sessionObj,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      accountInfo: accountInfo,
+      eventType: 'checkout.return.reconcile'
+    }
+  );
   return {
     status: 'pending_webhook',
     orderInfo: updatedOrder,
@@ -6146,7 +6169,8 @@ function buildAchMicrodepositVerificationClientResponse_(candidate, extra) {
     paymentPending: e.paymentPending === true,
     message: trimString_(e.message),
     orderSummary: e.orderSummary || c.orderSummary || null,
-    accountSummary: e.accountSummary || c.accountSummary || null
+    accountSummary: e.accountSummary || c.accountSummary || null,
+    portalPayload: e.portalPayload || null
   };
 }
 
@@ -6235,6 +6259,81 @@ function getRefreshedOrderSummaryForAchMicrodepositCandidate_(candidate, ctx) {
   return orderInfo ? buildPortalOrderSummary_(orderInfo.rowObjNormalized) : (c.orderSummary || null);
 }
 
+function getRefreshedPortalPayloadForAchMicrodepositCandidate_(candidate, ctx) {
+  const c = (candidate && typeof candidate === 'object') ? candidate : {};
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const cfg = context.cfg || getConfig_();
+  const ss = context.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = context.infra || ensurePortalInfrastructure_(ss, cfg);
+  const orderInfo = c.orderInfo && c.orderInfo.rowObjNormalized
+    ? c.orderInfo
+    : null;
+  const token = trimString_(
+    (orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.token) ||
+    (context.exportRowInfo && context.exportRowInfo.rowObjNormalized && context.exportRowInfo.rowObjNormalized.token)
+  );
+  if (!token) return null;
+  try {
+    return refreshPortalPayloadForToken_(token, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      rowInfo: context.exportRowInfo || null
+    });
+  } catch (err) {
+    console.log('[RT-ACH-VERIFY-PAYLOAD] ' + JSON.stringify({
+      ok: false,
+      tokenSuffix: token.slice(-8),
+      error: String((err && err.message) || err)
+    }));
+    return null;
+  }
+}
+
+function markOrderAchVerificationSucceededAfterMicrodeposit_(candidate, ctx, paymentIntent) {
+  const c = (candidate && typeof candidate === 'object') ? candidate : {};
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const intent = (paymentIntent && typeof paymentIntent === 'object') ? paymentIntent : (c.intentObj || {});
+  const paymentIntentId = trimString_(intent.id || c.intentId);
+  if (!paymentIntentId) return null;
+  const cfg = context.cfg || getConfig_();
+  const ss = context.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = context.infra || ensurePortalInfrastructure_(ss, cfg);
+  let orderInfo = (c.orderInfo && c.orderInfo.rowObjNormalized) ? c.orderInfo : null;
+  if (!orderInfo) {
+    orderInfo = getPortalOrderByStripePaymentIntentId_(paymentIntentId, {
+      cfg: cfg,
+      ss: ss,
+      ordersSheet: infra.ordersSheet
+    });
+  }
+  if (!orderInfo || !orderInfo.rowObjNormalized) return null;
+  const row = orderInfo.rowObjNormalized;
+  const token = trimString_(row.token);
+  const contextToken = trimString_(context.exportRowInfo && context.exportRowInfo.rowObjNormalized && context.exportRowInfo.rowObjNormalized.token);
+  if (token && contextToken && token !== contextToken) return null;
+  if (trimString_(row.paymentmethodselected).toLowerCase() !== PAYMENT_METHODS.ach) return null;
+  const paymentState = trimString_(row.paymentstate).toLowerCase();
+  if (paymentState === PAYMENT_STATES.paid || trimString_(row.paidat)) return orderInfo;
+
+  const updatedOrder = updatePortalOrderState_({
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    orderRowInfo: orderInfo,
+    stripePaymentIntentId: paymentIntentId,
+    paymentMethodSelected: PAYMENT_METHODS.ach,
+    paymentState: PAYMENT_STATES.pending,
+    achVerificationStatus: 'verified',
+    achVerificationFlow: trimString_(row.achverificationflow) || 'stripe_hosted_checkout',
+    achPaymentSource: buildAchOrderPaymentSource_(orderInfo, intent),
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    stripeAchCustomerId: stripeIdFromObject_(intent.customer) || trimString_(row.stripeachcustomerid)
+  });
+  updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, buildPortalOrderSummary_(updatedOrder.rowObjNormalized));
+  return updatedOrder;
+}
+
 function normalizeVerifiedAchSetupIntentCandidate_(candidate, ctx, setupIntent) {
   const c = (candidate && typeof candidate === 'object') ? candidate : {};
   const result = handleSetupIntentSucceeded_(setupIntent || c.intentObj || {});
@@ -6274,6 +6373,12 @@ function normalizeVerifiedAchPaymentIntentCandidate_(candidate, ctx, paymentInte
     };
   }
   const paymentPending = status !== 'succeeded';
+  const verifiedOrderInfo = paymentPending
+    ? markOrderAchVerificationSucceededAfterMicrodeposit_(c, ctx, intent)
+    : null;
+  const orderSummary = verifiedOrderInfo
+    ? buildPortalOrderSummary_(verifiedOrderInfo.rowObjNormalized)
+    : getRefreshedOrderSummaryForAchMicrodepositCandidate_(c, ctx);
   return buildAchMicrodepositVerificationClientResponse_(c, {
     verified: true,
     paymentPending: paymentPending,
@@ -6281,8 +6386,9 @@ function normalizeVerifiedAchPaymentIntentCandidate_(candidate, ctx, paymentInte
     message: paymentPending
       ? 'Bank verified in Stripe test mode. ACH payment is pending Stripe confirmation.'
       : 'Bank verified in Stripe test mode.',
-    orderSummary: getRefreshedOrderSummaryForAchMicrodepositCandidate_(c, ctx),
-    accountSummary: getRefreshedAccountSummaryForAchMicrodepositCandidate_(c, ctx)
+    orderSummary: orderSummary,
+    accountSummary: getRefreshedAccountSummaryForAchMicrodepositCandidate_(c, ctx),
+    portalPayload: getRefreshedPortalPayloadForAchMicrodepositCandidate_(c, ctx)
   });
 }
 
@@ -12622,6 +12728,20 @@ function handleCheckoutSessionCompleted_(sessionObj, options) {
       });
     }
   }
+  if (isAch && delayed) {
+    queueAchLifecycleClientEmailSafely_(
+      updatedOrder,
+      sessionObj,
+      PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
+      {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        accountInfo: accountInfo,
+        eventType: 'checkout.session.completed'
+      }
+    );
+  }
   return { ok: true, delayed: delayed, orderSummary: orderSummary };
 }
 
@@ -12796,6 +12916,18 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj, options) {
       });
     }
   }
+  queueAchLifecycleClientEmailSafely_(
+    updatedOrder,
+    sessionObj,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      accountInfo: accountInfo,
+      eventType: 'checkout.session.async_payment_succeeded'
+    }
+  );
   return { ok: true };
 }
 
@@ -12875,6 +13007,18 @@ function handleCheckoutAsyncPaymentFailed_(sessionObj, options) {
       accountSummary: getAccountStatus({ token: token }).accountSummary
     });
   }
+  queueAchLifecycleClientEmailSafely_(
+    updatedOrder,
+    sessionObj,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      accountInfo: accountInfo,
+      eventType: 'checkout.session.async_payment_failed'
+    }
+  );
   return { ok: true };
 }
 
@@ -12951,6 +13095,19 @@ function handlePaymentIntentFailed_(paymentIntentObj, options) {
       orderSummary: buildPortalOrderSummary_(updatedOrder.rowObjNormalized),
       accountSummary: getAccountStatus({ token: token }).accountSummary
     });
+  }
+  if (isAch) {
+    queueAchLifecycleClientEmailSafely_(
+      updatedOrder,
+      paymentIntentObj,
+      PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+      {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        eventType: 'payment_intent.payment_failed'
+      }
+    );
   }
   return { ok: true };
 }
@@ -13030,6 +13187,18 @@ function handlePaymentIntentProcessing_(paymentIntentObj, options) {
     achPendingProductionApprovedAtOrder: policy.achPendingProductionApprovedAtOrder
   }, eventUpdates));
   updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, buildPortalOrderSummary_(updatedOrder.rowObjNormalized));
+  queueAchLifecycleClientEmailSafely_(
+    updatedOrder,
+    paymentIntentObj,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      accountInfo: accountInfo,
+      eventType: 'payment_intent.processing'
+    }
+  );
   return { ok: true };
 }
 
@@ -13111,6 +13280,18 @@ function handlePaymentIntentSucceeded_(paymentIntentObj, options) {
       systemMessage: 'ACH payment cleared on ' + now + '. Order authorized for production.'
     });
   }
+  queueAchLifecycleClientEmailSafely_(
+    updatedOrder,
+    paymentIntentObj,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      accountInfo: accountInfo,
+      eventType: 'payment_intent.succeeded'
+    }
+  );
   return { ok: true };
 }
 
@@ -13221,6 +13402,18 @@ function handleChargeDisputeCreated_(disputeObj, options) {
     notes: 'Stripe ACH dispute created. Team review required.'
   }, eventUpdates));
   updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, buildPortalOrderSummary_(updatedOrder.rowObjNormalized));
+  queueAchLifecycleClientEmailSafely_(
+    updatedOrder,
+    chargeObj || dispute,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      accountInfo: accountInfo,
+      eventType: 'charge.dispute.created'
+    }
+  );
   return { ok: true };
 }
 
@@ -19637,17 +19830,32 @@ function normalizePortalEmailQueueStatus_(value) {
 }
 
 function buildPortalEmailQueueIdempotencyKey_(token, recipients, draftFingerprint) {
-  const source = {
+  return buildPortalEmailQueueIdempotencyKeyForSource_({
     jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.purchase_order_invoice_email,
     token: trimString_(token),
     recipients: normalizeEmailRecipients_(recipients).map(function(email) {
       return normalizeEmail_(email);
     }).sort(),
     draftFingerprint: trimString_(draftFingerprint)
-  };
+  });
+}
+
+function buildPortalEmailQueueIdempotencyKeyForSource_(source) {
+  const safeSource = (source && typeof source === 'object') ? source : {};
+  const normalized = {};
+  Object.keys(safeSource).sort().forEach(function(key) {
+    const value = safeSource[key];
+    if (Array.isArray(value)) {
+      normalized[key] = value.map(function(item) { return trimString_(item); }).filter(Boolean).sort();
+    } else if (value && typeof value === 'object') {
+      normalized[key] = JSON.stringify(value);
+    } else {
+      normalized[key] = trimString_(value);
+    }
+  });
   const digest = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
-    JSON.stringify(source)
+    JSON.stringify(normalized)
   );
   return Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
 }
@@ -19687,6 +19895,466 @@ function buildPortalEmailQueueStatusPayload_(jobInfo, portalPayload) {
   };
   if (portalPayload && typeof portalPayload === 'object') payload.portalPayload = portalPayload;
   return payload;
+}
+
+function normalizeAchLifecycleEmailJobType_(value) {
+  const jobType = trimString_(value).toLowerCase();
+  return [
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email
+  ].indexOf(jobType) >= 0 ? jobType : '';
+}
+
+function isAchLifecycleEmailJobType_(value) {
+  return !!normalizeAchLifecycleEmailJobType_(value);
+}
+
+function extractSafeStripePayerEmail_(stripeObj) {
+  const obj = (stripeObj && typeof stripeObj === 'object') ? stripeObj : {};
+  const candidates = [];
+  function collectFrom(source) {
+    const item = (source && typeof source === 'object') ? source : {};
+    candidates.push(item.email);
+    if (item.customer_details && typeof item.customer_details === 'object') candidates.push(item.customer_details.email);
+    if (item.customerDetails && typeof item.customerDetails === 'object') candidates.push(item.customerDetails.email);
+    if (item.billing_details && typeof item.billing_details === 'object') candidates.push(item.billing_details.email);
+    if (item.billingDetails && typeof item.billingDetails === 'object') candidates.push(item.billingDetails.email);
+    if (item.payment_method && typeof item.payment_method === 'object') collectFrom(item.payment_method);
+    if (item.paymentMethod && typeof item.paymentMethod === 'object') collectFrom(item.paymentMethod);
+    if (item.latest_charge && typeof item.latest_charge === 'object') collectFrom(item.latest_charge);
+    if (item.latestCharge && typeof item.latestCharge === 'object') collectFrom(item.latestCharge);
+    if (item.charges && Array.isArray(item.charges.data)) {
+      item.charges.data.forEach(collectFrom);
+    }
+  }
+  collectFrom(obj);
+  return firstNormalizedEmailFromValues_(candidates);
+}
+
+function buildAchLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const account = accountInfo && accountInfo.summary ? accountInfo.summary : {};
+  const payerEmail = extractSafeStripePayerEmail_(stripeObj);
+  const primaryEmail = firstNormalizedEmailFromValues_([
+    row.personemail,
+    row.personEmail,
+    draft.personEmail,
+    account.primaryEmail,
+    account.billingContactEmail
+  ]);
+  const toList = primaryEmail ? [primaryEmail] : (payerEmail ? [payerEmail] : []);
+  const ccList = primaryEmail && payerEmail && payerEmail !== primaryEmail ? [payerEmail] : [];
+  return {
+    toList: normalizeEmailRecipients_(toList),
+    ccList: normalizeEmailRecipients_(ccList),
+    payerEmail: payerEmail,
+    primaryEmail: primaryEmail
+  };
+}
+
+function isStandardOrderCheckoutAchOrder_(orderInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  if (trimString_(summary.paymentMethodSelected).toLowerCase() !== PAYMENT_METHODS.ach) return false;
+  const source = normalizeAchPaymentSource_(summary.achPaymentSource);
+  if (source === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link) return false;
+  return true;
+}
+
+function shouldQueueAchLifecycleEmailForOrder_(orderInfo, jobType) {
+  if (!isStandardOrderCheckoutAchOrder_(orderInfo)) return false;
+  const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized || {});
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  const eventType = trimString_(summary.stripeLatestEventType).toLowerCase();
+  const failureSignal = [
+    summary.achFailureCode,
+    summary.achFailureMessage,
+    eventType
+  ].join(' ').toLowerCase();
+  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+    return paymentState === PAYMENT_STATES.pending && !trimString_(summary.paidAt);
+  }
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
+    return paymentState === PAYMENT_STATES.paid || !!trimString_(summary.paidAt);
+  }
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
+    return paymentState === PAYMENT_STATES.failed ||
+      eventType === 'charge.dispute.created' ||
+      failureSignal.indexOf('dispute') >= 0 ||
+      failureSignal.indexOf('mandate') >= 0 ||
+      failureSignal.indexOf('blocked') >= 0;
+  }
+  return false;
+}
+
+function isAchVerificationRequiredForEmail_(orderSummary) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const signal = [
+    summary.achVerificationStatus,
+    summary.achFailureCode,
+    summary.achFailureMessage
+  ].join(' ').toLowerCase();
+  return /(microdeposit|requires_action|unverified|verification_pending|bank_verification_pending)/i.test(signal);
+}
+
+function buildAchLifecycleEmailIdempotencyKey_(jobType, orderSummary, recipients) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
+  return buildPortalEmailQueueIdempotencyKeyForSource_({
+    jobType: normalizeAchLifecycleEmailJobType_(jobType),
+    orderId: trimString_(summary.orderId),
+    token: trimString_(summary.token),
+    stripePaymentIntentId: trimString_(summary.stripePaymentIntentId),
+    invoiceNumber: trimString_(summary.invoiceNumber),
+    toList: normalizeEmailRecipients_(safeRecipients.toList),
+    ccList: normalizeEmailRecipients_(safeRecipients.ccList)
+  });
+}
+
+function findAchLifecycleEmailQueueJob_(queueSheet, jobType, orderSummary) {
+  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const orderId = trimString_(summary.orderId);
+  const paymentIntentId = trimString_(summary.stripePaymentIntentId);
+  if (!queueSheet || !type || (!orderId && !paymentIntentId)) return null;
+  return listSheetRowInfos_(queueSheet).find(function(info) {
+    const row = info && info.rowObjNormalized ? info.rowObjNormalized : {};
+    if (trimString_(row.jobtype) !== type) return false;
+    const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+    const metaOrderId = trimString_(meta.orderId);
+    const metaPaymentIntentId = trimString_(meta.stripePaymentIntentId);
+    return !!((orderId && metaOrderId === orderId) ||
+      (paymentIntentId && metaPaymentIntentId === paymentIntentId));
+  }) || null;
+}
+
+function parseAchLifecycleEmailQueueRecipients_(rawValue) {
+  const parsed = safeJsonParse_(rawValue, []);
+  if (Array.isArray(parsed)) {
+    return {
+      toList: normalizeEmailRecipients_(parsed),
+      ccList: []
+    };
+  }
+  const source = (parsed && typeof parsed === 'object') ? parsed : {};
+  return {
+    toList: normalizeEmailRecipients_(source.toList || source.to || source.recipients),
+    ccList: normalizeEmailRecipients_(source.ccList || source.cc),
+    payerEmail: normalizeEmail_(source.payerEmail),
+    primaryEmail: normalizeEmail_(source.primaryEmail)
+  };
+}
+
+function upsertPortalEmailQueueJob_(queueSheet, values) {
+  const safeValues = (values && typeof values === 'object') ? values : {};
+  const idempotencyKey = trimString_(safeValues.idempotencyKey);
+  if (!idempotencyKey) throw new Error('Email queue job is missing an idempotency key.');
+  let existingJob = findPortalEmailQueueJobByIdempotencyKey_(queueSheet, idempotencyKey);
+  const now = nowIso_();
+  if (existingJob) {
+    const existingStatus = normalizePortalEmailQueueStatus_(existingJob.rowObjNormalized.status);
+    if (existingStatus === PORTAL_EMAIL_QUEUE_STATUSES.sent ||
+        existingStatus === PORTAL_EMAIL_QUEUE_STATUSES.processing) {
+      return existingJob;
+    }
+    setRowValuesByHeaderMap_(queueSheet, existingJob.row, existingJob.colMap, Object.assign({}, safeValues, {
+      status: PORTAL_EMAIL_QUEUE_STATUSES.queued,
+      attemptCount: existingStatus === PORTAL_EMAIL_QUEUE_STATUSES.failed
+        ? Math.max(0, parseInt(String(existingJob.rowObjNormalized.attemptcount || 0), 10) || 0)
+        : Math.max(0, parseInt(String(safeValues.attemptCount || existingJob.rowObjNormalized.attemptcount || 0), 10) || 0),
+      lastError: '',
+      createdAt: trimString_(existingJob.rowObjNormalized.createdat) || trimString_(safeValues.createdAt) || now,
+      updatedAt: now,
+      startedAt: '',
+      completedAt: '',
+      leaseUntil: ''
+    }));
+    return buildRowInfoFromSheet_(queueSheet, existingJob.row);
+  }
+  return appendPortalEmailQueueJob_(queueSheet, Object.assign({
+    jobId: newPortalId_('eml'),
+    status: PORTAL_EMAIL_QUEUE_STATUSES.queued,
+    attemptCount: 0,
+    lastError: '',
+    createdAt: now,
+    updatedAt: now,
+    startedAt: '',
+    completedAt: '',
+    leaseUntil: ''
+  }, safeValues));
+}
+
+function queueAchLifecycleClientEmailSafely_(orderInfo, stripeObj, jobType, options) {
+  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  if (!type) return null;
+  try {
+    if (!shouldQueueAchLifecycleEmailForOrder_(orderInfo, type)) return null;
+    const opts = (options && typeof options === 'object') ? options : {};
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const accountInfo = opts.accountInfo || getPortalAccountInfoForOrder_(orderInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+    const recipients = buildAchLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo);
+    if (!recipients.toList.length) {
+      console.log('[RT-ACH-EMAIL-QUEUE] ' + JSON.stringify({
+        ok: false,
+        reason: 'missing_recipients',
+        jobType: type,
+        orderId: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid)
+      }));
+      return null;
+    }
+    const orderSummary = buildPortalOrderSummary_(orderInfo.rowObjNormalized || {});
+    const queueSheet = getPortalEmailQueueSheet_(ss);
+    const existingLifecycleJob = findAchLifecycleEmailQueueJob_(queueSheet, type, orderSummary);
+    const idempotencyKey = trimString_(existingLifecycleJob && existingLifecycleJob.rowObjNormalized.idempotencykey) ||
+      buildAchLifecycleEmailIdempotencyKey_(type, orderSummary, recipients);
+    const jobInfo = upsertPortalEmailQueueJob_(queueSheet, {
+      jobType: type,
+      idempotencyKey: idempotencyKey,
+      token: trimString_(orderInfo.rowObjNormalized.token),
+      recipientsJson: JSON.stringify(recipients),
+      portalStateJson: JSON.stringify({
+        jobType: type,
+        orderId: trimString_(orderSummary.orderId),
+        checkoutAttemptId: trimString_(orderSummary.checkoutAttemptId),
+        stripePaymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        stripeSessionId: trimString_(orderSummary.stripeSessionId),
+        invoiceNumber: trimString_(orderSummary.invoiceNumber),
+        queuedFromEventType: trimString_(opts.eventType),
+        queuedAt: nowIso_()
+      }),
+      orderDraftJson: trimString_(orderInfo.rowObjNormalized.orderdraftjson),
+      invoicePdfUrl: trimString_(orderSummary.invoicePdfUrl),
+      invoiceFileName: ''
+    });
+    if (isPortalEmailQueueJobEligible_(jobInfo, new Date())) schedulePortalEmailQueueProcessor_();
+    return jobInfo;
+  } catch (err) {
+    console.log('[RT-ACH-EMAIL-QUEUE] ' + JSON.stringify({
+      ok: false,
+      jobType: type,
+      orderId: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid),
+      error: String((err && err.message) || err)
+    }));
+    return null;
+  }
+}
+
+function resolveAchLifecycleOrderForQueueJob_(jobInfo, options) {
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const orderId = trimString_(meta.orderId);
+  const paymentIntentId = trimString_(meta.stripePaymentIntentId);
+  const token = trimString_(row.token || meta.token);
+  return (orderId ? getPortalOrderByOrderId_(orderId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (paymentIntentId ? getPortalOrderByStripePaymentIntentId_(paymentIntentId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (token ? getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null);
+}
+
+function resolveAchLifecycleInvoiceInfo_(orderInfo, jobType, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  const shouldGenerate = !trimString_(summary.invoicePdfUrl) ||
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email;
+  if (!shouldGenerate) {
+    return {
+      invoiceNumber: trimString_(summary.invoiceNumber),
+      invoicePdfUrl: trimString_(summary.invoicePdfUrl),
+      fileName: ''
+    };
+  }
+  const invoiceInfo = generateInvoiceDocumentForOrder_(row, {
+    cfg: cfg,
+    invoiceNumber: trimString_(summary.invoiceNumber)
+  });
+  if (invoiceInfo && trimString_(invoiceInfo.invoicePdfUrl)) {
+    updatePortalOrderState_({
+      cfg: cfg,
+      ss: opts.ss,
+      infra: opts.infra,
+      orderRowInfo: orderInfo,
+      invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
+      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl)
+    });
+  }
+  return invoiceInfo;
+}
+
+function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo) {
+  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const invoiceNumber = trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber);
+  const projectName = trimString_(draft.projectName || row.projectname);
+  const dealNumber = trimString_(draft.dealNumber || row.dealnumber);
+  const token = trimString_(row.token || draft.token);
+  const portalUrl = buildPortalSummaryUrl_(token);
+  const amount = type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email
+    ? (roundMoney_(summary.amountChargedTotal) > 0 ? summary.amountChargedTotal : summary.amountGrandTotal)
+    : summary.amountGrandTotal;
+  const paidDate = trimString_(summary.paidAt) ? formatDashboardShortDate_(summary.paidAt) : formatDashboardShortDate_(new Date());
+  const verificationRequired = isAchVerificationRequiredForEmail_(summary);
+  const usedConnectedBank = trimString_(draft.achCheckoutIntent).toLowerCase() === ACH_CHECKOUT_INTENTS.saved_bank &&
+    /(verified|succeeded|processing)/i.test(trimString_(summary.achVerificationStatus));
+  let subject = '';
+  let intro = '';
+  let statusCopy = '';
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+    subject = invoiceNumber
+      ? ('Red Threads invoice ' + invoiceNumber + ' — ACH payment pending')
+      : 'Red Threads ACH payment submitted';
+    intro = 'Your order has been placed and your invoice is attached.';
+    if (verificationRequired) {
+      statusCopy = 'Stripe is waiting for bank verification before this ACH payment can finish. You may receive an email from Stripe with a secure verification link. You can also return to your Red Threads invoice and choose Verify with Stripe.\n\nProduction will begin after ACH payment is verified and confirmed.';
+    } else if (usedConnectedBank) {
+      statusCopy = 'Your ACH payment has been submitted using your connected bank and is pending Stripe/bank confirmation. We will send you an updated email when payment is received and production begins.';
+    } else {
+      statusCopy = 'Your ACH payment has been submitted and is pending Stripe/bank confirmation. ACH payments can take several business days to confirm. We will send you an updated email when payment is received and production begins.';
+    }
+  } else if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
+    subject = invoiceNumber
+      ? ('ACH payment received — Red Threads invoice ' + invoiceNumber)
+      : 'Payment received — your Red Threads order is entering production';
+    intro = 'Good news — your ACH payment has been received.';
+    statusCopy = 'Your order is now authorized for production. Your updated invoice/receipt is attached.\n\nProduction is now underway according to the schedule shown on your invoice.';
+  } else {
+    subject = invoiceNumber
+      ? ('Action needed — ACH payment issue for invoice ' + invoiceNumber)
+      : 'Action needed — ACH payment issue for your Red Threads order';
+    intro = 'Stripe reported an issue with your ACH payment.';
+    statusCopy = 'Production cannot continue until payment is resolved. Please return to your Red Threads invoice to retry payment or contact Red Threads for help.';
+  }
+  const referenceLines = [
+    projectName ? ('Project: ' + projectName) : '',
+    dealNumber ? ('Project #: ' + dealNumber) : '',
+    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? ('Amount paid: ' + formatUsdAmount_(amount)) : ('Amount due: ' + formatUsdAmount_(amount)),
+    'Payment method: ACH',
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? ('Payment date: ' + (paidDate || '--')) : ''
+  ].filter(Boolean);
+  const body = [
+    intro,
+    '',
+    statusCopy,
+    '',
+    referenceLines.join('\n'),
+    '',
+    portalUrl ? ('View your Red Threads invoice: ' + portalUrl) : '',
+    '',
+    NOTIFICATION_REPLY_NOTICE
+  ].filter(Boolean).join('\n');
+  const htmlBody = [
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
+    '  <p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>',
+    '  <p style="margin:0 0 16px;color:#475569;">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>',
+    '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">',
+    projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
+    dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
+    invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
+    '    <div><strong>' + (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? 'Amount paid' : 'Amount due') + ':</strong> ' + escapeHtml_(formatUsdAmount_(amount)) + '</div>',
+    '    <div><strong>Payment method:</strong> ACH</div>',
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? ('    <div><strong>Payment date:</strong> ' + escapeHtml_(paidDate || '--') + '</div>') : '',
+    '  </div>',
+    portalUrl
+      ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">View Red Threads invoice</a></p>')
+      : '',
+    '  <p style="margin:0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+  return {
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody
+  };
+}
+
+function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const jobType = normalizeAchLifecycleEmailJobType_(row.jobtype);
+  if (!jobType) throw new Error('Unsupported ACH email queue job type.');
+  const orderInfo = resolveAchLifecycleOrderForQueueJob_(jobInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  if (!orderInfo) throw new Error('ACH email queue order could not be found.');
+  if (!isStandardOrderCheckoutAchOrder_(orderInfo)) {
+    return { skipped: true, invoiceInfo: null };
+  }
+  const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email && paymentState === PAYMENT_STATES.paid) {
+    return { skipped: true, invoiceInfo: null };
+  }
+  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email && paymentState !== PAYMENT_STATES.paid && !trimString_(summary.paidAt)) {
+    return { skipped: true, invoiceInfo: null };
+  }
+  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email && paymentState === PAYMENT_STATES.paid) {
+    return { skipped: true, invoiceInfo: null };
+  }
+  const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
+  if (!recipients.toList.length) throw new Error('ACH email queue job has no recipients.');
+  const invoiceInfo = resolveAchLifecycleInvoiceInfo_(orderInfo, jobType, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  const attachment = buildFinalInvoiceAttachment_(Object.assign({}, summary, {
+    invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber),
+    invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl) || trimString_(summary.invoicePdfUrl)
+  }), trimString_(invoiceInfo && invoiceInfo.fileName));
+  if (!attachment) throw new Error('ACH lifecycle invoice PDF could not be found.');
+  const content = buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo);
+  const emailResult = sendNotificationEmail_({
+    toList: recipients.toList,
+    ccList: recipients.ccList,
+    subject: content.subject,
+    body: content.body,
+    htmlBody: content.htmlBody,
+    attachments: [attachment],
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+  if (!emailResult || emailResult.ok !== true) {
+    throw new Error(trimString_(emailResult && emailResult.error) || 'ACH lifecycle email could not be sent.');
+  }
+  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+    try {
+      updatePortalOrderState_({
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        orderRowInfo: orderInfo,
+        invoiceSentToEmail: recipients.toList.join(', '),
+        invoiceSentAt: nowIso_()
+      });
+    } catch (err) {
+      console.log('[RT-ACH-EMAIL-SENT-META] ' + String((err && err.message) || err));
+    }
+  }
+  return {
+    invoiceInfo: invoiceInfo
+  };
 }
 
 function deletePortalEmailQueueProcessorTriggers_() {
@@ -20047,11 +20715,23 @@ function processPortalEmailQueueJobInfo_(jobInfo, options) {
   });
   const processingJobInfo = buildRowInfoFromSheet_(queueSheet, jobInfo.row);
   try {
-    const result = processPurchaseOrderInvoiceEmailQueueJob_(processingJobInfo, {
-      cfg: cfg,
-      ss: ss,
-      infra: infra
-    });
+    const jobType = trimString_(row.jobtype);
+    let result;
+    if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.purchase_order_invoice_email) {
+      result = processPurchaseOrderInvoiceEmailQueueJob_(processingJobInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } else if (isAchLifecycleEmailJobType_(jobType)) {
+      result = processAchLifecycleClientEmailQueueJob_(processingJobInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } else {
+      throw new Error('Unsupported email queue job type: ' + trimString_(jobType || 'unknown'));
+    }
     const completedAt = nowIso_();
     setRowValuesByHeaderMap_(queueSheet, jobInfo.row, jobInfo.colMap, {
       status: PORTAL_EMAIL_QUEUE_STATUSES.sent,
@@ -20071,15 +20751,17 @@ function processPortalEmailQueueJobInfo_(jobInfo, options) {
       updatedAt: failedAt,
       leaseUntil: ''
     });
-    try {
-      updatePurchaseOrderDraftEmailJobStatusForToken_(cfg, ss, infra, trimString_(row.token), {
-        jobId: trimString_(row.jobid),
-        status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
-        updatedAt: failedAt,
-        error: errorMessage
-      }, {});
-    } catch (statusErr) {
-      console.log('[RT-EMAIL-QUEUE-STATUS-FAIL] ' + String((statusErr && statusErr.message) || statusErr));
+    if (trimString_(row.jobtype) === PORTAL_EMAIL_QUEUE_JOB_TYPES.purchase_order_invoice_email) {
+      try {
+        updatePurchaseOrderDraftEmailJobStatusForToken_(cfg, ss, infra, trimString_(row.token), {
+          jobId: trimString_(row.jobid),
+          status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
+          updatedAt: failedAt,
+          error: errorMessage
+        }, {});
+      } catch (statusErr) {
+        console.log('[RT-EMAIL-QUEUE-STATUS-FAIL] ' + String((statusErr && statusErr.message) || statusErr));
+      }
     }
   }
   return buildRowInfoFromSheet_(queueSheet, jobInfo.row);
@@ -20611,6 +21293,18 @@ function generateInvoiceDocumentForOrder_(orderRowOrDraft, options) {
     ? roundMoney_(draft.amountChargedTotal)
     : roundMoney_(draft.amountGrandTotal);
   body.appendParagraph('Grand Total: ' + invoiceGrandTotal + ' ' + trimString_(draft.currency || order.currency || cfg.stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY));
+  const paymentState = trimString_(order.paymentstate || order.paymentState || draft.paymentState);
+  const paymentMethod = trimString_(order.paymentmethodselected || order.paymentMethodSelected || draft.paymentMethodSelected);
+  const paidAt = trimString_(order.paidat || order.paidAt || draft.paidAt);
+  const authorizedToProduceAt = trimString_(order.authorizedtoproduceat || order.authorizedToProduceAt || draft.authorizedToProduceAt);
+  if (paymentState || paymentMethod || paidAt || authorizedToProduceAt) {
+    body.appendParagraph('');
+    body.appendParagraph('Payment Status').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    if (paymentState) body.appendParagraph('Payment State: ' + paymentState);
+    if (paymentMethod) body.appendParagraph('Payment Method: ' + (paymentMethod === PAYMENT_METHODS.ach ? 'ACH' : paymentMethod));
+    if (paidAt) body.appendParagraph('Payment Date: ' + paidAt);
+    if (authorizedToProduceAt) body.appendParagraph('Production Authorized At: ' + authorizedToProduceAt);
+  }
   body.appendParagraph('');
   body.appendParagraph('Selected Print Jobs').setHeading(DocumentApp.ParagraphHeading.HEADING2);
   (Array.isArray(draft.selectedJobs) ? draft.selectedJobs : []).forEach((job) => {
