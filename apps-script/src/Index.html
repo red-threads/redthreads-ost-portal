@@ -16874,7 +16874,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 56">56</div>
+  <div class="devRevisionBadge" aria-label="Development revision 57">57</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17890,6 +17890,7 @@
         <div class="orderFlowResultMeta" id="orderFlowResultMeta"></div>
         <div class="orderFlowActions">
           <button class="orderFlowBtn orderFlowBtnBack" id="orderFlowDoneBtn" type="button">Return to Snapshot</button>
+          <button class="orderFlowBtn orderFlowBtnPrimary" id="orderFlowResultSecondaryBtn" type="button" hidden>Copy AP payment page link</button>
         </div>
       </div>
     </div>
@@ -19472,6 +19473,79 @@
     };
   }
 
+  function normalizeLockedOrderDraftSummary_(rawDraft){
+    const raw = (rawDraft && typeof rawDraft === 'object') ? rawDraft : {};
+    const selectedJobs = Array.isArray(raw.selectedJobs) ? raw.selectedJobs.map(job => {
+      const item = (job && typeof job === 'object') ? job : {};
+      return {
+        printJobId: String(item.printJobId || '').trim(),
+        printJobNumber: String(item.printJobNumber || '').trim(),
+        printJobName: String(item.printJobName || '').trim(),
+        turnaroundTime: String(item.turnaroundTime || '').trim(),
+        deliveryEstimate: String(item.deliveryEstimate || '').trim(),
+        decorations: Array.isArray(item.decorations) ? item.decorations : [],
+        units: Math.max(0, parseInt(String(item.units || 0), 10) || 0),
+        skus: Array.isArray(item.skus) ? item.skus.map(sku => {
+          const skuItem = (sku && typeof sku === 'object') ? sku : {};
+          return {
+            skuId: String(skuItem.skuId || '').trim(),
+            skuKey: String(skuItem.skuKey || '').trim(),
+            uiName: String(skuItem.uiName || '').trim(),
+            vendorProductUrl: String(skuItem.vendorProductUrl || '').trim(),
+            imageUrl: String(skuItem.imageUrl || '').trim(),
+            units: Math.max(0, parseInt(String(skuItem.units || 0), 10) || 0),
+            total: toNumber(skuItem.total, 0),
+            priceBuckets: Array.isArray(skuItem.priceBuckets) ? skuItem.priceBuckets.map(bucket => {
+              const priceBucket = (bucket && typeof bucket === 'object') ? bucket : {};
+              const qtyBySize = {};
+              Object.keys((priceBucket.qtyBySize && typeof priceBucket.qtyBySize === 'object') ? priceBucket.qtyBySize : {}).forEach(size => {
+                const cleanSize = String(size || '').trim();
+                const qty = Math.max(0, parseInt(String(priceBucket.qtyBySize[size] || 0), 10) || 0);
+                if (cleanSize && qty > 0) qtyBySize[cleanSize] = qty;
+              });
+              return {
+                colorway: String(priceBucket.colorway || '').trim(),
+                unitPrice: toNumber(priceBucket.unitPrice, 0),
+                unitPriceCents: Math.max(0, parseInt(String(priceBucket.unitPriceCents || 0), 10) || 0),
+                units: Math.max(0, parseInt(String(priceBucket.units || 0), 10) || 0),
+                total: toNumber(priceBucket.total, 0),
+                totalCents: Math.max(0, parseInt(String(priceBucket.totalCents || 0), 10) || 0),
+                qtyBySize: qtyBySize
+              };
+            }).filter(bucket => bucket.units > 0) : []
+          };
+        }).filter(sku => sku.skuId && sku.units > 0) : [],
+        addOns: Array.isArray(item.addOns) ? item.addOns.map(addOn => ({
+          label: String(addOn && addOn.label || '').trim(),
+          amount: toNumber(addOn && addOn.amount, 0),
+          type: String(addOn && addOn.type || '').trim()
+        })).filter(addOn => addOn.label && addOn.amount !== 0) : [],
+        mockups: {
+          previewUrl: String(item.mockups && item.mockups.previewUrl || '').trim()
+        }
+      };
+    }).filter(job => job.printJobId && job.units > 0) : [];
+    return {
+      selectedJobs: selectedJobs,
+      canceledJobs: Array.isArray(raw.canceledJobs) ? raw.canceledJobs.map(job => ({
+        printJobId: String(job && job.printJobId || '').trim(),
+        printJobName: String(job && job.printJobName || '').trim()
+      })).filter(job => job.printJobId) : [],
+      totalUnits: Math.max(0, parseInt(String(raw.totalUnits || 0), 10) || 0),
+      amountSubtotal: toNumber(raw.amountSubtotal, 0),
+      amountShipping: toNumber(raw.amountShipping, 0),
+      amountRush: toNumber(raw.amountRush, 0),
+      amountTax: toNumber(raw.amountTax, 0),
+      amountGrandTotal: toNumber(raw.amountGrandTotal, 0),
+      fulfillmentMethod: String(raw.fulfillmentMethod || '').trim(),
+      shippingChargeCents: Math.max(0, parseInt(String(raw.shippingChargeCents || 0), 10) || 0),
+      shippingModeLabel: String(raw.shippingModeLabel || '').trim(),
+      shippingDetailsCaptured: raw.shippingDetailsCaptured === true,
+      shippingDetails: normalizeOrderFlowShippingDetails_(raw.shippingDetails),
+      generatedAt: String(raw.generatedAt || '').trim()
+    };
+  }
+
   function normalizeOrderSummary(rawSummary){
     const raw = (rawSummary && typeof rawSummary === 'object') ? rawSummary : {};
     return {
@@ -19532,6 +19606,7 @@
       workflowContext: normalizeWorkflowContextObject_(raw.workflowContext),
       teamControls: normalizeTeamControlsObject_(raw.teamControls),
       teamJobCompletionByJobId: clonePlainObject(safeJsonParse(raw.teamJobCompletionByJobId, {})),
+      lockedOrderDraft: normalizeLockedOrderDraftSummary_(raw.lockedOrderDraft),
       selectedJobs: Array.isArray(raw.selectedJobs) ? raw.selectedJobs.map(job => ({
         printJobId: String(job && job.printJobId || '').trim(),
         printJobNumber: String(job && job.printJobNumber || '').trim(),
@@ -21267,9 +21342,30 @@
     if (setupResult === 'cancel') return '';
     if (setupResult) return 'Refreshing bank setup status...';
     const checkoutResult = getCheckoutReturnResult_();
-    if (checkoutResult === 'success') return 'Order placed — confirming payment status...';
+    if (checkoutResult === 'success') {
+      return isCheckoutReturnLikelyAch_()
+        ? 'Confirming ACH payment status with Stripe...'
+        : 'Confirming payment status with Stripe...';
+    }
     if (checkoutResult === 'cancel') return 'Checkout canceled. Returning to your order...';
     return '';
+  }
+
+  function isCheckoutReturnLikelyAch_(){
+    if (PAY_NOW_METHOD === PAYMENT_METHODS.ach || PAYMENT_ORIGIN_PARAM === 'ap') return true;
+    const workflow = getPortalWorkflowContext_();
+    const current = normalizeCurrentStateSummary(CURRENT_STATE_SUMMARY);
+    const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
+    const method = String(
+      workflow.paymentMethod
+      || workflow.paymentMethodSelected
+      || current.currentPaymentMethod
+      || order.paymentMethodSelected
+      || ''
+    ).trim().toLowerCase();
+    if (method === PAYMENT_METHODS.ach) return true;
+    const achDetailState = String(workflow.achDetailState || '').trim().toLowerCase();
+    return achDetailState.indexOf('ach_') === 0;
   }
 
   function buildCheckoutReturnReconciliationPayload_(){
@@ -21853,6 +21949,7 @@
   const orderFlowResultBody = document.getElementById('orderFlowResultBody');
   const orderFlowResultMeta = document.getElementById('orderFlowResultMeta');
   const orderFlowDoneBtn = document.getElementById('orderFlowDoneBtn');
+  const orderFlowResultSecondaryBtn = document.getElementById('orderFlowResultSecondaryBtn');
   const orderFlowBlockingJobs = document.getElementById('orderFlowBlockingJobs');
   const orderFlowSummaryViewerBackdrop = document.getElementById('orderFlowSummaryViewerBackdrop');
   const orderFlowSummaryViewerModal = document.getElementById('orderFlowSummaryViewerModal');
@@ -21955,9 +22052,9 @@
   const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
   const ACCOUNT_DOC_DEEPLINK_TYPE = String(URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();
   const ACCOUNT_DOC_DEEPLINK_ACTION = String(URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
-  const SUMMARY_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('summary') === '1';
+  const SUMMARY_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('summary') === '1' || VM_REQUEST_ROUTE_META.summary === '1';
   const SETUP_RETURN_RESULT = normalizeSetupReturnResultValue_(VM_REQUEST_ROUTE_META.setupResult || URL_QUERY_PARAMS.get('setupResult'));
-  const PAY_NOW_METHOD = String(URL_QUERY_PARAMS.get('payNow') || '').trim().toLowerCase();
+  const PAY_NOW_METHOD = String(VM_REQUEST_ROUTE_META.payNow || URL_QUERY_PARAMS.get('payNow') || '').trim().toLowerCase();
   const PAYMENT_ORIGIN_PARAM_RAW = String(VM_REQUEST_ROUTE_META.paymentOrigin || URL_QUERY_PARAMS.get('paymentOrigin') || '').trim().toLowerCase();
   const PAYMENT_ORIGIN_PARAM = PAYMENT_ORIGIN_PARAM_RAW || (SUMMARY_DEEPLINK_REQUEST && PAY_NOW_METHOD === 'ach' ? 'ap' : '');
   const PO_RESUME_REQUEST = URL_QUERY_PARAMS.get('resumePo') === '1';
@@ -22056,6 +22153,7 @@
   let ORDER_FLOW_CHECKOUT_URL = '';
   let ORDER_FLOW_RESULT_KIND = 'info';
   let ORDER_FLOW_REQUEST_IN_FLIGHT = false;
+  let ORDER_FLOW_RESULT_SECONDARY_ACTION = null;
   let ORDER_FLOW_FULFILLMENT_ERROR = false;
   let ORDER_FLOW_METHOD_ERROR = false;
   let ORDER_FLOW_PO_UNLOCK_ERROR = false;
@@ -23336,7 +23434,8 @@
     return false;
   }
 
-  async function copyPublicAchPaymentLink_(){
+  async function copyPublicAchPaymentLink_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
     const token = getActivePortalProjectToken_();
     const url = buildExternalPortalAchPaymentLink_(token);
     if (!url) {
@@ -23346,14 +23445,14 @@
     try {
       const copied = await copyTextToClipboard_(url);
       if (copied) {
-        showNotice('ACH payment link copied.', 'ok');
+        showNotice(String(opts.label || 'ACH payment link copied.'), 'ok');
         return;
       }
     } catch (_) {}
     try {
-      window.prompt('Copy ACH payment link', url);
+      window.prompt(String(opts.promptTitle || 'Copy ACH payment link'), url);
     } catch (_) {}
-    showNotice('Copy the ACH payment link from the dialog.', 'ok', { persist: true });
+    showNotice(String(opts.dialogNotice || 'Copy the ACH payment link from the dialog.'), 'ok', { persist: true });
   }
 
   function normalizePortalRouteHistoryMode_(value){
@@ -24431,6 +24530,9 @@
     clearDashboardBootstrapQueryParams_();
     closeIntroModal();
     setActiveSummaryPanel({ render: true });
+    if (CHECKOUT_RETURN_RESULT === 'success' || CHECKOUT_RETURN_RESULT === 'cancel' || PAYMENT_ORIGIN_PARAM === 'ap') {
+      return true;
+    }
     const method = PAY_NOW_METHOD === 'card' || PAY_NOW_METHOD === 'ach'
       ? PAY_NOW_METHOD
       : '';
@@ -36474,6 +36576,16 @@
     }
     setOrderFlowButtonsBusy(true);
     setOrderFlowApStatus_(sendEmail ? 'Preparing and emailing AP payment link...' : 'Preparing AP payment link...', '');
+    const useBlockingEmailLoader = sendEmail === true;
+    if (useBlockingEmailLoader) {
+      showOrderFlowResult(
+        'Preparing AP payment email',
+        'Generating the current invoice PDF and sending the secure AP payment page link.',
+        'Please wait while the order is locked as awaiting Accounts Payable payment.',
+        { kind: 'info', doneTarget: 'summary', doneLabel: 'Working...' }
+      );
+      rtShowLoader('Preparing AP payment email', 'Generating the current invoice PDF and sending the AP payment page link.');
+    }
     try {
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const artifact = sendEmail
@@ -36503,7 +36615,15 @@
               resp && resp.invoice && resp.invoice.invoiceNumber ? ('Invoice: ' + resp.invoice.invoiceNumber) : '',
               'AP bank details will be order-only and will not be saved to Dashboard Payment Methods.'
             ].filter(Boolean).join('\n'),
-            { kind: 'error', doneTarget: 'summary' }
+            {
+              kind: 'error',
+              doneTarget: 'summary',
+              secondaryAction: {
+                type: 'copyLink',
+                label: 'Copy AP payment page link',
+                value: link
+              }
+            }
           );
           showNotice('AP email could not be sent. The payment link is ready to copy.', 'err', { persist: true });
           return;
@@ -36526,14 +36646,31 @@
           sendEmail && resp.apEmailRedacted ? ('Sent to: ' + resp.apEmailRedacted) : '',
           'AP bank details will be order-only and will not be saved to Dashboard Payment Methods.'
         ].filter(Boolean).join('\n'),
-        { kind: 'success', doneTarget: 'summary' }
+        {
+          kind: 'success',
+          doneTarget: 'summary',
+          secondaryAction: {
+            type: 'copyLink',
+            label: sendEmail ? 'Copy AP payment page link' : 'Copy this AP payment page link',
+            value: link
+          }
+        }
       );
       showNotice(sendEmail ? 'ACH payment link emailed to Accounts Payable.' : 'ACH payment link copied.', 'ok');
     } catch (err) {
       const message = normalizeUiErrorMessage_(err, 'Unable to prepare AP payment link.');
       setOrderFlowApStatus_(message, 'error');
+      if (useBlockingEmailLoader) {
+        showOrderFlowResult(
+          'Unable to email AP payment link',
+          message,
+          'The order was not advanced unless the server returned a prepared AP payment link.',
+          { kind: 'error', doneTarget: 'summary' }
+        );
+      }
       showNotice(message, 'err', { persist: true });
     } finally {
+      if (useBlockingEmailLoader) rtHideLoader();
       setOrderFlowButtonsBusy(false);
       renderOrderFlowAchDecisionSection_();
     }
@@ -36722,7 +36859,11 @@
       orderFlowSubmitTermsBtn,
       orderFlowCheckoutBackBtn,
       orderFlowCheckoutLaunchBtn,
-      orderFlowCheckoutCopyBtn
+      orderFlowCheckoutCopyBtn,
+      orderFlowClose,
+      orderFlowAchDecisionCloseBtn,
+      orderFlowDoneBtn,
+      orderFlowResultSecondaryBtn
     ].forEach(btn => {
       if (!btn) return;
       btn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT;
@@ -36939,6 +37080,9 @@
     const opts = (options && typeof options === 'object') ? options : {};
     ORDER_FLOW_RESULT_KIND = String(opts.kind || 'info');
     ORDER_FLOW_DONE_TARGET = String(opts.doneTarget || 'snapshot').trim().toLowerCase() === 'summary' ? 'summary' : 'snapshot';
+    ORDER_FLOW_RESULT_SECONDARY_ACTION = opts.secondaryAction && typeof opts.secondaryAction === 'object'
+      ? Object.assign({}, opts.secondaryAction)
+      : null;
     setOrderFlowMode('result');
     setOrderFlowStatePill(ORDER_FLOW_RESULT_KIND === 'success' ? 'Updated' : 'Status');
     if (orderFlowResultIcon) {
@@ -36954,7 +37098,36 @@
     if (orderFlowResultBody) orderFlowResultBody.textContent = String(body || '');
     if (orderFlowResultMeta) orderFlowResultMeta.textContent = String(meta || '');
     if (orderFlowDoneBtn) orderFlowDoneBtn.textContent = String(opts.doneLabel || (ORDER_FLOW_DONE_TARGET === 'summary' ? 'Return to Summary' : 'Return to Snapshot'));
+    if (orderFlowResultSecondaryBtn) {
+      const label = ORDER_FLOW_RESULT_SECONDARY_ACTION && ORDER_FLOW_RESULT_SECONDARY_ACTION.label
+        ? String(ORDER_FLOW_RESULT_SECONDARY_ACTION.label)
+        : '';
+      orderFlowResultSecondaryBtn.textContent = label || 'Copy AP payment page link';
+      orderFlowResultSecondaryBtn.hidden = !ORDER_FLOW_RESULT_SECONDARY_ACTION;
+    }
     if (orderFlowDoneBtn) orderFlowDoneBtn.focus();
+  }
+
+  async function handleOrderFlowResultSecondaryAction_(){
+    if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
+    const action = ORDER_FLOW_RESULT_SECONDARY_ACTION && typeof ORDER_FLOW_RESULT_SECONDARY_ACTION === 'object'
+      ? ORDER_FLOW_RESULT_SECONDARY_ACTION
+      : null;
+    if (!action) return;
+    const type = String(action.type || '').trim();
+    if (type !== 'copyLink') return;
+    const link = String(action.value || '').trim();
+    if (!link) {
+      showNotice('AP payment page link is not available.', 'err', { persist: true });
+      return;
+    }
+    const copied = await copyTextToClipboard_(link).catch(() => false);
+    if (!copied) {
+      try {
+        window.prompt('Copy this AP payment page link:', link);
+      } catch (_) {}
+    }
+    showNotice('AP payment page link copied.', 'ok');
   }
 
   function openOrderFlowManualSubmitSuccessBackdrop_(resp){
@@ -37219,6 +37392,7 @@
     ORDER_FLOW_PENDING_PORTAL_PAYLOAD = null;
     ORDER_FLOW_RESULT_KIND = 'info';
     ORDER_FLOW_DONE_TARGET = 'snapshot';
+    ORDER_FLOW_RESULT_SECONDARY_ACTION = null;
     ORDER_FLOW_AP_STATUS = { tone: '', message: '' };
     ORDER_FLOW_FULFILLMENT_ERROR = false;
     ORDER_FLOW_METHOD_ERROR = false;
@@ -37247,6 +37421,10 @@
     if (orderFlowResultBody) orderFlowResultBody.textContent = 'We saved the latest order state.';
     if (orderFlowResultMeta) orderFlowResultMeta.textContent = '';
     if (orderFlowDoneBtn) orderFlowDoneBtn.textContent = 'Return to Snapshot';
+    if (orderFlowResultSecondaryBtn) {
+      orderFlowResultSecondaryBtn.hidden = true;
+      orderFlowResultSecondaryBtn.textContent = 'Copy AP payment page link';
+    }
   }
 
   function openOrderFlowModal(){
@@ -40629,6 +40807,181 @@
     return lifecycle.isLockedInvoice && lifecycle.paymentDue === true && lifecycle.paymentReceived !== true;
   }
 
+  function getSummaryAchInFlightControlModel_(lifecycleState){
+    const lifecycle = (lifecycleState && typeof lifecycleState === 'object')
+      ? lifecycleState
+      : getSummaryLifecycleUiState_();
+    if (!lifecycle.isLockedInvoice || lifecycle.paymentMethodSelected !== PAYMENT_METHODS.ach) return null;
+    const achDetailState = String(lifecycle.achDetailState || '').trim().toLowerCase();
+    const paymentState = String(lifecycle.paymentState || '').trim().toLowerCase();
+    const lifecycleStateName = String(lifecycle.lifecycleState || '').trim().toLowerCase();
+    const isPaid = lifecycle.paymentReceived === true || paymentState === 'paid' || achDetailState === 'ach_paid';
+    const isFailed = paymentState === 'failed' || achDetailState === 'ach_failed';
+    const isDisputed = achDetailState === 'ach_disputed' || lifecycleStateName === 'ach_payment_disputed';
+    const isBlocked = achDetailState === 'ach_blocked_or_mandate_invalid';
+    const isVerificationPending = achDetailState === 'ach_bank_verification_pending';
+    const isMicrodepositPending = achDetailState === 'ach_microdeposit_pending';
+    const isProcessing = achDetailState === 'ach_processing'
+      || paymentState === 'pending'
+      || lifecycleStateName === 'ach_payment_pending';
+    const isApAwaiting = lifecycle.isApPaymentLinkAwaitingPayment === true;
+    const isApCheckoutStarted = lifecycle.isApPaymentLinkCheckoutStarted === true;
+    const isApRecipientPage = PAYMENT_ORIGIN_PARAM === 'ap';
+    if (isPaid) {
+      return {
+        key: 'ach_paid',
+        title: 'ACH payment confirmed',
+        body: 'Payment has been confirmed. No additional payment action is needed.',
+        suppressNormalPaymentControls: true,
+        showRefresh: true
+      };
+    }
+    if (isDisputed || isBlocked) {
+      return {
+        key: isDisputed ? 'ach_disputed' : 'ach_blocked',
+        title: isDisputed ? 'ACH payment under review' : 'ACH payment issue',
+        body: isDisputed
+          ? 'Stripe reported an ACH dispute or return. Red Threads will review before payment or production continues.'
+          : 'Stripe reported an ACH bank authorization issue. Contact Red Threads if the payment method needs to change.',
+        suppressNormalPaymentControls: true,
+        showRefresh: true
+      };
+    }
+    if (isFailed) {
+      return {
+        key: 'ach_failed',
+        title: 'ACH payment could not be completed',
+        body: 'Stripe reported an ACH payment issue. Retry payment from this invoice, choose another payment method, or contact Red Threads.',
+        suppressNormalPaymentControls: false,
+        showRefresh: true
+      };
+    }
+    if (isApAwaiting) {
+      return {
+        key: 'ap_waiting',
+        title: isApRecipientPage ? 'ACH payment is ready' : 'Waiting for Accounts Payable',
+        body: isApRecipientPage
+          ? 'Use the secure Stripe checkout to complete ACH payment for this invoice. Bank details entered here are used for this order only.'
+          : 'Accounts Payable has not started Stripe ACH checkout yet. The order is locked while Red Threads waits for AP payment.',
+        suppressNormalPaymentControls: true,
+        showApContinue: isApRecipientPage,
+        showApCopy: true,
+        showRefresh: true
+      };
+    }
+    if (isApCheckoutStarted) {
+      return {
+        key: 'ap_checkout_started',
+        title: 'Accounts Payable checkout started',
+        body: 'Accounts Payable started Stripe ACH checkout. Waiting for checkout completion before payment can move into bank confirmation.',
+        suppressNormalPaymentControls: true,
+        showApCopy: !isApRecipientPage,
+        showRefresh: true
+      };
+    }
+    if (isMicrodepositPending || isVerificationPending) {
+      return {
+        key: isMicrodepositPending ? 'ach_microdeposit_pending' : 'ach_bank_verification_pending',
+        title: isMicrodepositPending ? 'Microdeposit verification pending' : 'Bank verification pending',
+        body: isMicrodepositPending
+          ? 'Stripe is waiting for bank verification to finish ACH payment. Use Stripe email or Manage ACH Banks where available; Red Threads does not collect microdeposit values.'
+          : 'Stripe needs bank verification before ACH payment can finish. Production will not begin until ACH is verified and payment is confirmed unless Red Threads approves production while ACH is pending.',
+        suppressNormalPaymentControls: true,
+        showRefresh: true
+      };
+    }
+    if (isProcessing || paymentState === 'checkout_created') {
+      return {
+        key: paymentState === 'checkout_created' ? 'ach_checkout_started' : 'ach_processing',
+        title: paymentState === 'checkout_created' ? 'Stripe checkout started' : 'ACH payment initiated',
+        body: paymentState === 'checkout_created'
+          ? 'Stripe ACH checkout has been created. Waiting for checkout completion before payment can move into bank confirmation.'
+          : 'ACH payment has been initiated and is pending Stripe or bank confirmation. Bank payments can take several business days to finish processing.',
+        suppressNormalPaymentControls: true,
+        showRefresh: true
+      };
+    }
+    return null;
+  }
+
+  function refreshSummaryPaymentStatus_(){
+    const token = String(CURRENT_TOKEN || INITIAL_TOKEN || '').trim();
+    if (!token) {
+      showNotice('Unable to refresh payment status without a project token.', 'err', { persist: true });
+      return Promise.resolve(false);
+    }
+    return loadProjectTokenInPlace(token, {
+      source: 'summary-payment-refresh',
+      requireAuthSession: false,
+      loadingTitle: 'Refreshing payment status',
+      loadingSub: '',
+      forceClientMode: true
+    }).then(ok => {
+      if (ok) {
+        setActiveSummaryPanel({ render: true });
+        showNotice('Payment status refreshed.', 'ok');
+      }
+      return ok;
+    });
+  }
+
+  function buildSummaryAchInFlightControlCard_(lifecycleState){
+    const model = getSummaryAchInFlightControlModel_(lifecycleState);
+    if (!model) return null;
+    const card = createEl('section', 'summaryEstimatePoSection summaryEstimateAchStatusSection');
+    card.appendChild(createEl('div', 'summaryEstimatePoSectionTitle', model.title));
+    card.appendChild(createEl('div', 'summaryEstimatePoSectionSub', model.body));
+    const actions = createEl('div', 'summaryEstimateInlineEmailActions');
+    if (model.showApContinue) {
+      const continueBtn = createEl(
+        'button',
+        'summaryEstimateInlineEmailBtn isPrimary',
+        SUMMARY_SHARE_BUSY_ACTION === 'pay_ach' ? 'Preparing...' : 'Continue to Stripe ACH Payment'
+      );
+      continueBtn.type = 'button';
+      continueBtn.disabled = Boolean(SUMMARY_SHARE_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
+      continueBtn.addEventListener('click', () => {
+        startLockedSummaryPaymentCheckout_(PAYMENT_METHODS.ach).catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to start ACH payment.'), 'err', { persist: true });
+        });
+      });
+      actions.appendChild(continueBtn);
+    }
+    if (model.showApCopy) {
+      const copyBtn = createEl(
+        'button',
+        'summaryEstimateInlineEmailBtn',
+        PAYMENT_ORIGIN_PARAM === 'ap' ? 'Copy this AP payment page link' : 'Copy AP payment page link'
+      );
+      copyBtn.type = 'button';
+      copyBtn.disabled = Boolean(SUMMARY_SHARE_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
+      copyBtn.addEventListener('click', () => {
+        copyPublicAchPaymentLink_({
+          label: PAYMENT_ORIGIN_PARAM === 'ap' ? 'AP payment page link copied.' : 'AP payment page link copied.'
+        }).catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to copy AP payment page link.'), 'err', { persist: true });
+        });
+      });
+      actions.appendChild(copyBtn);
+    }
+    if (model.showRefresh) {
+      const refreshBtn = createEl('button', 'summaryEstimateInlineEmailBtn', 'Refresh payment status');
+      refreshBtn.type = 'button';
+      refreshBtn.disabled = Boolean(SUMMARY_SHARE_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
+      refreshBtn.addEventListener('click', () => {
+        refreshSummaryPaymentStatus_().catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to refresh payment status.'), 'err', { persist: true });
+        });
+      });
+      actions.appendChild(refreshBtn);
+    }
+    if (actions.children.length) card.appendChild(actions);
+    if (model.suppressNormalPaymentControls && model.key !== 'ap_waiting') {
+      card.appendChild(createEl('div', 'summaryEstimateInlineEmailHelp isSecondary', 'Contact Red Threads if the payment method needs to change.'));
+    }
+    return card;
+  }
+
   function isLockedSummaryAwaitingPurchaseOrderSubmission_(){
     return getSummaryDocumentMode_() === SUMMARY_DOCUMENT_MODES.po_draft_invoice;
   }
@@ -41297,6 +41650,160 @@
     }).filter(group => includeQuantityRows ? group.rows.length > 0 : true);
   }
 
+  function getLockedOrderDraftForSummary_(documentMode){
+    const mode = String(documentMode || getSummaryDocumentMode_()).trim().toLowerCase();
+    if (!isInvoiceSummaryDocumentMode_(mode)) return null;
+    const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
+    const draft = normalizeLockedOrderDraftSummary_(order.lockedOrderDraft);
+    return Array.isArray(draft.selectedJobs) && draft.selectedJobs.length ? draft : null;
+  }
+
+  function buildLockedDraftSummaryRollupData_(lockedDraft){
+    const draft = normalizeLockedOrderDraftSummary_(lockedDraft);
+    const jobs = Array.isArray(draft.selectedJobs) ? draft.selectedJobs : [];
+    const units = Math.max(
+      Number(draft.totalUnits) || 0,
+      jobs.reduce((sum, job) => sum + (Number(job && job.units) || 0), 0)
+    );
+    const addOns = (Number(draft.amountShipping) || 0) + (Number(draft.amountRush) || 0);
+    return {
+      jobCount: jobs.length,
+      units: units,
+      subtotal: Number(draft.amountSubtotal) || 0,
+      addOns: addOns,
+      total: Number(draft.amountGrandTotal) || 0,
+      readyDateLabel: '',
+      readyDateValue: null
+    };
+  }
+
+  function buildLockedDraftSummaryPresentationTotals_(lockedDraft, presentation, options){
+    const draft = normalizeLockedOrderDraftSummary_(lockedDraft);
+    const order = normalizeOrderSummary(LATEST_ORDER_SUMMARY);
+    const opts = (options && typeof options === 'object') ? options : {};
+    const suppressShipping = opts.suppressShipping === true;
+    const baseSubtotal = Number(order.amountGrandTotal) > 0 && Number(draft.amountSubtotal) <= 0
+      ? Number(order.amountGrandTotal)
+      : (Number(draft.amountSubtotal) || 0);
+    const shippingCost = suppressShipping ? 0 : Math.max(0, Number(draft.shippingChargeCents || order.shippingChargeCents || 0) / 100);
+    const salesTax = Number(order.amountTax) > 0 ? Number(order.amountTax) : (Number(draft.amountTax) || 0);
+    const totalCost = Number(order.amountGrandTotal) > 0 ? Number(order.amountGrandTotal) : (Number(draft.amountGrandTotal) || 0);
+    return {
+      baseSubtotal: baseSubtotal,
+      displayedSubtotal: baseSubtotal,
+      shippingCost: shippingCost,
+      showShipping: !suppressShipping && shippingCost > 0,
+      creditCardFee: Number(order.amountCardFee) || 0,
+      showCreditCardFee: false,
+      salesTax: salesTax,
+      totalCost: totalCost,
+      fulfillmentMethod: String(draft.fulfillmentMethod || order.fulfillmentMethod || '').trim(),
+      shippingModeLabel: String(draft.shippingModeLabel || order.shippingModeLabel || '').trim()
+    };
+  }
+
+  function getLockedDraftSummarySizeOrder_(sku){
+    const seen = new Set();
+    const sizes = [];
+    (Array.isArray(sku && sku.priceBuckets) ? sku.priceBuckets : []).forEach(bucket => {
+      Object.keys((bucket && bucket.qtyBySize && typeof bucket.qtyBySize === 'object') ? bucket.qtyBySize : {}).forEach(size => {
+        const cleanSize = String(size || '').trim();
+        if (!cleanSize || seen.has(cleanSize)) return;
+        seen.add(cleanSize);
+        sizes.push(cleanSize);
+      });
+    });
+    return sizes;
+  }
+
+  function buildLockedDraftSummarySkuGroups_(job, presentation){
+    return (Array.isArray(job && job.skus) ? job.skus : []).map(sku => {
+      const sizeOrder = getLockedDraftSummarySizeOrder_(sku);
+      if (!sizeOrder.length) return null;
+      const unitBySize = {};
+      const rows = (Array.isArray(sku.priceBuckets) ? sku.priceBuckets : []).map(bucket => {
+        const qtyBySize = (bucket && bucket.qtyBySize && typeof bucket.qtyBySize === 'object') ? bucket.qtyBySize : {};
+        const sizeValues = sizeOrder.map(size => {
+          const qty = Math.max(0, parseInt(String(qtyBySize[size] || 0), 10) || 0);
+          if (qty > 0 && !Object.prototype.hasOwnProperty.call(unitBySize, size)) {
+            unitBySize[size] = Number(bucket.unitPrice) || 0;
+          }
+          return { size: size, qty: qty };
+        });
+        const totalQty = sizeValues.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+        if (totalQty <= 0) return null;
+        const lineTotalValue = Number(bucket.total) || (Number(bucket.totalCents) ? Number(bucket.totalCents) / 100 : 0);
+        return {
+          color: String(bucket.colorway || '').trim() || '--',
+          totalQty: totalQty,
+          lineTotalBase: lineTotalValue,
+          lineTotalDisplay: getSummaryDisplayMoney_(lineTotalValue, presentation),
+          sizeValues: sizeValues
+        };
+      }).filter(Boolean);
+      if (!rows.length) return null;
+      return {
+        skuId: String(sku.skuId || '').trim(),
+        skuKey: String(sku.skuKey || sku.skuId || '').trim() || '--',
+        uiName: String(sku.uiName || sku.skuKey || sku.skuId || '').trim() || '--',
+        vendorProductUrl: String(sku.vendorProductUrl || '').trim(),
+        sizeHeaders: sizeOrder.map(size => {
+          const unit = Number(unitBySize[size]) || 0;
+          return {
+            size: size,
+            unit: unit,
+            unitDisplay: unit > 0 ? formatSummaryUnitPriceLabel_(unit, presentation) : 'Call'
+          };
+        }),
+        rows: rows
+      };
+    }).filter(Boolean);
+  }
+
+  function buildLockedDraftSummaryJobData_(lockedJob, presentation, options){
+    const job = (lockedJob && typeof lockedJob === 'object') ? lockedJob : {};
+    const addOns = (Array.isArray(job.addOns) ? job.addOns : []).map(item => ({
+      label: String(item && item.label || '').trim() || 'Added service',
+      ruleText: '',
+      rush: String(item && item.type || '').trim().toLowerCase() === 'rush',
+      amountBase: Number(item && item.amount) || 0,
+      amountDisplay: getSummaryDisplayMoney_(Number(item && item.amount) || 0, presentation)
+    }));
+    const skuBaseTotal = (Array.isArray(job.skus) ? job.skus : []).reduce((sum, sku) => sum + (Number(sku && sku.total) || 0), 0);
+    const addOnTotal = addOns.reduce((sum, item) => sum + (Number(item.amountBase) || 0), 0);
+    const previewUrl = String(job.mockups && job.mockups.previewUrl || '').trim();
+    return {
+      job: {
+        printJobId: String(job.printJobId || '').trim(),
+        printJobName: String(job.printJobName || '').trim() || ('Print Job ' + (job.printJobNumber || '')),
+        deliveryEstimate: String(job.deliveryEstimate || '').trim(),
+        turnaroundTime: String(job.turnaroundTime || '').trim()
+      },
+      printJobNumber: String(job.printJobNumber || '').trim() || '1',
+      includeInTotals: true,
+      hasEnteredUnits: (Number(job.units) || 0) > 0,
+      previewCandidates: previewUrl ? [previewUrl] : [],
+      decorations: (Array.isArray(job.decorations) ? job.decorations : [])
+        .map((item, idx) => String(formatDecorationLine(item, idx) || '').replace(/^Deco\s+\d+:\s*/i, '').trim())
+        .filter(Boolean)
+        .filter(text => text !== '--'),
+      turnaround: String(job.turnaroundTime || '').trim(),
+      readyBy: String(job.deliveryEstimate || '').trim() || '--',
+      readyByValue: null,
+      unitsDisplay: Number(job.units) || 0,
+      jobCostBase: skuBaseTotal + addOnTotal,
+      jobCostDisplay: getSummaryDisplayMoney_(skuBaseTotal + addOnTotal, presentation),
+      showInformationalOnlyBanner: false,
+      compareHighlightTier: null,
+      activeTier: null,
+      documentLabel: getSummaryDocumentModeLabel_(options && options.mode),
+      showCompareTable: false,
+      addOns: addOns,
+      skuGroups: buildLockedDraftSummarySkuGroups_(job, presentation),
+      compareTable: null
+    };
+  }
+
   function buildSummaryEstimateCompareRows_(job, presentation){
     const visibleSkus = getVisibleSkus(job);
     const tierSet = new Set(normalizeTierList(job.priceTiers, visibleSkus));
@@ -41406,17 +41913,27 @@
     const normalizedPresentation = normalizeSummaryOptions(presentation);
     const documentMode = String(opts.mode || SUMMARY_DOCUMENT_MODES.estimate).trim().toLowerCase() || SUMMARY_DOCUMENT_MODES.estimate;
     const lockedInvoice = isInvoiceSummaryDocumentMode_(documentMode);
+    const lockedOrderDraft = getLockedOrderDraftForSummary_(documentMode);
     const lockedTimelineState = lockedInvoice ? getLockedSummaryTimelineState_() : null;
-    const rollup = buildSummaryRollupData_();
-    const totals = buildSummaryPresentationTotals_(rollup, normalizedPresentation, opts);
-    const includedJobs = getSummaryIncludedJobs_();
-    const zeroQtyJobs = getSummaryZeroQtyJobs_();
-    const hiddenZeroQtyJobs = getHiddenSummaryZeroQtyJobs_();
-    const hiddenRemovedJobs = getHiddenSummaryRemovedJobs_();
-    const activeJobs = includedJobs.map(job => buildSummaryEstimateJobData_(job, normalizedPresentation, true, Object.assign({}, opts, {
-      lockedInvoice: lockedInvoice,
-      lockedTimelineState: lockedTimelineState
-    })));
+    const rollup = lockedOrderDraft
+      ? buildLockedDraftSummaryRollupData_(lockedOrderDraft)
+      : buildSummaryRollupData_();
+    const totals = lockedOrderDraft
+      ? buildLockedDraftSummaryPresentationTotals_(lockedOrderDraft, normalizedPresentation, opts)
+      : buildSummaryPresentationTotals_(rollup, normalizedPresentation, opts);
+    const includedJobs = lockedOrderDraft ? [] : getSummaryIncludedJobs_();
+    const zeroQtyJobs = lockedOrderDraft ? [] : getSummaryZeroQtyJobs_();
+    const hiddenZeroQtyJobs = lockedOrderDraft ? [] : getHiddenSummaryZeroQtyJobs_();
+    const hiddenRemovedJobs = lockedOrderDraft ? [] : getHiddenSummaryRemovedJobs_();
+    const activeJobs = lockedOrderDraft
+      ? lockedOrderDraft.selectedJobs.map(job => buildLockedDraftSummaryJobData_(job, normalizedPresentation, Object.assign({}, opts, {
+          lockedInvoice: lockedInvoice,
+          lockedTimelineState: lockedTimelineState
+        })))
+      : includedJobs.map(job => buildSummaryEstimateJobData_(job, normalizedPresentation, true, Object.assign({}, opts, {
+          lockedInvoice: lockedInvoice,
+          lockedTimelineState: lockedTimelineState
+        })));
     const visibleZeroQtyJobs = opts.includeZeroQtyJobs === false
       ? []
       : zeroQtyJobs.map(job => buildSummaryEstimateJobData_(job, normalizedPresentation, false, Object.assign({}, opts, {
@@ -42182,10 +42699,12 @@
     const card = createEl('aside', 'summaryEstimateControlsCard');
     const isBusy = Boolean(SUMMARY_SHARE_BUSY_ACTION) || SUMMARY_PENDING_FLOW_CANCEL_BUSY;
     const emailActionLabel = isInvoiceMode ? 'Share / Download Invoice' : 'Share / Download Estimate';
-    const canShowLockedStripePaymentActions = (lifecycle.showPaymentDueControls
+    const achInFlightControlModel = getSummaryAchInFlightControlModel_(lifecycle);
+    const suppressLockedPaymentActions = achInFlightControlModel && achInFlightControlModel.suppressNormalPaymentControls === true;
+    const canShowLockedStripePaymentActions = !suppressLockedPaymentActions && ((lifecycle.showPaymentDueControls
       && paymentMethodSelected !== PAYMENT_METHODS.check
       && paymentMethodSelected !== PAYMENT_METHODS.cash)
-      || (lifecycle.showManualPendingControls && lifecycle.paymentDue === true);
+      || (lifecycle.showManualPendingControls && lifecycle.paymentDue === true));
 
     const emailBtn = createEl(
       'button',
@@ -42273,6 +42792,10 @@
     }
     if (lifecycle.showManualPendingControls) {
       card.appendChild(buildSummaryManualPendingControlCard_(Object.assign({}, data, { lifecycleUiState: lifecycle })));
+    }
+    const achInFlightCard = buildSummaryAchInFlightControlCard_(lifecycle);
+    if (achInFlightCard) {
+      card.appendChild(achInFlightCard);
     }
     if (isLockedPaymentSurface) {
       if (canShowLockedStripePaymentActions) {
@@ -44161,7 +44684,7 @@
           closeArtworkPreviewLightbox();
           return;
         }
-      if (termsReviewDecisionBackdrop && !termsReviewDecisionBackdrop.hidden) {
+        if (termsReviewDecisionBackdrop && !termsReviewDecisionBackdrop.hidden) {
           e.preventDefault();
           closeTermsReviewDecisionModal_();
           return;
@@ -44201,7 +44724,7 @@
         closeUnsavedLeaveModal();
         cancelColorRemoveConfirm_();
         closeArtworkApproveModal();
-        closeOrderFlowModal();
+        if (!ORDER_FLOW_REQUEST_IN_FLIGHT) closeOrderFlowModal();
       }
     });
 
@@ -44602,11 +45125,13 @@
     bindDashboardAchManageModalEvents_();
     if (orderFlowClose) {
       orderFlowClose.addEventListener('click', () => {
+        if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
         closeOrderFlowModal();
       });
     }
     if (orderFlowAchDecisionCloseBtn) {
       orderFlowAchDecisionCloseBtn.addEventListener('click', () => {
+        if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
         closeOrderFlowModal();
       });
     }
@@ -44709,10 +45234,18 @@
     }
     if (orderFlowDoneBtn) {
       orderFlowDoneBtn.addEventListener('click', () => {
+        if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
         closeOrderFlowModal();
         if (ORDER_FLOW_DONE_TARGET === 'summary') {
           setActiveSummaryPanel({ render: true });
         }
+      });
+    }
+    if (orderFlowResultSecondaryBtn) {
+      orderFlowResultSecondaryBtn.addEventListener('click', () => {
+        handleOrderFlowResultSecondaryAction_().catch(() => {
+          showNotice('Unable to copy AP payment page link.', 'err', { persist: true });
+        });
       });
     }
     if (orderFlowManualSubmitSuccessCloseBtn) {
@@ -44723,6 +45256,7 @@
     if (orderFlowBackdrop) {
       orderFlowBackdrop.addEventListener('click', evt => {
         if (evt.target !== orderFlowBackdrop) return;
+        if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
         closeOrderFlowModal();
       });
     }

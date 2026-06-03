@@ -650,6 +650,8 @@ function buildPortalRequestRouteMeta_(e) {
     setupResult: setupResult,
     stripeSessionId: String(params.stripeSessionId || '').trim(),
     dashboard: String(params.dashboard || '').trim() === '1' ? '1' : '',
+    summary: String(params.summary || '').trim() === '1' ? '1' : '',
+    payNow: trimString_(params.payNow),
     accountId: String(params.accountId || '').trim(),
     accountAccessToken: String(params.accountAccessToken || params.dashboardAccessToken || '').trim(),
     paymentOrigin: String(params.paymentOrigin || '').trim()
@@ -672,6 +674,8 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     setupResult: setupResult,
     stripeSessionId: String(meta.stripeSessionId || '').trim(),
     dashboard: String(meta.dashboard || '').trim() === '1' ? '1' : '',
+    summary: String(meta.summary || '').trim() === '1' ? '1' : '',
+    payNow: trimString_(meta.payNow),
     accountId: String(meta.accountId || '').trim(),
     accountAccessToken: String(meta.accountAccessToken || '').trim(),
     paymentOrigin: String(meta.paymentOrigin || '').trim()
@@ -8550,11 +8554,14 @@ function sendAchApPaymentLinkEmail_(ctx, orderSummary, options) {
       error: 'Enter a valid Accounts Payable email address.'
     };
   }
+  const purchaserEmail = normalizeEmail_(ctx && ctx.orderDraft && ctx.orderDraft.personEmail);
+  const ccList = purchaserEmail && recipients.indexOf(purchaserEmail) < 0 ? [purchaserEmail] : [];
   const content = buildAchApPaymentLinkEmailContent_(ctx, orderSummary, opts);
   const attachment = buildFinalInvoiceAttachment_(orderSummary, '');
   const attachments = attachment ? [attachment] : [];
   return sendNotificationEmail_({
     toList: recipients,
+    ccList: ccList,
     subject: content.subject,
     body: content.body,
     htmlBody: content.htmlBody,
@@ -17131,6 +17138,96 @@ function buildPortalOrderSelectedJobsSummary_(selectedJobs) {
   });
 }
 
+function buildPortalOrderLockedDraftSummary_(orderDraft) {
+  const draft = (orderDraft && typeof orderDraft === 'object') ? orderDraft : {};
+  const selectedJobs = (Array.isArray(draft.selectedJobs) ? draft.selectedJobs : []).map(function(job) {
+    const item = (job && typeof job === 'object') ? job : {};
+    const skus = (Array.isArray(item.skus) ? item.skus : []).map(function(sku) {
+      const skuItem = (sku && typeof sku === 'object') ? sku : {};
+      return {
+        skuId: trimString_(skuItem.skuId),
+        skuKey: trimString_(skuItem.skuKey),
+        uiName: trimString_(skuItem.uiName),
+        vendorProductUrl: trimString_(skuItem.vendorProductUrl),
+        imageUrl: trimString_(skuItem.imageUrl),
+        units: Math.max(0, parseInt(String(skuItem.units || 0), 10) || 0),
+        total: roundMoney_(skuItem.total || 0),
+        priceBuckets: (Array.isArray(skuItem.priceBuckets) ? skuItem.priceBuckets : []).map(function(bucket) {
+          const priceBucket = (bucket && typeof bucket === 'object') ? bucket : {};
+          return {
+            colorway: trimString_(priceBucket.colorway),
+            unitPrice: roundMoney_(priceBucket.unitPrice || 0),
+            unitPriceCents: Math.max(0, parseInt(String(priceBucket.unitPriceCents || 0), 10) || 0),
+            units: Math.max(0, parseInt(String(priceBucket.units || 0), 10) || 0),
+            total: roundMoney_(priceBucket.total || 0),
+            totalCents: Math.max(0, parseInt(String(priceBucket.totalCents || 0), 10) || 0),
+            qtyBySize: Object.keys((priceBucket.qtyBySize && typeof priceBucket.qtyBySize === 'object') ? priceBucket.qtyBySize : {}).reduce(function(map, size) {
+              const cleanSize = trimString_(size);
+              const qty = Math.max(0, parseInt(String(priceBucket.qtyBySize[size] || 0), 10) || 0);
+              if (cleanSize && qty > 0) map[cleanSize] = qty;
+              return map;
+            }, {})
+          };
+        }).filter(function(bucket) {
+          return bucket.units > 0;
+        })
+      };
+    }).filter(function(sku) {
+      return !!sku.skuId && sku.units > 0;
+    });
+    const addOns = (Array.isArray(item.addOns) ? item.addOns : []).map(function(addOn) {
+      const addOnItem = (addOn && typeof addOn === 'object') ? addOn : {};
+      return {
+        label: trimString_(addOnItem.label),
+        amount: roundMoney_(addOnItem.amount || 0),
+        type: trimString_(addOnItem.type)
+      };
+    }).filter(function(addOn) {
+      return !!addOn.label && Number(addOn.amount) !== 0;
+    });
+    return {
+      printJobId: trimString_(item.printJobId),
+      printJobNumber: trimString_(item.printJobNumber),
+      printJobName: trimString_(item.printJobName),
+      turnaroundTime: trimString_(item.turnaroundTime),
+      deliveryEstimate: trimString_(item.deliveryEstimate),
+      decorations: Array.isArray(item.decorations) ? item.decorations : [],
+      units: Math.max(0, parseInt(String(item.units || 0), 10) || 0),
+      skus: skus,
+      addOns: addOns,
+      mockups: {
+        previewUrl: trimString_(item.mockups && item.mockups.previewUrl)
+      }
+    };
+  }).filter(function(job) {
+    return !!job.printJobId && job.units > 0;
+  });
+  return {
+    selectedJobs: selectedJobs,
+    canceledJobs: (Array.isArray(draft.canceledJobs) ? draft.canceledJobs : []).map(function(job) {
+      const item = (job && typeof job === 'object') ? job : {};
+      return {
+        printJobId: trimString_(item.printJobId),
+        printJobName: trimString_(item.printJobName)
+      };
+    }).filter(function(job) {
+      return !!job.printJobId;
+    }),
+    totalUnits: Math.max(0, parseInt(String(draft.totalUnits || 0), 10) || 0),
+    amountSubtotal: roundMoney_(draft.amountSubtotal || 0),
+    amountShipping: roundMoney_(draft.amountShipping || 0),
+    amountRush: roundMoney_(draft.amountRush || 0),
+    amountTax: roundMoney_(draft.amountTax || 0),
+    amountGrandTotal: roundMoney_(draft.amountGrandTotal || 0),
+    fulfillmentMethod: normalizeFulfillmentMethod_(draft.fulfillmentMethod),
+    shippingChargeCents: Math.max(0, parseInt(String(draft.shippingChargeCents || 0), 10) || 0),
+    shippingModeLabel: trimString_(draft.shippingModeLabel),
+    shippingDetailsCaptured: draft.shippingDetailsCaptured === true,
+    shippingDetails: normalizeOrderDraftShippingDetailsInput_(draft.shippingDetails),
+    generatedAt: trimString_(draft.generatedAt || draft.createdAt)
+  };
+}
+
 /* ---------------- Canonical Lifecycle Source Chain ---------------- */
 /* Canonical lifecycle source — do not bypass for new lifecycle decisions.
    Command chain:
@@ -17199,7 +17296,8 @@ function buildPortalOrderSummary_(row) {
     lastUpdatedAt: trimString_(order.lastupdatedat || order.lastUpdatedAt),
     teamWorkflowMode: teamMeta.workflowMode,
     teamJobCompletionByJobId: teamMeta.completedJobsByJobId,
-    selectedJobs: buildPortalOrderSelectedJobsSummary_(draft.selectedJobs)
+    selectedJobs: buildPortalOrderSelectedJobsSummary_(draft.selectedJobs),
+    lockedOrderDraft: buildPortalOrderLockedDraftSummary_(draft)
   };
   summary.displayStatus = derivePortalDisplayOrderStatus_(summary, order.status);
   return summary;
@@ -20634,6 +20732,7 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
 function sendNotificationEmail_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const recipients = normalizeEmailRecipients_(opts.toList || opts.to);
+  const ccRecipients = normalizeEmailRecipients_(opts.ccList || opts.cc);
   if (!recipients.length) return { ok: false, skipped: true, reason: 'missing-email' };
 
   const message = {
@@ -20647,6 +20746,9 @@ function sendNotificationEmail_(options) {
   if (htmlBody) {
     message.htmlBody = htmlBody;
   }
+  if (ccRecipients.length) {
+    message.cc = ccRecipients.join(',');
+  }
   if (Array.isArray(opts.attachments) && opts.attachments.length) {
     message.attachments = opts.attachments;
   }
@@ -20655,21 +20757,23 @@ function sendNotificationEmail_(options) {
   if (fromAlias) {
     try {
       const aliases = (typeof GmailApp !== 'undefined' && GmailApp.getAliases) ? GmailApp.getAliases() : [];
-      const matchingAlias = aliases.find(alias => normalizeEmail_(alias) === fromAlias);
-      if (matchingAlias) {
-        const gmailOptions = {
-          name: NOTIFICATION_SENDER_NAME,
-          htmlBody: message.htmlBody,
-          attachments: message.attachments,
-          from: matchingAlias,
-          replyTo: replyTo || matchingAlias,
-          noReply: true
-        };
-        GmailApp.sendEmail(message.to, message.subject, message.body, gmailOptions);
+	      const matchingAlias = aliases.find(alias => normalizeEmail_(alias) === fromAlias);
+	      if (matchingAlias) {
+	        const gmailOptions = {
+	          name: NOTIFICATION_SENDER_NAME,
+	          from: matchingAlias,
+	          replyTo: replyTo || matchingAlias,
+	          noReply: true
+	        };
+	        if (message.htmlBody) gmailOptions.htmlBody = message.htmlBody;
+	        if (message.attachments) gmailOptions.attachments = message.attachments;
+	        if (message.cc) gmailOptions.cc = message.cc;
+	        GmailApp.sendEmail(message.to, message.subject, message.body, gmailOptions);
         return {
           ok: true,
           email: recipients[0],
           emails: recipients,
+          ccEmails: ccRecipients,
           noReply: true,
           senderName: NOTIFICATION_SENDER_NAME,
           fromAlias: matchingAlias
@@ -20683,6 +20787,7 @@ function sendNotificationEmail_(options) {
     ok: true,
     email: recipients[0],
     emails: recipients,
+    ccEmails: ccRecipients,
     noReply: true,
     senderName: NOTIFICATION_SENDER_NAME
   };
@@ -21835,6 +21940,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     queryParams: {
       checkoutResult: 'success',
       stripeSessionId: '{CHECKOUT_SESSION_ID}',
+      payNow: paymentMethodSelected === PAYMENT_METHODS.ach ? 'ach' : '',
       summary: isApPaymentLink ? '1' : '',
       paymentOrigin: isApPaymentLink ? 'ap' : ''
     }
@@ -21843,6 +21949,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
     returnUrl: returnBaseUrl,
     queryParams: {
       checkoutResult: 'cancel',
+      payNow: paymentMethodSelected === PAYMENT_METHODS.ach ? 'ach' : '',
       summary: isApPaymentLink ? '1' : '',
       paymentOrigin: isApPaymentLink ? 'ap' : ''
     }
@@ -22068,6 +22175,7 @@ function createStripeCheckoutSession_(orderDraft, options) {
     queryParams: {
       checkoutResult: 'success',
       stripeSessionId: '{CHECKOUT_SESSION_ID}',
+      payNow: trimString_(opts.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.ach ? 'ach' : '',
       summary: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? '1' : '',
       paymentOrigin: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? 'ap' : ''
     }
@@ -22076,6 +22184,7 @@ function createStripeCheckoutSession_(orderDraft, options) {
     returnUrl: returnBaseUrl,
     queryParams: {
       checkoutResult: 'cancel',
+      payNow: trimString_(opts.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.ach ? 'ach' : '',
       summary: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? '1' : '',
       paymentOrigin: normalizeAchPaymentSource_(opts.paymentOrigin) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link ? 'ap' : ''
     }
@@ -22132,7 +22241,6 @@ function createStripeCheckoutSession_(orderDraft, options) {
     uiMode: 'hosted',
     paymentUi: 'hosted',
     sessionId: sessionId,
-    clientSecret: trimString_(body.client_secret),
     checkoutUrl: checkoutUrl,
     url: checkoutUrl,
     returnUrl: returnBaseUrl,
