@@ -9866,11 +9866,13 @@
       overflow:hidden;
     }
     .termsReviewModal.is-client-view-mode .termsReviewShell{
-      grid-template-columns:minmax(0,1fr);
+      grid-template-columns:minmax(0,780px) 320px;
+      align-items:start;
       padding:0 26px 26px;
     }
     .termsReviewModal.is-client-view-mode .termsReviewRail{
-      display:none !important;
+      display:flex;
+      max-height:calc(100vh - 152px);
     }
     .termsReviewModal.is-client-view-mode .termsReviewStage{
       display:block;
@@ -9882,7 +9884,7 @@
     .termsReviewModal.is-client-view-mode .termsReviewClientPages,
     .termsReviewModal.is-client-view-mode .termsReviewFrame,
     .termsReviewModal.is-client-view-mode .termsReviewImage{
-      width:min(100%,980px);
+      width:min(100%,780px);
       margin:0 auto;
     }
     .termsReviewModal.is-client-view-mode .termsReviewClientPages{
@@ -10186,6 +10188,12 @@
     @media (max-width: 1120px){
       .termsReviewShell{
         grid-template-columns:minmax(0,1fr);
+      }
+      .termsReviewModal.is-client-view-mode .termsReviewShell{
+        grid-template-columns:minmax(0,1fr);
+      }
+      .termsReviewModal.is-client-view-mode .termsReviewRail{
+        max-height:none;
       }
       .termsReviewStage{
         min-height:52vh;
@@ -16866,7 +16874,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 55">55</div>
+  <div class="devRevisionBadge" aria-label="Development revision 56">56</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -29210,7 +29218,9 @@
       if (termsReviewModal && !termsReviewModal.contains(target)) return true;
       if (termsReviewModal && termsReviewModal.contains(target) && isTermsClientViewMode_()) {
         const headActions = termsReviewModal.querySelector('.termsReviewHeadActions');
+        const reviewRail = termsReviewModal.querySelector('.termsReviewRail');
         if (headActions && headActions.contains(target)) return false;
+        if (reviewRail && reviewRail.contains(target)) return false;
         if (termsReviewClientPages && termsReviewClientPages.contains(target)) return false;
         if (termsReviewFrame && termsReviewFrame.contains(target)) return false;
         if (termsReviewImage && termsReviewImage.contains(target)) return false;
