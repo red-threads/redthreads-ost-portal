@@ -2175,7 +2175,8 @@ function buildDashboardProjectStatusMetaFromProjectionContext_(context) {
     variant: variant,
     flags: flags,
     timeline: timeline,
-    presentation: presentation
+    presentation: presentation,
+    workflowContext: safeContext.workflowContext
   });
   return {
     projectionVersion: getDashboardProjectProjectionVersion_(),
@@ -4079,6 +4080,182 @@ function buildDashboardStatusPresentationMeta_(options) {
   };
 }
 
+function buildAchProgressPaymentCopyMeta_(workflowContext) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const lifecycleState = trimString_(ctx.lifecycleState).toLowerCase();
+  const lifecycleStage = trimString_(ctx.lifecycleStage).toLowerCase();
+  const paymentMethod = trimString_(ctx.paymentMethod || ctx.paymentMethodSelected).toLowerCase();
+  const paymentPath = trimString_(ctx.paymentPath).toLowerCase();
+  const achDetailState = trimString_(ctx.achDetailState).toLowerCase();
+  const paymentDue = ctx.paymentDue === true;
+  const paymentReceived = ctx.paymentReceived === true || ctx.isPaymentReceived === true;
+  const productionAuthorized = ctx.productionAuthorized === true || ctx.isProductionAuthorized === true;
+  const productionCurrent = ctx.productionCurrent === true;
+  const productionComplete = ctx.productionComplete === true;
+  const achPendingApproved = ctx.achPaymentPendingProductionApproved === true;
+  const nextClientAction = trimString_(ctx.nextClientAction).toLowerCase();
+  const isAch = paymentMethod === PAYMENT_METHODS.ach
+    || achDetailState.indexOf('ach_') === 0
+    || lifecycleState.indexOf('ach_payment_') === 0;
+  if (!isAch) {
+    return {
+      active: false,
+      statusKey: ''
+    };
+  }
+
+  const isFailed = lifecycleState === PORTAL_LIFECYCLE_STATES.ach_payment_failed
+    || achDetailState === ACH_DETAIL_STATES.failed
+    || achDetailState === ACH_DETAIL_STATES.blocked_or_mandate_invalid;
+  const isDisputed = lifecycleState === PORTAL_LIFECYCLE_STATES.ach_payment_disputed
+    || achDetailState === ACH_DETAIL_STATES.disputed;
+  const isCheckoutStarted = lifecycleState === PORTAL_LIFECYCLE_STATES.checkout_started_unpaid
+    || achDetailState === ACH_DETAIL_STATES.checkout_started
+    || lifecycleStage === PORTAL_LIFECYCLE_STAGES.checkout_started;
+  const isBankVerificationPending = achDetailState === ACH_DETAIL_STATES.bank_verification_pending;
+  const isMicrodepositPending = achDetailState === ACH_DETAIL_STATES.microdeposit_pending;
+  const isProcessing = achDetailState === ACH_DETAIL_STATES.processing
+    || lifecycleState === PORTAL_LIFECYCLE_STATES.ach_payment_pending
+    || (paymentDue && !paymentReceived);
+  const isPaid = paymentReceived === true || achDetailState === ACH_DETAIL_STATES.paid;
+  const pendingWithProductionApproved = !paymentReceived
+    && (achPendingApproved || productionAuthorized || productionCurrent)
+    && (isProcessing || isBankVerificationPending || isMicrodepositPending);
+
+  let statusKey = 'processing';
+  let tone = 'current';
+  let subtext = 'No action required: ACH payment is processing with Stripe.';
+  let helper = 'ACH payment was submitted and is awaiting bank confirmation. ACH confirmation can take several business days. Production begins after payment confirmation unless Red Threads has approved production while ACH is pending.';
+  let paymentHover = helper;
+  let productionHover = 'Production begins after ACH payment is confirmed.';
+
+  if (productionComplete && !paymentReceived) {
+    statusKey = 'production_complete_payment_pending';
+    tone = 'blocked';
+    subtext = 'Production is complete; ACH payment still needs final confirmation.';
+    helper = 'The print work is complete, but ACH payment is not yet fully confirmed. Watch for Stripe verification/payment updates or contact Red Threads.';
+    paymentHover = helper;
+    productionHover = 'Production is complete, but ACH payment still needs final confirmation.';
+  } else if (isDisputed) {
+    statusKey = 'disputed';
+    tone = 'blocked';
+    subtext = 'Action needed: ACH payment is under review.';
+    helper = 'Stripe reported an ACH dispute or return. Red Threads will review before production continues.';
+    paymentHover = helper;
+    productionHover = productionCurrent || productionAuthorized
+      ? 'Production was previously approved, but ACH payment is now under review.'
+      : 'Production should not advance until the ACH dispute or return is reviewed.';
+  } else if (isFailed) {
+    statusKey = 'failed';
+    tone = 'blocked';
+    subtext = 'Action needed: ACH payment could not be completed.';
+    helper = 'Stripe reported an ACH payment issue. Open the project to retry payment, choose another payment method, or contact Red Threads.';
+    paymentHover = helper;
+    productionHover = productionCurrent || productionAuthorized
+      ? 'Production was previously approved, but ACH payment needs review.'
+      : 'Production begins after payment is resolved.';
+  } else if (isPaid) {
+    statusKey = 'paid';
+    tone = 'current';
+    subtext = productionComplete
+      ? 'No action required: ACH payment confirmed and production is complete.'
+      : 'No action required: ACH payment confirmed and production is underway.';
+    helper = 'ACH payment was confirmed. Your order is authorized for production.';
+    paymentHover = 'ACH payment was confirmed.';
+    productionHover = productionComplete
+      ? 'Production is complete.'
+      : 'ACH payment was confirmed. Production is authorized.';
+  } else if (pendingWithProductionApproved) {
+    statusKey = 'pending_production_approved';
+    tone = 'current';
+    subtext = 'No action required: ACH is pending and production has been approved.';
+    helper = 'ACH payment is still pending with Stripe. Red Threads has approved production while payment settles. Payment is not yet confirmed.';
+    paymentHover = 'ACH payment processing. Payment is not marked paid until Stripe confirms success.';
+    productionHover = 'Production has been approved while ACH payment settles.';
+  } else if (isMicrodepositPending) {
+    statusKey = 'microdeposit_pending';
+    tone = 'blocked';
+    subtext = 'Action needed: verify your bank with Stripe to finish ACH payment.';
+    helper = 'Stripe is waiting for microdeposit verification. Use Manage ACH Banks and choose Verify with Stripe for the pending account. Production will not begin until ACH is verified and payment is confirmed, unless Red Threads approves production while ACH is pending.';
+    paymentHover = helper;
+    productionHover = 'Production will not begin until ACH is verified and payment is confirmed, unless Red Threads approves production while ACH is pending.';
+  } else if (isBankVerificationPending) {
+    statusKey = 'bank_verification_pending';
+    tone = 'blocked';
+    subtext = 'Action needed: bank verification is pending with Stripe.';
+    helper = 'Stripe needs bank verification before ACH payment can finish. Open the project or Manage ACH Banks to continue verification.';
+    paymentHover = helper;
+    productionHover = 'Production begins after bank verification and ACH payment confirmation, unless Red Threads approves production while ACH is pending.';
+  } else if (isCheckoutStarted) {
+    statusKey = 'checkout_started';
+    tone = 'current';
+    subtext = 'Your next action: complete ACH checkout with Stripe or restart payment.';
+    helper = 'ACH checkout was started but payment has not been submitted. Open the project to complete Stripe checkout or choose a payment path again.';
+    paymentHover = helper;
+    productionHover = 'Production begins after ACH payment is submitted and confirmed.';
+  }
+
+  return {
+    active: true,
+    statusKey: statusKey,
+    tone: tone,
+    subtext: subtext,
+    helper: helper,
+    paymentHover: paymentHover,
+    productionHover: productionHover,
+    lifecycleState: lifecycleState,
+    lifecycleStage: lifecycleStage,
+    paymentMethod: paymentMethod,
+    paymentPath: paymentPath,
+    achDetailState: achDetailState,
+    achPaymentPendingProductionApproved: achPendingApproved,
+    paymentDue: paymentDue,
+    paymentReceived: paymentReceived,
+    productionAuthorized: productionAuthorized,
+    productionCurrent: productionCurrent,
+    productionComplete: productionComplete,
+    nextClientAction: nextClientAction
+  };
+}
+
+function buildDashboardStatusCopyRunsFromPlain_(text) {
+  const value = trimString_(text);
+  if (!value) return [];
+  const prefixedRuns = [
+    { prefix: 'Action needed:', tone: 'red' },
+    { prefix: 'Your next action:', tone: 'blue' },
+    { prefix: 'No action required:', tone: 'green' }
+  ];
+  for (let i = 0; i < prefixedRuns.length; i += 1) {
+    const item = prefixedRuns[i];
+    if (value.indexOf(item.prefix) !== 0) continue;
+    const remainder = value.slice(item.prefix.length);
+    const runs = [buildDashboardStatusCopyRun_(item.prefix, item.tone)];
+    if (remainder) runs.push(buildDashboardStatusCopyRun_(remainder, ''));
+    return runs;
+  }
+  return [buildDashboardStatusCopyRun_(value, '')];
+}
+
+function buildDashboardStatusCopyLifecycleMeta_(workflowContext, achProgress) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  return {
+    lifecycleState: trimString_(ctx.lifecycleState),
+    lifecycleStage: trimString_(ctx.lifecycleStage),
+    paymentMethod: trimString_(ctx.paymentMethod || ctx.paymentMethodSelected),
+    paymentPath: trimString_(ctx.paymentPath),
+    achDetailState: trimString_(ctx.achDetailState),
+    achPaymentPendingProductionApproved: ctx.achPaymentPendingProductionApproved === true,
+    paymentDue: ctx.paymentDue === true,
+    paymentReceived: ctx.paymentReceived === true || ctx.isPaymentReceived === true,
+    productionAuthorized: ctx.productionAuthorized === true || ctx.isProductionAuthorized === true,
+    productionCurrent: ctx.productionCurrent === true,
+    productionComplete: ctx.productionComplete === true,
+    nextClientAction: trimString_(ctx.nextClientAction),
+    achProgress: (achProgress && typeof achProgress === 'object') ? achProgress : { active: false, statusKey: '' }
+  };
+}
+
 function buildDashboardStatusCopyMeta_(options) {
   /* Canonical dashboard consumer — status helper/tooltip copy adapter. */
   const opts = (options && typeof options === 'object') ? options : {};
@@ -4086,6 +4263,9 @@ function buildDashboardStatusCopyMeta_(options) {
   const variant = String(opts.variant || '').trim().toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
   const timeline = (opts.timeline && typeof opts.timeline === 'object') ? opts.timeline : {};
   const presentation = (opts.presentation && typeof opts.presentation === 'object') ? opts.presentation : {};
+  const workflowContext = (opts.workflowContext && typeof opts.workflowContext === 'object') ? opts.workflowContext : {};
+  const achProgress = buildAchProgressPaymentCopyMeta_(workflowContext);
+  const lifecycleCopyMeta = buildDashboardStatusCopyLifecycleMeta_(workflowContext, achProgress);
   const stateMode = String(presentation.stateMode || 'tracker').trim().toLowerCase() === 'complete' ? 'complete' : 'tracker';
   const currentStepKey = trimString_(presentation.currentStepKey).toLowerCase();
   const poStageMode = trimString_(presentation.poStageMode).toLowerCase();
@@ -4119,7 +4299,7 @@ function buildDashboardStatusCopyMeta_(options) {
       buildDashboardStatusCopyRun_('All orders completed on ' + (completionLabel || 'the final completion date') + '.', '')
     ];
     stageHelperMap.complete = buildDashboardStatusHelperPayloadFromRuns_(helperRuns);
-    return {
+    return Object.assign({
       stateMode: 'complete',
       tone: 'complete',
       completeLabel: 'COMPLETE',
@@ -4139,7 +4319,7 @@ function buildDashboardStatusCopyMeta_(options) {
       paymentTermsLabel: paymentTermsLabel,
       paymentMethodLabel: paymentMethodLabel,
       allJobsCompleted: allJobsCompleted
-    };
+    }, lifecycleCopyMeta);
   }
 
   let tone = 'current';
@@ -4197,17 +4377,23 @@ function buildDashboardStatusCopyMeta_(options) {
     ];
     tone = 'current';
   } else if (currentStepKey === 'payment') {
-    subtextRuns = [
-      buildDashboardStatusCopyRun_('Your Next Action:', 'blue'),
-      buildDashboardStatusCopyRun_(' Submit a payment - required to begin production & turn times.', '')
-    ];
-    helperRuns = [
-      buildDashboardStatusCopyRun_('Open the Project', 'red'),
-      buildDashboardStatusCopyRun_(' and click ', ''),
-      buildDashboardStatusCopyRun_('Place Order', 'blue'),
-      buildDashboardStatusCopyRun_(' to view payment options. Production & Turnaround begins on payment receipt.', '')
-    ];
-    tone = 'blocked';
+    if (achProgress.active === true) {
+      subtextRuns = buildDashboardStatusCopyRunsFromPlain_(achProgress.subtext);
+      helperRuns = buildDashboardStatusCopyRunsFromPlain_(achProgress.helper);
+      tone = trimString_(achProgress.tone) || 'current';
+    } else {
+      subtextRuns = [
+        buildDashboardStatusCopyRun_('Your Next Action:', 'blue'),
+        buildDashboardStatusCopyRun_(' Submit a payment - required to begin production & turn times.', '')
+      ];
+      helperRuns = [
+        buildDashboardStatusCopyRun_('Open the Project', 'red'),
+        buildDashboardStatusCopyRun_(' and click ', ''),
+        buildDashboardStatusCopyRun_('Place Order', 'blue'),
+        buildDashboardStatusCopyRun_(' to view payment options. Production & Turnaround begins on payment receipt.', '')
+      ];
+      tone = 'blocked';
+    }
   } else if (currentStepKey === 'production' && variant === 'purchase_order') {
     subtextRuns = [
       buildDashboardStatusCopyRun_('No action required. P.O. submitted / Production began on ' + (printStartLabel || 'the submission date') + '. ', ''),
@@ -4221,7 +4407,11 @@ function buildDashboardStatusCopyMeta_(options) {
     ];
     tone = 'current';
   } else if (currentStepKey === 'production') {
-    if (isManualProductionInProgress) {
+    if (achProgress.active === true && achProgress.statusKey === 'paid') {
+      subtextRuns = buildDashboardStatusCopyRunsFromPlain_(achProgress.subtext);
+      helperRuns = buildDashboardStatusCopyRunsFromPlain_(achProgress.helper);
+      tone = trimString_(achProgress.tone) || 'current';
+    } else if (isManualProductionInProgress) {
       subtextRuns = [
         buildDashboardStatusCopyRun_('No action required. Payment was made / Production began on ' + (printStartLabel || paidDateLabel || 'the payment date') + '. ', ''),
         buildDashboardStatusCopyRun_('Expand project details', ''),
@@ -4267,7 +4457,9 @@ function buildDashboardStatusCopyMeta_(options) {
         ]
   );
   stageHelperMap.payment = buildDashboardStatusHelperPayloadFromRuns_(
-    variant === 'purchase_order'
+    achProgress.active === true
+      ? buildDashboardStatusCopyRunsFromPlain_(achProgress.paymentHover || achProgress.helper)
+      : variant === 'purchase_order'
       ? [
           buildDashboardStatusCopyRun_('Open the Project', 'red'),
           buildDashboardStatusCopyRun_(' / invoice tab and make a payment by ' + (paymentDueLabel || 'the due date') + ' per your account terms: ' + (paymentTermsLabel || 'your approved terms') + '.', '')
@@ -4280,7 +4472,9 @@ function buildDashboardStatusCopyMeta_(options) {
         ]
   );
   stageHelperMap.production = buildDashboardStatusHelperPayloadFromRuns_(
-    hasPoSubmissionSignal
+    achProgress.active === true
+      ? buildDashboardStatusCopyRunsFromPlain_(achProgress.productionHover || achProgress.helper)
+      : hasPoSubmissionSignal
       ? [
           buildDashboardStatusCopyRun_('P.O. Submitted / Production began on ' + (printStartLabel || 'the submission date') + '. ', ''),
           buildDashboardStatusCopyRun_('Expand project details', ''),
@@ -4301,7 +4495,7 @@ function buildDashboardStatusCopyMeta_(options) {
         ]
   );
 
-  return {
+  return Object.assign({
     stateMode: 'tracker',
     tone: tone,
     completeLabel: '',
@@ -4310,9 +4504,9 @@ function buildDashboardStatusCopyMeta_(options) {
     helperPlainText: buildDashboardStatusPlainTextFromRuns_(helperRuns),
     stageHelpers: stageHelperMap,
     variant: variant,
-      currentStepKey: currentStepKey,
-      poStageMode: poStageMode,
-      poSubmittedDateLabel: poSubmittedLabel,
+    currentStepKey: currentStepKey,
+    poStageMode: poStageMode,
+    poSubmittedDateLabel: poSubmittedLabel,
     poNumber: poNumber,
     orderPlacedDateLabel: orderPlacedDateLabel,
     paidDateLabel: paidDateLabel,
@@ -4321,7 +4515,7 @@ function buildDashboardStatusCopyMeta_(options) {
     paymentTermsLabel: paymentTermsLabel,
     paymentMethodLabel: paymentMethodLabel,
     allJobsCompleted: allJobsCompleted
-  };
+  }, lifecycleCopyMeta);
 }
 
 function buildDashboardStatusCopyRun_(text, tone) {

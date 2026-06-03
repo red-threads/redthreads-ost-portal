@@ -24793,6 +24793,9 @@
       ? copy.helperRuns
       : [{ text: String(safeMeta.helperText || 'Loading project status.').trim() || 'Loading project status.', tone: '' }];
     const subtextRuns = Array.isArray(copy.subtextRuns) ? copy.subtextRuns : [];
+    const achProgress = (copy.achProgress && typeof copy.achProgress === 'object')
+      ? Object.assign({}, copy.achProgress)
+      : { active: false, statusKey: '' };
     return {
       stateMode: String(copy.stateMode || 'tracker').trim().toLowerCase() === 'complete' ? 'complete' : 'tracker',
       helperRuns: helperRuns,
@@ -24811,6 +24814,19 @@
       paymentDueDateLabel: String(copy.paymentDueDateLabel || '').trim(),
       paymentTermsLabel: String(copy.paymentTermsLabel || '').trim(),
       paymentMethodLabel: String(copy.paymentMethodLabel || '').trim(),
+      lifecycleState: String(copy.lifecycleState || '').trim(),
+      lifecycleStage: String(copy.lifecycleStage || '').trim(),
+      paymentMethod: String(copy.paymentMethod || '').trim(),
+      paymentPath: String(copy.paymentPath || '').trim(),
+      achDetailState: String(copy.achDetailState || '').trim(),
+      achPaymentPendingProductionApproved: copy.achPaymentPendingProductionApproved === true,
+      paymentDue: copy.paymentDue === true,
+      paymentReceived: copy.paymentReceived === true,
+      productionAuthorized: copy.productionAuthorized === true,
+      productionCurrent: copy.productionCurrent === true,
+      productionComplete: copy.productionComplete === true,
+      nextClientAction: String(copy.nextClientAction || '').trim(),
+      achProgress: achProgress,
       allJobsCompleted: copy.allJobsCompleted === true
     };
   }
@@ -24898,14 +24914,23 @@
     const opts = (options && typeof options === 'object') ? options : {};
     const runs = parseProjectHeaderStatusCopyRuns_(template, replacements);
     if (opts.highlightNextActionPrefix === true && runs.length) {
-      const prefix = 'Your next action:';
+      const prefixTones = [
+        { prefix: 'Your next action:', tone: 'blue' },
+        { prefix: 'Action needed:', tone: 'red' },
+        { prefix: 'No action required:', tone: 'green' }
+      ];
       const firstRun = runs[0];
       const firstText = String(firstRun && firstRun.text || '');
       const firstTone = String(firstRun && firstRun.tone || '').trim().toLowerCase();
-      if (!firstTone && firstText.indexOf(prefix) === 0) {
-        const remainder = firstText.slice(prefix.length);
-        runs.splice(0, 1, { text: prefix, tone: 'blue' });
-        if (remainder) runs.splice(1, 0, { text: remainder, tone: '' });
+      if (!firstTone) {
+        for (let i = 0; i < prefixTones.length; i += 1) {
+          const item = prefixTones[i];
+          if (firstText.indexOf(item.prefix) !== 0) continue;
+          const remainder = firstText.slice(item.prefix.length);
+          runs.splice(0, 1, { text: item.prefix, tone: item.tone });
+          if (remainder) runs.splice(1, 0, { text: remainder, tone: '' });
+          break;
+        }
       }
     }
     return {
@@ -24915,7 +24940,7 @@
   }
 
   function isProjectHeaderManualPaymentMethod_(copyMeta){
-    const method = String(copyMeta && copyMeta.paymentMethodLabel || '').trim().toLowerCase();
+    const method = String(copyMeta && (copyMeta.paymentMethod || copyMeta.paymentMethodLabel) || '').trim().toLowerCase();
     return method === 'check' || method === 'cash';
   }
 
@@ -24926,8 +24951,17 @@
     const poStageMode = String(safeCopy.poStageMode || '').trim().toLowerCase();
     const isPo = variant === 'purchase_order';
     const isManualPayment = isProjectHeaderManualPaymentMethod_(safeCopy);
-    const isAchPayment = String(safeCopy.paymentMethodLabel || '').trim().toLowerCase().indexOf('ach') >= 0 ||
-      String(safeCopy.paymentMethodLabel || '').trim().toLowerCase().indexOf('bank') >= 0;
+    const paymentMethod = String(safeCopy.paymentMethod || '').trim().toLowerCase();
+    const lifecycleState = String(safeCopy.lifecycleState || '').trim().toLowerCase();
+    const achDetailState = String(safeCopy.achDetailState || '').trim().toLowerCase();
+    const paymentMethodLabel = String(safeCopy.paymentMethodLabel || '').trim().toLowerCase();
+    const achProgress = (safeCopy.achProgress && typeof safeCopy.achProgress === 'object') ? safeCopy.achProgress : {};
+    const achProgressActive = achProgress.active === true && !!String(achProgress.subtext || achProgress.helper || '').trim();
+    const isAchPayment = paymentMethod === PAYMENT_METHODS.ach
+      || lifecycleState.indexOf('ach_payment_') === 0
+      || achDetailState.indexOf('ach_') === 0
+      || paymentMethodLabel.indexOf('ach') >= 0
+      || paymentMethodLabel.indexOf('bank') >= 0;
     const completeText = 'Project complete. All orders were completed on {{completionDate|the final completion date}}.';
     const commonStandardPending = {
       order: 'Click [blue]Place Order[/blue] on the right to choose delivery and payment methods.',
@@ -24947,6 +24981,30 @@
       qty_sizes: commonDone.qty_sizes,
       artwork: commonDone.artwork,
       place_order: 'Purchase Order #{{poNumber|--}} was submitted on {{poSubmittedDate|the submission date}}.'
+    };
+    const buildAchProgressRow = (currentKey) => {
+      const statusKey = String(achProgress.statusKey || '').trim().toLowerCase();
+      const resolvedCurrentKey = currentKey || (statusKey === 'pending_production_approved' ? 'production' : 'payment');
+      const subtext = String(achProgress.subtext || '').trim()
+        || 'No action required: ACH payment is processing with Stripe.';
+      const helper = String(achProgress.helper || '').trim()
+        || 'ACH payment was submitted and is awaiting bank confirmation.';
+      const paymentHover = String(achProgress.paymentHover || '').trim() || helper;
+      const productionHover = String(achProgress.productionHover || '').trim()
+        || (statusKey === 'pending_production_approved'
+          ? 'Production has been approved while ACH payment settles.'
+          : 'Production begins after ACH payment is confirmed.');
+      return {
+        subtext: subtext,
+        currentKey: resolvedCurrentKey,
+        hovers: {
+          qty_sizes: lockedStandard.qty_sizes,
+          artwork: lockedStandard.artwork,
+          place_order: lockedStandard.place_order,
+          payment: paymentHover,
+          production: productionHover
+        }
+      };
     };
 
     if (String(safeCopy.stateMode || '').trim().toLowerCase() === 'complete') {
@@ -25059,6 +25117,19 @@
           production: commonStandardPending.production
         }
       };
+    }
+    if (isAchPayment && achProgressActive && stateMap.payment === 'current' && stateMap.production === 'complete') {
+      return buildAchProgressRow('payment');
+    }
+    if (isAchPayment && achProgressActive && stateMap.payment === 'current' && stateMap.production === 'current') {
+      const statusKey = String(achProgress.statusKey || '').trim().toLowerCase();
+      return buildAchProgressRow(statusKey === 'pending_production_approved' ? 'production' : 'payment');
+    }
+    if (isAchPayment && achProgressActive && stateMap.payment === 'current') {
+      return buildAchProgressRow('payment');
+    }
+    if (isAchPayment && achProgressActive && stateMap.payment === 'complete' && stateMap.production === 'current') {
+      return buildAchProgressRow('production');
     }
     if (stateMap.payment === 'current' && stateMap.production === 'future') {
       return {
