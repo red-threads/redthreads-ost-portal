@@ -16823,7 +16823,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 50">50</div>
+  <div class="devRevisionBadge" aria-label="Development revision 51">51</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -30788,6 +30788,50 @@
     return TAX_DOC_CLIENT_VIEW_MODE === true;
   }
 
+  function handleTaxDocumentCloseRequest_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (isTaxTeamReviewMode_()) {
+      closeTaxTeamReviewAndReturn_({ immediate: opts.immediate === true });
+      return;
+    }
+    closeTaxExemptWorkspace({ immediate: opts.immediate === true || isTaxClientViewMode_() });
+  }
+
+  function isTaxDocumentOutsideCloseTarget_(target){
+    if (!taxDocBackdrop || taxDocBackdrop.hidden) return false;
+    if (typeof Node !== 'undefined' && target instanceof Node) {
+      if (taxDocClose && taxDocClose.contains(target)) return false;
+      if (taxDocModal && !taxDocModal.contains(target)) return true;
+      if (taxDocModal && taxDocModal.contains(target) && isTaxClientViewMode_()) {
+        if (taxDocApprovedViewerCard && taxDocApprovedViewerCard.contains(target)) return false;
+        if (taxDocModal.querySelector('.taxDocHeadActions') && taxDocModal.querySelector('.taxDocHeadActions').contains(target)) return false;
+        return true;
+      }
+    }
+    return target === taxDocBackdrop;
+  }
+
+  function handleTaxDocumentBackdropClick_(event){
+    if (!event || !isTaxDocumentOutsideCloseTarget_(event.target)) return;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    handleTaxDocumentCloseRequest_({ immediate: true });
+  }
+
+  function handleTaxDocumentKeydown_(event){
+    if (!event || event.key !== 'Escape') return;
+    if (!taxDocBackdrop || taxDocBackdrop.hidden || !taxDocBackdrop.classList.contains('open')) return;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    handleTaxDocumentCloseRequest_({ immediate: true });
+  }
+
+  function bindTaxDocumentWorkspaceEvents_(){
+    if (bindTaxDocumentWorkspaceEvents_.isBound === true) return;
+    bindTaxDocumentWorkspaceEvents_.isBound = true;
+    if (taxDocClose) taxDocClose.addEventListener('click', () => handleTaxDocumentCloseRequest_());
+    if (taxDocBackdrop) taxDocBackdrop.addEventListener('click', handleTaxDocumentBackdropClick_);
+    document.addEventListener('keydown', handleTaxDocumentKeydown_);
+  }
+
   function setTaxClientViewerLoading_(isLoading){
     TAX_DOC_CLIENT_VIEW_LOADING = isLoading === true;
   }
@@ -30905,6 +30949,7 @@
       openTeamModeGate({ preserveMessage: true, resetValue: true });
       return;
     }
+    bindTaxDocumentWorkspaceEvents_();
     closeAccountDocumentModal({ immediate: true });
     closeTaxSignatureModal_();
     closeTaxDocEmailPanel_();
@@ -33116,6 +33161,7 @@
   async function openTaxExemptWorkspace_(options){
     if (!taxDocBackdrop) return;
     const opts = (options && typeof options === 'object') ? options : {};
+    bindTaxDocumentWorkspaceEvents_();
     TAX_DOC_MODAL_CONTEXT = String(opts.context || (CURRENT_VIEW === VIEW_DASHBOARD ? 'dashboard' : 'project')).trim() || 'project';
     resetTaxClientViewState_();
     resetTaxTeamReviewState_();
@@ -33161,6 +33207,7 @@
   async function openTaxExemptClientViewer_(options){
     if (!taxDocBackdrop) return;
     const opts = (options && typeof options === 'object') ? options : {};
+    bindTaxDocumentWorkspaceEvents_();
     TAX_DOC_MODAL_CONTEXT = String(opts.context || (CURRENT_VIEW === VIEW_DASHBOARD ? 'dashboard' : 'project')).trim() || 'project';
     resetTaxTeamReviewState_();
     resetTaxClientViewState_();
@@ -43944,6 +43991,7 @@
         }
         if (taxDocBackdrop && !taxDocBackdrop.hidden && taxDocBackdrop.classList.contains('open')) {
           e.preventDefault();
+          handleTaxDocumentCloseRequest_({ immediate: true });
           return;
         }
         closeChat();
@@ -44119,27 +44167,7 @@
         }
       });
     }
-    if (taxDocClose) {
-      taxDocClose.addEventListener('click', () => {
-        if (isTaxTeamReviewMode_()) {
-          closeTaxTeamReviewAndReturn_({ immediate: true });
-          return;
-        }
-        closeTaxExemptWorkspace();
-      });
-    }
-    if (taxDocBackdrop) {
-      taxDocBackdrop.addEventListener('click', e => {
-        if (e.target !== taxDocBackdrop) return;
-        if (isTaxTeamReviewMode_()) {
-          closeTaxTeamReviewAndReturn_({ immediate: true });
-          return;
-        }
-        if (isTaxClientViewMode_()) {
-          closeTaxExemptWorkspace({ immediate: true });
-        }
-      });
-    }
+    bindTaxDocumentWorkspaceEvents_();
     if (taxDocTeamBackBtn) taxDocTeamBackBtn.addEventListener('click', () => closeTaxTeamReviewAndReturn_({ immediate: true }));
     if (taxDocTeamApproveBtn) taxDocTeamApproveBtn.addEventListener('click', approveTaxExemptTeamReview_);
     if (taxDocTeamDenyBtn) taxDocTeamDenyBtn.addEventListener('click', openTaxTeamDecisionModal_);
