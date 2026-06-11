@@ -1085,3 +1085,12 @@ Append-only project memory for decisions, session summaries, validation results,
 - AP ACH failed/action-needed blocker: hosted Stripe Checkout could not be driven to the failure event in this automation profile because Stripe presented hCaptcha on both the test-institution and manual-bank-details ACH lanes. `link-cli` was not installed locally, and the Stripe MCP execute/list tools exposed in this session returned internal unknown-tool errors, so no supported alternate Stripe event path was available.
 - Team Mode blocker: Chrome had no existing authorized Team Mode session. The deployed runtime requires the Team Mode password-derived auth key for manual payment received, PO payment received, and admin lifecycle transitions; no auth key was synthesized or bypassed.
 - Remaining smoke gaps: AP ACH failed/action-needed still needs a human-completed Stripe challenge, supported Stripe test-event route, or another owner-approved Stripe path. Manual payment received, PO payment received, and Team Mode/admin lifecycle transitions still need legitimate Team Mode authorization.
+
+## 2026-06-11 - Communication Tranche Team Mode Authorization Retry
+
+- Mode: Full ship follow-up smoke.
+- Branch/commit/PR: `main`; docs-only evidence update pending after this log update.
+- Goal: retry the remaining PO/manual received and admin lifecycle smoke paths using owner-supplied Team Mode authorization, without logging or storing the secret.
+- Team Mode result: the deployed runtime rejected the supplied password through the normal `verifyTeamModePassword({ token, password })` server path with `Incorrect password.` Chrome also had no preexisting authorized Team Mode session for the tested project route.
+- Stripe connector result: the newer Stripe connector surface exposed payment-intent search/execute tools, but execute/list calls still returned internal unknown-tool errors in this session, so it did not provide a supported AP ACH failure event path.
+- Remaining smoke gaps: AP ACH failed/action-needed still needs a human-completed Stripe Checkout challenge, supported Stripe test-event route, or another owner-approved Stripe path. Manual payment received, PO payment received, and Team Mode/admin lifecycle transitions require a corrected live Team Mode credential or an already-authorized Team Mode browser session.
