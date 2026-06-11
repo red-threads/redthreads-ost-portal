@@ -101,34 +101,95 @@ The second command should show only redaction, safety, or documentation referenc
 64. AP-link ACH bank evidence stays on `PORTAL_ORDERS` and does not create a Dashboard Payment Methods row.
 65. No full bank account numbers, routing numbers, hosted verification URLs, or microdeposit values are stored in Sheets, Apps Script logs, browser state, or repo files.
 66. ACH payment Checkout email policy: normal owner and AP/order-only ACH payment sessions do not pass `customer` or `customer_email` by default; Stripe collects payer contact email in Checkout. Dashboard bank setup remains the saved-bank readiness path.
-67. Standard order-checkout ACH pending state queues one client invoice/status email through `PORTAL_EMAIL_QUEUE` with the current invoice attachment. Verification-required copy says Stripe is waiting for bank verification; processing copy says ACH is pending Stripe/bank confirmation.
-68. Standard order-checkout ACH paid state queues one client receipt email through `PORTAL_EMAIL_QUEUE` with an updated invoice/receipt attachment. Duplicate success signals such as `payment_intent.succeeded` plus `checkout.session.async_payment_succeeded` must not send a second receipt.
-69. Standard order-checkout ACH failed/disputed/blocked state queues one action-needed client email and does not expose raw Stripe failure payloads.
-70. AP/order-only ACH remains excluded from the standard ACH lifecycle client emails; the existing AP payment-link email path is the only AP email path unless a future task explicitly adds AP lifecycle notices.
+67. Standard order-checkout ACH pending state queues one client invoice/status email and one team alert to `hello@redthreads.com` through `PORTAL_EMAIL_QUEUE` with the current invoice attachment. Verification-required copy says Stripe is waiting for bank verification; processing copy says ACH is pending Stripe/bank confirmation.
+68. Standard order-checkout ACH paid state queues one client receipt email and one team alert to `hello@redthreads.com` through `PORTAL_EMAIL_QUEUE` with an updated invoice/receipt attachment. Duplicate success signals such as `payment_intent.succeeded` plus `checkout.session.async_payment_succeeded` must not send a second receipt or team alert.
+69. Standard order-checkout ACH failed/disputed/blocked state queues one action-needed client email and one team alert to `hello@redthreads.com`, and does not expose raw Stripe failure payloads.
+70. ACH lifecycle queue rows use recipient-class idempotency, immediately attempt safe queue processing, and fall back to the processor trigger when a lock or send failure prevents immediate completion. Queue status must distinguish `sent`, `failed`, and state-based `skipped` rows.
+71. ACH lifecycle client emails and matching team alerts render through the shared lifecycle email shell with a reference block, email-safe progress snapshot, current next step, history bullets when dates exist, CTA, no-reply footer, and invoice/receipt attachment.
+72. AP/order-only ACH remains excluded from the standard ACH lifecycle client/team lifecycle emails, but uses its own `ap_ach_lifecycle_email` queue job for checkout-started, submitted/pending, confirmed/receipt, and failed/action-needed milestones.
+73. Non-ACH payment lifecycle milestones use `PORTAL_EMAIL_QUEUE` job type `payment_lifecycle_email` with recipient-class idempotency: card paid, card failed/action-needed, manual check/cash pending, manual payment received, PO submitted, and PO payment received each queue one client email and one team alert to `hello@redthreads.com`.
+74. Non-ACH payment lifecycle emails render through the shared lifecycle email shell with the five-stage progress snapshot, payment-method-specific reference copy, current next step, history bullets when dates exist, CTA, no-reply footer, and the required invoice/receipt attachment except card failed/action-needed, where an existing invoice may attach but missing attachment must not block the action-needed email.
+75. AP lifecycle emails render through the shared lifecycle email shell with AP ACH reference copy, the five-stage progress snapshot, current next step, AP payment CTA, history bullets when dates exist, and no-reply footer. AP-facing emails go to the stored AP recipient with purchaser/client visible CC when distinct; matching team alerts go to `hello@redthreads.com`.
+76. AP submitted/pending and confirmed/receipt lifecycle emails require invoice/receipt attachments. AP failed/action-needed attaches the invoice/status PDF when available, but missing attachment must not block the action-needed email.
+77. Portal chat notifications use queued `chat_message_digest_email` jobs with a 10-minute `portalStateJson.notBefore` debounce. Client messages digest to `hello@redthreads.com`, team replies digest to the project client email, and queue payloads store message IDs/timing only, not message text.
+78. Non-payment portal lifecycle milestones use queued `portal_lifecycle_email` jobs with recipient-class idempotency: artwork approved/change requested, project ready to order, Team Mode unlock/reset/reopen/hold/cancel, ACH pending-production authorization, job/project completion, and tax-exempt/credit-terms submission/approval/denial/reset events.
+79. `portal_lifecycle_email` messages render through the shared lifecycle email shell with the five-stage progress snapshot when project context exists, current next step, history bullets when dates exist, CTA, no-reply footer, and safe document attachments when the event requires them.
+80. Utility/direct emails that are intentionally not lifecycle triggers remain direct: AP payment-link send, blank account-document send, submitted tax-form copy send, password reset code, summary PDF send, and explicit admin resend actions.
+81. Due `PORTAL_EMAIL_QUEUE` jobs can be processed by the normal queue trigger or by the bounded portal-traffic nudge on direct portal loads/chat saves. Nudge logs must remain safe and must not include tokens, raw recipient emails, chat message text, Stripe secrets, or bank details.
+
+## Post-896 Communication Tranche Smoke Evidence
+
+Recorded 2026-06-11 after deploying stable Apps Script version `896`, `Complete portal communication tranche`:
+
+- Direct Apps Script `/exec`, direct tokenized `/exec`, public `/portal`, direct dashboard route, and checkout-cancel route returned HTTP 200 with revision `60` visible where expected and no `client_secret` / `clientSecret` markers in rendered output. Raw curl POST smoke against the Apps Script public redirect path returned HTTP 405 after redirect, so read-only server action evidence should be gathered through the rendered portal/`google.script.run` surface or Apps Script execution context rather than anonymous curl.
+- `clasp deployments` confirmed the existing stable deployment ID points at `@896`; no new deployment ID was created.
+- The private fixture loaded visually in browser automation with the revision `60` badge, project status stages, order controls, and price matrix. The only console issue observed was an external Squarespace widget limit message, not a portal runtime failure.
+- Older queued ACH lifecycle rows from prior smoke attempts were processed by the bounded portal-traffic nudge: submitted/pending jobs skipped safely once the order was already paid, and receipt jobs sent.
+- Artwork approval on the private fixture created one `portal_lifecycle_email` team alert row and it completed with status `sent`.
+- Chat digest batching was exercised with two private fixture messages in the same `client_to_team` window. The same `chat_message_digest_email` row was updated with both message IDs, its `notBefore` was refreshed, it did not send early, and it completed with status `sent` after the debounce window with one attempt and no failure reason.
+- Queue payload review confirmed chat digest rows store message IDs/timing only, not message text.
+- The scanned `PORTAL_EMAIL_QUEUE` status column contained only `sent` and intentional state-based `skipped` rows after post-ship queue smoke; no `failed` rows were found.
+- `clasp run processPortalEmailQueue --nondev` is not available for this Apps Script project because the project is not API-executable; queue evidence was gathered through the live web app, the backing Sheets queue, and safe rendered-route checks.
 
 ## ACH Event Smokes
 
 For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID and `PORTAL_ORDERS` reflects the expected state:
 
 - `checkout.session.completed`: order placed, ACH pending, production policy applied.
-- Standard ACH `checkout.session.completed`: one submitted/pending invoice email is queued/sent for `achPaymentSource=order_checkout`; AP/order-only ACH is excluded.
+- Standard ACH `checkout.session.completed`: one submitted/pending invoice email and one team alert are queued/sent for `achPaymentSource=order_checkout`; AP/order-only ACH is excluded.
+- Standard ACH email rendering: pending/verification, receipt, and failed/action-needed client emails plus team alerts include the five-stage progress snapshot (`Qty/Sizes`, `Artwork`, `Order`, `Payment`, `Production`) sourced from canonical dashboard lifecycle helpers.
 - Immediate Checkout success return before async payment finality: `reconcile_checkout_return` locks the order pending/not paid and records safe ACH fields only after ACH evidence is present.
 - Stale `checkout.session.completed`: no regression when the order is already paid, failed, disputed, team-hold, in production, or closed.
-- `checkout.session.async_payment_succeeded`: paid, production authorized, failure fields cleared, one ACH receipt email queued/sent for standard order-checkout ACH.
-- `checkout.session.async_payment_failed`: failed/action-needed, retry available, team review if production was already authorized, one ACH action-needed email queued/sent for standard order-checkout ACH.
+- `checkout.session.async_payment_succeeded`: paid, production authorized, failure fields cleared, one ACH receipt email and one team alert queued/sent for standard order-checkout ACH.
+- `checkout.session.async_payment_failed`: failed/action-needed, retry available, team review if production was already authorized, one ACH action-needed email and one team alert queued/sent for standard order-checkout ACH.
 - `payment_intent.processing`: ACH processing, not paid.
-- Standard ACH `payment_intent.processing`: submitted/pending invoice email idempotency collapses with any already-queued submitted email for the same order/payment intent.
+- Standard ACH `payment_intent.processing`: submitted/pending invoice email and team-alert idempotency collapse with any already-queued submitted email/team alert for the same order/payment intent and recipient class.
 - Stale `payment_intent.processing`: no regression when the order is already paid, failed, disputed, team-hold, in production, or closed.
-- `payment_intent.succeeded`: paid and production authorized; receipt email idempotency collapses with `checkout.session.async_payment_succeeded`.
-- `payment_intent.payment_failed` or `charge.failed`: failed/action-needed, with unsafe saved-bank default blocked for hard bank/mandate/verification failures and one ACH action-needed email queued/sent for standard order-checkout ACH.
+- `payment_intent.succeeded`: paid and production authorized; receipt email and team-alert idempotency collapse with `checkout.session.async_payment_succeeded`.
+- `payment_intent.payment_failed` or `charge.failed`: failed/action-needed, with unsafe saved-bank default blocked for hard bank/mandate/verification failures and one ACH action-needed email plus one team alert queued/sent for standard order-checkout ACH.
 - `charge.updated`: expected debit date and safe bank summary fields updated when available.
-- `charge.dispute.created`: failed/team review, no silent retry, saved bank marked unusable, one ACH action-needed email queued/sent for standard order-checkout ACH.
+- `charge.dispute.created`: failed/team review, no silent retry, saved bank marked unusable, one ACH action-needed email plus one team alert queued/sent for standard order-checkout ACH.
 - `setup_intent.succeeded`: saved bank summary stored.
 - `setup_intent.setup_failed`: setup failed with retry path; if exactly one matching `dashboard_saved` ACH row can be identified by safe setup/payment method/customer/account linkage, that row moves to failed/unavailable and is not default-eligible.
-- AP-link payment events: order-level ACH fields update, but `PORTAL_ACCOUNTS.achPaymentMethodsJson` is not expanded with a dashboard-visible bank.
+- AP-link checkout-started: creating the locked-order AP ACH Checkout Session queues/sends one AP-facing checkout-started email plus purchaser/client visible CC when distinct and one team alert; replaying the same checkout-started source does not duplicate sent rows.
+- AP-link `checkout.session.completed` / `payment_intent.processing`: order-level ACH fields update, `PORTAL_ACCOUNTS.achPaymentMethodsJson` is not expanded with a dashboard-visible bank, and one AP-facing submitted/pending email plus one team alert are queued/sent with attachment-required handling.
+- AP-link `checkout.session.async_payment_succeeded` / `payment_intent.succeeded`: one AP-facing receipt email plus one team alert are queued/sent with updated invoice/receipt attachment, and duplicate success signals collapse by AP lifecycle idempotency.
+- AP-link `checkout.session.async_payment_failed`, `payment_intent.payment_failed`, `charge.failed`, or `charge.dispute.created`: one AP-facing action-needed email plus one team alert are queued/sent, missing optional invoice attachment does not block the action-needed send, and no raw Stripe payload or bank detail is exposed.
 - PaymentIntent or SetupIntent `requires_action` with `next_action.verify_with_microdeposits`: verification status shown as microdeposit pending; no microdeposit values stored.
 - Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink` returns a Stripe-hosted verification URL only when ACH payment/setup evidence is present, the clicked pending bank matches the authorized account/order context, and Stripe exposes a hosted verification URL. If that URL is unavailable in `STRIPE_MODE=test`, the server-only fallback may complete official Stripe test verification and return refreshed safe account/order state. A bare PaymentMethod ID is not enough for the dashboard to render the Verify with Stripe action.
 - Tokenized Dashboard microdeposit verification handoff: `getAchMicrodepositVerificationLink({ token })` accepts a valid job dashboard token but rejects invalid or cross-account token context.
+
+## Non-ACH Payment Email Smokes
+
+- Card checkout paid: `checkout.session.completed` records paid state and queues/sends exactly one `payment_lifecycle_email` client receipt and one team alert; replaying the same event does not duplicate sent rows.
+- Card failed/action-needed: `payment_intent.payment_failed` or `charge.failed` records failed state and queues/sends exactly one client action-needed email and one team alert; missing invoice attachment does not block this failed/action-needed email.
+- Manual check/cash pending: placing a check or cash order queues/sends exactly one client invoice email and one team alert with the invoice attachment.
+- Manual payment received: Team Mode mark-payment-received queues/sends exactly one client receipt email and one team alert with updated invoice/receipt attachment and production-authorized copy.
+- PO submitted: purchase-order submission uses the queued lifecycle email path instead of the old direct send, queues/sends one client confirmation and one team alert with invoice attachment, and still returns Summary/card/ACH payment links in the action response.
+- PO payment received: Team Mode mark-PO-payment-received queues/sends exactly one client receipt email and one team alert with updated invoice/receipt attachment.
+
+## Chat Digest Email Smokes
+
+- Client sends three messages within 10 minutes: one `client_to_team` digest job is updated with all three message IDs, does not send before `notBefore`, and sends one email to `hello@redthreads.com` after the debounce window.
+- Team sends multiple replies within 10 minutes: one `team_to_client` digest job is updated with all reply IDs, does not send before `notBefore`, and sends one no-reply email to the project client email after the debounce window.
+- Client and team messages in the same period create separate directional digest jobs.
+- Running `processPortalEmailQueue` before `notBefore` does not send early and schedules another processor trigger while the job remains queued/retryable.
+- Queue send failure does not block chat save; the queue row records `failed` with a safe `lastError` and remains eligible for normal retry until the max attempt limit.
+- Missing client email skips or avoids queuing the client digest safely; client-to-team digests still route to `hello@redthreads.com`.
+- Existing ACH, AP ACH, card, PO, manual/check/cash, and payment lifecycle email behavior remains unchanged.
+
+## Portal Lifecycle Email Smokes
+
+- Artwork approved: approving a print job queues/sends one `portal_lifecycle_email` team alert to `hello@redthreads.com`; approving the same job again does not duplicate the sent row.
+- Project ready to order: once quantities/artwork make `nextClientAction=place_order`, one client ready-to-order email and one team alert queue/send with the shared progress snapshot.
+- Artwork change requested: clearing approval queues/sends one team alert to `hello@redthreads.com`.
+- Team Mode unlock/reset/reopen/hold: each successful admin transition queues/sends the expected client email and matching team alert; repeated clicks do not duplicate the same milestone.
+- Client cancels a pending manual/PO flow: the action returns the project to editable mode and queues/sends one team alert to `hello@redthreads.com`.
+- ACH pending-production approval: enabling production for an eligible pending ACH order queues/sends one production-authorized client email and one team alert.
+- Job/project completion: marking some jobs complete queues/sends job-completion emails; marking all tracked jobs complete queues/sends project-complete emails.
+- Account document submitted: tax-exempt and credit-terms submissions queue/send one team-review email to `hello@redthreads.com` with the submitted document attachment.
+- Account document approved/denied/reset: tax-exempt and credit-terms decisions queue/send client emails and team alerts with appropriate CTA, reason text when denied, and approved-document attachment when required.
+- Queue failure behavior: missing required document attachment records a safe `failed` queue row, while missing recipients records safe skipped/not-queued diagnostics.
 
 ## Internal Test-Mode Microdeposit Verification
 
@@ -155,3 +216,4 @@ Run only after explicit Full ship authorization:
 7. ACH payment launch and return.
 8. ACH setup launch and return.
 9. Webhook replay/idempotency check.
+10. Due email queue processing through direct portal load/chat-save nudge.

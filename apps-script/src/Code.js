@@ -231,19 +231,67 @@ const PORTAL_EMAIL_QUEUE_HEADERS = [
 ];
 const PORTAL_EMAIL_QUEUE_JOB_TYPES = {
   purchase_order_invoice_email: 'purchase_order_invoice_email',
+  portal_lifecycle_email: 'portal_lifecycle_email',
+  payment_lifecycle_email: 'payment_lifecycle_email',
+  ap_ach_lifecycle_email: 'ap_ach_lifecycle_email',
+  chat_message_digest_email: 'chat_message_digest_email',
   ach_payment_submitted_invoice_email: 'ach_payment_submitted_invoice_email',
   ach_payment_confirmed_receipt_email: 'ach_payment_confirmed_receipt_email',
-  ach_payment_failed_action_email: 'ach_payment_failed_action_email'
+  ach_payment_failed_action_email: 'ach_payment_failed_action_email',
+  ach_payment_submitted_team_alert_email: 'ach_payment_submitted_team_alert_email',
+  ach_payment_confirmed_team_alert_email: 'ach_payment_confirmed_team_alert_email',
+  ach_payment_failed_team_alert_email: 'ach_payment_failed_team_alert_email'
 };
 const PORTAL_EMAIL_QUEUE_STATUSES = {
   queued: 'queued',
   processing: 'processing',
   sent: 'sent',
+  skipped: 'skipped',
   failed: 'failed'
 };
 const PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS = 3;
 const PORTAL_EMAIL_QUEUE_LEASE_MS = 5 * 60 * 1000;
 const PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS = 60 * 1000;
+const PAYMENT_LIFECYCLE_EMAIL_MILESTONES = {
+  card_paid: 'card_paid',
+  card_failed: 'card_failed',
+  manual_pending: 'manual_pending',
+  manual_received: 'manual_received',
+  po_submitted: 'po_submitted',
+  po_payment_received: 'po_payment_received'
+};
+const PORTAL_LIFECYCLE_EMAIL_MILESTONES = {
+  artwork_approved: 'artwork_approved',
+  artwork_disapproved: 'artwork_disapproved',
+  project_ready_to_order: 'project_ready_to_order',
+  project_unlocked: 'project_unlocked',
+  checkout_reset: 'checkout_reset',
+  po_reopened: 'po_reopened',
+  team_hold: 'team_hold',
+  client_flow_canceled: 'client_flow_canceled',
+  production_authorized: 'production_authorized',
+  jobs_completed: 'jobs_completed',
+  project_completed: 'project_completed',
+  tax_exempt_submitted: 'tax_exempt_submitted',
+  tax_exempt_approved: 'tax_exempt_approved',
+  tax_exempt_denied: 'tax_exempt_denied',
+  tax_exempt_reset: 'tax_exempt_reset',
+  credit_terms_submitted: 'credit_terms_submitted',
+  credit_terms_approved: 'credit_terms_approved',
+  credit_terms_denied: 'credit_terms_denied',
+  credit_terms_reset: 'credit_terms_reset'
+};
+const AP_ACH_LIFECYCLE_EMAIL_MILESTONES = {
+  checkout_started: 'ap_checkout_started',
+  payment_submitted: 'ap_payment_submitted',
+  payment_confirmed: 'ap_payment_confirmed',
+  payment_failed: 'ap_payment_failed'
+};
+const CHAT_MESSAGE_DIGEST_DELAY_MS = 10 * 60 * 1000;
+const CHAT_MESSAGE_DIGEST_DIRECTIONS = {
+  client_to_team: 'client_to_team',
+  team_to_client: 'team_to_client'
+};
 
 const PORTAL_STRIPE_EVENTS_SHEET_NAME = 'PORTAL_STRIPE_EVENTS';
 const PORTAL_STRIPE_EVENTS_HEADERS = [
@@ -563,6 +611,13 @@ function doGet(e) {
     const cfg = getConfig_();
     const ss = SpreadsheetApp.openById(cfg.sheetId);
     const infra = ensurePortalInfrastructure_(ss, cfg);
+    kickPortalEmailQueueProcessorSafely_({
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      maxJobs: 2,
+      source: 'doGet'
+    });
     const sheet = infra.exportSheet;
     if (!sheet) return renderMessage_('Configuration error', 'EXPORT_LOG sheet not found.');
 
@@ -764,11 +819,17 @@ function appendChatMessage(payload) {
       projectName: String(p.projectName || '').trim(),
       printJobId: String(p.printJobId || '').trim()
     });
-    if (sender === 'team') {
-      sendPortalMessageNotificationEmail_(rowInfo, nextMsg, notificationPayload);
-    } else {
-      sendClientPortalMessageAlertEmail_(rowInfo, nextMsg, notificationPayload);
-    }
+    queuePortalMessageDigestEmailSafely_(rowInfo, nextMsg, Object.assign({}, notificationPayload, {
+      cfg: cfg,
+      ss: ss,
+      senderType: sender
+    }));
+    kickPortalEmailQueueProcessorSafely_({
+      cfg: cfg,
+      ss: ss,
+      maxJobs: 2,
+      source: 'appendChatMessage'
+    });
 
     return { ok: true, chatLog: nextChatLog, status: statusOut, savedAt: savedAt };
   } catch (err) {
@@ -1144,6 +1205,39 @@ function setArtworkApproval(payload) {
       portalState: p.portalState
     });
     if (!persisted.ok) return persisted;
+    const refreshedRowInfo = buildRowInfoFromSheet_(sheet, rowInfo.row);
+    queuePortalLifecycleEmailJobSafely_({
+      token: token,
+      rowInfo: refreshedRowInfo,
+      cfg: cfg,
+      ss: ss,
+      infra: ensurePortalInfrastructure_(ss, cfg)
+    }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_approved, {
+      recipientClass: 'team',
+      eventType: 'artwork_approved',
+      meta: {
+        eventKey: 'artwork_approved_' + printJobIndex,
+        printJobIndex: printJobIndex
+      }
+    });
+    if (isPortalLifecycleReadyToOrderForEmail_(refreshedRowInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: ensurePortalInfrastructure_(ss, cfg)
+    })) {
+      queuePortalLifecycleClientAndTeamEmailsSafely_({
+        token: token,
+        rowInfo: refreshedRowInfo,
+        cfg: cfg,
+        ss: ss,
+        infra: ensurePortalInfrastructure_(ss, cfg)
+      }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_ready_to_order, {
+        eventType: 'project_ready_to_order',
+        meta: {
+          eventKey: 'project_ready_to_order'
+        }
+      });
+    }
     return {
       ok: true,
       artStatus: 'approved',
@@ -1205,6 +1299,20 @@ function clearArtworkApproval(payload) {
       portalState: p.portalState
     });
     if (!persisted.ok) return persisted;
+    queuePortalLifecycleEmailJobSafely_({
+      token: token,
+      rowInfo: buildRowInfoFromSheet_(sheet, rowInfo.row),
+      cfg: cfg,
+      ss: ss,
+      infra: ensurePortalInfrastructure_(ss, cfg)
+    }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_disapproved, {
+      recipientClass: 'team',
+      eventType: 'artwork_disapproved',
+      meta: {
+        eventKey: 'artwork_disapproved_' + printJobIndex,
+        printJobIndex: printJobIndex
+      }
+    });
     return {
       ok: true,
       artStatus: '',
@@ -5695,10 +5803,11 @@ function reconcileAchCheckoutReturnOrderToPending_(orderInfo, sessionObj, rowInf
   setPortalClientLockForRow_(infra.exportSheet, lockedRowInfo, true, {
     token: trimString_(rowInfo.rowObjNormalized.token)
   });
-  queueAchLifecycleClientEmailSafely_(
+  queueOrderAchLifecycleEmailsSafely_(
     updatedOrder,
     sessionObj,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
+    AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted,
     {
       cfg: cfg,
       ss: ss,
@@ -8603,6 +8712,19 @@ function initiateManualPaymentOrder_(payload) {
       }
     );
   }
+  queuePaymentLifecycleClientAndTeamEmailsSafely_(
+    created.rowInfo,
+    null,
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending,
+    {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      accountInfo: ctx.accountInfo,
+      invoiceInfo: invoiceArtifacts.invoiceInfo,
+      eventType: 'initiate_manual_payment'
+    }
+  );
   return buildLockedOrderTransitionResponse_(
     ctx,
     created,
@@ -8938,17 +9060,27 @@ function sendManualPaymentConfirmationEmail_(payload) {
     }, ctx);
   }
   try {
-    const confirmation = sendLockedOrderConfirmationEmails_(ctx, finalOrderSummary, {
-      intro: 'Your order has been placed and the final invoice is attached. Production will begin after Red Threads receives your manual payment.'
-    });
+    queuePaymentLifecycleClientAndTeamEmailsSafely_(
+      ctx.latestOrderInfo,
+      null,
+      PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending,
+      {
+        cfg: ctx.cfg,
+        ss: ctx.ss,
+        infra: ctx.infra,
+        accountInfo: ctx.accountInfo,
+        eventType: 'send_manual_payment_confirmation_email'
+      }
+    );
+    const paymentLinks = buildLockedOrderPaymentLinkBundle_(ctx.orderDraft.token);
     return finalizeOrderActionResponse_({
       ok: true,
-      message: 'Invoice email sent.',
-      paymentLinks: confirmation && confirmation.ok === true ? {
-        summaryUrl: trimString_(confirmation.summaryUrl),
-        cardUrl: trimString_(confirmation.cardUrl),
-        achUrl: trimString_(confirmation.achUrl)
-      } : null
+      message: 'Invoice email queued.',
+      paymentLinks: {
+        summaryUrl: trimString_(paymentLinks.summaryUrl),
+        cardUrl: trimString_(paymentLinks.cardUrl),
+        achUrl: trimString_(paymentLinks.achUrl)
+      }
     }, ctx);
   } catch (err) {
     console.log('[RT-MANUAL-PAYMENT-CONFIRMATION-EMAIL] ' + JSON.stringify({
@@ -10316,7 +10448,11 @@ function approveTaxExemptSubmission_(payload) {
   persistTaxExemptDecision_(ctx, decisionEntry);
   let warnings = [];
   try {
-    sendApprovedTaxExemptEmail_(ctx, submissionEntry);
+    queueAccountDocumentLifecycleEmailSafely_(ctx, getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx.cfg), submissionEntry, 'approved', {
+      decision: 'approved',
+      decidedAt: trimString_(decisionEntry && decisionEntry.decidedAt),
+      attachmentRequired: true
+    });
   } catch (notifyErr) {
     warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
   }
@@ -10350,7 +10486,11 @@ function denyTaxExemptSubmission_(payload) {
   const decisionEntry = buildTaxExemptDecisionEntry_('rejected', ctx, payload);
   persistTaxExemptDecision_(ctx, decisionEntry);
   try {
-    sendTaxExemptDenialEmail_(ctx, submissionEntry, reason);
+    queueAccountDocumentLifecycleEmailSafely_(ctx, getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx.cfg), submissionEntry, 'denied', {
+      decision: 'rejected',
+      decidedAt: trimString_(decisionEntry && decisionEntry.decidedAt),
+      reason: reason
+    });
   } catch (_) {}
   return buildAccountDocumentWorkflowResponse_(
     ctx,
@@ -10475,7 +10615,12 @@ function approveCreditTermsSubmission_(payload) {
   });
   let warnings = [];
   try {
-    sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelection);
+    queueAccountDocumentLifecycleEmailSafely_(ctx, getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, ctx.cfg), submissionEntry, 'approved', {
+      decision: 'approved',
+      decidedAt: trimString_(decisionEntry && decisionEntry.decidedAt),
+      paymentTermsLabel: trimString_(paymentTermsSelection && paymentTermsSelection.label),
+      attachmentRequired: true
+    });
   } catch (notifyErr) {
     warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
   }
@@ -10510,7 +10655,11 @@ function denyCreditTermsSubmission_(payload) {
   const decisionEntry = buildCreditTermsDecisionEntry_('rejected', ctx, payload);
   persistCreditTermsDecision_(ctx, decisionEntry);
   try {
-    sendCreditTermsDenialEmail_(ctx, submissionEntry, reason);
+    queueAccountDocumentLifecycleEmailSafely_(ctx, getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, ctx.cfg), submissionEntry, 'denied', {
+      decision: 'rejected',
+      decidedAt: trimString_(decisionEntry && decisionEntry.decidedAt),
+      reason: reason
+    });
   } catch (_) {}
   return buildAccountDocumentWorkflowResponse_(
     ctx,
@@ -10541,7 +10690,12 @@ function hardDenyCreditTermsSubmission_(payload) {
   const decisionEntry = buildCreditTermsDecisionEntry_('denied', ctx, payload);
   persistCreditTermsDecision_(ctx, decisionEntry);
   try {
-    sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason);
+    queueAccountDocumentLifecycleEmailSafely_(ctx, getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, ctx.cfg), submissionEntry, 'denied', {
+      decision: 'denied',
+      decidedAt: trimString_(decisionEntry && decisionEntry.decidedAt),
+      reason: reason,
+      hardDenied: true
+    });
   } catch (_) {}
   return buildAccountDocumentWorkflowResponse_(
     ctx,
@@ -10899,7 +11053,9 @@ function submitAccountDocumentUpload_(payload) {
   persistAccountDocumentSubmission_(ctx, definition.type, submissionEntry);
   let warnings = [];
   try {
-    sendAccountDocumentSubmissionNotification_(ctx, definition, submissionEntry);
+    queueAccountDocumentLifecycleEmailSafely_(ctx, definition, submissionEntry, 'submitted', {
+      attachmentRequired: true
+    });
   } catch (notifyErr) {
     warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
   }
@@ -10945,7 +11101,9 @@ function submitTaxExemptGuidedSubmission_(payload) {
   persistAccountDocumentSubmission_(ctx, definition.type, submissionEntry);
   let warnings = [];
   try {
-    sendAccountDocumentSubmissionNotification_(ctx, definition, submissionEntry);
+    queueAccountDocumentLifecycleEmailSafely_(ctx, definition, submissionEntry, 'submitted', {
+      attachmentRequired: true
+    });
   } catch (notifyErr) {
     warnings = [String((notifyErr && notifyErr.message) || notifyErr)];
   }
@@ -11367,6 +11525,17 @@ function adminUnlockProjectSnapshot_(payload) {
     false,
     { token: ctx.token, actorName: ctx.actorName }
   );
+  queuePortalLifecycleClientAndTeamEmailsSafely_({
+    ctx: ctx,
+    token: ctx.token,
+    rowInfo: auditedRow,
+    orderInfo: next.rowInfo
+  }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_unlocked, {
+    eventType: 'admin_unlock_project_snapshot',
+    meta: {
+      eventKey: 'project_unlocked_' + trimString_(next.summary && next.summary.orderId)
+    }
+  });
   return buildTeamOrderAdminResponse_(ctx, next.summary, auditedRow, 'Project unlocked successfully.');
 }
 
@@ -11422,6 +11591,17 @@ function adminResetCheckoutSelection_(payload) {
     true,
     { token: ctx.token, actorName: ctx.actorName }
   );
+  queuePortalLifecycleClientAndTeamEmailsSafely_({
+    ctx: ctx,
+    token: ctx.token,
+    rowInfo: auditedRow,
+    orderInfo: updatedOrder
+  }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.checkout_reset, {
+    eventType: 'admin_reset_checkout_selection',
+    meta: {
+      eventKey: 'checkout_reset_' + trimString_(updatedSummary.orderId)
+    }
+  });
   return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, 'Checkout selection reset successfully.');
 }
 
@@ -11473,6 +11653,17 @@ function adminReopenPoSubmission_(payload) {
     true,
     { token: ctx.token, actorName: ctx.actorName }
   );
+  queuePortalLifecycleClientAndTeamEmailsSafely_({
+    ctx: ctx,
+    token: ctx.token,
+    rowInfo: auditedRow,
+    orderInfo: updatedOrder
+  }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.po_reopened, {
+    eventType: 'admin_reopen_po_submission',
+    meta: {
+      eventKey: 'po_reopened_' + trimString_(updatedSummary.orderId)
+    }
+  });
   return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, 'Purchase-order submission reopened successfully.');
 }
 
@@ -11543,6 +11734,17 @@ function adminLockProjectWithoutOrdering_(payload) {
     true,
     { token: ctx.token, actorName: ctx.actorName }
   );
+  queuePortalLifecycleClientAndTeamEmailsSafely_({
+    ctx: ctx,
+    token: ctx.token,
+    rowInfo: auditedRow,
+    orderInfo: orderInfo
+  }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.team_hold, {
+    eventType: 'admin_lock_project_without_ordering',
+    meta: {
+      eventKey: 'team_hold_' + trimString_(orderSummary && orderSummary.orderId)
+    }
+  });
   return buildTeamOrderAdminResponse_(ctx, orderSummary, auditedRow, 'Project locked successfully.');
 }
 
@@ -11647,6 +11849,31 @@ function adminMarkJobsCompleted_(payload) {
     trimString_(updatedSummary.portalLockState).toLowerCase() === PORTAL_LOCK_STATES.locked,
     { token: ctx.token, actorName: ctx.actorName }
   );
+  const selectedJobs = Array.isArray(updatedSummary.selectedJobs) ? updatedSummary.selectedJobs : [];
+  const completedMap = updatedSummary.teamJobCompletionByJobId && typeof updatedSummary.teamJobCompletionByJobId === 'object'
+    ? updatedSummary.teamJobCompletionByJobId
+    : {};
+  const completedJobIds = Object.keys(completedMap).filter(function(jobId) {
+    return !!trimString_(jobId);
+  });
+  const allJobsCompleted = !!selectedJobs.length && selectedJobs.every(function(job) {
+    return !!completedMap[trimString_(job && job.printJobId)];
+  });
+  queuePortalLifecycleClientAndTeamEmailsSafely_({
+    ctx: ctx,
+    token: ctx.token,
+    rowInfo: auditedRow,
+    orderInfo: updatedOrder
+  }, allJobsCompleted
+    ? PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed
+    : PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed, {
+    eventType: 'admin_mark_jobs_completed',
+    meta: {
+      eventKey: 'jobs_completed_' + trimString_(updatedSummary.orderId) + '_' + completedJobIds.sort().join('_'),
+      completedJobCount: completedJobIds.length,
+      totalJobCount: selectedJobs.length
+    }
+  });
   return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, 'Job completion dates saved successfully.');
 }
 
@@ -11758,6 +11985,7 @@ function adminSetAchPendingProductionApproval_(payload) {
   };
 
   let updatedSummary = ctx.latestOrderSummary;
+  let productionAuthorizedOrderInfo = null;
   if (approved && ctx.latestOrderInfo && ctx.latestOrderSummary) {
     if (isActiveAchPendingProductionApprovalOrder_(ctx.latestOrderSummary, ctx.workflowContext)) {
       const updatedOrder = updatePortalOrderState_({
@@ -11771,6 +11999,7 @@ function adminSetAchPendingProductionApproval_(payload) {
         achPendingProductionApprovedAtOrder: now,
         notes: 'Team approved production to begin while ACH payment is pending.'
       });
+      productionAuthorizedOrderInfo = updatedOrder;
       updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
       writeCurrentOrderPointersToExportLog_({
         cfg: ctx.cfg,
@@ -11789,6 +12018,19 @@ function adminSetAchPendingProductionApproval_(payload) {
     ctx.workflowContext && ctx.workflowContext.isLocked === true,
     { token: ctx.token, actorName: ctx.actorName }
   );
+  if (approved && productionAuthorizedOrderInfo) {
+    queuePortalLifecycleClientAndTeamEmailsSafely_({
+      ctx: ctx,
+      token: ctx.token,
+      rowInfo: auditedRow,
+      orderInfo: productionAuthorizedOrderInfo
+    }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.production_authorized, {
+      eventType: 'admin_set_ach_pending_production_approval',
+      meta: {
+        eventKey: 'production_authorized_' + trimString_(updatedSummary && updatedSummary.orderId)
+      }
+    });
+  }
   return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, approved
     ? 'ACH pending-production approval enabled.'
     : 'ACH pending-production approval disabled.');
@@ -11854,6 +12096,17 @@ function adminMarkManualPaymentReceived_(payload) {
     submittedAt: now,
     systemMessage: 'Manual payment received. Order authorized for production on ' + now + '.'
   });
+  queuePaymentLifecycleClientAndTeamEmailsSafely_(
+    updatedOrder,
+    null,
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      eventType: 'admin_mark_manual_payment_received'
+    }
+  );
   return buildTeamOrderAdminResponse_(ctx, updatedSummary, refreshedRow, 'Manual payment recorded successfully.');
 }
 
@@ -11920,6 +12173,17 @@ function adminMarkPurchaseOrderReceived_(payload) {
     submittedAt: now,
     systemMessage: 'Purchase order payment received. Order confirmed on ' + now + '.'
   });
+  queuePaymentLifecycleClientAndTeamEmailsSafely_(
+    updatedOrder,
+    null,
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received,
+    {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      eventType: 'admin_mark_po_payment_received'
+    }
+  );
   return buildTeamOrderAdminResponse_(ctx, updatedSummary, refreshedRow, 'Purchase order payment recorded successfully.');
 }
 
@@ -12042,6 +12306,10 @@ function resetAccountDocumentWorkflow_(payload, documentType) {
     updates
   );
   refreshAccountDocumentContextAccount_(ctx);
+  queueAccountDocumentLifecycleEmailSafely_(ctx, definition, null, 'reset', {
+    decision: 'reset',
+    decidedAt: nowIso_()
+  });
   return {
     ok: true,
     accountSummary: ctx.accountInfo.summary,
@@ -12729,10 +12997,24 @@ function handleCheckoutSessionCompleted_(sessionObj, options) {
     }
   }
   if (isAch && delayed) {
-    queueAchLifecycleClientEmailSafely_(
+    queueOrderAchLifecycleEmailsSafely_(
       updatedOrder,
       sessionObj,
       PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
+      AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted,
+      {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        accountInfo: accountInfo,
+        eventType: 'checkout.session.completed'
+      }
+    );
+  } else if (!isAch && !delayed && effectivePaymentMethodSelected === PAYMENT_METHODS.card) {
+    queuePaymentLifecycleClientAndTeamEmailsSafely_(
+      updatedOrder,
+      sessionObj,
+      PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid,
       {
         cfg: cfg,
         ss: ss,
@@ -12916,10 +13198,11 @@ function handleCheckoutAsyncPaymentSucceeded_(sessionObj, options) {
       });
     }
   }
-  queueAchLifecycleClientEmailSafely_(
+  queueOrderAchLifecycleEmailsSafely_(
     updatedOrder,
     sessionObj,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email,
+    AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed,
     {
       cfg: cfg,
       ss: ss,
@@ -13007,10 +13290,11 @@ function handleCheckoutAsyncPaymentFailed_(sessionObj, options) {
       accountSummary: getAccountStatus({ token: token }).accountSummary
     });
   }
-  queueAchLifecycleClientEmailSafely_(
+  queueOrderAchLifecycleEmailsSafely_(
     updatedOrder,
     sessionObj,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+    AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed,
     {
       cfg: cfg,
       ss: ss,
@@ -13097,10 +13381,11 @@ function handlePaymentIntentFailed_(paymentIntentObj, options) {
     });
   }
   if (isAch) {
-    queueAchLifecycleClientEmailSafely_(
+    queueOrderAchLifecycleEmailsSafely_(
       updatedOrder,
       paymentIntentObj,
       PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+      AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed,
       {
         cfg: cfg,
         ss: ss,
@@ -13108,6 +13393,21 @@ function handlePaymentIntentFailed_(paymentIntentObj, options) {
         eventType: 'payment_intent.payment_failed'
       }
     );
+  } else {
+    const updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+    if (trimString_(updatedSummary.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.card) {
+      queuePaymentLifecycleClientAndTeamEmailsSafely_(
+        updatedOrder,
+        paymentIntentObj,
+        PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed,
+        {
+          cfg: cfg,
+          ss: ss,
+          infra: infra,
+          eventType: 'payment_intent.payment_failed'
+        }
+      );
+    }
   }
   return { ok: true };
 }
@@ -13187,10 +13487,11 @@ function handlePaymentIntentProcessing_(paymentIntentObj, options) {
     achPendingProductionApprovedAtOrder: policy.achPendingProductionApprovedAtOrder
   }, eventUpdates));
   updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, buildPortalOrderSummary_(updatedOrder.rowObjNormalized));
-  queueAchLifecycleClientEmailSafely_(
+  queueOrderAchLifecycleEmailsSafely_(
     updatedOrder,
     paymentIntentObj,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
+    AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted,
     {
       cfg: cfg,
       ss: ss,
@@ -13280,10 +13581,11 @@ function handlePaymentIntentSucceeded_(paymentIntentObj, options) {
       systemMessage: 'ACH payment cleared on ' + now + '. Order authorized for production.'
     });
   }
-  queueAchLifecycleClientEmailSafely_(
+  queueOrderAchLifecycleEmailsSafely_(
     updatedOrder,
     paymentIntentObj,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email,
+    AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed,
     {
       cfg: cfg,
       ss: ss,
@@ -13402,10 +13704,11 @@ function handleChargeDisputeCreated_(disputeObj, options) {
     notes: 'Stripe ACH dispute created. Team review required.'
   }, eventUpdates));
   updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, buildPortalOrderSummary_(updatedOrder.rowObjNormalized));
-  queueAchLifecycleClientEmailSafely_(
+  queueOrderAchLifecycleEmailsSafely_(
     updatedOrder,
     chargeObj || dispute,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+    AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed,
     {
       cfg: cfg,
       ss: ss,
@@ -19902,12 +20205,54 @@ function normalizeAchLifecycleEmailJobType_(value) {
   return [
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email,
-    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_team_alert_email,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email
   ].indexOf(jobType) >= 0 ? jobType : '';
 }
 
 function isAchLifecycleEmailJobType_(value) {
   return !!normalizeAchLifecycleEmailJobType_(value);
+}
+
+function isAchLifecycleTeamAlertEmailJobType_(value) {
+  const type = normalizeAchLifecycleEmailJobType_(value);
+  return type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email ||
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_team_alert_email ||
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email;
+}
+
+function getAchLifecycleBaseEmailJobType_(value) {
+  const type = normalizeAchLifecycleEmailJobType_(value);
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email;
+  }
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_team_alert_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email;
+  }
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email;
+  }
+  return type;
+}
+
+function getAchLifecycleTeamAlertEmailJobType_(value) {
+  const baseType = getAchLifecycleBaseEmailJobType_(value);
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email;
+  }
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_team_alert_email;
+  }
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email;
+  }
+  return '';
+}
+
+function getAchLifecycleEmailRecipientClass_(jobType) {
+  return isAchLifecycleTeamAlertEmailJobType_(jobType) ? 'team' : 'client';
 }
 
 function extractSafeStripePayerEmail_(stripeObj) {
@@ -19954,6 +20299,48 @@ function buildAchLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo) {
   };
 }
 
+function buildAchLifecycleTeamAlertRecipients_() {
+  return {
+    toList: normalizeEmailRecipients_([DOCUMENT_REVIEW_EMAIL]),
+    ccList: [],
+    recipientClass: 'team'
+  };
+}
+
+function summarizeEmailDomainsForLog_(emails) {
+  const counts = {};
+  normalizeEmailRecipients_(emails).forEach(function(email) {
+    const domain = trimString_(email.split('@').slice(1).join('@')).toLowerCase();
+    if (!domain) return;
+    counts[domain] = (counts[domain] || 0) + 1;
+  });
+  return Object.keys(counts).sort().map(function(domain) {
+    return domain + ':' + counts[domain];
+  });
+}
+
+function logAchLifecycleEmailQueueEvent_(eventName, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const safe = {
+    event: trimString_(eventName),
+    ok: p.ok === true,
+    reason: trimString_(p.reason),
+    jobType: trimString_(p.jobType),
+    recipientClass: trimString_(p.recipientClass),
+    tokenPresent: !!trimString_(p.token),
+    orderId: trimString_(p.orderId),
+    paymentIntentPresent: !!trimString_(p.paymentIntentId),
+    sessionPresent: !!trimString_(p.sessionId),
+    recipientCount: Math.max(0, parseInt(String(p.recipientCount || 0), 10) || 0),
+    ccCount: Math.max(0, parseInt(String(p.ccCount || 0), 10) || 0),
+    recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
+    invoicePdfPresent: p.invoicePdfPresent === true,
+    status: trimString_(p.status),
+    error: trimString_(p.error)
+  };
+  console.log('[RT-ACH-EMAIL-QUEUE] ' + JSON.stringify(safe));
+}
+
 function isStandardOrderCheckoutAchOrder_(orderInfo) {
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
@@ -19973,7 +20360,7 @@ function shouldQueueAchLifecycleEmailForOrder_(orderInfo, jobType) {
     summary.achFailureMessage,
     eventType
   ].join(' ').toLowerCase();
-  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  const type = getAchLifecycleBaseEmailJobType_(jobType);
   if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
     return paymentState === PAYMENT_STATES.pending && !trimString_(summary.paidAt);
   }
@@ -20005,6 +20392,7 @@ function buildAchLifecycleEmailIdempotencyKey_(jobType, orderSummary, recipients
   const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
   return buildPortalEmailQueueIdempotencyKeyForSource_({
     jobType: normalizeAchLifecycleEmailJobType_(jobType),
+    recipientClass: getAchLifecycleEmailRecipientClass_(jobType),
     orderId: trimString_(summary.orderId),
     token: trimString_(summary.token),
     stripePaymentIntentId: trimString_(summary.stripePaymentIntentId),
@@ -20088,11 +20476,47 @@ function upsertPortalEmailQueueJob_(queueSheet, values) {
 }
 
 function queueAchLifecycleClientEmailSafely_(orderInfo, stripeObj, jobType, options) {
+  return queueAchLifecycleEmailJobSafely_(orderInfo, stripeObj, jobType, Object.assign({}, options || {}, {
+    recipientClass: 'client'
+  }));
+}
+
+function queueAchLifecycleTeamAlertEmailSafely_(orderInfo, stripeObj, jobType, options) {
+  const teamType = getAchLifecycleTeamAlertEmailJobType_(jobType);
+  if (!teamType) return null;
+  return queueAchLifecycleEmailJobSafely_(orderInfo, stripeObj, teamType, Object.assign({}, options || {}, {
+    recipientClass: 'team'
+  }));
+}
+
+function queueAchLifecycleClientAndTeamEmailsSafely_(orderInfo, stripeObj, jobType, options) {
+  return {
+    clientJob: queueAchLifecycleClientEmailSafely_(orderInfo, stripeObj, jobType, options),
+    teamJob: queueAchLifecycleTeamAlertEmailSafely_(orderInfo, stripeObj, jobType, options)
+  };
+}
+
+function queueAchLifecycleEmailJobSafely_(orderInfo, stripeObj, jobType, options) {
   const type = normalizeAchLifecycleEmailJobType_(jobType);
   if (!type) return null;
+  const recipientClass = getAchLifecycleEmailRecipientClass_(type);
   try {
-    if (!shouldQueueAchLifecycleEmailForOrder_(orderInfo, type)) return null;
     const opts = (options && typeof options === 'object') ? options : {};
+    const orderSummary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+    if (!shouldQueueAchLifecycleEmailForOrder_(orderInfo, type)) {
+      logAchLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'state_not_eligible',
+        jobType: type,
+        recipientClass: recipientClass,
+        token: trimString_(orderSummary.token),
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl)
+      });
+      return null;
+    }
     const cfg = opts.cfg || getConfig_();
     const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
     const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
@@ -20101,17 +20525,23 @@ function queueAchLifecycleClientEmailSafely_(orderInfo, stripeObj, jobType, opti
       ss: ss,
       infra: infra
     });
-    const recipients = buildAchLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo);
+    const recipients = recipientClass === 'team'
+      ? buildAchLifecycleTeamAlertRecipients_()
+      : buildAchLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo);
     if (!recipients.toList.length) {
-      console.log('[RT-ACH-EMAIL-QUEUE] ' + JSON.stringify({
+      logAchLifecycleEmailQueueEvent_('not_queued', {
         ok: false,
         reason: 'missing_recipients',
         jobType: type,
-        orderId: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid)
-      }));
+        recipientClass: recipientClass,
+        token: trimString_(orderSummary.token),
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl)
+      });
       return null;
     }
-    const orderSummary = buildPortalOrderSummary_(orderInfo.rowObjNormalized || {});
     const queueSheet = getPortalEmailQueueSheet_(ss);
     const existingLifecycleJob = findAchLifecycleEmailQueueJob_(queueSheet, type, orderSummary);
     const idempotencyKey = trimString_(existingLifecycleJob && existingLifecycleJob.rowObjNormalized.idempotencykey) ||
@@ -20123,6 +20553,7 @@ function queueAchLifecycleClientEmailSafely_(orderInfo, stripeObj, jobType, opti
       recipientsJson: JSON.stringify(recipients),
       portalStateJson: JSON.stringify({
         jobType: type,
+        recipientClass: recipientClass,
         orderId: trimString_(orderSummary.orderId),
         checkoutAttemptId: trimString_(orderSummary.checkoutAttemptId),
         stripePaymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
@@ -20135,15 +20566,40 @@ function queueAchLifecycleClientEmailSafely_(orderInfo, stripeObj, jobType, opti
       invoicePdfUrl: trimString_(orderSummary.invoicePdfUrl),
       invoiceFileName: ''
     });
-    if (isPortalEmailQueueJobEligible_(jobInfo, new Date())) schedulePortalEmailQueueProcessor_();
-    return jobInfo;
+    logAchLifecycleEmailQueueEvent_('queued', {
+      ok: true,
+      jobType: type,
+      recipientClass: recipientClass,
+      token: trimString_(orderSummary.token),
+      orderId: trimString_(orderSummary.orderId),
+      paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+      sessionId: trimString_(orderSummary.stripeSessionId),
+      recipientCount: recipients.toList.length,
+      ccCount: recipients.ccList.length,
+      recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+      invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+      status: trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.status)
+    });
+    let finalJobInfo = jobInfo;
+    if (isPortalEmailQueueJobEligible_(jobInfo, new Date())) {
+      finalJobInfo = tryProcessPortalEmailQueueJobById_(trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.jobid), {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        queueSheet: queueSheet,
+        token: trimString_(orderSummary.token)
+      }) || jobInfo;
+      if (isPortalEmailQueueJobEligible_(finalJobInfo, new Date())) schedulePortalEmailQueueProcessor_();
+    }
+    return finalJobInfo;
   } catch (err) {
-    console.log('[RT-ACH-EMAIL-QUEUE] ' + JSON.stringify({
+    logAchLifecycleEmailQueueEvent_('error', {
       ok: false,
       jobType: type,
+      recipientClass: recipientClass,
       orderId: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid),
       error: String((err && err.message) || err)
-    }));
+    });
     return null;
   }
 }
@@ -20168,7 +20624,7 @@ function resolveAchLifecycleInvoiceInfo_(orderInfo, jobType, options) {
   const cfg = opts.cfg || getConfig_();
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
-  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  const type = getAchLifecycleBaseEmailJobType_(jobType);
   const shouldGenerate = !trimString_(summary.invoicePdfUrl) ||
     type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email;
   if (!shouldGenerate) {
@@ -20195,92 +20651,2309 @@ function resolveAchLifecycleInvoiceInfo_(orderInfo, jobType, options) {
   return invoiceInfo;
 }
 
-function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo) {
-  const type = normalizeAchLifecycleEmailJobType_(jobType);
+function normalizeApAchLifecycleEmailMilestone_(value) {
+  const milestone = trimString_(value).toLowerCase();
+  return Object.keys(AP_ACH_LIFECYCLE_EMAIL_MILESTONES).some(function(key) {
+    return AP_ACH_LIFECYCLE_EMAIL_MILESTONES[key] === milestone;
+  }) ? milestone : '';
+}
+
+function isApAchLifecycleEmailJobType_(value) {
+  return trimString_(value).toLowerCase() === PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email;
+}
+
+function isApAchLifecycleReceiptMilestone_(milestone) {
+  return normalizeApAchLifecycleEmailMilestone_(milestone) === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed;
+}
+
+function isApAchLifecycleFailureMilestone_(milestone) {
+  return normalizeApAchLifecycleEmailMilestone_(milestone) === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed;
+}
+
+function isApAchLifecycleAttachmentRequired_(milestone) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  return normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted ||
+    normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed;
+}
+
+function getApAchLifecycleOrderToken_(orderInfo, orderSummary) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  return trimString_(summary.token || row.token || row.Token || draft.token);
+}
+
+function isApAchLifecycleOrder_(orderInfo) {
+  const summary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+  return trimString_(summary.paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.ach &&
+    normalizeAchPaymentSource_(summary.achPaymentSource) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+}
+
+function shouldQueueApAchLifecycleEmailForOrder_(orderInfo, milestone) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  if (!normalized || !isApAchLifecycleOrder_(orderInfo)) return false;
+  const summary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  const eventType = trimString_(summary.stripeLatestEventType).toLowerCase();
+  const paid = paymentState === PAYMENT_STATES.paid || !!trimString_(summary.paidAt);
+  const failureSignal = [
+    summary.achFailureCode,
+    summary.achFailureMessage,
+    eventType
+  ].join(' ').toLowerCase();
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
+    return paymentState === PAYMENT_STATES.checkout_created && !paid &&
+      (!!trimString_(summary.checkoutAttemptId) || !!trimString_(summary.stripeSessionId));
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
+    return paymentState === PAYMENT_STATES.pending && !paid;
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
+    return paid;
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
+    return paymentState === PAYMENT_STATES.failed ||
+      eventType === 'charge.dispute.created' ||
+      failureSignal.indexOf('dispute') >= 0 ||
+      failureSignal.indexOf('mandate') >= 0 ||
+      failureSignal.indexOf('blocked') >= 0;
+  }
+  return false;
+}
+
+function buildApAchLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo, recipientClass) {
+  if (trimString_(recipientClass) === 'team') {
+    return buildPaymentLifecycleTeamAlertRecipients_();
+  }
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
   const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const account = accountInfo && accountInfo.summary ? accountInfo.summary : {};
+  const apRecipients = normalizeEmailRecipients_(summary.invoiceSentToEmail || row.invoicesenttoemail || draft.invoiceSentToEmail);
+  const purchaserEmail = firstNormalizedEmailFromValues_([
+    row.personemail,
+    row.personEmail,
+    draft.personEmail,
+    account.primaryEmail,
+    account.billingContactEmail
+  ]);
+  const ccList = purchaserEmail && apRecipients.indexOf(purchaserEmail) < 0 ? [purchaserEmail] : [];
+  return {
+    toList: apRecipients,
+    ccList: normalizeEmailRecipients_(ccList),
+    apEmail: apRecipients[0] || '',
+    purchaserEmail: purchaserEmail,
+    payerEmail: extractSafeStripePayerEmail_(stripeObj),
+    recipientClass: 'ap'
+  };
+}
+
+function buildApAchLifecycleEmailIdempotencyKey_(milestone, recipientClass, orderSummary, recipients, token) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
+  return buildPortalEmailQueueIdempotencyKeyForSource_({
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+    milestone: normalizeApAchLifecycleEmailMilestone_(milestone),
+    recipientClass: trimString_(recipientClass),
+    token: trimString_(token),
+    orderId: trimString_(summary.orderId),
+    paymentMethodSelected: PAYMENT_METHODS.ach,
+    achPaymentSource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    checkoutAttemptId: trimString_(summary.checkoutAttemptId),
+    stripePaymentIntentId: trimString_(summary.stripePaymentIntentId),
+    stripeSessionId: trimString_(summary.stripeSessionId),
+    invoiceNumber: trimString_(summary.invoiceNumber),
+    toList: normalizeEmailRecipients_(safeRecipients.toList),
+    ccList: normalizeEmailRecipients_(safeRecipients.ccList)
+  });
+}
+
+function findApAchLifecycleEmailQueueJob_(queueSheet, milestone, recipientClass, orderSummary, token) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  const safeRecipientClass = trimString_(recipientClass);
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const orderId = trimString_(summary.orderId);
+  const paymentIntentId = trimString_(summary.stripePaymentIntentId);
+  const sessionId = trimString_(summary.stripeSessionId);
+  const checkoutAttemptId = trimString_(summary.checkoutAttemptId);
+  const orderToken = trimString_(token || summary.token);
+  if (!queueSheet || !normalized || !safeRecipientClass) return null;
+  return listSheetRowInfos_(queueSheet).find(function(info) {
+    const row = info && info.rowObjNormalized ? info.rowObjNormalized : {};
+    if (trimString_(row.jobtype) !== PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email) return false;
+    const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+    if (normalizeApAchLifecycleEmailMilestone_(meta.milestone) !== normalized) return false;
+    if (trimString_(meta.recipientClass) !== safeRecipientClass) return false;
+    return !!((orderId && trimString_(meta.orderId) === orderId) ||
+      (paymentIntentId && trimString_(meta.stripePaymentIntentId) === paymentIntentId) ||
+      (sessionId && trimString_(meta.stripeSessionId) === sessionId) ||
+      (checkoutAttemptId && trimString_(meta.checkoutAttemptId) === checkoutAttemptId) ||
+      (orderToken && trimString_(row.token || meta.token) === orderToken));
+  }) || null;
+}
+
+function logApAchLifecycleEmailQueueEvent_(eventName, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const safe = {
+    event: trimString_(eventName),
+    ok: p.ok === true,
+    reason: trimString_(p.reason),
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+    milestone: trimString_(p.milestone),
+    recipientClass: trimString_(p.recipientClass),
+    tokenPresent: !!trimString_(p.token),
+    orderId: trimString_(p.orderId),
+    paymentIntentPresent: !!trimString_(p.paymentIntentId),
+    sessionPresent: !!trimString_(p.sessionId),
+    recipientCount: Math.max(0, parseInt(String(p.recipientCount || 0), 10) || 0),
+    ccCount: Math.max(0, parseInt(String(p.ccCount || 0), 10) || 0),
+    recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
+    invoicePdfPresent: p.invoicePdfPresent === true,
+    attachmentRequired: p.attachmentRequired === true,
+    status: trimString_(p.status),
+    error: trimString_(p.error)
+  };
+  console.log('[RT-AP-ACH-LIFECYCLE-EMAIL-QUEUE] ' + JSON.stringify(safe));
+}
+
+function queueApAchLifecycleApAndTeamEmailsSafely_(orderInfo, stripeObj, milestone, options) {
+  return {
+    apJob: queueApAchLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, Object.assign({}, options || {}, {
+      recipientClass: 'ap'
+    })),
+    teamJob: queueApAchLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, Object.assign({}, options || {}, {
+      recipientClass: 'team'
+    }))
+  };
+}
+
+function queueOrderAchLifecycleEmailsSafely_(orderInfo, stripeObj, standardJobType, apMilestone, options) {
+  if (isApAchLifecycleOrder_(orderInfo)) {
+    return queueApAchLifecycleApAndTeamEmailsSafely_(orderInfo, stripeObj, apMilestone, options);
+  }
+  return queueAchLifecycleClientAndTeamEmailsSafely_(orderInfo, stripeObj, standardJobType, options);
+}
+
+function queueApAchLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, options) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  if (!normalized) return null;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'ap';
+  try {
+    const orderSummary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+    const token = getApAchLifecycleOrderToken_(orderInfo, orderSummary);
+    const attachmentRequired = isApAchLifecycleAttachmentRequired_(normalized);
+    if (!shouldQueueApAchLifecycleEmailForOrder_(orderInfo, normalized)) {
+      logApAchLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'state_not_eligible',
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+        attachmentRequired: attachmentRequired
+      });
+      return null;
+    }
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const accountInfo = opts.accountInfo || getPortalAccountInfoForOrder_(orderInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+    const recipients = buildApAchLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo, recipientClass);
+    if (!recipients.toList.length) {
+      logApAchLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'missing_recipients',
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+        attachmentRequired: attachmentRequired
+      });
+      return null;
+    }
+    const queueSheet = getPortalEmailQueueSheet_(ss);
+    const invoiceInfo = (opts.invoiceInfo && typeof opts.invoiceInfo === 'object') ? opts.invoiceInfo : {};
+    const existingLifecycleJob = findApAchLifecycleEmailQueueJob_(queueSheet, normalized, recipientClass, orderSummary, token);
+    const idempotencyKey = trimString_(existingLifecycleJob && existingLifecycleJob.rowObjNormalized.idempotencykey) ||
+      buildApAchLifecycleEmailIdempotencyKey_(normalized, recipientClass, orderSummary, recipients, token);
+    const jobInfo = upsertPortalEmailQueueJob_(queueSheet, {
+      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+      idempotencyKey: idempotencyKey,
+      token: token,
+      recipientsJson: JSON.stringify(recipients),
+      portalStateJson: JSON.stringify({
+        jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        checkoutAttemptId: trimString_(orderSummary.checkoutAttemptId),
+        stripePaymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        stripeSessionId: trimString_(orderSummary.stripeSessionId),
+        paymentMethodSelected: PAYMENT_METHODS.ach,
+        achPaymentSource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+        invoiceNumber: trimString_(invoiceInfo.invoiceNumber || orderSummary.invoiceNumber),
+        attachmentRequired: attachmentRequired,
+        queuedFromEventType: trimString_(opts.eventType),
+        queuedAt: nowIso_()
+      }),
+      orderDraftJson: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderdraftjson),
+      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl || orderSummary.invoicePdfUrl),
+      invoiceFileName: trimString_(invoiceInfo.fileName || invoiceInfo.invoiceFileName)
+    });
+    logApAchLifecycleEmailQueueEvent_('queued', {
+      ok: true,
+      milestone: normalized,
+      recipientClass: recipientClass,
+      token: token,
+      orderId: trimString_(orderSummary.orderId),
+      paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+      sessionId: trimString_(orderSummary.stripeSessionId),
+      recipientCount: recipients.toList.length,
+      ccCount: recipients.ccList.length,
+      recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+      invoicePdfPresent: !!trimString_(invoiceInfo.invoicePdfUrl || orderSummary.invoicePdfUrl),
+      attachmentRequired: attachmentRequired,
+      status: trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.status)
+    });
+    let finalJobInfo = jobInfo;
+    if (isPortalEmailQueueJobEligible_(jobInfo, new Date())) {
+      finalJobInfo = tryProcessPortalEmailQueueJobById_(trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.jobid), {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        queueSheet: queueSheet,
+        token: token
+      }) || jobInfo;
+      if (isPortalEmailQueueJobEligible_(finalJobInfo, new Date())) schedulePortalEmailQueueProcessor_();
+    }
+    return finalJobInfo;
+  } catch (err) {
+    logApAchLifecycleEmailQueueEvent_('error', {
+      ok: false,
+      milestone: normalized,
+      recipientClass: recipientClass,
+      orderId: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid),
+      error: String((err && err.message) || err)
+    });
+    return null;
+  }
+}
+
+function resolveApAchLifecycleOrderForQueueJob_(jobInfo, options) {
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const orderId = trimString_(meta.orderId);
+  const paymentIntentId = trimString_(meta.stripePaymentIntentId);
+  const sessionId = trimString_(meta.stripeSessionId);
+  const checkoutAttemptId = trimString_(meta.checkoutAttemptId);
+  const token = trimString_(row.token || meta.token);
+  return (orderId ? getPortalOrderByOrderId_(orderId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (paymentIntentId ? getPortalOrderByStripePaymentIntentId_(paymentIntentId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (sessionId ? getPortalOrderByStripeSessionId_(sessionId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (checkoutAttemptId ? getPortalOrderByCheckoutAttemptId_(checkoutAttemptId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (token ? getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null);
+}
+
+function resolveApAchLifecycleInvoiceInfo_(orderInfo, milestone, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const queued = (opts.queuedInvoiceInfo && typeof opts.queuedInvoiceInfo === 'object') ? opts.queuedInvoiceInfo : {};
+  let invoiceInfo = {
+    invoiceNumber: trimString_(queued.invoiceNumber) || trimString_(summary.invoiceNumber),
+    invoicePdfUrl: trimString_(queued.invoicePdfUrl) || trimString_(summary.invoicePdfUrl),
+    fileName: trimString_(queued.fileName || queued.invoiceFileName)
+  };
+  const attachmentRequired = isApAchLifecycleAttachmentRequired_(milestone);
+  const shouldGenerate = attachmentRequired && (
+    !trimString_(invoiceInfo.invoicePdfUrl) ||
+    isApAchLifecycleReceiptMilestone_(milestone)
+  );
+  if (!shouldGenerate) return invoiceInfo;
+  invoiceInfo = generateInvoiceDocumentForOrder_(row, {
+    cfg: cfg,
+    invoiceNumber: trimString_(invoiceInfo.invoiceNumber)
+  });
+  if (invoiceInfo && trimString_(invoiceInfo.invoicePdfUrl)) {
+    updatePortalOrderState_({
+      cfg: cfg,
+      ss: opts.ss,
+      infra: opts.infra,
+      orderRowInfo: orderInfo,
+      invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
+      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl)
+    });
+  }
+  return invoiceInfo;
+}
+
+function getApAchLifecycleCtaLabel_(milestone, recipientClass) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  if (trimString_(recipientClass) === 'team') return 'View project in portal';
+  if (isApAchLifecycleReceiptMilestone_(normalized)) return 'View Red Threads receipt';
+  if (isApAchLifecycleFailureMilestone_(normalized)) return 'Return to AP payment link';
+  return 'Open AP ACH payment';
+}
+
+function getApAchLifecycleCtaUrl_(token, recipientClass) {
+  return trimString_(recipientClass) === 'team'
+    ? buildTeamSnapshotPortalUrl_(token)
+    : buildAchApPaymentPortalUrl_(token);
+}
+
+function getApAchLifecycleNextStepText_(milestone, recipientClass, fallback) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  const isTeamAlert = trimString_(recipientClass) === 'team';
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
+    return isTeamAlert
+      ? 'Monitor whether Accounts Payable completes ACH checkout.'
+      : 'Complete the secure Stripe checkout for this Red Threads invoice.';
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
+    return isTeamAlert
+      ? 'Monitor ACH verification and bank confirmation before production begins.'
+      : 'Watch for any Stripe bank-verification email. No Red Threads portal action is needed unless Stripe asks for verification.';
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
+    return isTeamAlert
+      ? 'No AP payment action is required; continue with the production workflow.'
+      : 'No payment action is needed. The updated invoice/receipt is attached.';
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
+    return isTeamAlert
+      ? 'Review the AP ACH payment issue before production continues.'
+      : 'Return to the AP payment link or contact Red Threads so payment can be resolved.';
+  }
+  return trimString_(fallback);
+}
+
+function buildApAchLifecycleEmailHistoryLines_(milestone, workflowContext, orderSummary) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const lines = buildLifecycleEmailHistoryLines_(ctx, summary, '', {});
+  function addLine(label, value) {
+    const dateLabel = buildLifecycleEmailDateLabel_(value);
+    if (dateLabel) lines.push(label + ': ' + dateLabel);
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
+    addLine('AP checkout started', summary.lastUpdatedAt);
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
+    addLine('AP ACH submitted', summary.lastUpdatedAt || summary.lockedAt);
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
+    addLine('AP ACH payment received', ctx.paymentReceivedAt || summary.paidAt);
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
+    addLine('AP ACH issue recorded', summary.stripeLatestEventAt || summary.lastUpdatedAt);
+  }
+  return uniqueTrimmedStrings_(lines);
+}
+
+function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, options) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'ap';
+  const isTeamAlert = recipientClass === 'team';
+  const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, Object.assign({}, opts, {
+    recipientClass: isTeamAlert ? 'team' : 'client',
+    paymentMethodLabel: 'AP ACH',
+    ctaLabel: getApAchLifecycleCtaLabel_(normalized, recipientClass),
+    isReceipt: isApAchLifecycleReceiptMilestone_(normalized)
+  }));
+  const summary = emailContext.orderSummary || {};
+  const invoiceNumber = trimString_(emailContext.invoiceNumber);
+  let subject = '';
+  let intro = '';
+  let statusCopy = '';
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: AP ACH checkout started - invoice ' + invoiceNumber) : 'Team alert: AP ACH checkout started')
+      : (invoiceNumber ? ('AP ACH checkout started - Red Threads invoice ' + invoiceNumber) : 'AP ACH checkout started for a Red Threads invoice');
+    intro = isTeamAlert ? 'Accounts Payable opened ACH checkout for this order.' : 'ACH checkout has started for this Red Threads invoice.';
+    statusCopy = isTeamAlert
+      ? 'The AP payment link is being used. Payment is not received until Stripe and the bank confirm the ACH debit.'
+      : 'The invoice is still open until Stripe and the bank confirm the ACH debit.';
+  } else if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: AP ACH payment pending - invoice ' + invoiceNumber) : 'Team alert: AP ACH payment pending')
+      : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' - AP ACH payment pending') : 'AP ACH payment pending for a Red Threads invoice');
+    intro = isTeamAlert ? 'Accounts Payable submitted ACH payment for this order.' : 'ACH payment has been submitted for this Red Threads invoice.';
+    statusCopy = isTeamAlert
+      ? 'The payment is pending Stripe/bank confirmation. ACH payments can take several business days to confirm.'
+      : 'The payment is pending Stripe/bank confirmation. ACH payments can take several business days to confirm. The current invoice is attached.';
+  } else if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: AP ACH payment received - invoice ' + invoiceNumber) : 'Team alert: AP ACH payment received')
+      : (invoiceNumber ? ('AP ACH payment received - Red Threads invoice ' + invoiceNumber) : 'AP ACH payment received for a Red Threads invoice');
+    intro = isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'ACH payment has been received for this Red Threads invoice.';
+    statusCopy = isTeamAlert
+      ? 'The order is now authorized for production according to the portal lifecycle state.'
+      : 'The order is now authorized for production. The updated invoice/receipt is attached.';
+  } else {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: AP ACH payment issue - invoice ' + invoiceNumber) : 'Team alert: AP ACH payment issue')
+      : (invoiceNumber ? ('Action needed - AP ACH payment issue for invoice ' + invoiceNumber) : 'Action needed - AP ACH payment issue for a Red Threads invoice');
+    intro = isTeamAlert ? 'Stripe reported an issue with an AP ACH payment.' : 'Stripe reported an issue with this AP ACH payment.';
+    statusCopy = isTeamAlert
+      ? 'The order needs team review before production continues. Use the portal and Stripe dashboard for details.'
+      : 'Payment must be resolved before production can continue. Return to the AP payment link or contact Red Threads for help.';
+  }
+  const token = getApAchLifecycleOrderToken_(orderInfo, summary);
+  const ctaUrl = getApAchLifecycleCtaUrl_(token, recipientClass);
+  const shell = buildLifecycleEmailShell_({
+    intro: intro,
+    statusCopy: statusCopy,
+    nextStep: getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText),
+    blocks: [
+      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
+      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
+        steps: emailContext.steps
+      }),
+      buildLifecycleEmailHistoryBlock_(buildApAchLifecycleEmailHistoryLines_(normalized, emailContext.workflowContext, emailContext.orderSummary)),
+      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, ctaUrl),
+      buildLifecycleEmailFooter_()
+    ]
+  });
+  return {
+    subject: subject,
+    body: shell.body,
+    htmlBody: shell.htmlBody
+  };
+}
+
+function processApAchLifecycleEmailQueueJob_(jobInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const milestone = normalizeApAchLifecycleEmailMilestone_(meta.milestone);
+  const recipientClass = trimString_(meta.recipientClass) === 'team' ? 'team' : 'ap';
+  if (!milestone) throw new Error('AP ACH lifecycle email queue job is missing a milestone.');
+  const orderInfo = resolveApAchLifecycleOrderForQueueJob_(jobInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  if (!orderInfo) throw new Error('AP ACH lifecycle queue order could not be found.');
+  if (!shouldQueueApAchLifecycleEmailForOrder_(orderInfo, milestone)) {
+    return { skipped: true, skipReason: 'state_not_eligible_for_' + milestone, invoiceInfo: null };
+  }
+  const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
+  if (!recipients.toList.length) throw new Error('AP ACH lifecycle email queue job has no recipients.');
+  const queuedInvoiceInfo = {
+    invoiceNumber: trimString_(meta.invoiceNumber),
+    invoicePdfUrl: trimString_(row.invoicepdfurl),
+    fileName: trimString_(row.invoicefilename)
+  };
+  const invoiceInfo = resolveApAchLifecycleInvoiceInfo_(orderInfo, milestone, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    queuedInvoiceInfo: queuedInvoiceInfo
+  });
+  const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
+  const attachment = buildFinalInvoiceAttachment_(Object.assign({}, summary, {
+    invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber),
+    invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl) || trimString_(summary.invoicePdfUrl)
+  }), trimString_(invoiceInfo && invoiceInfo.fileName));
+  if (isApAchLifecycleAttachmentRequired_(milestone) && !attachment) {
+    throw new Error('AP ACH lifecycle invoice PDF could not be found.');
+  }
+  const content = buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    recipientClass: recipientClass
+  });
+  const emailResult = sendNotificationEmail_({
+    toList: recipients.toList,
+    ccList: recipients.ccList,
+    subject: content.subject,
+    body: content.body,
+    htmlBody: content.htmlBody,
+    attachments: attachment ? [attachment] : [],
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+  if (!emailResult || emailResult.ok !== true) {
+    throw new Error(trimString_(emailResult && emailResult.error) || 'AP ACH lifecycle email could not be sent.');
+  }
+  const token = getApAchLifecycleOrderToken_(orderInfo, summary);
+  logApAchLifecycleEmailQueueEvent_('sent', {
+    ok: true,
+    milestone: milestone,
+    recipientClass: recipientClass,
+    token: token,
+    orderId: trimString_(summary.orderId),
+    paymentIntentId: trimString_(summary.stripePaymentIntentId),
+    sessionId: trimString_(summary.stripeSessionId),
+    recipientCount: recipients.toList.length,
+    ccCount: recipients.ccList.length,
+    recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+    invoicePdfPresent: !!trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
+    attachmentRequired: isApAchLifecycleAttachmentRequired_(milestone),
+    status: PORTAL_EMAIL_QUEUE_STATUSES.sent
+  });
+  return {
+    invoiceInfo: invoiceInfo
+  };
+}
+
+function normalizePortalLifecycleEmailMilestone_(value) {
+  const milestone = trimString_(value).toLowerCase();
+  return Object.keys(PORTAL_LIFECYCLE_EMAIL_MILESTONES).some(function(key) {
+    return PORTAL_LIFECYCLE_EMAIL_MILESTONES[key] === milestone;
+  }) ? milestone : '';
+}
+
+function isPortalLifecycleEmailJobType_(value) {
+  return trimString_(value).toLowerCase() === PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email;
+}
+
+function isPortalLifecycleAccountDocumentMilestone_(milestone) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  return normalized.indexOf('tax_exempt_') === 0 || normalized.indexOf('credit_terms_') === 0;
+}
+
+function getPortalLifecycleEmailRecipientClass_(value) {
+  const recipientClass = trimString_(value).toLowerCase();
+  return recipientClass === 'team' ? 'team' : 'client';
+}
+
+function buildPortalLifecycleSyntheticOrderInfoFromRow_(rowInfo, accountSummary, options) {
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const snapshot = safeJsonParse_(row.snapshotjson, {}) || {};
+  const portalState = safeJsonParse_(row.portalstatejson, {}) || {};
+  const orderDraft = buildOrderDraftFromSnapshotAndPortalState_({
+    token: trimString_(row.token),
+    rowInfo: rowInfo,
+    row: row,
+    snapshot: snapshot,
+    portalState: portalState,
+    accountSummary: accountSummary || null,
+    currency: cfg.stripePriceCurrency
+  });
+  const syntheticRow = {
+    token: trimString_(row.token),
+    orderdraftjson: JSON.stringify(orderDraft),
+    portallockstate: trimString_(row.currentportallockstate || row.portallockstate || orderDraft.portalLockState),
+    orderstate: trimString_(row.currentorderstate || orderDraft.orderState),
+    paymentmethodselected: trimString_(row.currentpaymentmethod || orderDraft.paymentMethodSelected),
+    paymentstate: trimString_(row.currentpaymentstate || orderDraft.paymentState),
+    productionauthorizationstate: trimString_(row.currentproductionauthorizationstate || orderDraft.productionAuthorizationState),
+    invoicenumber: trimString_(row.latestinvoicenumber || row.invoicenumber),
+    invoicepdfurl: trimString_(row.latestinvoicepdfurl || row.invoicepdfurl),
+    amountgrandtotal: orderDraft.amountGrandTotal,
+    amounttax: orderDraft.amountTax,
+    amountcardfee: orderDraft.amountCardFee,
+    currency: trimString_(orderDraft.currency || cfg.stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY),
+    paidat: trimString_(row.paidat),
+    authorizedtoproduceat: trimString_(row.authorizedtoproduceat),
+    lockedat: trimString_(row.lockedat),
+    createdat: trimString_(row.exportedat || row.createdat) || nowIso_(),
+    lastupdatedat: trimString_(row.lastorderupdatedat || row.updatedat || row.exportedat)
+  };
+  return {
+    row: rowInfo && rowInfo.row ? rowInfo.row : 0,
+    colMap: rowInfo && rowInfo.colMap ? rowInfo.colMap : {},
+    rowObjNormalized: syntheticRow
+  };
+}
+
+function resolvePortalLifecycleEmailContext_(source, options) {
+  const src = (source && typeof source === 'object') ? source : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const sourceCtx = src.ctx && typeof src.ctx === 'object' ? src.ctx : {};
+  const cfg = opts.cfg || src.cfg || sourceCtx.cfg || getConfig_();
+  const ss = opts.ss || src.ss || sourceCtx.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || src.infra || sourceCtx.infra || ensurePortalInfrastructure_(ss, cfg);
+  let orderInfo = opts.orderInfo || src.orderInfo || sourceCtx.latestOrderInfo || null;
+  const orderSummary = orderInfo ? buildPortalOrderSummary_(orderInfo.rowObjNormalized) : null;
+  const orderRow = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const token = trimString_(
+    opts.token ||
+    src.token ||
+    sourceCtx.token ||
+    (sourceCtx.orderDraft && sourceCtx.orderDraft.token) ||
+    (sourceCtx.exportRowInfo && sourceCtx.exportRowInfo.rowObjNormalized && sourceCtx.exportRowInfo.rowObjNormalized.token) ||
+    (sourceCtx.rowInfo && sourceCtx.rowInfo.rowObjNormalized && sourceCtx.rowInfo.rowObjNormalized.token) ||
+    orderRow.token ||
+    orderRow.Token
+  );
+  let rowInfo = opts.rowInfo || src.rowInfo || sourceCtx.rowInfo || sourceCtx.exportRowInfo || null;
+  if (!rowInfo && token && infra && infra.exportSheet) rowInfo = findRowByToken_(infra.exportSheet, token);
+  if (!orderInfo && token) {
+    orderInfo = getLatestPortalOrderByToken_(token, {
+      cfg: cfg,
+      ss: ss,
+      ordersSheet: infra.ordersSheet
+    });
+  }
+  let accountInfo = opts.accountInfo || src.accountInfo || sourceCtx.accountInfo || null;
+  if (!accountInfo && orderInfo) {
+    try {
+      accountInfo = getPortalAccountInfoForOrder_(orderInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } catch (_) {
+      accountInfo = null;
+    }
+  }
+  if (!orderInfo && rowInfo) {
+    orderInfo = buildPortalLifecycleSyntheticOrderInfoFromRow_(
+      rowInfo,
+      accountInfo && accountInfo.summary ? accountInfo.summary : null,
+      { cfg: cfg }
+    );
+  }
+  return {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    token: token,
+    rowInfo: rowInfo,
+    orderInfo: orderInfo,
+    accountInfo: accountInfo
+  };
+}
+
+function buildPortalLifecycleEmailTeamRecipients_() {
+  return {
+    toList: normalizeEmailRecipients_([DOCUMENT_REVIEW_EMAIL]),
+    ccList: [],
+    recipientClass: 'team'
+  };
+}
+
+function isPortalLifecycleReadyToOrderForEmail_(rowInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (!rowInfo) return false;
+  try {
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const projection = buildDashboardProjectProjectionContext_(rowInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      includeLatestOrderSummary: true
+    });
+    return trimString_(projection && projection.workflowContext && projection.workflowContext.nextClientAction).toLowerCase() === 'place_order';
+  } catch (_) {
+    return false;
+  }
+}
+
+function buildPortalLifecycleEmailClientRecipients_(ctx, meta) {
+  const row = ctx && ctx.rowInfo && ctx.rowInfo.rowObjNormalized ? ctx.rowInfo.rowObjNormalized : {};
+  const orderRow = ctx && ctx.orderInfo && ctx.orderInfo.rowObjNormalized ? ctx.orderInfo.rowObjNormalized : {};
+  const draft = safeJsonParse_(orderRow.orderdraftjson || orderRow.orderDraftJson, {}) || {};
+  const account = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const payload = (meta && typeof meta === 'object') ? meta : {};
+  const primaryEmail = firstNormalizedEmailFromValues_([
+    payload.clientEmail,
+    payload.submittedByEmail,
+    orderRow.personemail,
+    orderRow.personEmail,
+    draft.personEmail,
+    row.personemail,
+    row[EXPORT_LOG_PERSON_EMAIL_HEADER],
+    account.primaryEmail,
+    account.billingContactEmail
+  ]);
+  return {
+    toList: normalizeEmailRecipients_(primaryEmail ? [primaryEmail] : []),
+    ccList: [],
+    primaryEmail: primaryEmail,
+    recipientClass: 'client'
+  };
+}
+
+function buildPortalLifecycleEmailIdempotencyKey_(milestone, recipientClass, ctx, recipients, meta) {
+  const safeCtx = (ctx && typeof ctx === 'object') ? ctx : {};
+  const orderSummary = safeCtx.orderInfo ? buildPortalOrderSummary_(safeCtx.orderInfo.rowObjNormalized) : {};
+  const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
+  const safeMeta = (meta && typeof meta === 'object') ? meta : {};
+  return buildPortalEmailQueueIdempotencyKeyForSource_({
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+    milestone: normalizePortalLifecycleEmailMilestone_(milestone),
+    recipientClass: getPortalLifecycleEmailRecipientClass_(recipientClass),
+    token: trimString_(safeCtx.token),
+    orderId: trimString_(orderSummary.orderId),
+    eventKey: trimString_(safeMeta.eventKey),
+    printJobIndex: trimString_(safeMeta.printJobIndex),
+    documentType: trimString_(safeMeta.documentType),
+    decision: trimString_(safeMeta.decision),
+    flowKind: trimString_(safeMeta.flowKind),
+    toList: normalizeEmailRecipients_(safeRecipients.toList),
+    ccList: normalizeEmailRecipients_(safeRecipients.ccList)
+  });
+}
+
+function logPortalLifecycleEmailQueueEvent_(eventName, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const safe = {
+    event: trimString_(eventName),
+    ok: p.ok === true,
+    reason: trimString_(p.reason),
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+    milestone: trimString_(p.milestone),
+    recipientClass: trimString_(p.recipientClass),
+    tokenPresent: !!trimString_(p.token),
+    orderId: trimString_(p.orderId),
+    recipientCount: Math.max(0, parseInt(String(p.recipientCount || 0), 10) || 0),
+    ccCount: Math.max(0, parseInt(String(p.ccCount || 0), 10) || 0),
+    recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
+    attachmentCount: Math.max(0, parseInt(String(p.attachmentCount || 0), 10) || 0),
+    attachmentRequired: p.attachmentRequired === true,
+    status: trimString_(p.status),
+    error: trimString_(p.error)
+  };
+  console.log('[RT-PORTAL-LIFECYCLE-EMAIL-QUEUE] ' + JSON.stringify(safe));
+}
+
+function queuePortalLifecycleClientAndTeamEmailsSafely_(source, milestone, options) {
+  return {
+    clientJob: queuePortalLifecycleEmailJobSafely_(source, milestone, Object.assign({}, options || {}, {
+      recipientClass: 'client'
+    })),
+    teamJob: queuePortalLifecycleEmailJobSafely_(source, milestone, Object.assign({}, options || {}, {
+      recipientClass: 'team'
+    }))
+  };
+}
+
+function queuePortalLifecycleEmailJobSafely_(source, milestone, options) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  if (!normalized) return null;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = getPortalLifecycleEmailRecipientClass_(opts.recipientClass);
+  const meta = Object.assign({}, (opts.meta && typeof opts.meta === 'object') ? opts.meta : {}, {
+    milestone: normalized,
+    recipientClass: recipientClass
+  });
+  try {
+    const ctx = resolvePortalLifecycleEmailContext_(source, opts);
+    const recipients = recipientClass === 'team'
+      ? buildPortalLifecycleEmailTeamRecipients_()
+      : buildPortalLifecycleEmailClientRecipients_(ctx, meta);
+    const orderSummary = ctx.orderInfo ? buildPortalOrderSummary_(ctx.orderInfo.rowObjNormalized) : {};
+    if (!ctx.token && !trimString_(orderSummary.orderId)) {
+      logPortalLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'missing_context',
+        milestone: normalized,
+        recipientClass: recipientClass
+      });
+      return null;
+    }
+    if (!recipients.toList.length) {
+      logPortalLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'missing_recipients',
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: ctx.token,
+        orderId: trimString_(orderSummary.orderId)
+      });
+      return null;
+    }
+    const queueSheet = getPortalEmailQueueSheet_(ctx.ss);
+    const idempotencyKey = buildPortalLifecycleEmailIdempotencyKey_(normalized, recipientClass, ctx, recipients, meta);
+    const jobInfo = upsertPortalEmailQueueJob_(queueSheet, {
+      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+      idempotencyKey: idempotencyKey,
+      token: ctx.token,
+      recipientsJson: JSON.stringify(recipients),
+      portalStateJson: JSON.stringify(Object.assign({}, meta, {
+        jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+        token: ctx.token,
+        orderId: trimString_(orderSummary.orderId),
+        queuedFromEventType: trimString_(opts.eventType),
+        queuedAt: nowIso_()
+      })),
+      orderDraftJson: trimString_(ctx.orderInfo && ctx.orderInfo.rowObjNormalized && ctx.orderInfo.rowObjNormalized.orderdraftjson),
+      invoicePdfUrl: trimString_(orderSummary.invoicePdfUrl),
+      invoiceFileName: ''
+    });
+    logPortalLifecycleEmailQueueEvent_('queued', {
+      ok: true,
+      milestone: normalized,
+      recipientClass: recipientClass,
+      token: ctx.token,
+      orderId: trimString_(orderSummary.orderId),
+      recipientCount: recipients.toList.length,
+      ccCount: recipients.ccList.length,
+      recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+      attachmentCount: Array.isArray(meta.attachmentFileIds) ? meta.attachmentFileIds.length : 0,
+      attachmentRequired: meta.attachmentRequired === true,
+      status: trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.status)
+    });
+    let finalJobInfo = jobInfo;
+    if (isPortalEmailQueueJobEligible_(jobInfo, new Date())) {
+      finalJobInfo = tryProcessPortalEmailQueueJobById_(trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.jobid), {
+        cfg: ctx.cfg,
+        ss: ctx.ss,
+        infra: ctx.infra,
+        queueSheet: queueSheet,
+        token: ctx.token
+      }) || jobInfo;
+      if (isPortalEmailQueueJobEligible_(finalJobInfo, new Date())) schedulePortalEmailQueueProcessor_();
+    }
+    return finalJobInfo;
+  } catch (err) {
+    logPortalLifecycleEmailQueueEvent_('error', {
+      ok: false,
+      milestone: normalized,
+      recipientClass: recipientClass,
+      error: String((err && err.message) || err)
+    });
+    return null;
+  }
+}
+
+function getAccountDocumentPortalLifecycleMilestone_(documentType, eventName, options) {
+  const type = trimString_(documentType);
+  const event = trimString_(eventName).toLowerCase();
+  const hardDenied = options && options.hardDenied === true;
+  if (type === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
+    if (event === 'submitted') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted;
+    if (event === 'approved') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved;
+    if (event === 'denied') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied;
+    if (event === 'reset') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset;
+  }
+  if (type === ACCOUNT_DOCUMENT_TYPES.credit_terms) {
+    if (event === 'submitted') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted;
+    if (event === 'approved') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved;
+    if (event === 'denied' || hardDenied) return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied;
+    if (event === 'reset') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset;
+  }
+  return '';
+}
+
+function buildAccountDocumentLifecycleAttachmentMeta_(submissionEntry) {
+  const attachmentFileIds = [];
+  const attachmentFileNames = {};
+  getAccountDocumentSubmissionArtifactFiles_(submissionEntry).forEach(function(item) {
+    const fileId = trimString_(item && item.fileId);
+    if (!fileId) return;
+    attachmentFileIds.push(fileId);
+    attachmentFileNames[fileId] = trimString_(item && item.fileName);
+  });
+  return {
+    attachmentFileIds: uniqueTrimmedStrings_(attachmentFileIds),
+    attachmentFileNames: attachmentFileNames
+  };
+}
+
+function buildAccountDocumentLifecycleMeta_(ctx, definition, submissionEntry, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const decision = trimString_(opts.decision);
+  const attachmentMeta = buildAccountDocumentLifecycleAttachmentMeta_(submissionEntry);
+  const submittedAt = trimString_(submissionEntry && submissionEntry.submittedAt);
+  const decidedAt = trimString_(opts.decidedAt);
+  return Object.assign({}, attachmentMeta, {
+    eventKey: [
+      trimString_(definition && definition.type),
+      trimString_(opts.eventName),
+      submittedAt,
+      decidedAt,
+      decision
+    ].filter(Boolean).join('_'),
+    documentType: trimString_(definition && definition.type),
+    documentLabel: trimString_(definition && definition.label || definition && definition.shortLabel),
+    submittedByEmail: normalizeEmail_(submissionEntry && submissionEntry.submittedByEmail),
+    submittedByName: trimString_(submissionEntry && submissionEntry.submittedByName),
+    clientEmail: firstNormalizedEmailFromValues_([
+      submissionEntry && submissionEntry.submittedByEmail,
+      accountSummary.billingContactEmail,
+      accountSummary.primaryEmail,
+      ctx && ctx.identity && ctx.identity.personEmail
+    ]),
+    submissionSource: trimString_(submissionEntry && submissionEntry.submissionSource),
+    decision: decision,
+    reason: trimString_(opts.reason),
+    hardDenied: opts.hardDenied === true ? 'true' : '',
+    paymentTermsLabel: trimString_(opts.paymentTermsLabel),
+    attachmentRequired: opts.attachmentRequired === true
+  });
+}
+
+function queueAccountDocumentLifecycleEmailSafely_(ctx, definition, submissionEntry, eventName, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const milestone = getAccountDocumentPortalLifecycleMilestone_(
+    definition && definition.type,
+    eventName,
+    opts
+  );
+  if (!milestone) return null;
+  const token = resolveAccountDocumentPortalToken_(ctx);
+  const rowInfo = (ctx && ctx.exportRowInfo) || (token ? findRowByToken_(ctx.infra.exportSheet, token) : null);
+  const meta = buildAccountDocumentLifecycleMeta_(ctx, definition, submissionEntry, Object.assign({}, opts, {
+    eventName: eventName
+  }));
+  const source = {
+    ctx: ctx,
+    token: token,
+    rowInfo: rowInfo,
+    accountInfo: ctx && ctx.accountInfo
+  };
+  if (trimString_(eventName).toLowerCase() === 'submitted') {
+    return queuePortalLifecycleEmailJobSafely_(source, milestone, {
+      recipientClass: 'team',
+      eventType: 'account_document_submitted',
+      meta: Object.assign({}, meta, {
+        attachmentRequired: true
+      })
+    });
+  }
+  return queuePortalLifecycleClientAndTeamEmailsSafely_(source, milestone, {
+    eventType: 'account_document_' + trimString_(eventName).toLowerCase(),
+    meta: meta
+  });
+}
+
+function resolvePortalLifecycleOrderForQueueJob_(jobInfo, options) {
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const ctx = resolvePortalLifecycleEmailContext_({
+    token: trimString_(row.token || meta.token)
+  }, options);
+  return ctx.orderInfo;
+}
+
+function getPortalLifecycleEmailCta_(milestone, recipientClass, ctx, meta) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  const isTeam = getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team';
+  const token = trimString_(ctx && ctx.token);
+  const documentType = trimString_(meta && meta.documentType);
+  if (isTeam) {
+    if (documentType) {
+      return {
+        label: 'Open team review',
+        url: buildAccountDocumentTeamReviewUrl_(documentType, token, ctx && ctx.cfg)
+      };
+    }
+    return {
+      label: 'Open Team Mode',
+      url: buildTeamSnapshotPortalUrl_(token)
+    };
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_ready_to_order) {
+    return { label: 'Open project and place order', url: buildExternalPortalUrl_(token) };
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
+    return { label: 'Update credit terms document', url: buildDashboardCreditTermsResubmitUrl_(token) };
+  }
+  if (documentType === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
+    return { label: 'Open Red Threads portal', url: buildExternalPortalUrl_(token) };
+  }
+  return {
+    label: isPortalLifecycleAccountDocumentMilestone_(normalized) ? 'Open Red Threads portal' : 'View project status',
+    url: buildPortalSummaryUrl_(token)
+  };
+}
+
+function buildPortalLifecycleEmailDetailBlock_(lines) {
+  const cleanLines = uniqueTrimmedStrings_(lines);
+  if (!cleanLines.length) return { text: '', html: '' };
+  const htmlRows = cleanLines.map(function(line) {
+    return '<div style="margin:0 0 6px;color:#334155;">' + escapeHtml_(line) + '</div>';
+  }).join('');
+  return {
+    text: buildLifecycleEmailTextBlock_('Details', cleanLines),
+    html: [
+      '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;">',
+      '<div style="font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;margin:0 0 8px;">Details</div>',
+      htmlRows,
+      '</div>'
+    ].join('')
+  };
+}
+
+function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext, meta, cfg) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  const isTeam = getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team';
+  const projectName = trimString_(emailContext && emailContext.projectName) || 'Red Threads project';
+  const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
+  const printJobIndex = trimString_(meta && meta.printJobIndex);
+  const documentLabel = trimString_(meta && meta.documentLabel);
+  const flowKind = trimString_(meta && meta.flowKind);
+  const completedCount = Math.max(0, parseInt(String(meta && meta.completedJobCount || 0), 10) || 0);
+  const totalCount = Math.max(0, parseInt(String(meta && meta.totalJobCount || 0), 10) || 0);
+  const subjectParts = [];
+  let intro = '';
+  let statusCopy = '';
+  let details = [];
+
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_approved) {
+    subjectParts.push(isTeam ? 'Team alert: artwork approved' : 'Artwork approved');
+    intro = isTeam ? 'A client approved artwork in the portal.' : 'Artwork approval has been recorded.';
+    statusCopy = printJobIndex ? ('Print job ' + printJobIndex + ' was approved.') : 'Artwork was approved.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_disapproved) {
+    subjectParts.push(isTeam ? 'Team alert: artwork change requested' : 'Artwork change requested');
+    intro = isTeam ? 'A client requested an artwork change in the portal.' : 'An artwork change request was recorded.';
+    statusCopy = printJobIndex ? ('Print job ' + printJobIndex + ' needs artwork review.') : 'Artwork needs review.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_ready_to_order) {
+    subjectParts.push(isTeam ? 'Team alert: project ready to order' : 'Your Red Threads project is ready to order');
+    intro = isTeam ? 'A project reached the ready-to-order state.' : 'Your project is ready for order placement.';
+    statusCopy = isTeam
+      ? 'Quantities and artwork appear ready. The client can place the order from the portal.'
+      : 'Quantities and artwork are ready. Return to the portal when you are ready to place the order.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_unlocked) {
+    subjectParts.push(isTeam ? 'Team alert: project reopened' : 'Your Red Threads project was reopened');
+    intro = isTeam ? 'A project was reopened for client changes.' : 'Your project has been reopened for updates.';
+    statusCopy = 'Review the portal before placing the order again.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.checkout_reset) {
+    subjectParts.push(isTeam ? 'Team alert: checkout reset' : 'Your Red Threads checkout was reset');
+    intro = isTeam ? 'Checkout selection was reset by the team.' : 'Your checkout selection was reset by Red Threads.';
+    statusCopy = 'Return to the portal to select payment and continue.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.po_reopened) {
+    subjectParts.push(isTeam ? 'Team alert: PO submission reopened' : 'Purchase-order submission reopened');
+    intro = isTeam ? 'Purchase-order submission was reopened.' : 'Your purchase-order submission step has been reopened.';
+    statusCopy = 'Return to the portal to upload the corrected purchase order.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.team_hold) {
+    subjectParts.push(isTeam ? 'Team alert: project paused' : 'Your Red Threads project is paused');
+    intro = isTeam ? 'The project was placed on a team hold.' : 'Red Threads temporarily paused this project.';
+    statusCopy = 'The portal will show the current hold state while the team resolves the next step.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.client_flow_canceled) {
+    subjectParts.push(isTeam ? 'Team alert: client canceled payment flow' : 'Payment flow canceled');
+    intro = isTeam ? 'A client canceled an in-progress payment workflow.' : 'Your payment workflow was canceled.';
+    statusCopy = flowKind === PAYMENT_METHODS.purchase_order
+      ? 'The purchase-order workflow returned to editable estimate mode.'
+      : 'The manual-payment workflow returned to editable estimate mode.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.production_authorized) {
+    subjectParts.push(isTeam ? 'Team alert: production authorized' : 'Your Red Threads order is authorized for production');
+    intro = isTeam ? 'Production has been authorized for this order.' : 'Your order has been authorized for production.';
+    statusCopy = 'The portal progress snapshot below reflects the current production status.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed) {
+    const complete = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed;
+    subjectParts.push(isTeam
+      ? (complete ? 'Team alert: project complete' : 'Team alert: job completion updated')
+      : (complete ? 'Your Red Threads project is complete' : 'Red Threads job completion update'));
+    intro = isTeam
+      ? (complete ? 'All tracked jobs are marked complete.' : 'Job completion dates were updated.')
+      : (complete ? 'Your Red Threads project is complete.' : 'A production completion update was recorded for your project.');
+    statusCopy = completedCount && totalCount
+      ? (completedCount + ' of ' + totalCount + ' tracked jobs are marked complete.')
+      : 'The current completion status is shown below.';
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted) {
+    subjectParts.push(isTeam ? ('Team review required: ' + (documentLabel || 'account document')) : (documentLabel || 'Account document') + ' submitted');
+    intro = isTeam ? 'A client submitted an account document for review.' : 'Your account document was submitted for Red Threads review.';
+    statusCopy = isTeam ? 'Review the submission in Team Mode.' : 'Red Threads will review the document and update the portal.';
+    if (cfg && cfg.teamModePassword && isTeam) details.push('Team Mode password: ' + trimString_(cfg.teamModePassword));
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
+    subjectParts.push(isTeam ? ('Team alert: ' + (documentLabel || 'account document') + ' approved') : (documentLabel || 'Account document') + ' approved');
+    intro = isTeam ? 'An account document was approved.' : 'Your account document has been approved.';
+    statusCopy = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
+      ? 'Purchase-order submission is available according to the approved terms.'
+      : 'The approved tax exemption status is now reflected in the portal.';
+    if (trimString_(meta && meta.paymentTermsLabel)) details.push('Approved payment terms: ' + trimString_(meta.paymentTermsLabel));
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
+    subjectParts.push(isTeam ? ('Team alert: ' + (documentLabel || 'account document') + ' needs attention') : 'Update on your Red Threads document submission');
+    intro = isTeam ? 'An account document review decision was recorded.' : 'Red Threads reviewed your account document submission.';
+    statusCopy = trimString_(meta && meta.hardDenied) === 'true'
+      ? 'The submission was denied. Review the portal for the current status.'
+      : 'A correction is needed before approval. Review the portal for the next step.';
+    if (trimString_(meta && meta.reason)) details.push('Reason: ' + trimString_(meta.reason));
+  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
+    subjectParts.push(isTeam ? ('Team alert: ' + (documentLabel || 'account document') + ' reset') : (documentLabel || 'Account document') + ' reset');
+    intro = isTeam ? 'An account document workflow was reset.' : 'Red Threads reset an account document workflow.';
+    statusCopy = 'Return to the portal if a new submission is required.';
+  } else {
+    subjectParts.push(isTeam ? 'Team alert: Red Threads portal update' : 'Red Threads portal update');
+    intro = 'A portal lifecycle update was recorded.';
+    statusCopy = 'Review the current project status below.';
+  }
+
+  if (projectName) subjectParts.push(projectName);
+  if (invoiceNumber) subjectParts.push(invoiceNumber);
+  return {
+    subject: subjectParts.filter(Boolean).join(' - '),
+    intro: intro,
+    statusCopy: statusCopy,
+    details: details
+  };
+}
+
+function buildPortalLifecycleEmailAttachments_(meta) {
+  const source = (meta && typeof meta === 'object') ? meta : {};
+  const attachments = [];
+  const fileIds = uniqueTrimmedStrings_(source.attachmentFileIds);
+  fileIds.forEach(function(fileId) {
+    const file = getDriveFileByIdSafe_(fileId);
+    if (!file) return;
+    attachments.push(file.getBlob().setName(
+      sanitizeUploadedDocumentName_(
+        (source.attachmentFileNames && source.attachmentFileNames[fileId]) || file.getName(),
+        file.getName()
+      )
+    ));
+  });
+  return attachments;
+}
+
+function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = getPortalLifecycleEmailRecipientClass_(opts.recipientClass);
+  const ctx = opts.lifecycleContext || {};
+  const meta = (opts.meta && typeof opts.meta === 'object') ? opts.meta : {};
+  const cta = getPortalLifecycleEmailCta_(normalized, recipientClass, ctx, meta);
+  const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, null, Object.assign({}, opts, {
+    recipientClass: recipientClass,
+    ctaLabel: cta.label
+  }));
+  emailContext.ctaUrl = trimString_(cta.url);
+  emailContext.ctaLabel = trimString_(cta.label);
+  const copy = buildPortalLifecycleEmailCopy_(normalized, recipientClass, emailContext, meta, ctx.cfg || opts.cfg);
+  const shell = buildLifecycleEmailShell_({
+    intro: copy.intro,
+    statusCopy: copy.statusCopy,
+    nextStep: emailContext.nextStepText,
+    blocks: [
+      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
+      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
+        steps: emailContext.steps
+      }),
+      buildLifecycleEmailHistoryBlock_(emailContext.historyLines),
+      buildPortalLifecycleEmailDetailBlock_(copy.details),
+      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
+      buildLifecycleEmailFooter_()
+    ]
+  });
+  return {
+    subject: copy.subject,
+    body: shell.body,
+    htmlBody: shell.htmlBody
+  };
+}
+
+function processPortalLifecycleEmailQueueJob_(jobInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const milestone = normalizePortalLifecycleEmailMilestone_(meta.milestone);
+  const recipientClass = getPortalLifecycleEmailRecipientClass_(meta.recipientClass);
+  if (!milestone) throw new Error('Portal lifecycle email queue job is missing a milestone.');
+  const lifecycleContext = resolvePortalLifecycleEmailContext_({
+    token: trimString_(row.token || meta.token)
+  }, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  const orderInfo = lifecycleContext.orderInfo || resolvePortalLifecycleOrderForQueueJob_(jobInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  if (!orderInfo) return { skipped: true, skipReason: 'missing_project_context', invoiceInfo: null };
+  const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
+  if (!recipients.toList.length) return { skipped: true, skipReason: 'missing_recipients', invoiceInfo: null };
+  const attachments = buildPortalLifecycleEmailAttachments_(meta);
+  if (meta.attachmentRequired === true && !attachments.length) {
+    throw new Error('Portal lifecycle attachment could not be found.');
+  }
+  const content = buildPortalLifecycleEmailContent_(milestone, orderInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    recipientClass: recipientClass,
+    lifecycleContext: lifecycleContext,
+    meta: meta
+  });
+  const emailResult = sendNotificationEmail_({
+    toList: recipients.toList,
+    ccList: recipients.ccList,
+    subject: content.subject,
+    body: content.body,
+    htmlBody: content.htmlBody,
+    attachments: attachments,
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+  if (!emailResult || emailResult.ok !== true) {
+    throw new Error(trimString_(emailResult && emailResult.error) || 'Portal lifecycle email could not be sent.');
+  }
+  const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
+  logPortalLifecycleEmailQueueEvent_('sent', {
+    ok: true,
+    milestone: milestone,
+    recipientClass: recipientClass,
+    token: trimString_(row.token || meta.token),
+    orderId: trimString_(summary.orderId),
+    recipientCount: recipients.toList.length,
+    ccCount: recipients.ccList.length,
+    recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+    attachmentCount: attachments.length,
+    attachmentRequired: meta.attachmentRequired === true,
+    status: PORTAL_EMAIL_QUEUE_STATUSES.sent
+  });
+  return {
+    invoiceInfo: null
+  };
+}
+
+function normalizePaymentLifecycleEmailMilestone_(value) {
+  const milestone = trimString_(value).toLowerCase();
+  return Object.keys(PAYMENT_LIFECYCLE_EMAIL_MILESTONES).some(function(key) {
+    return PAYMENT_LIFECYCLE_EMAIL_MILESTONES[key] === milestone;
+  }) ? milestone : '';
+}
+
+function isPaymentLifecycleEmailJobType_(value) {
+  return trimString_(value).toLowerCase() === PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email;
+}
+
+function isPaymentLifecycleReceiptMilestone_(milestone) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  return normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid ||
+    normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received ||
+    normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received;
+}
+
+function isPaymentLifecycleFailureMilestone_(milestone) {
+  return normalizePaymentLifecycleEmailMilestone_(milestone) === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed;
+}
+
+function isPaymentLifecycleAttachmentRequired_(milestone) {
+  return !isPaymentLifecycleFailureMilestone_(milestone);
+}
+
+function getPaymentLifecycleOrderToken_(orderInfo, orderSummary) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  return trimString_(summary.token || row.token || row.Token || draft.token);
+}
+
+function getPaymentLifecycleMethodLabel_(method) {
+  const normalized = trimString_(method).toLowerCase();
+  if (normalized === PAYMENT_METHODS.card) return 'Credit card';
+  if (normalized === PAYMENT_METHODS.check) return 'Check';
+  if (normalized === PAYMENT_METHODS.cash) return 'Cash';
+  if (normalized === PAYMENT_METHODS.purchase_order) return 'Purchase order';
+  if (normalized === PAYMENT_METHODS.ach) return 'ACH';
+  return normalized ? normalized : 'Payment';
+}
+
+function buildPaymentLifecycleTeamAlertRecipients_() {
+  return {
+    toList: normalizeEmailRecipients_([DOCUMENT_REVIEW_EMAIL]),
+    ccList: [],
+    recipientClass: 'team'
+  };
+}
+
+function buildPaymentLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const account = accountInfo && accountInfo.summary ? accountInfo.summary : {};
+  const payerEmail = extractSafeStripePayerEmail_(stripeObj);
+  const primaryEmail = firstNormalizedEmailFromValues_([
+    row.personemail,
+    row.personEmail,
+    draft.personEmail,
+    account.primaryEmail,
+    account.billingContactEmail
+  ]);
+  const toList = primaryEmail ? [primaryEmail] : (payerEmail ? [payerEmail] : []);
+  const ccList = primaryEmail && payerEmail && payerEmail !== primaryEmail ? [payerEmail] : [];
+  return {
+    toList: normalizeEmailRecipients_(toList),
+    ccList: normalizeEmailRecipients_(ccList),
+    payerEmail: payerEmail,
+    primaryEmail: primaryEmail,
+    recipientClass: 'client'
+  };
+}
+
+function shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, milestone) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  if (!normalized) return false;
+  const summary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+  const method = trimString_(summary.paymentMethodSelected).toLowerCase();
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  const paid = !!trimString_(summary.paidAt) || paymentState === PAYMENT_STATES.paid ||
+    paymentState === PAYMENT_STATES.manual_received;
+  if (method === PAYMENT_METHODS.ach) return false;
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
+    return method === PAYMENT_METHODS.card && paid;
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
+    return method === PAYMENT_METHODS.card && paymentState === PAYMENT_STATES.failed && !paid;
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
+    return (method === PAYMENT_METHODS.check || method === PAYMENT_METHODS.cash) &&
+      paymentState === PAYMENT_STATES.manual_pending &&
+      !paid;
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
+    return (method === PAYMENT_METHODS.check || method === PAYMENT_METHODS.cash) && paid;
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
+    return method === PAYMENT_METHODS.purchase_order &&
+      !!trimString_(summary.poSubmittedAt) &&
+      !paid;
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received) {
+    return method === PAYMENT_METHODS.purchase_order && paid;
+  }
+  return false;
+}
+
+function buildPaymentLifecycleEmailIdempotencyKey_(milestone, recipientClass, orderSummary, recipients, token) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
+  return buildPortalEmailQueueIdempotencyKeyForSource_({
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
+    milestone: normalizePaymentLifecycleEmailMilestone_(milestone),
+    recipientClass: trimString_(recipientClass),
+    token: trimString_(token),
+    orderId: trimString_(summary.orderId),
+    paymentMethodSelected: trimString_(summary.paymentMethodSelected),
+    checkoutAttemptId: trimString_(summary.checkoutAttemptId),
+    stripePaymentIntentId: trimString_(summary.stripePaymentIntentId),
+    stripeSessionId: trimString_(summary.stripeSessionId),
+    invoiceNumber: trimString_(summary.invoiceNumber),
+    toList: normalizeEmailRecipients_(safeRecipients.toList),
+    ccList: normalizeEmailRecipients_(safeRecipients.ccList)
+  });
+}
+
+function logPaymentLifecycleEmailQueueEvent_(eventName, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const safe = {
+    event: trimString_(eventName),
+    ok: p.ok === true,
+    reason: trimString_(p.reason),
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
+    milestone: trimString_(p.milestone),
+    recipientClass: trimString_(p.recipientClass),
+    tokenPresent: !!trimString_(p.token),
+    orderId: trimString_(p.orderId),
+    paymentIntentPresent: !!trimString_(p.paymentIntentId),
+    sessionPresent: !!trimString_(p.sessionId),
+    recipientCount: Math.max(0, parseInt(String(p.recipientCount || 0), 10) || 0),
+    ccCount: Math.max(0, parseInt(String(p.ccCount || 0), 10) || 0),
+    recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
+    invoicePdfPresent: p.invoicePdfPresent === true,
+    attachmentRequired: p.attachmentRequired === true,
+    status: trimString_(p.status),
+    error: trimString_(p.error)
+  };
+  console.log('[RT-PAYMENT-LIFECYCLE-EMAIL-QUEUE] ' + JSON.stringify(safe));
+}
+
+function queuePaymentLifecycleClientAndTeamEmailsSafely_(orderInfo, stripeObj, milestone, options) {
+  return {
+    clientJob: queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, Object.assign({}, options || {}, {
+      recipientClass: 'client'
+    })),
+    teamJob: queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, Object.assign({}, options || {}, {
+      recipientClass: 'team'
+    }))
+  };
+}
+
+function queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, options) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  if (!normalized) return null;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'client';
+  try {
+    const orderSummary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+    const token = getPaymentLifecycleOrderToken_(orderInfo, orderSummary);
+    const attachmentRequired = isPaymentLifecycleAttachmentRequired_(normalized);
+    if (!shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, normalized)) {
+      logPaymentLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'state_not_eligible',
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+        attachmentRequired: attachmentRequired
+      });
+      return null;
+    }
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const accountInfo = opts.accountInfo || getPortalAccountInfoForOrder_(orderInfo, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+    const recipients = recipientClass === 'team'
+      ? buildPaymentLifecycleTeamAlertRecipients_()
+      : buildPaymentLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo);
+    if (!recipients.toList.length) {
+      logPaymentLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'missing_recipients',
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+        attachmentRequired: attachmentRequired
+      });
+      return null;
+    }
+    const queueSheet = getPortalEmailQueueSheet_(ss);
+    const invoiceInfo = (opts.invoiceInfo && typeof opts.invoiceInfo === 'object') ? opts.invoiceInfo : {};
+    const idempotencyKey = buildPaymentLifecycleEmailIdempotencyKey_(normalized, recipientClass, orderSummary, recipients, token);
+    const jobInfo = upsertPortalEmailQueueJob_(queueSheet, {
+      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
+      idempotencyKey: idempotencyKey,
+      token: token,
+      recipientsJson: JSON.stringify(recipients),
+      portalStateJson: JSON.stringify({
+        jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        checkoutAttemptId: trimString_(orderSummary.checkoutAttemptId),
+        stripePaymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        stripeSessionId: trimString_(orderSummary.stripeSessionId),
+        paymentMethodSelected: trimString_(orderSummary.paymentMethodSelected),
+        invoiceNumber: trimString_(invoiceInfo.invoiceNumber || orderSummary.invoiceNumber),
+        attachmentRequired: attachmentRequired,
+        queuedFromEventType: trimString_(opts.eventType),
+        queuedAt: nowIso_()
+      }),
+      orderDraftJson: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderdraftjson),
+      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl || orderSummary.invoicePdfUrl),
+      invoiceFileName: trimString_(invoiceInfo.fileName || invoiceInfo.invoiceFileName)
+    });
+    logPaymentLifecycleEmailQueueEvent_('queued', {
+      ok: true,
+      milestone: normalized,
+      recipientClass: recipientClass,
+      token: token,
+      orderId: trimString_(orderSummary.orderId),
+      paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+      sessionId: trimString_(orderSummary.stripeSessionId),
+      recipientCount: recipients.toList.length,
+      ccCount: recipients.ccList.length,
+      recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+      invoicePdfPresent: !!trimString_(invoiceInfo.invoicePdfUrl || orderSummary.invoicePdfUrl),
+      attachmentRequired: attachmentRequired,
+      status: trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.status)
+    });
+    let finalJobInfo = jobInfo;
+    if (isPortalEmailQueueJobEligible_(jobInfo, new Date())) {
+      finalJobInfo = tryProcessPortalEmailQueueJobById_(trimString_(jobInfo && jobInfo.rowObjNormalized && jobInfo.rowObjNormalized.jobid), {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        queueSheet: queueSheet,
+        token: token
+      }) || jobInfo;
+      if (isPortalEmailQueueJobEligible_(finalJobInfo, new Date())) schedulePortalEmailQueueProcessor_();
+    }
+    return finalJobInfo;
+  } catch (err) {
+    logPaymentLifecycleEmailQueueEvent_('error', {
+      ok: false,
+      milestone: normalized,
+      recipientClass: recipientClass,
+      orderId: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderid),
+      error: String((err && err.message) || err)
+    });
+    return null;
+  }
+}
+
+function resolvePaymentLifecycleOrderForQueueJob_(jobInfo, options) {
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const orderId = trimString_(meta.orderId);
+  const paymentIntentId = trimString_(meta.stripePaymentIntentId);
+  const sessionId = trimString_(meta.stripeSessionId);
+  const checkoutAttemptId = trimString_(meta.checkoutAttemptId);
+  const token = trimString_(row.token || meta.token);
+  return (orderId ? getPortalOrderByOrderId_(orderId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (paymentIntentId ? getPortalOrderByStripePaymentIntentId_(paymentIntentId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (sessionId ? getPortalOrderByStripeSessionId_(sessionId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (checkoutAttemptId ? getPortalOrderByCheckoutAttemptId_(checkoutAttemptId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null) ||
+    (token ? getLatestPortalOrderByToken_(token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet }) : null);
+}
+
+function resolvePaymentLifecycleInvoiceInfo_(orderInfo, milestone, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  const queued = (opts.queuedInvoiceInfo && typeof opts.queuedInvoiceInfo === 'object') ? opts.queuedInvoiceInfo : {};
+  let invoiceInfo = {
+    invoiceNumber: trimString_(queued.invoiceNumber) || trimString_(summary.invoiceNumber),
+    invoicePdfUrl: trimString_(queued.invoicePdfUrl) || trimString_(summary.invoicePdfUrl),
+    fileName: trimString_(queued.fileName || queued.invoiceFileName)
+  };
+  const attachmentRequired = isPaymentLifecycleAttachmentRequired_(normalized);
+  const shouldGenerate = attachmentRequired && (
+    !trimString_(invoiceInfo.invoicePdfUrl) ||
+    isPaymentLifecycleReceiptMilestone_(normalized)
+  );
+  if (!shouldGenerate) return invoiceInfo;
+  invoiceInfo = generateInvoiceDocumentForOrder_(row, {
+    cfg: cfg,
+    invoiceNumber: trimString_(invoiceInfo.invoiceNumber)
+  });
+  if (invoiceInfo && trimString_(invoiceInfo.invoicePdfUrl)) {
+    updatePortalOrderState_({
+      cfg: cfg,
+      ss: opts.ss,
+      infra: opts.infra,
+      orderRowInfo: orderInfo,
+      invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
+      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl)
+    });
+  }
+  return invoiceInfo;
+}
+
+function getPaymentLifecycleCtaLabel_(milestone) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  if (isPaymentLifecycleReceiptMilestone_(normalized)) return 'View Red Threads receipt';
+  if (isPaymentLifecycleFailureMilestone_(normalized)) return 'View Red Threads invoice';
+  return 'View Red Threads invoice';
+}
+
+function buildPaymentLifecycleInstructionsBlock_(milestone, orderSummary) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const method = trimString_(summary.paymentMethodSelected).toLowerCase();
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending && method === PAYMENT_METHODS.check) {
+    return {
+      text: buildLifecycleEmailTextBlock_('Payment instructions', [buildCheckPaymentInstructionsText_(summary)]),
+      html: buildCheckPaymentInstructionsHtml_(summary)
+    };
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending && method === PAYMENT_METHODS.cash) {
+    const text = 'Coordinate cash payment directly with Red Threads. Production begins after the team records payment received.';
+    return {
+      text: buildLifecycleEmailTextBlock_('Payment instructions', [text]),
+      html: '<div style="margin:16px 0 18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;color:#334155;"><strong>Payment instructions</strong><br>' + escapeHtml_(text) + '</div>'
+    };
+  }
+  return { text: '', html: '' };
+}
+
+function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, options) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'client';
+  const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, Object.assign({}, opts, {
+    milestone: normalized,
+    recipientClass: recipientClass,
+    ctaLabel: getPaymentLifecycleCtaLabel_(normalized)
+  }));
+  const summary = emailContext.orderSummary || {};
+  const method = trimString_(summary.paymentMethodSelected).toLowerCase();
+  const methodLabel = getPaymentLifecycleMethodLabel_(method);
+  const invoiceNumber = trimString_(emailContext.invoiceNumber);
+  const isTeamAlert = recipientClass === 'team';
+  let subject = '';
+  let intro = '';
+  let statusCopy = '';
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: card payment received - invoice ' + invoiceNumber) : 'Team alert: card payment received')
+      : (invoiceNumber ? ('Payment received - Red Threads invoice ' + invoiceNumber) : 'Payment received - your Red Threads order is entering production');
+    intro = isTeamAlert ? 'A credit card payment has been received.' : 'Your credit card payment has been received.';
+    statusCopy = isTeamAlert
+      ? 'The order is now authorized for production according to the portal lifecycle state.'
+      : 'Your order is now authorized for production. Your updated invoice/receipt is attached.';
+  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: card payment issue - invoice ' + invoiceNumber) : 'Team alert: card payment issue')
+      : (invoiceNumber ? ('Action needed - payment issue for invoice ' + invoiceNumber) : 'Action needed - payment issue for your Red Threads order');
+    intro = isTeamAlert ? 'Stripe reported a card payment issue.' : 'Stripe reported an issue with your card payment.';
+    statusCopy = isTeamAlert
+      ? 'The order needs team review or client payment retry before production continues.'
+      : 'Production cannot continue until payment is resolved. Please return to your Red Threads invoice to retry payment or contact Red Threads for help.';
+  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: manual payment pending - invoice ' + invoiceNumber) : 'Team alert: manual payment pending')
+      : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' - payment pending') : 'Red Threads order placed - payment pending');
+    intro = isTeamAlert ? (methodLabel + ' payment order was placed.') : 'Your order has been placed and your invoice is attached.';
+    statusCopy = isTeamAlert
+      ? 'Production is waiting for the team to record payment received.'
+      : 'Production will begin after Red Threads records your payment received.';
+  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: manual payment received - invoice ' + invoiceNumber) : 'Team alert: manual payment received')
+      : (invoiceNumber ? ('Payment received - Red Threads invoice ' + invoiceNumber) : 'Payment received - your Red Threads order is entering production');
+    intro = isTeamAlert ? (methodLabel + ' payment has been recorded received.') : 'Your payment has been received.';
+    statusCopy = isTeamAlert
+      ? 'The order is now authorized for production according to the portal lifecycle state.'
+      : 'Your order is now authorized for production. Your updated invoice/receipt is attached.';
+  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: purchase order submitted - invoice ' + invoiceNumber) : 'Team alert: purchase order submitted')
+      : (invoiceNumber ? ('Purchase order submitted - Red Threads invoice ' + invoiceNumber) : 'Purchase order submitted - Red Threads order confirmed');
+    intro = isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully and your final invoice is attached.';
+    statusCopy = isTeamAlert
+      ? 'The order is authorized for production. Payment remains open until funds are recorded received.'
+      : 'Your order is authorized for production. Payment remains open according to your approved terms until Red Threads records funds received.';
+  } else {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: purchase order payment received - invoice ' + invoiceNumber) : 'Team alert: purchase order payment received')
+      : (invoiceNumber ? ('Payment received - Red Threads invoice ' + invoiceNumber) : 'Payment received - your Red Threads order');
+    intro = isTeamAlert ? 'Purchase order payment has been recorded received.' : 'Your purchase order payment has been received.';
+    statusCopy = isTeamAlert
+      ? 'The order payment is now recorded received.'
+      : 'Thank you. Your updated invoice/receipt is attached.';
+  }
+  const shell = buildLifecycleEmailShell_({
+    intro: intro,
+    statusCopy: statusCopy,
+    nextStep: emailContext.nextStepText,
+    blocks: [
+      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
+      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
+        steps: emailContext.steps
+      }),
+      buildLifecycleEmailHistoryBlock_(emailContext.historyLines),
+      buildPaymentLifecycleInstructionsBlock_(normalized, emailContext.orderSummary),
+      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
+      buildLifecycleEmailFooter_()
+    ]
+  });
+  return {
+    subject: subject,
+    body: shell.body,
+    htmlBody: shell.htmlBody
+  };
+}
+
+function processPaymentLifecycleEmailQueueJob_(jobInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const milestone = normalizePaymentLifecycleEmailMilestone_(meta.milestone);
+  const recipientClass = trimString_(meta.recipientClass) === 'team' ? 'team' : 'client';
+  if (!milestone) throw new Error('Payment lifecycle email queue job is missing a milestone.');
+  const orderInfo = resolvePaymentLifecycleOrderForQueueJob_(jobInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
+  if (!orderInfo) throw new Error('Payment lifecycle queue order could not be found.');
+  if (!shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, milestone)) {
+    return { skipped: true, skipReason: 'state_not_eligible_for_' + milestone, invoiceInfo: null };
+  }
+  const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
+  if (!recipients.toList.length) throw new Error('Payment lifecycle email queue job has no recipients.');
+  const queuedInvoiceInfo = {
+    invoiceNumber: trimString_(meta.invoiceNumber),
+    invoicePdfUrl: trimString_(row.invoicepdfurl),
+    fileName: trimString_(row.invoicefilename)
+  };
+  const invoiceInfo = resolvePaymentLifecycleInvoiceInfo_(orderInfo, milestone, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    queuedInvoiceInfo: queuedInvoiceInfo
+  });
+  const attachment = buildFinalInvoiceAttachment_(Object.assign({}, buildPortalOrderSummary_(orderInfo.rowObjNormalized), {
+    invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber),
+    invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl)
+  }), trimString_(invoiceInfo && invoiceInfo.fileName));
+  if (isPaymentLifecycleAttachmentRequired_(milestone) && !attachment) {
+    throw new Error('Payment lifecycle invoice PDF could not be found.');
+  }
+  const content = buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    recipientClass: recipientClass
+  });
+  const attachments = attachment ? [attachment] : [];
+  const emailResult = sendNotificationEmail_({
+    toList: recipients.toList,
+    ccList: recipients.ccList,
+    subject: content.subject,
+    body: content.body,
+    htmlBody: content.htmlBody,
+    attachments: attachments,
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+  if (!emailResult || emailResult.ok !== true) {
+    throw new Error(trimString_(emailResult && emailResult.error) || 'Payment lifecycle email could not be sent.');
+  }
+  const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
+  const token = getPaymentLifecycleOrderToken_(orderInfo, summary);
+  logPaymentLifecycleEmailQueueEvent_('sent', {
+    ok: true,
+    milestone: milestone,
+    recipientClass: recipientClass,
+    token: token,
+    orderId: trimString_(summary.orderId),
+    paymentIntentId: trimString_(summary.stripePaymentIntentId),
+    sessionId: trimString_(summary.stripeSessionId),
+    recipientCount: recipients.toList.length,
+    ccCount: recipients.ccList.length,
+    recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+    invoicePdfPresent: !!trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
+    attachmentRequired: isPaymentLifecycleAttachmentRequired_(milestone),
+    status: PORTAL_EMAIL_QUEUE_STATUSES.sent
+  });
+  return {
+    invoiceInfo: invoiceInfo
+  };
+}
+
+function buildLifecycleEmailDateLabel_(value) {
+  const label = trimString_(value) ? formatDashboardShortDate_(value) : '';
+  return label || '';
+}
+
+function buildLifecycleEmailFallbackTimeline_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  return {
+    orderPlacedDateLabel: buildLifecycleEmailDateLabel_(ctx.orderPlacedAt || summary.lockedAt || summary.createdAt),
+    paidDateLabel: buildLifecycleEmailDateLabel_(ctx.paymentReceivedAt || summary.paidAt),
+    printStartDateLabel: buildLifecycleEmailDateLabel_(ctx.productionStartAt || summary.authorizedToProduceAt),
+    completionDateLabel: buildLifecycleEmailDateLabel_(ctx.productionCompletionAt),
+    poSubmittedDateLabel: buildLifecycleEmailDateLabel_(ctx.poSubmittedAt || summary.poSubmittedAt),
+    paymentMethodLabel: 'ACH',
+    poNumber: trimString_(ctx.poNumber || summary.poNumber)
+  };
+}
+
+function buildLifecycleEmailFallbackReadiness_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const includedJobCount = Array.isArray(summary.selectedJobs) ? summary.selectedJobs.length : 0;
+  const hasPlacedOrder = ctx.hasPlacedOrder === true || ctx.orderPlaced === true;
+  return {
+    hasIncludedJobs: includedJobCount > 0 || hasPlacedOrder,
+    minimumsMet: includedJobCount > 0 || hasPlacedOrder,
+    qtySizesComplete: hasPlacedOrder,
+    artworkApprovalComplete: hasPlacedOrder,
+    includedJobCount: includedJobCount
+  };
+}
+
+function buildLifecycleEmailTextBlock_(title, lines) {
+  const cleanTitle = trimString_(title);
+  const cleanLines = uniqueTrimmedStrings_(lines);
+  if (!cleanLines.length) return '';
+  return [cleanTitle ? (cleanTitle + ':') : ''].concat(cleanLines).filter(Boolean).join('\n');
+}
+
+function buildLifecycleEmailReferenceBlock_(fields) {
+  const rows = (Array.isArray(fields) ? fields : []).map(function(field) {
+    const item = (field && typeof field === 'object') ? field : {};
+    return {
+      label: trimString_(item.label),
+      value: trimString_(item.value)
+    };
+  }).filter(function(field) {
+    return field.label && field.value;
+  });
+  if (!rows.length) return { text: '', html: '' };
+  const text = rows.map(function(field) {
+    return field.label + ': ' + field.value;
+  }).join('\n');
+  const htmlRows = rows.map(function(field) {
+    return '<tr>' +
+      '<td style="padding:6px 12px 6px 0;color:#64748b;font-weight:700;white-space:nowrap;vertical-align:top;">' + escapeHtml_(field.label) + '</td>' +
+      '<td style="padding:6px 0;color:#111827;vertical-align:top;">' + escapeHtml_(field.value) + '</td>' +
+      '</tr>';
+  }).join('');
+  return {
+    text: buildLifecycleEmailTextBlock_('Reference', text.split('\n')),
+    html: [
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;border-collapse:separate;">',
+      '<tr><td style="padding:12px 16px;">',
+      '<div style="font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;margin:0 0 6px;">Reference</div>',
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' + htmlRows + '</table>',
+      '</td></tr>',
+      '</table>'
+    ].join('')
+  };
+}
+
+function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, options) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  let steps = Array.isArray(opts.steps) ? opts.steps : [];
+  if (!steps.length) {
+    const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+    const variant = trimString_(ctx.variant).toLowerCase() === 'purchase_order' ? 'purchase_order' : 'standard';
+    const readiness = buildLifecycleEmailFallbackReadiness_(ctx, summary);
+    const flags = buildDashboardProjectStepFlagsFromLifecycle_(readiness, {}, ctx);
+    const presentation = buildDashboardStatusPresentationMeta_({
+      flags: flags,
+      variant: variant,
+      timeline: buildLifecycleEmailFallbackTimeline_(ctx, summary),
+      workflowContext: ctx
+    });
+    steps = buildDashboardStatusBarModel_(flags, variant, presentation);
+  }
+  const normalizedSteps = steps.map(function(step) {
+    const item = (step && typeof step === 'object') ? step : {};
+    const state = trimString_(item.state).toLowerCase();
+    return {
+      key: trimString_(item.key),
+      label: trimString_(item.label),
+      state: state === 'complete' || state === 'current' || state === 'future' ? state : 'future'
+    };
+  }).filter(function(step) {
+    return step.label;
+  });
+  if (!normalizedSteps.length) return { text: '', html: '' };
+  const stateLabel = {
+    complete: 'Complete',
+    current: 'Current',
+    future: 'Next'
+  };
+  const text = normalizedSteps.map(function(step) {
+    return step.label + ': ' + (stateLabel[step.state] || step.state);
+  }).join('\n');
+  const htmlCells = normalizedSteps.map(function(step) {
+    const color = step.state === 'complete' ? '#047857' : (step.state === 'current' ? '#be123c' : '#64748b');
+    const background = step.state === 'complete' ? '#ecfdf5' : (step.state === 'current' ? '#fff1f2' : '#f8fafc');
+    const border = step.state === 'current' ? '#fecdd3' : '#e2e8f0';
+    return '<td style="padding:0 4px 8px 0;vertical-align:top;width:20%;">' +
+      '<div style="border:1px solid ' + border + ';background:' + background + ';border-radius:8px;padding:10px 8px;min-height:56px;">' +
+      '<div style="font-size:13px;line-height:1.25;font-weight:800;color:#111827;">' + escapeHtml_(step.label) + '</div>' +
+      '<div style="margin-top:4px;font-size:12px;line-height:1.25;font-weight:700;color:' + color + ';">' + escapeHtml_(stateLabel[step.state] || step.state) + '</div>' +
+      '</div>' +
+      '</td>';
+  }).join('');
+  return {
+    text: buildLifecycleEmailTextBlock_('Progress', text.split('\n')),
+    html: [
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">',
+      '<tr><td style="padding:0 0 8px;font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;">Order Progress</td></tr>',
+      '<tr><td>',
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>',
+      htmlCells,
+      '</tr></table>',
+      '</td></tr>',
+      '</table>'
+    ].join('')
+  };
+}
+
+function buildLifecycleEmailProgressBlock_(workflowContext, orderSummary, options) {
+  return buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, options);
+}
+
+function buildLifecycleEmailHistoryBlock_(historyLines) {
+  const lines = uniqueTrimmedStrings_(historyLines);
+  if (!lines.length) return { text: '', html: '' };
+  const htmlItems = lines.map(function(line) {
+    return '<li style="margin:0 0 6px;color:#334155;">' + escapeHtml_(line) + '</li>';
+  }).join('');
+  return {
+    text: buildLifecycleEmailTextBlock_('History', lines),
+    html: [
+      '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;">',
+      '<div style="font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;margin:0 0 8px;">History</div>',
+      '<ul style="margin:0;padding-left:18px;">' + htmlItems + '</ul>',
+      '</div>'
+    ].join('')
+  };
+}
+
+function buildLifecycleEmailCtaBlock_(label, url) {
+  const cleanUrl = trimString_(url);
+  const cleanLabel = trimString_(label) || 'Open Red Threads portal';
+  if (!cleanUrl) return { text: '', html: '' };
+  return {
+    text: cleanLabel + ': ' + cleanUrl,
+    html: '<p style="margin:0 0 18px;"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">' + escapeHtml_(cleanLabel) + '</a></p>'
+  };
+}
+
+function buildLifecycleEmailFooter_() {
+  return {
+    text: NOTIFICATION_REPLY_NOTICE,
+    html: '<p style="margin:0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>'
+  };
+}
+
+function buildLifecycleEmailShell_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const intro = trimString_(opts.intro);
+  const statusCopy = trimString_(opts.statusCopy);
+  const nextStep = trimString_(opts.nextStep);
+  const blocks = Array.isArray(opts.blocks) ? opts.blocks : [];
+  const textParts = [
+    intro,
+    statusCopy,
+    nextStep ? ('Next step: ' + nextStep) : ''
+  ];
+  blocks.forEach(function(block) {
+    const item = (block && typeof block === 'object') ? block : {};
+    if (trimString_(item.text)) textParts.push(trimString_(item.text));
+  });
+  const htmlParts = [
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
+    intro ? ('<p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>') : '',
+    statusCopy ? ('<p style="margin:0 0 14px;color:#475569;">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
+    nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid #be123c;background:#fff1f2;color:#7f1d1d;"><strong>Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : ''
+  ];
+  blocks.forEach(function(block) {
+    const item = (block && typeof block === 'object') ? block : {};
+    if (trimString_(item.html)) htmlParts.push(trimString_(item.html));
+  });
+  htmlParts.push('</div>');
+  return {
+    body: textParts.filter(Boolean).join('\n\n'),
+    htmlBody: htmlParts.filter(Boolean).join('\n')
+  };
+}
+
+function buildLifecycleEmailHistoryLines_(workflowContext, orderSummary, jobType, options) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const baseType = getAchLifecycleBaseEmailJobType_(jobType);
+  const milestone = normalizePaymentLifecycleEmailMilestone_(opts.milestone);
+  const lines = [];
+  function addLine(label, value) {
+    const dateLabel = buildLifecycleEmailDateLabel_(value);
+    if (dateLabel) lines.push(label + ': ' + dateLabel);
+  }
+  addLine('Order placed', ctx.orderPlacedAt || summary.lockedAt || summary.createdAt);
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+    addLine('ACH submitted', summary.lockedAt || summary.createdAt || summary.lastUpdatedAt);
+  }
+  if (milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
+    addLine('Card payment received', ctx.paymentReceivedAt || summary.paidAt);
+  }
+  if (milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
+    addLine('Card payment failed', summary.lastUpdatedAt);
+  }
+  if (milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
+    addLine('Manual payment pending', summary.lockedAt || summary.createdAt || summary.lastUpdatedAt);
+  }
+  if (milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
+    addLine('Manual payment received', summary.paymentReceivedManuallyAt || ctx.paymentReceivedAt || summary.paidAt);
+  }
+  if (milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
+    addLine('Purchase order submitted', ctx.poSubmittedAt || summary.poSubmittedAt);
+  }
+  if (milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received) {
+    addLine('PO payment received', summary.paymentReceivedManuallyAt || ctx.paymentReceivedAt || summary.paidAt);
+  }
+  if ([
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid,
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received,
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received
+  ].indexOf(milestone) < 0) {
+    addLine('Payment received', ctx.paymentReceivedAt || summary.paidAt);
+  }
+  addLine('Production authorized', ctx.productionStartAt || summary.authorizedToProduceAt);
+  addLine('Production complete', ctx.productionCompletionAt);
+  return uniqueTrimmedStrings_(lines);
+}
+
+function formatLifecycleEmailNextActionText_(workflowContext, options) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'client';
+  const action = trimString_(recipientClass === 'team' ? ctx.nextTeamAction : ctx.nextClientAction);
+  const map = recipientClass === 'team'
+    ? {
+        review_payment_issue: 'Review the ACH payment issue before production continues.',
+        mark_manual_payment_received: 'Mark payment received when funds are confirmed.',
+        mark_po_payment_received: 'Mark the PO payment received when funds are confirmed.',
+        mark_production_complete: 'Update job completion when production is finished.',
+        monitor_payment: 'Monitor ACH confirmation before production begins.',
+        none: 'No team action is required right now.'
+      }
+    : {
+        retry_payment: 'Return to your Red Threads invoice to retry payment or contact Red Threads for help.',
+        wait_for_ap_payment: 'No action is needed while Accounts Payable completes payment.',
+        wait_for_ap_checkout: 'No action is needed while Accounts Payable completes Checkout.',
+        wait_for_payment: 'Watch for Stripe bank verification or payment confirmation.',
+        enter_quantities: 'Enter quantities and sizes in the portal.',
+        approve_artwork: 'Review and approve artwork in the portal.',
+        place_order: 'Return to the portal when you are ready to place the order.',
+        complete_checkout: 'Return to the portal to complete Checkout.',
+        submit_purchase_order: 'Return to the portal to submit your purchase order.',
+        send_manual_payment: 'Send payment using the instructions on your invoice.',
+        pay_invoice: 'Return to the portal to pay the invoice.',
+        wait_for_production: 'No action is needed while production continues.',
+        none: 'No action is needed right now.'
+      };
+  return trimString_(map[action] || map.none || '');
+}
+
+function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const token = trimString_(summary.token || row.token || draft.token);
+  const cfg = opts.cfg || null;
+  const ss = opts.ss || null;
+  const infra = opts.infra || null;
+  let accountInfo = opts.accountInfo || null;
+  try {
+    if (!accountInfo && cfg && ss && infra) {
+      accountInfo = getPortalAccountInfoForOrder_(orderInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    }
+  } catch (err) {
+    accountInfo = null;
+  }
+  const accountSummary = accountInfo && accountInfo.summary ? accountInfo.summary : {};
+  let projectionContext = null;
+  if (token && cfg && ss && infra && infra.exportSheet) {
+    try {
+      const rowInfo = findRowByToken_(infra.exportSheet, token);
+      if (rowInfo) {
+        projectionContext = buildDashboardProjectProjectionContext_(rowInfo, {
+          cfg: cfg,
+          ss: ss,
+          infra: infra,
+          latestOrderInfo: orderInfo,
+          latestOrderSummary: summary,
+          accountSummary: accountSummary
+        });
+      }
+    } catch (err) {
+      projectionContext = null;
+    }
+  }
+  let workflowContext;
+  let flags;
+  let variant;
+  let timeline;
+  let presentation;
+  let steps;
+  let copy;
+  let projectName = trimString_(draft.projectName || row.projectname);
+  let dealNumber = trimString_(draft.dealNumber || row.dealnumber);
+  if (projectionContext) {
+    workflowContext = projectionContext.workflowContext || {};
+    flags = projectionContext.flags || {};
+    variant = projectionContext.variant || workflowContext.variant || 'standard';
+    timeline = projectionContext.timeline || {};
+    presentation = projectionContext.presentation || {};
+    projectName = trimString_(projectionContext.dealTitle || projectName);
+    dealNumber = trimString_(projectionContext.dealNumber || dealNumber);
+    const statusMeta = buildDashboardProjectStatusMetaFromProjectionContext_(projectionContext);
+    steps = Array.isArray(statusMeta && statusMeta.steps) ? statusMeta.steps : [];
+    copy = statusMeta && statusMeta.copy ? statusMeta.copy : null;
+  } else {
+    const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(row, accountSummary, summary);
+    workflowContext = buildTeamWorkflowContext_({
+      row: row,
+      latestOrderSummary: summary,
+      currentStateSummary: currentStateSummary,
+      accountSummary: accountSummary
+    });
+    variant = workflowContext.variant || 'standard';
+    const readiness = buildLifecycleEmailFallbackReadiness_(workflowContext, summary);
+    flags = buildDashboardProjectStepFlagsFromLifecycle_(readiness, {}, workflowContext);
+    timeline = buildLifecycleEmailFallbackTimeline_(workflowContext, summary);
+    presentation = buildDashboardStatusPresentationMeta_({
+      flags: flags,
+      variant: variant,
+      timeline: timeline,
+      workflowContext: workflowContext
+    });
+    steps = buildDashboardStatusBarModel_(flags, variant, presentation);
+    copy = buildDashboardStatusCopyMeta_({
+      variant: variant,
+      flags: flags,
+      timeline: timeline,
+      presentation: presentation,
+      workflowContext: workflowContext
+    });
+  }
+  const type = normalizeAchLifecycleEmailJobType_(opts.jobType);
+  const milestone = normalizePaymentLifecycleEmailMilestone_(opts.milestone);
+  const baseType = getAchLifecycleBaseEmailJobType_(type);
+  const isReceipt = opts.isReceipt === true ||
+    baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ||
+    isPaymentLifecycleReceiptMilestone_(milestone);
   const invoiceNumber = trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber);
-  const projectName = trimString_(draft.projectName || row.projectname);
-  const dealNumber = trimString_(draft.dealNumber || row.dealnumber);
-  const token = trimString_(row.token || draft.token);
-  const portalUrl = buildPortalSummaryUrl_(token);
-  const amount = type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email
+  const amount = isReceipt
     ? (roundMoney_(summary.amountChargedTotal) > 0 ? summary.amountChargedTotal : summary.amountGrandTotal)
     : summary.amountGrandTotal;
-  const paidDate = trimString_(summary.paidAt) ? formatDashboardShortDate_(summary.paidAt) : formatDashboardShortDate_(new Date());
+  const paymentDate = trimString_(summary.paidAt) ? buildLifecycleEmailDateLabel_(summary.paidAt) : '';
+  const paymentMethodLabel = trimString_(opts.paymentMethodLabel) ||
+    getPaymentLifecycleMethodLabel_(summary.paymentMethodSelected || PAYMENT_METHODS.ach);
+  const ctaLabel = trimString_(opts.ctaLabel) || (isReceipt ? 'View Red Threads receipt' : 'View Red Threads invoice');
+  return {
+    orderSummary: summary,
+    workflowContext: workflowContext,
+    flags: flags,
+    variant: variant,
+    timeline: timeline,
+    presentation: presentation,
+    steps: steps,
+    copy: copy,
+    projectName: projectName,
+    dealNumber: dealNumber,
+    invoiceNumber: invoiceNumber,
+    amount: amount,
+    paymentDate: paymentDate,
+    ctaUrl: buildPortalSummaryUrl_(token),
+    ctaLabel: ctaLabel,
+    referenceFields: [
+      { label: 'Project', value: projectName },
+      { label: 'Project #', value: dealNumber },
+      { label: 'Invoice #', value: invoiceNumber },
+      { label: isReceipt ? 'Amount paid' : 'Amount due', value: formatUsdAmount_(amount) },
+      { label: 'Payment method', value: paymentMethodLabel },
+      { label: 'Payment date', value: isReceipt ? paymentDate : '' }
+    ],
+    historyLines: buildLifecycleEmailHistoryLines_(workflowContext, summary, type, {
+      milestone: milestone
+    }),
+    nextStepText: formatLifecycleEmailNextActionText_(workflowContext, {
+      recipientClass: trimString_(opts.recipientClass),
+      jobType: type
+    })
+  };
+}
+
+function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options) {
+  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  const baseType = getAchLifecycleBaseEmailJobType_(type);
+  const isTeamAlert = isAchLifecycleTeamAlertEmailJobType_(type);
+  const isReceipt = baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, Object.assign({}, opts, {
+    jobType: type,
+    recipientClass: isTeamAlert ? 'team' : 'client'
+  }));
+  const summary = emailContext.orderSummary || {};
+  const invoiceNumber = trimString_(emailContext.invoiceNumber);
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
   const verificationRequired = isAchVerificationRequiredForEmail_(summary);
   const usedConnectedBank = trimString_(draft.achCheckoutIntent).toLowerCase() === ACH_CHECKOUT_INTENTS.saved_bank &&
     /(verified|succeeded|processing)/i.test(trimString_(summary.achVerificationStatus));
   let subject = '';
   let intro = '';
   let statusCopy = '';
-  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
-    subject = invoiceNumber
-      ? ('Red Threads invoice ' + invoiceNumber + ' — ACH payment pending')
-      : 'Red Threads ACH payment submitted';
-    intro = 'Your order has been placed and your invoice is attached.';
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: ACH payment pending — invoice ' + invoiceNumber) : 'Team alert: ACH payment pending')
+      : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — ACH payment pending') : 'Red Threads ACH payment submitted');
+    intro = isTeamAlert
+      ? 'A standard ACH order checkout was submitted.'
+      : 'Your order has been placed and your invoice is attached.';
     if (verificationRequired) {
-      statusCopy = 'Stripe is waiting for bank verification before this ACH payment can finish. You may receive an email from Stripe with a secure verification link. You can also return to your Red Threads invoice and choose Verify with Stripe.\n\nProduction will begin after ACH payment is verified and confirmed.';
+      statusCopy = isTeamAlert
+        ? 'Stripe is waiting for bank verification before this ACH payment can finish. Monitor the order before production begins.'
+        : 'Stripe is waiting for bank verification before this ACH payment can finish. You may receive an email from Stripe with a secure verification link. You can also return to your Red Threads invoice and choose Verify with Stripe.\n\nProduction will begin after ACH payment is verified and confirmed.';
     } else if (usedConnectedBank) {
-      statusCopy = 'Your ACH payment has been submitted using your connected bank and is pending Stripe/bank confirmation. We will send you an updated email when payment is received and production begins.';
+      statusCopy = isTeamAlert
+        ? 'The ACH payment was submitted using a connected bank and is pending Stripe/bank confirmation.'
+        : 'Your ACH payment has been submitted using your connected bank and is pending Stripe/bank confirmation. We will send you an updated email when payment is received and production begins.';
     } else {
-      statusCopy = 'Your ACH payment has been submitted and is pending Stripe/bank confirmation. ACH payments can take several business days to confirm. We will send you an updated email when payment is received and production begins.';
+      statusCopy = isTeamAlert
+        ? 'The ACH payment was submitted and is pending Stripe/bank confirmation. ACH payments can take several business days to confirm.'
+        : 'Your ACH payment has been submitted and is pending Stripe/bank confirmation. ACH payments can take several business days to confirm. We will send you an updated email when payment is received and production begins.';
     }
-  } else if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
-    subject = invoiceNumber
-      ? ('ACH payment received — Red Threads invoice ' + invoiceNumber)
-      : 'Payment received — your Red Threads order is entering production';
-    intro = 'Good news — your ACH payment has been received.';
-    statusCopy = 'Your order is now authorized for production. Your updated invoice/receipt is attached.\n\nProduction is now underway according to the schedule shown on your invoice.';
+  } else if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: ACH payment received — invoice ' + invoiceNumber) : 'Team alert: ACH payment received')
+      : (invoiceNumber ? ('ACH payment received — Red Threads invoice ' + invoiceNumber) : 'Payment received — your Red Threads order is entering production');
+    intro = isTeamAlert
+      ? 'A standard ACH payment has been received.'
+      : 'Good news — your ACH payment has been received.';
+    statusCopy = isTeamAlert
+      ? 'The order is now authorized for production according to the portal lifecycle state.'
+      : 'Your order is now authorized for production. Your updated invoice/receipt is attached.\n\nProduction is now underway according to the schedule shown on your invoice.';
   } else {
-    subject = invoiceNumber
-      ? ('Action needed — ACH payment issue for invoice ' + invoiceNumber)
-      : 'Action needed — ACH payment issue for your Red Threads order';
-    intro = 'Stripe reported an issue with your ACH payment.';
-    statusCopy = 'Production cannot continue until payment is resolved. Please return to your Red Threads invoice to retry payment or contact Red Threads for help.';
+    subject = isTeamAlert
+      ? (invoiceNumber ? ('Team alert: ACH payment issue — invoice ' + invoiceNumber) : 'Team alert: ACH payment issue')
+      : (invoiceNumber ? ('Action needed — ACH payment issue for invoice ' + invoiceNumber) : 'Action needed — ACH payment issue for your Red Threads order');
+    intro = isTeamAlert
+      ? 'Stripe reported an issue with a standard ACH payment.'
+      : 'Stripe reported an issue with your ACH payment.';
+    statusCopy = isTeamAlert
+      ? 'The order needs team review before production continues. Do not rely on this email for raw Stripe details; use the portal and Stripe dashboard as needed.'
+      : 'Production cannot continue until payment is resolved. Please return to your Red Threads invoice to retry payment or contact Red Threads for help.';
   }
-  const referenceLines = [
-    projectName ? ('Project: ' + projectName) : '',
-    dealNumber ? ('Project #: ' + dealNumber) : '',
-    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
-    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? ('Amount paid: ' + formatUsdAmount_(amount)) : ('Amount due: ' + formatUsdAmount_(amount)),
-    'Payment method: ACH',
-    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? ('Payment date: ' + (paidDate || '--')) : ''
-  ].filter(Boolean);
-  const body = [
-    intro,
-    '',
-    statusCopy,
-    '',
-    referenceLines.join('\n'),
-    '',
-    portalUrl ? ('View your Red Threads invoice: ' + portalUrl) : '',
-    '',
-    NOTIFICATION_REPLY_NOTICE
-  ].filter(Boolean).join('\n');
-  const htmlBody = [
-    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
-    '  <p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>',
-    '  <p style="margin:0 0 16px;color:#475569;">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>',
-    '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">',
-    projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
-    dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
-    invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
-    '    <div><strong>' + (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? 'Amount paid' : 'Amount due') + ':</strong> ' + escapeHtml_(formatUsdAmount_(amount)) + '</div>',
-    '    <div><strong>Payment method:</strong> ACH</div>',
-    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? ('    <div><strong>Payment date:</strong> ' + escapeHtml_(paidDate || '--') + '</div>') : '',
-    '  </div>',
-    portalUrl
-      ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">View Red Threads invoice</a></p>')
-      : '',
-    '  <p style="margin:0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
-    '</div>'
-  ].filter(Boolean).join('\n');
+  const shell = buildLifecycleEmailShell_({
+    intro: intro,
+    statusCopy: statusCopy,
+    nextStep: emailContext.nextStepText,
+    blocks: [
+      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
+      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
+        steps: emailContext.steps
+      }),
+      buildLifecycleEmailHistoryBlock_(emailContext.historyLines),
+      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
+      buildLifecycleEmailFooter_()
+    ]
+  });
   return {
     subject: subject,
-    body: body,
-    htmlBody: htmlBody
+    body: shell.body,
+    htmlBody: shell.htmlBody
   };
 }
 
@@ -20299,18 +22972,19 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
   });
   if (!orderInfo) throw new Error('ACH email queue order could not be found.');
   if (!isStandardOrderCheckoutAchOrder_(orderInfo)) {
-    return { skipped: true, invoiceInfo: null };
+    return { skipped: true, skipReason: 'not_standard_order_checkout_ach', invoiceInfo: null };
   }
   const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
   const paymentState = trimString_(summary.paymentState).toLowerCase();
-  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email && paymentState === PAYMENT_STATES.paid) {
-    return { skipped: true, invoiceInfo: null };
+  const baseJobType = getAchLifecycleBaseEmailJobType_(jobType);
+  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email && paymentState === PAYMENT_STATES.paid) {
+    return { skipped: true, skipReason: 'ach_submitted_job_already_paid', invoiceInfo: null };
   }
-  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email && paymentState !== PAYMENT_STATES.paid && !trimString_(summary.paidAt)) {
-    return { skipped: true, invoiceInfo: null };
+  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email && paymentState !== PAYMENT_STATES.paid && !trimString_(summary.paidAt)) {
+    return { skipped: true, skipReason: 'ach_receipt_job_not_paid', invoiceInfo: null };
   }
-  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email && paymentState === PAYMENT_STATES.paid) {
-    return { skipped: true, invoiceInfo: null };
+  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email && paymentState === PAYMENT_STATES.paid) {
+    return { skipped: true, skipReason: 'ach_failed_job_already_paid', invoiceInfo: null };
   }
   const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
   if (!recipients.toList.length) throw new Error('ACH email queue job has no recipients.');
@@ -20324,7 +22998,11 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
     invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl) || trimString_(summary.invoicePdfUrl)
   }), trimString_(invoiceInfo && invoiceInfo.fileName));
   if (!attachment) throw new Error('ACH lifecycle invoice PDF could not be found.');
-  const content = buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo);
+  const content = buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra
+  });
   const emailResult = sendNotificationEmail_({
     toList: recipients.toList,
     ccList: recipients.ccList,
@@ -20338,7 +23016,22 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
   if (!emailResult || emailResult.ok !== true) {
     throw new Error(trimString_(emailResult && emailResult.error) || 'ACH lifecycle email could not be sent.');
   }
-  if (jobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+  logAchLifecycleEmailQueueEvent_('sent', {
+    ok: true,
+    jobType: jobType,
+    recipientClass: getAchLifecycleEmailRecipientClass_(jobType),
+    token: trimString_(summary.token),
+    orderId: trimString_(summary.orderId),
+    paymentIntentId: trimString_(summary.stripePaymentIntentId),
+    sessionId: trimString_(summary.stripeSessionId),
+    recipientCount: recipients.toList.length,
+    ccCount: recipients.ccList.length,
+    recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+    invoicePdfPresent: !!trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
+    status: PORTAL_EMAIL_QUEUE_STATUSES.sent
+  });
+  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email &&
+      !isAchLifecycleTeamAlertEmailJobType_(jobType)) {
     try {
       updatePortalOrderState_({
         cfg: cfg,
@@ -20369,19 +23062,27 @@ function deletePortalEmailQueueProcessorTriggers_() {
   }
 }
 
-function schedulePortalEmailQueueProcessor_() {
+function schedulePortalEmailQueueProcessor_(delayMs) {
   try {
-    const hasTrigger = ScriptApp.getProjectTriggers().some(function(trigger) {
-      return trigger.getHandlerFunction && trigger.getHandlerFunction() === 'processPortalEmailQueue';
-    });
-    if (!hasTrigger) {
-      ScriptApp.newTrigger('processPortalEmailQueue')
-        .timeBased()
-        .after(PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS)
-        .create();
-    }
+    const rawDelayMs = Math.max(0, parseInt(String(delayMs || 0), 10) || 0);
+    const triggerDelayMs = rawDelayMs
+      ? Math.max(1000, Math.min(rawDelayMs, PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS))
+      : PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS;
+    deletePortalEmailQueueProcessorTriggers_();
+    ScriptApp.newTrigger('processPortalEmailQueue')
+      .timeBased()
+      .after(triggerDelayMs)
+      .create();
+    return {
+      ok: true,
+      delayMs: triggerDelayMs
+    };
   } catch (err) {
     console.log('[RT-EMAIL-QUEUE-TRIGGER] ' + String((err && err.message) || err));
+    return {
+      ok: false,
+      error: String((err && err.message) || err)
+    };
   }
 }
 
@@ -20592,15 +23293,54 @@ function queuePurchaseOrderInvoiceEmail(payload) {
   }
 }
 
+function getPortalEmailQueueJobNotBeforeMs_(jobInfo) {
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  if (!isChatMessageDigestEmailJobType_(row.jobtype)) return 0;
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  return parseIsoDateMs_(meta.notBefore);
+}
+
+function isPortalEmailQueueJobBlockedByNotBefore_(jobInfo, nowDate) {
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  if (!isChatMessageDigestEmailJobType_(row.jobtype)) return false;
+  const status = normalizePortalEmailQueueStatus_(row.status);
+  const attemptCount = Math.max(0, parseInt(String(row.attemptcount || 0), 10) || 0);
+  if (status !== PORTAL_EMAIL_QUEUE_STATUSES.queued &&
+      !(status === PORTAL_EMAIL_QUEUE_STATUSES.failed && attemptCount < PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS)) {
+    return false;
+  }
+  const notBeforeMs = getPortalEmailQueueJobNotBeforeMs_(jobInfo);
+  const nowMs = (nowDate instanceof Date ? nowDate : new Date()).getTime();
+  return !!(notBeforeMs && notBeforeMs > nowMs);
+}
+
+function getNextPortalEmailQueueNotBeforeDelayMs_(jobInfos, nowDate) {
+  const infos = Array.isArray(jobInfos) ? jobInfos : [];
+  const nowMs = (nowDate instanceof Date ? nowDate : new Date()).getTime();
+  let nextMs = 0;
+  infos.forEach(function(jobInfo) {
+    if (!isPortalEmailQueueJobBlockedByNotBefore_(jobInfo, new Date(nowMs))) return;
+    const notBeforeMs = getPortalEmailQueueJobNotBeforeMs_(jobInfo);
+    if (!notBeforeMs || notBeforeMs <= nowMs) return;
+    if (!nextMs || notBeforeMs < nextMs) nextMs = notBeforeMs;
+  });
+  return nextMs ? Math.max(0, nextMs - nowMs) : 0;
+}
+
 function isPortalEmailQueueJobEligible_(jobInfo, nowDate) {
   const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
   const status = normalizePortalEmailQueueStatus_(row.status);
   const attemptCount = Math.max(0, parseInt(String(row.attemptcount || 0), 10) || 0);
-  if (status === PORTAL_EMAIL_QUEUE_STATUSES.queued) return true;
-  if (status === PORTAL_EMAIL_QUEUE_STATUSES.failed && attemptCount < PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS) return true;
+  const now = nowDate instanceof Date ? nowDate : new Date();
+  if (status === PORTAL_EMAIL_QUEUE_STATUSES.queued) {
+    return !isPortalEmailQueueJobBlockedByNotBefore_(jobInfo, now);
+  }
+  if (status === PORTAL_EMAIL_QUEUE_STATUSES.failed && attemptCount < PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS) {
+    return !isPortalEmailQueueJobBlockedByNotBefore_(jobInfo, now);
+  }
   if (status === PORTAL_EMAIL_QUEUE_STATUSES.processing) {
     const leaseUntilMs = Date.parse(trimString_(row.leaseuntil));
-    return !leaseUntilMs || leaseUntilMs <= nowDate.getTime();
+    return !leaseUntilMs || leaseUntilMs <= now.getTime();
   }
   return false;
 }
@@ -20723,6 +23463,30 @@ function processPortalEmailQueueJobInfo_(jobInfo, options) {
         ss: ss,
         infra: infra
       });
+    } else if (isPortalLifecycleEmailJobType_(jobType)) {
+      result = processPortalLifecycleEmailQueueJob_(processingJobInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } else if (isChatMessageDigestEmailJobType_(jobType)) {
+      result = processChatMessageDigestEmailQueueJob_(processingJobInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } else if (isApAchLifecycleEmailJobType_(jobType)) {
+      result = processApAchLifecycleEmailQueueJob_(processingJobInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } else if (isPaymentLifecycleEmailJobType_(jobType)) {
+      result = processPaymentLifecycleEmailQueueJob_(processingJobInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
     } else if (isAchLifecycleEmailJobType_(jobType)) {
       result = processAchLifecycleClientEmailQueueJob_(processingJobInfo, {
         cfg: cfg,
@@ -20733,6 +23497,93 @@ function processPortalEmailQueueJobInfo_(jobInfo, options) {
       throw new Error('Unsupported email queue job type: ' + trimString_(jobType || 'unknown'));
     }
     const completedAt = nowIso_();
+    if (result && result.skipped === true) {
+      const skipReason = trimString_(result.skipReason) || 'skipped';
+      setRowValuesByHeaderMap_(queueSheet, jobInfo.row, jobInfo.colMap, {
+        status: PORTAL_EMAIL_QUEUE_STATUSES.skipped,
+        invoicePdfUrl: trimString_(result && result.invoiceInfo && result.invoiceInfo.invoicePdfUrl),
+        invoiceFileName: trimString_(result && result.invoiceInfo && result.invoiceInfo.fileName),
+        lastError: skipReason,
+        updatedAt: completedAt,
+        completedAt: completedAt,
+        leaseUntil: ''
+      });
+      if (isAchLifecycleEmailJobType_(jobType)) {
+        const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+        logAchLifecycleEmailQueueEvent_('skipped', {
+          ok: true,
+          reason: skipReason,
+          jobType: jobType,
+          recipientClass: trimString_(meta.recipientClass) || getAchLifecycleEmailRecipientClass_(jobType),
+          token: trimString_(row.token || meta.token),
+          orderId: trimString_(meta.orderId),
+          paymentIntentId: trimString_(meta.stripePaymentIntentId),
+          sessionId: trimString_(meta.stripeSessionId),
+          status: PORTAL_EMAIL_QUEUE_STATUSES.skipped
+        });
+      } else if (isApAchLifecycleEmailJobType_(jobType)) {
+        const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+        logApAchLifecycleEmailQueueEvent_('skipped', {
+          ok: true,
+          reason: skipReason,
+          milestone: normalizeApAchLifecycleEmailMilestone_(meta.milestone),
+          recipientClass: trimString_(meta.recipientClass),
+          token: trimString_(row.token || meta.token),
+          orderId: trimString_(meta.orderId),
+          paymentIntentId: trimString_(meta.stripePaymentIntentId),
+          sessionId: trimString_(meta.stripeSessionId),
+          status: PORTAL_EMAIL_QUEUE_STATUSES.skipped
+        });
+      } else if (isPaymentLifecycleEmailJobType_(jobType)) {
+        const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+        logPaymentLifecycleEmailQueueEvent_('skipped', {
+          ok: true,
+          reason: skipReason,
+          milestone: normalizePaymentLifecycleEmailMilestone_(meta.milestone),
+          recipientClass: trimString_(meta.recipientClass),
+          token: trimString_(row.token || meta.token),
+          orderId: trimString_(meta.orderId),
+          paymentIntentId: trimString_(meta.stripePaymentIntentId),
+          sessionId: trimString_(meta.stripeSessionId),
+          status: PORTAL_EMAIL_QUEUE_STATUSES.skipped
+        });
+      } else if (isPortalLifecycleEmailJobType_(jobType)) {
+        const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+        const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
+        logPortalLifecycleEmailQueueEvent_('skipped', {
+          ok: true,
+          reason: skipReason,
+          milestone: normalizePortalLifecycleEmailMilestone_(meta.milestone),
+          recipientClass: trimString_(meta.recipientClass),
+          token: trimString_(row.token || meta.token),
+          orderId: trimString_(meta.orderId),
+          recipientCount: recipients.toList.length,
+          ccCount: recipients.ccList.length,
+          recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+          attachmentCount: Array.isArray(meta.attachmentFileIds) ? meta.attachmentFileIds.length : 0,
+          attachmentRequired: meta.attachmentRequired === true,
+          status: PORTAL_EMAIL_QUEUE_STATUSES.skipped
+        });
+      } else if (isChatMessageDigestEmailJobType_(jobType)) {
+        const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+        const recipients = parseChatMessageDigestRecipients_(row.recipientsjson);
+        logChatMessageDigestQueueEvent_('skipped', {
+          ok: true,
+          reason: skipReason,
+          direction: normalizeChatMessageDigestDirection_(meta.direction),
+          recipientClass: trimString_(meta.recipientClass),
+          token: trimString_(row.token || meta.token),
+          recipientCount: recipients.toList.length,
+          ccCount: recipients.ccList.length,
+          recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+          messageCount: Array.isArray(meta.messageIds) ? meta.messageIds.length : 0,
+          notBefore: trimString_(meta.notBefore),
+          due: true,
+          status: PORTAL_EMAIL_QUEUE_STATUSES.skipped
+        });
+      }
+      return buildRowInfoFromSheet_(queueSheet, jobInfo.row);
+    }
     setRowValuesByHeaderMap_(queueSheet, jobInfo.row, jobInfo.colMap, {
       status: PORTAL_EMAIL_QUEUE_STATUSES.sent,
       invoicePdfUrl: trimString_(result && result.invoiceInfo && result.invoiceInfo.invoicePdfUrl),
@@ -20751,6 +23602,80 @@ function processPortalEmailQueueJobInfo_(jobInfo, options) {
       updatedAt: failedAt,
       leaseUntil: ''
     });
+    if (isAchLifecycleEmailJobType_(row.jobtype)) {
+      const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+      logAchLifecycleEmailQueueEvent_('failed', {
+        ok: false,
+        jobType: trimString_(row.jobtype),
+        recipientClass: trimString_(meta.recipientClass) || getAchLifecycleEmailRecipientClass_(row.jobtype),
+        token: trimString_(row.token || meta.token),
+        orderId: trimString_(meta.orderId),
+        paymentIntentId: trimString_(meta.stripePaymentIntentId),
+        sessionId: trimString_(meta.stripeSessionId),
+        status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
+        error: errorMessage
+      });
+    } else if (isApAchLifecycleEmailJobType_(row.jobtype)) {
+      const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+      logApAchLifecycleEmailQueueEvent_('failed', {
+        ok: false,
+        milestone: normalizeApAchLifecycleEmailMilestone_(meta.milestone),
+        recipientClass: trimString_(meta.recipientClass),
+        token: trimString_(row.token || meta.token),
+        orderId: trimString_(meta.orderId),
+        paymentIntentId: trimString_(meta.stripePaymentIntentId),
+        sessionId: trimString_(meta.stripeSessionId),
+        status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
+        error: errorMessage
+      });
+    } else if (isPaymentLifecycleEmailJobType_(row.jobtype)) {
+      const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+      logPaymentLifecycleEmailQueueEvent_('failed', {
+        ok: false,
+        milestone: normalizePaymentLifecycleEmailMilestone_(meta.milestone),
+        recipientClass: trimString_(meta.recipientClass),
+        token: trimString_(row.token || meta.token),
+        orderId: trimString_(meta.orderId),
+        paymentIntentId: trimString_(meta.stripePaymentIntentId),
+        sessionId: trimString_(meta.stripeSessionId),
+        status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
+        error: errorMessage
+      });
+    } else if (isPortalLifecycleEmailJobType_(row.jobtype)) {
+      const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+      const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
+      logPortalLifecycleEmailQueueEvent_('failed', {
+        ok: false,
+        milestone: normalizePortalLifecycleEmailMilestone_(meta.milestone),
+        recipientClass: trimString_(meta.recipientClass),
+        token: trimString_(row.token || meta.token),
+        orderId: trimString_(meta.orderId),
+        recipientCount: recipients.toList.length,
+        ccCount: recipients.ccList.length,
+        recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+        attachmentCount: Array.isArray(meta.attachmentFileIds) ? meta.attachmentFileIds.length : 0,
+        attachmentRequired: meta.attachmentRequired === true,
+        status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
+        error: errorMessage
+      });
+    } else if (isChatMessageDigestEmailJobType_(row.jobtype)) {
+      const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+      const recipients = parseChatMessageDigestRecipients_(row.recipientsjson);
+      logChatMessageDigestQueueEvent_('failed', {
+        ok: false,
+        direction: normalizeChatMessageDigestDirection_(meta.direction),
+        recipientClass: trimString_(meta.recipientClass),
+        token: trimString_(row.token || meta.token),
+        recipientCount: recipients.toList.length,
+        ccCount: recipients.ccList.length,
+        recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+        messageCount: Array.isArray(meta.messageIds) ? meta.messageIds.length : 0,
+        notBefore: trimString_(meta.notBefore),
+        due: true,
+        status: PORTAL_EMAIL_QUEUE_STATUSES.failed,
+        error: errorMessage
+      });
+    }
     if (trimString_(row.jobtype) === PORTAL_EMAIL_QUEUE_JOB_TYPES.purchase_order_invoice_email) {
       try {
         updatePurchaseOrderDraftEmailJobStatusForToken_(cfg, ss, infra, trimString_(row.token), {
@@ -20797,10 +23722,83 @@ function tryProcessPortalEmailQueueJobById_(jobId, options) {
   }
 }
 
+function kickPortalEmailQueueProcessorSafely_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const maxJobs = Math.max(1, Math.min(3, parseInt(String(opts.maxJobs || 1), 10) || 1));
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(500)) {
+    console.log('[RT-EMAIL-QUEUE-KICK] ' + JSON.stringify({
+      ok: false,
+      reason: 'lock_busy',
+      source: trimString_(opts.source),
+      maxJobs: maxJobs
+    }));
+    return { ok: false, reason: 'lock_busy' };
+  }
+  try {
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const queueSheet = opts.queueSheet || getPortalEmailQueueSheet_(ss);
+    const nowDate = new Date();
+    const dueJobs = listSheetRowInfos_(queueSheet)
+      .filter(function(jobInfo) { return isPortalEmailQueueJobEligible_(jobInfo, nowDate); })
+      .slice(0, maxJobs);
+    dueJobs.forEach(function(jobInfo) {
+      processPortalEmailQueueJobInfo_(jobInfo, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        queueSheet: queueSheet,
+        nowDate: nowDate
+      });
+    });
+    const remainingJobs = listSheetRowInfos_(queueSheet);
+    const hasMoreDue = remainingJobs.some(function(info) {
+      return isPortalEmailQueueJobEligible_(info, new Date());
+    });
+    const nextNotBeforeDelayMs = hasMoreDue ? 0 : getNextPortalEmailQueueNotBeforeDelayMs_(remainingJobs, new Date());
+    if (hasMoreDue) {
+      schedulePortalEmailQueueProcessor_(PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS);
+    } else if (nextNotBeforeDelayMs) {
+      schedulePortalEmailQueueProcessor_(nextNotBeforeDelayMs);
+    }
+    console.log('[RT-EMAIL-QUEUE-KICK] ' + JSON.stringify({
+      ok: true,
+      source: trimString_(opts.source),
+      processedCount: dueJobs.length,
+      maxJobs: maxJobs,
+      hasMoreDue: hasMoreDue,
+      nextNotBeforePresent: !!nextNotBeforeDelayMs
+    }));
+    return {
+      ok: true,
+      processedCount: dueJobs.length,
+      hasMoreDue: hasMoreDue,
+      nextNotBeforeDelayMs: nextNotBeforeDelayMs
+    };
+  } catch (err) {
+    const message = String((err && err.message) || err);
+    console.log('[RT-EMAIL-QUEUE-KICK] ' + JSON.stringify({
+      ok: false,
+      source: trimString_(opts.source),
+      maxJobs: maxJobs,
+      error: message
+    }));
+    return {
+      ok: false,
+      error: message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function processPortalEmailQueue() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return;
   let shouldScheduleAgain = false;
+  let nextScheduleDelayMs = PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS;
   try {
     deletePortalEmailQueueProcessorTriggers_();
     const cfg = getConfig_();
@@ -20825,17 +23823,27 @@ function processPortalEmailQueue() {
         shouldScheduleAgain = true;
       }
     });
-    const hasMore = listSheetRowInfos_(queueSheet).some(function(info) {
+    const remainingJobs = listSheetRowInfos_(queueSheet);
+    const hasMore = remainingJobs.some(function(info) {
       return isPortalEmailQueueJobEligible_(info, new Date());
     });
-    if (hasMore) shouldScheduleAgain = true;
+    if (hasMore) {
+      shouldScheduleAgain = true;
+      nextScheduleDelayMs = PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS;
+    } else {
+      const nextNotBeforeDelayMs = getNextPortalEmailQueueNotBeforeDelayMs_(remainingJobs, new Date());
+      if (nextNotBeforeDelayMs) {
+        shouldScheduleAgain = true;
+        nextScheduleDelayMs = nextNotBeforeDelayMs;
+      }
+    }
   } catch (err) {
     console.log('[RT-EMAIL-QUEUE-PROCESS] ' + String((err && err.message) || err));
     shouldScheduleAgain = true;
   } finally {
     lock.releaseLock();
   }
-  if (shouldScheduleAgain) schedulePortalEmailQueueProcessor_();
+  if (shouldScheduleAgain) schedulePortalEmailQueueProcessor_(nextScheduleDelayMs);
 }
 
 function getPurchaseOrderEmailJobStatus_(payload) {
@@ -21048,6 +24056,20 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
   markCheckoutTiming_(timing, 'response_hydration_start');
   const portalPayload = buildOrderActionPortalPayload_(ctx, exportRowInfo);
   markCheckoutTiming_(timing, 'response_hydration_end', { ok: !!portalPayload });
+  if (method === PAYMENT_METHODS.ach && paymentOrigin === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link) {
+    queueApAchLifecycleApAndTeamEmailsSafely_(
+      updatedOrder,
+      stripe,
+      AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started,
+      {
+        cfg: ctx.cfg,
+        ss: ctx.ss,
+        infra: ctx.infra,
+        accountInfo: ctx.accountInfo,
+        eventType: 'locked_order.ap_checkout_started'
+      }
+    );
+  }
   markCheckoutTiming_(timing, 'response_build_start');
   const response = finalizeOrderActionResponse_({
     ok: true,
@@ -21187,20 +24209,31 @@ function submitPurchaseOrder_(payload) {
   }
   ctx.rowInfo = findRowByToken_(ctx.infra.exportSheet, ctx.orderDraft.token) || buildRowInfoFromSheet_(ctx.infra.exportSheet, exportRowInfo.row);
   ctx.row = ctx.rowInfo.rowObjNormalized;
-  const confirmation = sendLockedOrderConfirmationEmails_(ctx, finalOrderSummary, {
-    intro: 'Congratulations. Your purchase order was submitted successfully and your final invoice is attached.'
-  });
+  queuePaymentLifecycleClientAndTeamEmailsSafely_(
+    created.rowInfo,
+    null,
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted,
+    {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra,
+      accountInfo: ctx.accountInfo,
+      invoiceInfo: invoiceInfo,
+      eventType: 'submit_purchase_order'
+    }
+  );
+  const paymentLinks = buildLockedOrderPaymentLinkBundle_(ctx.orderDraft.token);
   return finalizeOrderActionResponse_({
     ok: true,
     accountSummary: ctx.accountInfo.summary,
     orderSummary: finalOrderSummary,
     portalPayload: buildOrderActionPortalPayload_(ctx, ctx.rowInfo),
     message: 'Purchase order submitted successfully.',
-    paymentLinks: confirmation && confirmation.ok === true ? {
-      summaryUrl: trimString_(confirmation.summaryUrl),
-      cardUrl: trimString_(confirmation.cardUrl),
-      achUrl: trimString_(confirmation.achUrl)
-    } : null
+    paymentLinks: {
+      summaryUrl: trimString_(paymentLinks.summaryUrl),
+      cardUrl: trimString_(paymentLinks.cardUrl),
+      achUrl: trimString_(paymentLinks.achUrl)
+    }
   }, ctx);
 }
 
@@ -21241,6 +24274,19 @@ function cancelPendingClientOrderFlow_(payload) {
     trimString_(ctx.orderDraft && ctx.orderDraft.personName)
   );
   clearCurrentOrderPointersToEditableState_(ctx, clearedPortalState);
+  queuePortalLifecycleEmailJobSafely_({
+    ctx: ctx,
+    token: ctx.orderDraft.token,
+    rowInfo: ctx.rowInfo,
+    orderInfo: lifecycle.latestOrderInfo
+  }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.client_flow_canceled, {
+    recipientClass: 'team',
+    eventType: 'cancel_pending_client_order_flow',
+    meta: {
+      eventKey: 'client_flow_canceled_' + trimString_(lifecycle.latestOrderSummary && lifecycle.latestOrderSummary.orderId),
+      flowKind: cancelFlowKind
+    }
+  });
   return finalizeOrderActionResponse_({
     ok: true,
     accountSummary: ctx.accountInfo.summary,
@@ -23141,6 +26187,483 @@ function buildChatNotificationPayload_(rowInfo, message, options) {
     personEmail: personEmail,
     teamInboxEmail: DOCUMENT_REVIEW_EMAIL,
     portalDirectUrl: buildPortalDirectUrl_(token)
+  };
+}
+
+function isChatMessageDigestEmailJobType_(value) {
+  return trimString_(value).toLowerCase() === PORTAL_EMAIL_QUEUE_JOB_TYPES.chat_message_digest_email;
+}
+
+function normalizeChatMessageDigestDirection_(value) {
+  const clean = trimString_(value).toLowerCase();
+  return clean === CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team ||
+    clean === CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client
+    ? clean
+    : '';
+}
+
+function getChatMessageDigestDirectionForSender_(sender) {
+  const clean = trimString_(sender).toLowerCase();
+  if (clean === 'team') return CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client;
+  if (clean === 'client') return CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team;
+  return '';
+}
+
+function getChatMessageDigestRecipientClass_(direction) {
+  const clean = normalizeChatMessageDigestDirection_(direction);
+  if (clean === CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team) return 'team';
+  if (clean === CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client) return 'client';
+  return '';
+}
+
+function getChatMessageDigestExpectedSender_(direction) {
+  const clean = normalizeChatMessageDigestDirection_(direction);
+  if (clean === CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team) return 'client';
+  if (clean === CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client) return 'team';
+  return '';
+}
+
+function parseChatMessageDigestRecipients_(rawValue) {
+  const parsed = safeJsonParse_(rawValue, []);
+  if (Array.isArray(parsed)) {
+    return {
+      toList: normalizeEmailRecipients_(parsed),
+      ccList: []
+    };
+  }
+  const source = (parsed && typeof parsed === 'object') ? parsed : {};
+  return {
+    toList: normalizeEmailRecipients_(source.toList || source.to || source.recipients),
+    ccList: normalizeEmailRecipients_(source.ccList || source.cc),
+    recipientClass: trimString_(source.recipientClass),
+    direction: normalizeChatMessageDigestDirection_(source.direction)
+  };
+}
+
+function buildChatMessageDigestRecipients_(rowInfo, direction, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const cleanDirection = normalizeChatMessageDigestDirection_(direction);
+  if (cleanDirection === CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team) {
+    return {
+      toList: normalizeEmailRecipients_([opts.teamInboxEmail || DOCUMENT_REVIEW_EMAIL]),
+      ccList: [],
+      recipientClass: 'team',
+      direction: cleanDirection
+    };
+  }
+  if (cleanDirection === CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client) {
+    return {
+      toList: normalizeEmailRecipients_([opts.personEmail || row[EXPORT_LOG_PERSON_EMAIL_HEADER]]),
+      ccList: [],
+      recipientClass: 'client',
+      direction: cleanDirection
+    };
+  }
+  return {
+    toList: [],
+    ccList: [],
+    recipientClass: '',
+    direction: ''
+  };
+}
+
+function buildChatMessageDigestEmailIdempotencyKey_(source) {
+  const safe = (source && typeof source === 'object') ? source : {};
+  return buildPortalEmailQueueIdempotencyKeyForSource_({
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.chat_message_digest_email,
+    token: trimString_(safe.token),
+    direction: normalizeChatMessageDigestDirection_(safe.direction),
+    recipientClass: trimString_(safe.recipientClass),
+    firstMessageId: trimString_(safe.firstMessageId),
+    windowStartedAt: trimString_(safe.windowStartedAt),
+    toList: normalizeEmailRecipients_(safe.toList),
+    ccList: normalizeEmailRecipients_(safe.ccList)
+  });
+}
+
+function findOpenChatMessageDigestEmailQueueJob_(queueSheet, token, direction) {
+  const cleanToken = trimString_(token);
+  const cleanDirection = normalizeChatMessageDigestDirection_(direction);
+  if (!queueSheet || !cleanToken || !cleanDirection) return null;
+  return listSheetRowInfos_(queueSheet).find(function(info) {
+    const row = info && info.rowObjNormalized ? info.rowObjNormalized : {};
+    if (!isChatMessageDigestEmailJobType_(row.jobtype)) return false;
+    if (trimString_(row.token) !== cleanToken) return false;
+    const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+    if (normalizeChatMessageDigestDirection_(meta.direction) !== cleanDirection) return false;
+    const status = normalizePortalEmailQueueStatus_(row.status);
+    const attemptCount = Math.max(0, parseInt(String(row.attemptcount || 0), 10) || 0);
+    if (status === PORTAL_EMAIL_QUEUE_STATUSES.queued) return true;
+    return status === PORTAL_EMAIL_QUEUE_STATUSES.failed && attemptCount < PORTAL_EMAIL_QUEUE_MAX_ATTEMPTS;
+  }) || null;
+}
+
+function logChatMessageDigestQueueEvent_(eventName, payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const safe = {
+    event: trimString_(eventName),
+    ok: p.ok === true,
+    reason: trimString_(p.reason),
+    jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.chat_message_digest_email,
+    direction: normalizeChatMessageDigestDirection_(p.direction),
+    recipientClass: trimString_(p.recipientClass),
+    tokenPresent: !!trimString_(p.token),
+    recipientCount: Math.max(0, parseInt(String(p.recipientCount || 0), 10) || 0),
+    ccCount: Math.max(0, parseInt(String(p.ccCount || 0), 10) || 0),
+    recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
+    messageCount: Math.max(0, parseInt(String(p.messageCount || 0), 10) || 0),
+    notBefore: trimString_(p.notBefore),
+    due: p.due === true,
+    status: trimString_(p.status),
+    error: trimString_(p.error)
+  };
+  console.log('[RT-CHAT-DIGEST-QUEUE] ' + JSON.stringify(safe));
+}
+
+function queuePortalMessageDigestEmailSafely_(rowInfo, message, options) {
+  try {
+    const opts = (options && typeof options === 'object') ? options : {};
+    const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+    const normalizedMessage = normalizeChatLog_([message])[0];
+    const token = trimString_(opts.token || row.token);
+    const direction = normalizeChatMessageDigestDirection_(opts.direction) ||
+      getChatMessageDigestDirectionForSender_(opts.senderType || (normalizedMessage && normalizedMessage.sender));
+    const recipientClass = getChatMessageDigestRecipientClass_(direction);
+    if (!token || !normalizedMessage || !direction) {
+      logChatMessageDigestQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'invalid_chat_digest_context',
+        direction: direction,
+        recipientClass: recipientClass,
+        token: token,
+        messageCount: normalizedMessage ? 1 : 0
+      });
+      return null;
+    }
+    const expectedSender = getChatMessageDigestExpectedSender_(direction);
+    if (expectedSender && trimString_(normalizedMessage.sender).toLowerCase() !== expectedSender) {
+      logChatMessageDigestQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'direction_sender_mismatch',
+        direction: direction,
+        recipientClass: recipientClass,
+        token: token,
+        messageCount: 1
+      });
+      return null;
+    }
+    const recipients = buildChatMessageDigestRecipients_(rowInfo, direction, opts);
+    if (!recipients.toList.length) {
+      logChatMessageDigestQueueEvent_('not_queued', {
+        ok: false,
+        reason: 'missing_recipients',
+        direction: direction,
+        recipientClass: recipientClass,
+        token: token,
+        recipientCount: 0,
+        ccCount: 0,
+        messageCount: 1
+      });
+      return { ok: false, skipped: true, reason: 'missing_recipients' };
+    }
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const queueSheet = opts.queueSheet || getPortalEmailQueueSheet_(ss);
+    const now = nowIso_();
+    const messageAtMs = parseIsoDateMs_(normalizedMessage.ts) || Date.now();
+    const notBefore = new Date(messageAtMs + CHAT_MESSAGE_DIGEST_DELAY_MS).toISOString();
+    const existingJob = findOpenChatMessageDigestEmailQueueJob_(queueSheet, token, direction);
+    const existingRow = existingJob && existingJob.rowObjNormalized ? existingJob.rowObjNormalized : {};
+    const existingMeta = safeJsonParse_(existingRow.portalstatejson, {}) || {};
+    const messageIds = uniqueTrimmedStrings_(
+      (Array.isArray(existingMeta.messageIds) ? existingMeta.messageIds : [])
+        .concat([normalizedMessage.id])
+    );
+    const windowStartedAt = trimString_(existingMeta.windowStartedAt || normalizedMessage.ts || now);
+    const firstMessageId = trimString_(existingMeta.firstMessageId || messageIds[0] || normalizedMessage.id);
+    const meta = {
+      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.chat_message_digest_email,
+      direction: direction,
+      recipientClass: recipientClass,
+      token: token,
+      firstMessageId: firstMessageId,
+      messageIds: messageIds,
+      windowStartedAt: windowStartedAt,
+      lastMessageAt: trimString_(normalizedMessage.ts || now),
+      notBefore: notBefore,
+      sourceEvent: 'appendChatMessage',
+      queuedAt: trimString_(existingMeta.queuedAt || now),
+      updatedAt: now
+    };
+    const idempotencyKey = buildChatMessageDigestEmailIdempotencyKey_({
+      token: token,
+      direction: direction,
+      recipientClass: recipientClass,
+      firstMessageId: firstMessageId,
+      windowStartedAt: windowStartedAt,
+      toList: recipients.toList,
+      ccList: recipients.ccList
+    });
+    const jobValues = {
+      jobId: trimString_(existingRow.jobid) || newPortalId_('eml'),
+      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.chat_message_digest_email,
+      idempotencyKey: idempotencyKey,
+      token: token,
+      status: PORTAL_EMAIL_QUEUE_STATUSES.queued,
+      recipientsJson: JSON.stringify({
+        toList: recipients.toList,
+        ccList: recipients.ccList,
+        recipientClass: recipientClass,
+        direction: direction
+      }),
+      portalStateJson: JSON.stringify(meta),
+      orderDraftJson: '',
+      invoicePdfUrl: '',
+      invoiceFileName: '',
+      attemptCount: existingJob
+        ? Math.max(0, parseInt(String(existingRow.attemptcount || 0), 10) || 0)
+        : 0,
+      lastError: '',
+      createdAt: trimString_(existingRow.createdat) || now,
+      updatedAt: now,
+      startedAt: '',
+      completedAt: '',
+      leaseUntil: ''
+    };
+    let jobInfo;
+    if (existingJob) {
+      setRowValuesByHeaderMap_(queueSheet, existingJob.row, existingJob.colMap, jobValues);
+      jobInfo = buildRowInfoFromSheet_(queueSheet, existingJob.row);
+    } else {
+      jobInfo = appendPortalEmailQueueJob_(queueSheet, jobValues);
+    }
+    logChatMessageDigestQueueEvent_(existingJob ? 'updated' : 'queued', {
+      ok: true,
+      direction: direction,
+      recipientClass: recipientClass,
+      token: token,
+      recipientCount: recipients.toList.length,
+      ccCount: recipients.ccList.length,
+      recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+      messageCount: messageIds.length,
+      notBefore: notBefore,
+      due: false,
+      status: PORTAL_EMAIL_QUEUE_STATUSES.queued
+    });
+    schedulePortalEmailQueueProcessor_(Math.max(0, parseIsoDateMs_(notBefore) - Date.now()));
+    return jobInfo;
+  } catch (err) {
+    logChatMessageDigestQueueEvent_('not_queued', {
+      ok: false,
+      reason: 'queue_error',
+      error: String((err && err.message) || err)
+    });
+    return null;
+  }
+}
+
+function selectChatMessageDigestMessages_(chatLog, meta, direction) {
+  const normalizedLog = normalizeChatLog_(chatLog);
+  const expectedSender = getChatMessageDigestExpectedSender_(direction);
+  const source = (meta && typeof meta === 'object') ? meta : {};
+  const messageIds = uniqueTrimmedStrings_(Array.isArray(source.messageIds) ? source.messageIds : []);
+  if (messageIds.length) {
+    const byId = {};
+    normalizedLog.forEach(function(message) {
+      byId[trimString_(message.id)] = message;
+    });
+    return messageIds
+      .map(function(messageId) { return byId[messageId]; })
+      .filter(function(message) {
+        return message && (!expectedSender || trimString_(message.sender).toLowerCase() === expectedSender);
+      });
+  }
+  const windowStartedMs = parseIsoDateMs_(source.windowStartedAt);
+  const lastMessageMs = parseIsoDateMs_(source.lastMessageAt);
+  if (!windowStartedMs || !lastMessageMs) return [];
+  return normalizedLog.filter(function(message) {
+    if (expectedSender && trimString_(message.sender).toLowerCase() !== expectedSender) return false;
+    const messageMs = parseIsoDateMs_(message.ts);
+    return messageMs >= windowStartedMs && messageMs <= lastMessageMs;
+  });
+}
+
+function formatChatMessageDigestTimestamp_(value) {
+  const ms = parseIsoDateMs_(value);
+  if (!ms) return '';
+  try {
+    return Utilities.formatDate(new Date(ms), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a');
+  } catch (_) {
+    return new Date(ms).toISOString();
+  }
+}
+
+function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  const direction = normalizeChatMessageDigestDirection_(opts.direction);
+  const isTeamDigest = direction === CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team;
+  const safeMessages = normalizeChatLog_(messages);
+  const token = trimString_(opts.token || row.token);
+  const snapshot = safeJsonParse_(row.snapshotjson, null);
+  const projectName = deriveProjectNameForNotification_(row, snapshot, opts);
+  const messageCount = safeMessages.length;
+  const clientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+  const clientName = trimString_(row.personname || row.clientname || row.orgname || 'there');
+  const firstName = trimString_(clientName.split(/\s+/)[0]) || 'there';
+  const teamModePassword = isTeamDigest
+    ? trimString_(getConfig_().teamModePassword || DEFAULT_TEAM_MODE_PASSWORD)
+    : '';
+  const portalUrl = isTeamDigest
+    ? buildTeamSnapshotPortalUrl_(token)
+    : buildExternalPortalUrl_(token);
+  const ctaLabel = isTeamDigest ? 'Open Team Snapshot' : 'Open Your Portal Messages';
+  const subjectPrefix = isTeamDigest
+    ? 'New client portal messages'
+    : 'New Red Threads portal messages';
+  const subject = subjectPrefix + ' (' + messageCount + ')' + (projectName ? (' - ' + projectName) : '');
+  const messageRows = safeMessages.map(function(message) {
+    const senderName = trimString_(message.sender).toLowerCase() === 'team'
+      ? trimString_(message.authorName || getVisibleTeamAuthorName_(row) || 'Red Threads Team')
+      : trimString_(message.authorName || deriveSenderNameForNotification_(row, 'client', opts) || 'Client');
+    return {
+      senderName: senderName,
+      timestamp: formatChatMessageDigestTimestamp_(message.ts),
+      text: trimString_(message.text)
+    };
+  });
+  const plainMessageLines = [];
+  messageRows.forEach(function(messageRow) {
+    plainMessageLines.push('[' + (messageRow.timestamp || 'Time unavailable') + '] ' + messageRow.senderName + ':');
+    plainMessageLines.push(messageRow.text || '--');
+    plainMessageLines.push('');
+  });
+  const body = isTeamDigest
+    ? [
+        'A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.',
+        '',
+        projectName ? ('Project: ' + projectName) : '',
+        clientEmail ? ('Client email: ' + clientEmail) : '',
+        '',
+        'Messages:',
+        plainMessageLines.join('\n').trim(),
+        '',
+        teamModePassword ? ('Team password: ' + teamModePassword) : '',
+        portalUrl ? ('Open portal: ' + portalUrl) : ''
+      ].filter(Boolean).join('\n')
+    : [
+        'Hi ' + firstName + ',',
+        '',
+        'You have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.',
+        projectName ? ('Project: ' + projectName) : '',
+        '',
+        'Messages:',
+        plainMessageLines.join('\n').trim(),
+        '',
+        portalUrl ? ('Open your portal: ' + portalUrl) : '',
+        '',
+        'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+        '',
+        '- Red Threads Team'
+      ].filter(Boolean).join('\n');
+  const htmlMessages = messageRows.map(function(messageRow) {
+    return [
+      '      <tr>',
+      '        <td style="padding:14px 16px;border-top:1px solid #e6ebf3;">',
+      '          <div style="font-size:13px;line-height:1.5;color:#5f6f86;"><strong style="color:#142033;">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:#73829a;">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
+      '          <div style="margin-top:8px;font-size:15px;line-height:1.65;color:#35435a;white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
+      '        </td>',
+      '      </tr>'
+    ].join('\n');
+  }).join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads Portal Messages</div>',
+    '    <h1 style="margin:0 0 12px;font-size:26px;line-height:1.25;color:#142033;">' + escapeHtml_(isTeamDigest ? 'Client portal message digest' : 'You have new portal messages') + '</h1>',
+    isTeamDigest
+      ? ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.</p>')
+      : ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>'),
+    (projectName || clientEmail)
+      ? ('    <div style="margin:0 0 18px;padding:16px 18px;border-radius:12px;background:#f7f9fc;border:1px solid #e6ebf3;font-size:14px;line-height:1.8;color:#35435a;">'
+        + (projectName ? ('<div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '')
+        + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
+        + '</div>')
+      : '',
+    '    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 20px;border:1px solid #e6ebf3;border-radius:12px;overflow:hidden;">',
+    '      <tr><td style="padding:12px 16px;background:#f7f9fc;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#73829a;font-weight:800;">Messages</td></tr>',
+    htmlMessages,
+    '    </table>',
+    teamModePassword
+      ? ('    <div style="margin:0 0 20px;padding:16px 18px;border-radius:12px;background:#ecfeff;border:1px solid #67e8f9;">'
+        + '<div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#0f766e;font-weight:800;margin-bottom:10px;">Team Password</div>'
+        + '<div style="display:inline-block;padding:9px 12px;border-radius:10px;background:#042f2e;color:#99f6e4;font-size:20px;line-height:1.2;font-weight:900;letter-spacing:0.04em;">'
+        + escapeHtml_(teamModePassword)
+        + '</div></div>')
+      : '',
+    portalUrl
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:13px 20px;border-radius:999px;background:#f43f5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;">' + escapeHtml_(ctaLabel) + '</a></p>')
+      : '',
+    isTeamDigest
+      ? '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated notification from the Red Threads portal.</p>'
+      : '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '  </div>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+  return {
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody
+  };
+}
+
+function processChatMessageDigestEmailQueueJob_(jobInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
+  const token = trimString_(row.token || meta.token);
+  const direction = normalizeChatMessageDigestDirection_(meta.direction);
+  const recipientClass = trimString_(meta.recipientClass) || getChatMessageDigestRecipientClass_(direction);
+  const recipients = parseChatMessageDigestRecipients_(row.recipientsjson);
+  if (!token) return { skipped: true, skipReason: 'missing_token' };
+  if (!direction) return { skipped: true, skipReason: 'missing_direction' };
+  if (!recipients.toList.length) return { skipped: true, skipReason: 'missing_recipients' };
+  const rowInfo = findRowByToken_(infra.exportSheet, token);
+  if (!rowInfo) return { skipped: true, skipReason: 'missing_project_row' };
+  const messages = selectChatMessageDigestMessages_(readChatLogForRow_(infra.exportSheet, rowInfo), meta, direction);
+  if (!messages.length) return { skipped: true, skipReason: 'no_digest_messages' };
+  const content = buildChatMessageDigestEmailContent_(rowInfo, messages, {
+    direction: direction,
+    token: token
+  });
+  sendNotificationEmail_({
+    toList: recipients.toList,
+    ccList: recipients.ccList,
+    subject: content.subject,
+    body: content.body,
+    htmlBody: content.htmlBody,
+    fromAlias: NOTIFICATION_FROM_ALIAS,
+    replyTo: NOTIFICATION_FROM_ALIAS
+  });
+  logChatMessageDigestQueueEvent_('sent', {
+    ok: true,
+    direction: direction,
+    recipientClass: recipientClass,
+    token: token,
+    recipientCount: recipients.toList.length,
+    ccCount: recipients.ccList.length,
+    recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
+    messageCount: messages.length,
+    notBefore: trimString_(meta.notBefore),
+    due: true,
+    status: PORTAL_EMAIL_QUEUE_STATUSES.sent
+  });
+  return {
+    messageCount: messages.length
   };
 }
 
