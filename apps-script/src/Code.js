@@ -8964,12 +8964,20 @@ function prepareAchApPaymentLink_(payload, options) {
   let emailResult = null;
   let emailSentAt = '';
   if (opts.sendEmail === true) {
-    emailResult = sendAchApPaymentLinkEmail_(ctx, orderSummary, {
-      apEmail: payload && payload.apEmail,
-      apName: payload && payload.apName,
-      note: payload && payload.note,
-      apPaymentLink: apPaymentLink
-    });
+    try {
+      emailResult = sendAchApPaymentLinkEmail_(ctx, orderSummary, {
+        apEmail: payload && payload.apEmail,
+        apName: payload && payload.apName,
+        note: payload && payload.note,
+        apPaymentLink: apPaymentLink
+      });
+    } catch (emailErr) {
+      emailResult = {
+        ok: false,
+        code: 'ach_ap_email_failed',
+        error: String((emailErr && emailErr.message) || emailErr)
+      };
+    }
     if (emailResult && emailResult.ok === true) {
       emailSentAt = nowIso_();
       const updatedOrder = updatePortalOrderState_({

@@ -131,6 +131,15 @@ Recorded 2026-06-11 after deploying stable Apps Script version `896`, `Complete 
 - The scanned `PORTAL_EMAIL_QUEUE` status column contained only `sent` and intentional state-based `skipped` rows after post-ship queue smoke; no `failed` rows were found.
 - `clasp run processPortalEmailQueue --nondev` is not available for this Apps Script project because the project is not API-executable; queue evidence was gathered through the live web app, the backing Sheets queue, and safe rendered-route checks.
 
+Recorded 2026-06-11 after deploying stable Apps Script version `897`, `Harden AP link email failure response`:
+
+- Manual check pending smoke placed a disposable check-payment order through the live portal and produced one client invoice lifecycle row plus one team alert row; both completed `sent` with one attempt and no failure reason.
+- PO submitted smoke approved artwork, generated a disposable invoice artifact, submitted a purchase order, and produced one client `payment_lifecycle_email` plus one team `payment_lifecycle_email`; both completed `sent`, both carried invoice attachment references, and no `client_secret` / `clientSecret` marker appeared in the action response.
+- Card paid smoke completed Stripe Checkout with a test card and produced one client receipt lifecycle row plus one team alert row; both completed `sent`, both carried invoice/receipt attachment references, and no `client_secret` / `clientSecret` marker appeared in the portal response.
+- AP ACH smoke first exposed an AP payment-link failure mode where the AP order could be created before a generic Apps Script email-send error returned and left the AP recipient field blank. Version `897` catches that exception and routes it through the existing structured AP-email-failed response so the AP link can still be copied safely.
+- AP ACH payment-link retry after `897` succeeded with structured `emailOk=true`, preserved `order_only` AP ACH scope, and did not expose a client secret. Starting AP ACH checkout from that locked AP order produced two `ap_ach_lifecycle_email` rows, one AP-facing and one team alert; both completed `sent`, both carried invoice attachment references, and neither row recorded a failure reason.
+- Remaining live-smoke evidence still required before claiming every matrix path complete: standard ACH fresh pending/confirmed/failed paths, AP ACH submitted/confirmed/failed paths, card failed/action-needed, manual payment received, PO payment received, Team Mode/admin lifecycle transitions, and team-to-client chat digest. Some of those require fresh disposable fixtures, Stripe ACH bank verification/failure completion, or Team Mode authorization.
+
 ## ACH Event Smokes
 
 For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID and `PORTAL_ORDERS` reflects the expected state:
