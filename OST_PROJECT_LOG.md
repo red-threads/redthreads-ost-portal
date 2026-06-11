@@ -1057,3 +1057,12 @@ Append-only project memory for decisions, session summaries, validation results,
 - Goal: close the card failed/action-needed lifecycle smoke gap without exposing private fixture tokens, recipients, customer data, Checkout URLs, or Stripe object IDs.
 - Smoke evidence: a disposable hosted Stripe Checkout retry was created for card payment, and the action response included a Checkout URL without exposing `client_secret` / `clientSecret`. Submitting Stripe's declined test card produced the expected declined-card state. The webhook created one client `payment_lifecycle_email` and one team `payment_lifecycle_email` for `card_failed`; both rows completed with status `sent`, one attempt, and no failure reason.
 - Remaining smoke gaps: fresh standard ACH pending/confirmed/failed, AP ACH submitted/confirmed/failed, manual payment received, PO payment received, and Team Mode/admin lifecycle transitions still require Stripe ACH completion/failure actions or legitimate Team Mode authorization.
+
+## 2026-06-11 - Communication Tranche Standard ACH Pending And Receipt Smoke
+
+- Mode: Full ship follow-up smoke.
+- Branch/commit/PR: `main`; docs-only evidence update pending after this log update.
+- Goal: close the fresh standard ACH submitted/pending and confirmed/receipt lifecycle smoke gaps without exposing private fixture tokens, recipients, customer data, Checkout URLs, Stripe object IDs, or bank details.
+- Smoke evidence: a disposable locked invoice ACH retry was created from the live portal with `paymentOrigin=order_checkout`, and the action response included a Checkout URL without exposing `client_secret` / `clientSecret`. Hosted Stripe Checkout was completed using Stripe's sandbox success test institution. Checkout returned to the public portal without a client-secret marker. The queue created one client `ach_payment_submitted_invoice_email`, one `ach_payment_submitted_team_alert_email`, one client `ach_payment_confirmed_receipt_email`, and one `ach_payment_confirmed_team_alert_email`; all four rows completed with status `sent`, one attempt, no failure reason, and invoice/receipt attachment references.
+- Additional evidence: duplicate historical submitted rows for already-paid ACH orders remained state-based `skipped` rather than sending stale pending notices.
+- Remaining smoke gaps: standard ACH failed/action-needed, AP ACH submitted/confirmed/failed, manual payment received, PO payment received, and Team Mode/admin lifecycle transitions still require Stripe ACH failure/AP completion actions or legitimate Team Mode authorization.
