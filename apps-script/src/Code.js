@@ -24588,35 +24588,6 @@ function sendNotificationEmail_(options) {
   if (Array.isArray(opts.attachments) && opts.attachments.length) {
     message.attachments = opts.attachments;
   }
-  const fromAlias = normalizeEmail_(opts.fromAlias);
-  const replyTo = normalizeEmail_(opts.replyTo);
-  if (fromAlias) {
-    try {
-      const aliases = (typeof GmailApp !== 'undefined' && GmailApp.getAliases) ? GmailApp.getAliases() : [];
-	      const matchingAlias = aliases.find(alias => normalizeEmail_(alias) === fromAlias);
-	      if (matchingAlias) {
-	        const gmailOptions = {
-	          name: NOTIFICATION_SENDER_NAME,
-	          from: matchingAlias,
-	          replyTo: replyTo || matchingAlias,
-	          noReply: true
-	        };
-	        if (message.htmlBody) gmailOptions.htmlBody = message.htmlBody;
-	        if (message.attachments) gmailOptions.attachments = message.attachments;
-	        if (message.cc) gmailOptions.cc = message.cc;
-	        GmailApp.sendEmail(message.to, message.subject, message.body, gmailOptions);
-        return {
-          ok: true,
-          email: recipients[0],
-          emails: recipients,
-          ccEmails: ccRecipients,
-          noReply: true,
-          senderName: NOTIFICATION_SENDER_NAME,
-          fromAlias: matchingAlias
-        };
-      }
-    } catch (_) {}
-  }
 
   MailApp.sendEmail(message);
   return {
@@ -24625,7 +24596,8 @@ function sendNotificationEmail_(options) {
     emails: recipients,
     ccEmails: ccRecipients,
     noReply: true,
-    senderName: NOTIFICATION_SENDER_NAME
+    senderName: NOTIFICATION_SENDER_NAME,
+    transport: 'mailapp_noreply'
   };
 }
 

@@ -1,6 +1,6 @@
 # Current Build State
 
-Last aligned: 2026-06-11.
+Last aligned: 2026-06-12.
 
 ## Repo Verified
 
@@ -15,11 +15,13 @@ Last aligned: 2026-06-11.
 - `docs/EXPORT_LOG_WIDE_SCHEMA.md` tracks the locked EXPORT_LOG column order.
 - `package.json` exposes `npm run validate`, `npm run validate:runtime`, and `npm run validate:binding`.
 - Active Squarespace `/portal` iframe wrapper code is tracked at `web/squarespace-portal-code-block.html`; the repo copy now includes centralized route-param forwarding, parent URL replace/push handling, Back/Forward iframe reload from the parent URL, same-window Stripe navigation message handlers, `setupResult` passthrough for ACH setup returns, account-dashboard query passthrough for `dashboard`, `accountId`, `accountAccessToken`, and AP `paymentOrigin`, a Stripe-hosted payment/verification navigation allowlist, and a pre-iframe mobile block with a centered ellipsized copy-link display that prevents iframe loading under `900px`.
+- Deployed no-reply transport rewire: `sendNotificationEmail_` now enforces Apps Script `MailApp` `noReply: true` delivery for all portal-generated emails and no longer attempts the removed `noreply@redthreads.com` Workspace alias or sets a reply-to address. `noreply@redthreads.com` should remain non-deliverable and not assigned as a user alias.
 
 ## ACH V1 Live State
 
 - ACH V1 infrastructure is merged to `main` and deployed to the existing stable Apps Script deployment.
-- Stable Apps Script deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` is currently version `899`, `Fix Team Mode route preservation`.
+- Stable Apps Script deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` is currently version `900`, `Use Apps Script no-reply email transport`.
+- Version `900` removes the Gmail alias transport from `sendNotificationEmail_` and sends portal email through `MailApp` with `noReply: true`; post-deploy smoke sent three `sendSummaryEstimatePdfEmail` messages to the approved test client address and each server response reported `transport=mailapp_noreply`, `noReply=true`, no CC recipients, and `ok=true`. Direct Apps Script and public wrapper HTTP smokes returned 200 and did not show `client_secret` / `clientSecret` markers in the targeted checks. Owner reply-bounce verification is pending from the delivered messages.
 - Version `899` preserves explicit Team Mode routing through both the public Squarespace wrapper and Apps Script's sandboxed `userCodeAppPanel`: server-rendered request-route metadata now includes `mode` and `teamReview`, the client Team Mode route helper falls back to that boot metadata when the sandbox URL omits query params, and the project route replacement keeps `mode=team` / `teamReview` for explicit Team routes while checkout/setup returns still force client mode. Post-899 browser smoke confirmed the public wrapper keeps `mode=team`, the inner Apps Script frame keeps `mode=team`, the Team Mode password gate appears, the configured Script Property password unlocks the gate, Team admin controls become visible, Save/Place Order remain hidden in Team Mode, ordinary project links stay client-mode, and explicit `teamReview=tax_exempt` routes preserve the review query. The dev badge is `61`.
 - Post-899 communication follow-up smoke closed the Team Mode-dependent email gaps: PO payment received, manual/check payment received, Team Hold, Project Unlock, Checkout Reset, PO Reopen, and Project Complete each queued and sent the expected client email plus `hello@redthreads.com` team alert with one attempt and no queue failure reason. Receipt/payment milestones carried invoice/receipt attachment references where required. AP ACH failed/action-needed remains intentionally deferred per owner direction because the hosted Stripe failure path requires a human-completed hCaptcha challenge or another owner-approved Stripe test-event route.
 - Version `898` was an initial Team Mode route preservation deployment superseded by `899` after browser smoke showed Apps Script's sandboxed inner frame still needed server-rendered `mode` / `teamReview` metadata.

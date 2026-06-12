@@ -116,6 +116,7 @@ The second command should show only redaction, safety, or documentation referenc
 79. `portal_lifecycle_email` messages render through the shared lifecycle email shell with the five-stage progress snapshot when project context exists, current next step, history bullets when dates exist, CTA, no-reply footer, and safe document attachments when the event requires them.
 80. Utility/direct emails that are intentionally not lifecycle triggers remain direct: AP payment-link send, blank account-document send, submitted tax-form copy send, password reset code, summary PDF send, and explicit admin resend actions.
 81. Due `PORTAL_EMAIL_QUEUE` jobs can be processed by the normal queue trigger or by the bounded portal-traffic nudge on direct portal loads/chat saves. Nudge logs must remain safe and must not include tokens, raw recipient emails, chat message text, Stripe secrets, or bank details.
+82. Portal-generated emails use Apps Script `MailApp` `noReply: true` transport rather than the removed `noreply@redthreads.com` Workspace alias; reply tests should confirm replies bounce, fail, or otherwise do not arrive in the owner Workspace inbox.
 
 ## Post-896 Communication Tranche Smoke Evidence
 
@@ -195,6 +196,7 @@ For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID an
 - Queue send failure does not block chat save; the queue row records `failed` with a safe `lastError` and remains eligible for normal retry until the max attempt limit.
 - Missing client email skips or avoids queuing the client digest safely; client-to-team digests still route to `hello@redthreads.com`.
 - Existing ACH, AP ACH, card, PO, manual/check/cash, and payment lifecycle email behavior remains unchanged.
+- Replying to the delivered client digest must not reach the owner Workspace inbox.
 
 ## Portal Lifecycle Email Smokes
 
