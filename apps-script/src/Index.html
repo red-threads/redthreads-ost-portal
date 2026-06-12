@@ -16874,7 +16874,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 60">60</div>
+  <div class="devRevisionBadge" aria-label="Development revision 61">61</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21277,11 +21277,30 @@
     return !!(getCheckoutReturnResult_() || getSetupReturnResult_());
   }
 
+  function getExplicitTeamRouteParams_(){
+    if (hasCheckoutReturnIntent_()) {
+      return {
+        explicitTeamMode: false,
+        mode: '',
+        teamReview: ''
+      };
+    }
+    const liveMode = String(getLivePortalRouteParam_('mode') || '').trim().toLowerCase();
+    const bootMode = String(VM_REQUEST_ROUTE_META.mode || '').trim().toLowerCase();
+    const vmMode = String((VM && VM.mode) || PORTAL_MODE || '').trim().toLowerCase();
+    const liveTeamReview = String(getLivePortalRouteParam_('teamReview') || '').trim();
+    const bootTeamReview = String(VM_REQUEST_ROUTE_META.teamReview || '').trim();
+    const teamReview = liveTeamReview || bootTeamReview;
+    const explicitTeamMode = liveMode === 'team' || bootMode === 'team' || vmMode === 'team' || !!teamReview;
+    return {
+      explicitTeamMode: explicitTeamMode,
+      mode: explicitTeamMode ? 'team' : '',
+      teamReview: teamReview
+    };
+  }
+
   function hasExplicitTeamRouteIntent_(){
-    if (hasCheckoutReturnIntent_()) return false;
-    const mode = String(getLivePortalRouteParam_('mode') || '').trim().toLowerCase();
-    const teamReview = String(getLivePortalRouteParam_('teamReview') || '').trim();
-    return mode === 'team' || !!teamReview;
+    return getExplicitTeamRouteParams_().explicitTeamMode === true;
   }
 
   function shouldForceClientModeForProjectOpen_(source, requireAuthSession, options){
@@ -22061,7 +22080,7 @@
   }
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
   const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
-  const TEAM_REVIEW_REQUEST = String(URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
+  const TEAM_REVIEW_REQUEST = String(VM_REQUEST_ROUTE_META.teamReview || URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
   const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1' || VM_REQUEST_ROUTE_META.dashboard === '1';
   const DASHBOARD_ACCOUNT_ID_PARAM = String(VM_REQUEST_ROUTE_META.accountId || URL_QUERY_PARAMS.get('accountId') || '').trim();
   const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
@@ -45681,9 +45700,13 @@
       });
     }
     if (CURRENT_TOKEN) {
+      const explicitTeamRoute = getExplicitTeamRouteParams_();
       replaceCurrentPortalProjectRoute_(CURRENT_TOKEN, {
         summary: checkoutReturnResult === 'success' || (isCheckoutCancelReturn && SUMMARY_DEEPLINK_REQUEST) ? '1' : '',
-        forceClientMode: !!checkoutReturnResult
+        forceClientMode: !!checkoutReturnResult,
+        explicitTeamMode: explicitTeamRoute.explicitTeamMode,
+        mode: explicitTeamRoute.mode,
+        teamReview: explicitTeamRoute.teamReview
       });
     }
     if (

@@ -712,7 +712,9 @@ function buildPortalRequestRouteMeta_(e) {
     payNow: trimString_(params.payNow),
     accountId: String(params.accountId || '').trim(),
     accountAccessToken: String(params.accountAccessToken || params.dashboardAccessToken || '').trim(),
-    paymentOrigin: String(params.paymentOrigin || '').trim()
+    paymentOrigin: String(params.paymentOrigin || '').trim(),
+    mode: normalizeMode_(params.mode) === 'team' ? 'team' : '',
+    teamReview: trimString_(params.teamReview)
   };
 }
 
@@ -736,7 +738,9 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     payNow: trimString_(meta.payNow),
     accountId: String(meta.accountId || '').trim(),
     accountAccessToken: String(meta.accountAccessToken || '').trim(),
-    paymentOrigin: String(meta.paymentOrigin || '').trim()
+    paymentOrigin: String(meta.paymentOrigin || '').trim(),
+    mode: normalizeMode_(meta.mode) === 'team' ? 'team' : '',
+    teamReview: trimString_(meta.teamReview)
   };
   return payload;
 }
