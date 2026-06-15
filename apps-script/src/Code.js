@@ -1424,10 +1424,11 @@ function isPortalSaveFinalized_(rowInfo, existingPortalState, options) {
   if (!latestOrderSummary && cfg && ss && token) {
     try {
       infra = infra || ensurePortalInfrastructure_(ss, cfg);
-      const latestOrderInfo = getLatestPortalOrderByToken_(token, {
+      const latestOrderInfo = getCurrentPortalOrderForRow_(rowInfo, {
         cfg: cfg,
         ss: ss,
-        ordersSheet: infra && infra.ordersSheet
+        ordersSheet: infra && infra.ordersSheet,
+        token: token
       });
       latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
     } catch (_) {}
@@ -12303,10 +12304,11 @@ function resetAccountDocumentWorkflow_(payload, documentType) {
   const token = resolveAccountDocumentPortalToken_(ctx);
   if (token) {
     const rowInfo = ctx.exportRowInfo || findRowByToken_(ctx.infra.exportSheet, token);
-    const latestOrderInfo = getLatestPortalOrderByToken_(token, {
+    const latestOrderInfo = getCurrentPortalOrderForRow_(rowInfo, {
       cfg: ctx.cfg,
       ss: ctx.ss,
-      ordersSheet: ctx.infra.ordersSheet
+      ordersSheet: ctx.infra.ordersSheet,
+      token: token
     });
     const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
     const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(
@@ -14575,10 +14577,11 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
   const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(deriveOrgContextFromRow_(row), cfg);
   effectiveRowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, effectiveRowInfo, accountSummary) || effectiveRowInfo;
   row = effectiveRowInfo && effectiveRowInfo.rowObjNormalized ? effectiveRowInfo.rowObjNormalized : row;
-  const latestOrderInfo = getLatestPortalOrderByToken_(token, {
+  const latestOrderInfo = getCurrentPortalOrderForRow_(effectiveRowInfo, {
     cfg: cfg,
     ss: ss,
-    ordersSheet: infra.ordersSheet
+    ordersSheet: infra.ordersSheet,
+    token: token
   });
   const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
   const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderSummary);
