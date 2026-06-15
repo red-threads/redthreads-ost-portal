@@ -71,7 +71,7 @@ const DEFAULT_STRIPE_ACH_REQUIRE_CUSTOMER = true;
 const DEFAULT_STRIPE_ACH_DEFAULT_PENDING_PRODUCTION_APPROVED = false;
 const NOTIFICATION_SENDER_NAME = 'Red Threads';
 const NOTIFICATION_FROM_ALIAS = 'noreply@redthreads.com';
-const NOTIFICATION_REPLY_NOTICE = 'This inbox is not monitored. Please use your portal link below to view updates or respond.';
+const NOTIFICATION_REPLY_NOTICE = 'This is an automated Red Threads notification. Please use the portal link above or contact Red Threads through your usual support channel if you need help.';
 const DOCUMENT_REVIEW_EMAIL = 'hello@redthreads.com';
 const MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_SUMMARY_EXPORT_PDF_BYTES = 20 * 1024 * 1024;
@@ -286,6 +286,35 @@ const AP_ACH_LIFECYCLE_EMAIL_MILESTONES = {
   payment_submitted: 'ap_payment_submitted',
   payment_confirmed: 'ap_payment_confirmed',
   payment_failed: 'ap_payment_failed'
+};
+const COMMUNICATION_POLICY_DISABLED_REASON = 'communication_policy_disabled';
+const COMMUNICATION_MILESTONE_SUPERSEDED_REASON = 'communication_milestone_superseded';
+const COMMUNICATION_POLICY_DISABLED_PORTAL_LIFECYCLE_MILESTONES = [
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_approved,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_disapproved,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_ready_to_order,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_unlocked,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.checkout_reset,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.team_hold,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.client_flow_canceled,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.production_authorized,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed,
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed
+];
+const COMMUNICATION_POLICY_DISABLED_AP_ACH_LIFECYCLE_MILESTONES = [
+  AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started
+];
+const LIFECYCLE_EMAIL_ATTACHMENT_POLICIES = {
+  required_blocking: 'REQUIRED_BLOCKING',
+  required_queue_failed: 'REQUIRED_QUEUE_FAILED',
+  optional_send_without: 'OPTIONAL_SEND_WITHOUT',
+  not_applicable: 'NOT_APPLICABLE'
+};
+const LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS = {
+  required_invoice: 'required_invoice_attachment_missing',
+  required_receipt: 'required_receipt_attachment_missing',
+  required_document: 'required_document_attachment_missing',
+  optional_unavailable: 'optional_attachment_unavailable'
 };
 const CHAT_MESSAGE_DIGEST_DELAY_MS = 10 * 60 * 1000;
 const CHAT_MESSAGE_DIGEST_DIRECTIONS = {
@@ -8804,7 +8833,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const dealNumber = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.dealNumber);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const greeting = apName ? ('Hi ' + apName + ',') : 'Hello,';
-  const footer = 'This inbox is not monitored. Please use the secure payment page above or contact the purchaser / Red Threads team if you need help.';
+  const footer = buildStandardNoReplyFooterCopy_();
   const reference = [
     invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
     dealNumber ? ('Project #: ' + dealNumber) : '',
@@ -8822,6 +8851,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     paymentLink,
     '',
     'You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.',
+    'The invoice is attached.',
     note ? ('\nNote from ' + (purchaserName || 'the purchaser') + ':\n' + note) : '',
     '',
     footer
@@ -8840,6 +8870,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
       ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(paymentLink) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">Open secure ACH payment page</a></p>')
       : '',
     '  <p style="margin:0 0 14px;color:#475569;">You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.</p>',
+    '  <p style="margin:0 0 14px;color:#475569;"><strong>Attachment:</strong> The invoice is attached.</p>',
     note
       ? ('  <div style="margin:0 0 16px;padding:14px 16px;border-left:4px solid #be123c;background:#fff1f2;"><strong>Note from ' + escapeHtml_(purchaserName || 'the purchaser') + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
       : '',
@@ -8848,8 +8879,8 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   ].filter(Boolean).join('\n');
   return {
     subject: invoiceNumber
-      ? ('Red Threads ACH payment link - ' + invoiceNumber)
-      : 'Red Threads ACH payment link',
+      ? ('Red Threads ACH payment page — invoice ' + invoiceNumber)
+      : 'Red Threads ACH payment page',
     body: bodyLines.join('\n'),
     htmlBody: htmlBody
   };
@@ -8868,15 +8899,24 @@ function sendAchApPaymentLinkEmail_(ctx, orderSummary, options) {
   const purchaserEmail = normalizeEmail_(ctx && ctx.orderDraft && ctx.orderDraft.personEmail);
   const ccList = purchaserEmail && recipients.indexOf(purchaserEmail) < 0 ? [purchaserEmail] : [];
   const content = buildAchApPaymentLinkEmailContent_(ctx, orderSummary, opts);
-  const attachment = buildFinalInvoiceAttachment_(orderSummary, '');
-  const attachments = attachment ? [attachment] : [];
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('ap_payment_link', '', {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(orderSummary, attachmentPolicy, {
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+  });
+  if (attachmentResult.ok !== true) {
+    return {
+      ok: false,
+      code: attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice,
+      error: 'Unable to attach the current Red Threads invoice. Please regenerate the invoice and try again.'
+    };
+  }
   return sendNotificationEmail_({
     toList: recipients,
     ccList: ccList,
     subject: content.subject,
     body: content.body,
     htmlBody: content.htmlBody,
-    attachments: attachments,
+    attachments: attachmentResult.attachments,
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
   });
@@ -9731,6 +9771,15 @@ function buildDefaultAccountDocumentBlankEmailPayload_(ctx, definition, recipien
   const emailList = normalizeEmailRecipients_(recipients);
   if (!emailList.length) throw new Error('Enter at least one valid email address.');
   const sourceFile = getDriveFileByIdSafe_(definition.sourceFileId);
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('account_document_source', '', {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(sourceFile || {
+    fileId: definition.sourceFileId,
+    fileName: definition.shortLabel + '.pdf'
+  }, attachmentPolicy, {
+    fileNameOverride: definition.shortLabel + '.pdf',
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document
+  });
+  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
   const subject = definition.blankEmailSubject;
   const body = [
     definition.label + ' blank PDF attached.',
@@ -9761,7 +9810,7 @@ function buildDefaultAccountDocumentBlankEmailPayload_(ctx, definition, recipien
     subject: subject,
     body: body,
     htmlBody: htmlBody,
-    attachments: sourceFile ? [sourceFile.getBlob().setName(sanitizeUploadedDocumentName_(sourceFile.getName(), definition.shortLabel + '.pdf'))] : []
+    attachments: attachmentResult.attachments
   };
 }
 
@@ -9769,7 +9818,16 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
   const emailList = normalizeEmailRecipients_(recipients);
   if (!emailList.length) throw new Error('Enter at least one valid email address.');
   const sourceFile = getDriveFileByIdSafe_(definition.sourceFileId);
-  const taxBlankEmailFooter = 'This inbox is not monitored. Please do not reply or respond.';
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('account_document_source', '', {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(sourceFile || {
+    fileId: definition.sourceFileId,
+    fileName: definition.shortLabel + '.pdf'
+  }, attachmentPolicy, {
+    fileNameOverride: definition.shortLabel + '.pdf',
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document
+  });
+  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
+  const taxBlankEmailFooter = buildStandardNoReplyFooterCopy_();
   const body = [
     'The blank PDF is attached for your department to review and complete. Please log back into your portal and upload the finished document. Red Threads will review the complete document and notify you upon successful review.',
     '',
@@ -9790,7 +9848,7 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
     subject: definition.blankEmailSubject,
     body: body,
     htmlBody: htmlBody,
-    attachments: sourceFile ? [sourceFile.getBlob().setName(sanitizeUploadedDocumentName_(sourceFile.getName(), definition.shortLabel + '.pdf'))] : []
+    attachments: attachmentResult.attachments
   };
 }
 
@@ -9798,7 +9856,16 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
   const emailList = normalizeEmailRecipients_(recipients);
   if (!emailList.length) throw new Error('Enter at least one valid email address.');
   const sourceFile = getDriveFileByIdSafe_(definition.sourceFileId);
-  const creditTermsBlankEmailFooter = 'This inbox is not monitored. Please do not reply or respond.';
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('account_document_source', '', {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(sourceFile || {
+    fileId: definition.sourceFileId,
+    fileName: definition.shortLabel + '.pdf'
+  }, attachmentPolicy, {
+    fileNameOverride: definition.shortLabel + '.pdf',
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document
+  });
+  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
+  const creditTermsBlankEmailFooter = buildStandardNoReplyFooterCopy_();
   const body = [
     'The blank PDF is attached for your department to review and complete. When the document is complete, please log back into your portal and upload the completed file. The Red Threads team will notify you if your terms have been approved and purchase order submission ability unlocked.',
     '',
@@ -9819,7 +9886,7 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
     subject: definition.blankEmailSubject,
     body: body,
     htmlBody: htmlBody,
-    attachments: sourceFile ? [sourceFile.getBlob().setName(sanitizeUploadedDocumentName_(sourceFile.getName(), definition.shortLabel + '.pdf'))] : []
+    attachments: attachmentResult.attachments
   };
 }
 
@@ -9840,7 +9907,7 @@ function sendAccountDocumentSourceEmail_(ctx, definition, recipients) {
 function buildDefaultAccountDocumentSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const token = resolveAccountDocumentPortalToken_(ctx);
-  const portalUrl = token ? buildPortalDirectUrl_(token) : '';
+  const portalUrl = token ? buildExternalPortalUrl_(token) : '';
   const teamReviewUrl = buildAccountDocumentTeamReviewUrl_(definition.type, token, ctx.cfg) || portalUrl;
   const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
   const orgLabel = trimString_(accountSummary.orgName || 'Unknown organization');
@@ -9876,7 +9943,6 @@ function buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, optio
   const submittedAt = trimString_(submissionEntry && submissionEntry.submittedAt) || '--';
   const artifactUrl = trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl));
   const teamReviewUrl = trimString_(opts.teamReviewUrl);
-  const teamModePassword = trimString_(opts.teamModePassword);
   return [
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
     '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:20px;font-family:Arial,sans-serif;color:#142033;">',
@@ -9891,18 +9957,10 @@ function buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, optio
       ? ('      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
       : '',
     '    </div>',
-    teamModePassword
-      ? [
-        '    <div style="margin:0 0 22px;padding:16px 18px;border-radius:16px;background:#fff1f2;border:1px solid #fda4af;text-align:center;">',
-        '      <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#be123c;font-weight:900;margin-bottom:6px;">🔐 Team Mode Password 🔐</div>',
-        '      <div style="font-size:24px;line-height:1.2;color:#9f1239;font-weight:900;"><strong>' + escapeHtml_(teamModePassword) + '</strong></div>',
-        '    </div>'
-      ].join('\n')
-      : '',
     teamReviewUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Click Here to Review Credit Terms</a></p>')
       : '',
-    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">This inbox is not monitored. Please review the submission in the portal.</p>',
+    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -9912,7 +9970,6 @@ function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submiss
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const token = resolveAccountDocumentPortalToken_(ctx);
   const teamReviewUrl = buildAccountDocumentTeamReviewUrl_(definition.type, token, ctx.cfg);
-  const teamModePassword = trimString_(ctx && ctx.cfg && ctx.cfg.teamModePassword);
   const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
   const artifactFiles = getAccountDocumentSubmissionArtifactFiles_(submissionEntry);
   const attachments = artifactFiles.map(function(item) {
@@ -9927,7 +9984,7 @@ function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submiss
   }).filter(Boolean);
   return {
     to: DOCUMENT_REVIEW_EMAIL,
-    subject: '🔥 ' + reviewerLabel + ' submitted signed credit terms and your review is required',
+    subject: 'Team review required — credit terms submitted',
     body: [
       'A signed credit terms document is ready for team review.',
       '',
@@ -9939,13 +9996,11 @@ function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submiss
       'Submission Source: ' + trimString_(submissionEntry.submissionSource || '--'),
       submissionEntry.artifactUrl ? ('Submission Artifact: ' + trimString_(submissionEntry.artifactUrl)) : '',
       teamReviewUrl ? ('Team Review: ' + teamReviewUrl) : '',
-      teamModePassword ? ('🔥 Team mode password: ' + teamModePassword) : '',
       submissionEntry.notes ? ('Notes: ' + trimString_(submissionEntry.notes)) : ''
     ].filter(Boolean).join('\n'),
     htmlBody: buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, {
       teamReviewUrl: teamReviewUrl,
-      artifactUrl: trimString_(submissionEntry.artifactUrl),
-      teamModePassword: teamModePassword
+      artifactUrl: trimString_(submissionEntry.artifactUrl)
     }),
     attachments: attachments
   };
@@ -9954,16 +10009,15 @@ function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submiss
 function buildTaxExemptSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const token = resolveAccountDocumentPortalToken_(ctx);
-  const portalUrl = token ? buildPortalDirectUrl_(token) : '';
+  const portalUrl = token ? buildExternalPortalUrl_(token) : '';
   const teamReviewUrl = buildTeamTaxExemptReviewUrl_(token);
-  const teamModePassword = trimString_(ctx && ctx.cfg && ctx.cfg.teamModePassword);
   const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
   const artifactFile = trimString_(submissionEntry.artifactFileId)
     ? getDriveFileByIdSafe_(submissionEntry.artifactFileId)
     : null;
   return {
     to: DOCUMENT_REVIEW_EMAIL,
-    subject: '🔥 ' + reviewerLabel + ' has completed the sales tax exempt form and your review is required',
+    subject: 'Team review required — tax exemption submitted',
     body: [
       'A Michigan sales tax exemption form is ready for team review.',
       '',
@@ -9976,14 +10030,12 @@ function buildTaxExemptSubmissionNotificationPayload_(ctx, definition, submissio
       submissionEntry.certificateNumber ? ('Certificate Number: ' + trimString_(submissionEntry.certificateNumber)) : '',
       submissionEntry.artifactUrl ? ('Submission Artifact: ' + trimString_(submissionEntry.artifactUrl)) : '',
       teamReviewUrl ? ('Team Review: ' + teamReviewUrl) : '',
-      teamModePassword ? ('🔥 Team mode password: ' + teamModePassword) : '',
       submissionEntry.notes ? ('Notes: ' + trimString_(submissionEntry.notes)) : ''
     ].filter(Boolean).join('\n'),
     htmlBody: buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, {
       teamReviewUrl: teamReviewUrl,
       artifactUrl: trimString_(submissionEntry.artifactUrl),
-      portalUrl: portalUrl,
-      teamModePassword: teamModePassword
+      portalUrl: portalUrl
     }),
     attachments: artifactFile ? [
       artifactFile.getBlob().setName(
@@ -10036,7 +10088,6 @@ function buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, options
   const artifactUrl = trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl));
   const teamReviewUrl = trimString_(opts.teamReviewUrl);
   const portalUrl = trimString_(opts.portalUrl);
-  const teamModePassword = trimString_(opts.teamModePassword);
   return [
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
     '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:20px;font-family:Arial,sans-serif;color:#142033;">',
@@ -10051,21 +10102,13 @@ function buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, options
       ? ('      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
       : '',
     '    </div>',
-    teamModePassword
-      ? [
-        '    <div style="margin:0 0 22px;padding:16px 18px;border-radius:16px;background:#fff1f2;border:1px solid #fda4af;text-align:center;">',
-        '      <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#be123c;font-weight:900;margin-bottom:6px;">🔐 Team Mode Password 🔐</div>',
-        '      <div style="font-size:24px;line-height:1.2;color:#9f1239;font-weight:900;"><strong>' + escapeHtml_(teamModePassword) + '</strong></div>',
-        '    </div>'
-      ].join('\n')
-      : '',
     teamReviewUrl
-      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Click Here to Review and Approve</a></p>')
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Open team review</a></p>')
       : '',
     portalUrl
       ? ('    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#64748b;">If the button does not open, use this direct portal link: <a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;">Open portal</a></p>')
       : '',
-    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">This inbox is not monitored. Please review the submission in the portal.</p>',
+    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -10203,6 +10246,7 @@ function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
     accountSummary.primaryContactName ||
     'there'
   );
+  const cleanReason = trimString_(reason) || 'A correction is needed before this document can be approved.';
   const subject = 'Update on your Red Threads credit terms submission';
   const body = [
     'Hi ' + submittedByName + ',',
@@ -10210,11 +10254,11 @@ function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
     'Red Threads reviewed your signed credit terms document, but we need a correction before approval.',
     '',
     'Reason:',
-    reason,
+    cleanReason,
     '',
     'Please return to the portal, update the form, and resubmit it for review.' + (portalUrl ? (' ' + portalUrl) : ''),
     '',
-    'This inbox is not monitored. Please do not reply or respond.'
+    buildStandardNoReplyFooterCopy_()
   ].join('\n');
   const htmlBody = [
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
@@ -10222,11 +10266,11 @@ function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
     '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">We need a correction before approval</h1>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Your signed credit terms document was reviewed, but it could not be approved yet.</p>',
-    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(reason).replace(/\n/g, '<br>') + '</div>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
     portalUrl
       ? ('    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;"><a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Please return to the portal, update the form, and resubmit it for review.</a></p>')
       : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#35435a;">Please return to the portal, update the form, and resubmit it for review.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -10253,6 +10297,7 @@ function sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason) {
     accountSummary.primaryContactName ||
     'there'
   );
+  const cleanReason = trimString_(reason) || 'This document could not be approved.';
   const subject = 'Update on your Red Threads credit terms submission';
   const body = [
     'Hi ' + submittedByName + ',',
@@ -10260,11 +10305,11 @@ function sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason) {
     'Red Threads reviewed your signed credit terms document, and it was denied.',
     '',
     'Reason:',
-    reason,
+    cleanReason,
     '',
     'Purchase-order ordering will remain unavailable until the Red Threads team reopens this workflow or provides next steps.',
     '',
-    'This inbox is not monitored. Please do not reply or respond.'
+    buildStandardNoReplyFooterCopy_()
   ].join('\n');
   const htmlBody = [
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
@@ -10272,9 +10317,9 @@ function sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason) {
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
     '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your credit terms document was denied</h1>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Red Threads reviewed the signed credit terms submission, but it could not be approved.</p>',
-    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(reason).replace(/\n/g, '<br>') + '</div>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
     '    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#35435a;">Purchase-order ordering will remain unavailable until the Red Threads team reopens this workflow or provides next steps.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -10287,6 +10332,7 @@ function sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason) {
 }
 
 function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelection) {
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('account_document_approved', '', {});
   const attachments = getAccountDocumentSubmissionArtifactFiles_(submissionEntry).map(function(item) {
     const file = getDriveFileByIdSafe_(item.fileId);
     if (!file) return null;
@@ -10297,6 +10343,9 @@ function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelecti
       )
     );
   }).filter(Boolean);
+  if (!attachments.length) {
+    return { ok: false, skipped: true, reason: attachmentPolicy.safeError || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document };
+  }
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const recipients = normalizeEmailRecipients_([
     submissionEntry && submissionEntry.submittedByEmail,
@@ -10315,17 +10364,17 @@ function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelecti
   const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
   const selection = (paymentTermsSelection && typeof paymentTermsSelection === 'object') ? paymentTermsSelection : {};
   const paymentLabel = trimString_(selection.label) || 'Approved Terms';
-  const subject = 'Your Red Threads credit terms are approved';
+  const subject = 'Credit terms approved';
   const body = [
     'Hi ' + firstName + ',',
     '',
-    'Congratulations, your credit terms have been approved for purchases within Red Threads LLC.',
+    'Your Red Threads credit terms have been approved.',
     'Approved payment terms: ' + paymentLabel + '.',
     'You can now place orders with a purchase order inside the Red Threads portal.',
     '',
-    'Attached is a copy of the signed credit terms document for your records.',
+    'The signed credit terms document is attached for your records.',
     '',
-    'This inbox is not monitored. Please do not reply or respond.',
+    buildStandardNoReplyFooterCopy_(),
     '',
     '- Red Threads Team'
   ].join('\n');
@@ -10335,11 +10384,11 @@ function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelecti
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
     '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your credit terms are approved</h1>',
     '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Congratulations, your credit terms have been approved for purchases within Red Threads LLC.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Your Red Threads credit terms have been approved.</p>',
     '    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#35435a;"><strong>Approved payment terms:</strong> ' + escapeHtml_(paymentLabel) + '</p>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">You can now place orders with a purchase order inside the Red Threads portal.</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Attached is a copy of the signed credit terms document for your records.</p>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">The signed credit terms document is attached for your records.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
     '  </div>',
     '</div>'
@@ -10370,6 +10419,7 @@ function sendTaxExemptDenialEmail_(ctx, submissionEntry, reason) {
     accountSummary.primaryContactName ||
     'there'
   );
+  const cleanReason = trimString_(reason) || 'A correction is needed before this form can be approved.';
   const subject = 'Update on your Michigan sales tax exemption form';
   const body = [
     'Hi ' + submittedByName + ',',
@@ -10377,11 +10427,11 @@ function sendTaxExemptDenialEmail_(ctx, submissionEntry, reason) {
     'Red Threads reviewed your Michigan sales tax exemption form, but it could not be approved yet.',
     '',
     'Reason:',
-    reason,
+    cleanReason,
     '',
     'Please return to the portal, update the form, and resubmit it for review.' + (portalUrl ? (' ' + portalUrl) : ''),
     '',
-    'This inbox is not monitored. Please do not reply or respond.'
+    buildStandardNoReplyFooterCopy_()
   ].join('\n');
   const htmlBody = [
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
@@ -10389,11 +10439,11 @@ function sendTaxExemptDenialEmail_(ctx, submissionEntry, reason) {
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
     '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">We need a correction before approval</h1>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Your Michigan sales tax exemption form was reviewed, but it could not be approved yet.</p>',
-    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(reason).replace(/\n/g, '<br>') + '</div>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
     portalUrl
       ? ('    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;"><a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Please return to the portal, update the form, and resubmit it for review.</a></p>')
       : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#35435a;">Please return to the portal, update the form, and resubmit it for review.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This inbox is not monitored. Please do not reply or respond.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -11153,6 +11203,8 @@ function emailTaxExemptSubmissionCopy_(payload) {
   ]);
   if (!recipients.length) return { ok: false, error: 'No recipient email is available for this account.' };
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const token = resolveAccountDocumentPortalToken_(ctx);
+  const portalUrl = token ? buildExternalPortalUrl_(token) : '';
   const personName = trimString_(
     (ctx.identity && ctx.identity.personName) ||
     (accountSummary && accountSummary.billingContactName) ||
@@ -11160,14 +11212,15 @@ function emailTaxExemptSubmissionCopy_(payload) {
     ''
   );
   const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
-  const subject = 'Copy of your completed tax exempt form';
+  const subject = 'Copy of your completed tax exemption form';
   const body = [
     'Hi ' + firstName + ',',
     '',
-    'Here is a completed copy of your form.',
-    'Your form is under review by the Red Threads team, and you will get a notification when your form is approved.',
+    'A copy of your completed Michigan sales tax exemption form is attached.',
+    'Your form is under review by the Red Threads team. You will receive an update when the review is complete.',
+    portalUrl ? ('You can view the current project status in your portal: ' + portalUrl) : '',
     '',
-    'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+    buildStandardNoReplyFooterCopy_(),
     '',
     '- Red Threads Team'
   ].join('\n');
@@ -11175,11 +11228,14 @@ function emailTaxExemptSubmissionCopy_(payload) {
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
     '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Copy of your completed tax exempt form</h1>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Copy of your completed tax exemption form</h1>',
     '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Here is a completed copy of your form.</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Your form is under review by the Red Threads team, and you will get a notification when your form is approved.</p>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">📩 This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A copy of your completed Michigan sales tax exemption form is attached.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Your form is under review by the Red Threads team. You will receive an update when the review is complete.</p>',
+    portalUrl
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Red Threads Portal</a></p>')
+      : '',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
     '  </div>',
     '</div>'
@@ -11203,9 +11259,9 @@ function emailTaxExemptSubmissionCopy_(payload) {
 
 function sendApprovedTaxExemptEmail_(ctx, submissionEntry) {
   const artifactFileId = trimString_(submissionEntry && submissionEntry.artifactFileId);
-  if (!artifactFileId) return { ok: false, skipped: true, reason: 'missing-artifact' };
+  if (!artifactFileId) return { ok: false, skipped: true, reason: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document };
   const file = getDriveFileByIdSafe_(artifactFileId);
-  if (!file) return { ok: false, skipped: true, reason: 'missing-file' };
+  if (!file) return { ok: false, skipped: true, reason: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document };
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const recipients = normalizeEmailRecipients_([
     submissionEntry && submissionEntry.submittedByEmail,
@@ -11222,33 +11278,17 @@ function sendApprovedTaxExemptEmail_(ctx, submissionEntry) {
     ''
   );
   const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
-  const subject = 'Copy of your completed tax exempt form + Quick Guidelines';
+  const subject = 'Tax exemption form approved';
   const body = [
     'Hi ' + firstName + ',',
     '',
-    'Congratulations, your tax exempt form has been approved for use for purchases within Red Threads LLC.',
+    'Your Michigan sales tax exemption form has been approved.',
+    'The exemption status is now reflected for eligible Red Threads purchases.',
+    'Your approved form is attached for your records.',
     '',
-    'Thanks for completing your Michigan Sales Tax Exemption Form!',
-    'Attached is a copy for your records.',
+    'Red Threads does not provide tax or legal advice. If you are unsure whether a purchase qualifies, please consult your accountant or tax professional.',
     '',
-    'Before using this exemption, here are a few quick things to keep in mind:',
-    '',
-    'When exemption typically applies:',
-    '- Purchases made for resale',
-    '- Government entities making direct purchases',
-    '- Qualified organizations purchasing items for an exempt purpose (not end use)',
-    '',
-    'When exemption typically does NOT apply:',
-    '- Items used for giveaways, promotions, or fundraising distribution',
-    '- Purchases for staff, members, or internal use',
-    '- When you are the final user of the product',
-    '',
-    'Important:',
-    'It is your responsibility to determine whether your purchase qualifies for sales tax exemption. By submitting this form, you certify that your use complies with applicable tax laws.',
-    '',
-    'Red Threads LLC does not provide tax or legal advice. If you\'re unsure, please consult your accountant or tax professional.',
-    '',
-    'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+    buildStandardNoReplyFooterCopy_(),
     '',
     '- Red Threads Team'
   ].join('\n');
@@ -11256,33 +11296,12 @@ function sendApprovedTaxExemptEmail_(ctx, submissionEntry) {
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
     '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Copy of your completed tax exempt form + Quick Guidelines</h1>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Tax exemption form approved</h1>',
     '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Congratulations, your tax exempt form has been approved for use for purchases within Red Threads LLC.</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Thanks for completing your Michigan Sales Tax Exemption Form! Attached is a copy for your records.</p>',
-    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Before using this exemption, here are a few quick things to keep in mind:</p>',
-    '    <div style="margin:0 0 16px;padding:14px 16px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0;">',
-    '      <div style="margin:0 0 8px;font-size:15px;line-height:1.5;color:#166534;font-weight:800;">✅ When exemption typically applies:</div>',
-    '      <ul style="margin:0;padding-left:20px;color:#35435a;font-size:15px;line-height:1.7;">',
-    '        <li>Purchases made for resale</li>',
-    '        <li>Government entities making direct purchases</li>',
-    '        <li>Qualified organizations purchasing items for an exempt purpose (not end use)</li>',
-    '      </ul>',
-    '    </div>',
-    '    <div style="margin:0 0 16px;padding:14px 16px;border-radius:14px;background:#fff7f7;border:1px solid #fecdd3;">',
-    '      <div style="margin:0 0 8px;font-size:15px;line-height:1.5;color:#be123c;font-weight:800;">❌ When exemption typically does NOT apply:</div>',
-    '      <ul style="margin:0;padding-left:20px;color:#35435a;font-size:15px;line-height:1.7;">',
-    '        <li>Items used for giveaways, promotions, or fundraising distribution</li>',
-    '        <li>Purchases for staff, members, or internal use</li>',
-    '        <li>When you are the final user of the product</li>',
-    '      </ul>',
-    '    </div>',
-    '    <div style="margin:0 0 16px;padding:14px 16px;border-radius:14px;background:#fffaf0;border:1px solid #fde68a;">',
-    '      <div style="margin:0 0 8px;font-size:15px;line-height:1.5;color:#92400e;font-weight:800;">⚠️ Important:</div>',
-    '      <p style="margin:0 0 10px;font-size:15px;line-height:1.7;color:#35435a;">It is your responsibility to determine whether your purchase qualifies for sales tax exemption. By submitting this form, you certify that your use complies with applicable tax laws.</p>',
-    '      <p style="margin:0;font-size:15px;line-height:1.7;color:#35435a;">Red Threads LLC does not provide tax or legal advice. If you\'re unsure, please consult your accountant or tax professional.</p>',
-    '    </div>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">📩 This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Your Michigan sales tax exemption form has been approved.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">The exemption status is now reflected for eligible Red Threads purchases. Your approved form is attached for your records.</p>',
+    '    <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#35435a;">Red Threads does not provide tax or legal advice. If you are unsure whether a purchase qualifies, please consult your accountant or tax professional.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
     '  </div>',
     '</div>'
@@ -11781,7 +11800,11 @@ function adminResendLockedOrderLink_(payload) {
     const paymentEmail = buildLockedOrderPaymentEmailContent_(orderActionCtx, ctx.latestOrderSummary, {
       intro: 'Your Red Threads invoice and locked order payment links are attached.'
     });
-    const attachment = buildFinalInvoiceAttachment_(ctx.latestOrderSummary, '');
+    const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('locked_order_confirmation', '', {});
+    const attachmentResult = resolveLifecycleEmailAttachment_(ctx.latestOrderSummary, attachmentPolicy, {
+      safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+    });
+    assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
     sendNotificationEmail_({
       toList: recipients,
       subject: trimString_(ctx.latestOrderSummary.invoiceNumber)
@@ -11789,7 +11812,7 @@ function adminResendLockedOrderLink_(payload) {
         : 'Red Threads order confirmation',
       body: paymentEmail.body,
       htmlBody: paymentEmail.htmlBody,
-      attachments: attachment ? [attachment] : [],
+      attachments: attachmentResult.attachments,
       fromAlias: NOTIFICATION_FROM_ALIAS,
       replyTo: NOTIFICATION_FROM_ALIAS
     });
@@ -13673,6 +13696,13 @@ function handleChargeDisputeCreated_(disputeObj, options) {
   const infra = ensurePortalInfrastructure_(ss, cfg);
   const orderInfo = getPortalOrderByStripeLatestChargeId_(chargeId, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
   if (!orderInfo) return { ok: true, ignored: true, type: 'charge.dispute.created' };
+  const currentGuard = validateCurrentStripeCheckoutWebhookOrder_(dispute, orderInfo, {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    eventType: 'charge.dispute.created'
+  });
+  if (currentGuard.current === false) return currentGuard;
   let chargeObj = dispute.charge && typeof dispute.charge === 'object' ? dispute.charge : null;
   if (!chargeObj && chargeId) {
     const chargeResult = retrieveStripeCharge_(chargeId, { cfg: cfg });
@@ -14371,18 +14401,19 @@ function authSendResetCode(payload) {
     updateUserResetCode_(usersSheet, user, code, expiresAt);
 
     const subject = 'Red Threads password reset code';
-    const portalUrl = trimString_(getWebAppUrl_());
+    const portalUrl = trimString_(buildExternalPortalBaseUrl_());
     const body = [
       'Your Red Threads reset code is: ' + code,
       '',
       'This code expires in 15 minutes.',
       '',
-      'This inbox is not monitored.',
       portalUrl
         ? ('Please return to the portal to enter this code and continue: ' + portalUrl)
         : 'Please return to the Red Threads portal to enter this code and continue.',
       '',
-      'If you did not request this, you can ignore this email.'
+      'If you did not request this, you can ignore this email.',
+      '',
+      buildStandardNoReplyFooterCopy_()
     ].join('\n');
     const htmlBody = [
       '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
@@ -14395,8 +14426,8 @@ function authSendResetCode(payload) {
       portalUrl
         ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
         : '',
-      '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#5f6f86;">This inbox is not monitored. Please use the portal link above to enter your code and continue.</p>',
-      '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">If you did not request this, you can ignore this email.</p>',
+      '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#5f6f86;">If you did not request this, you can ignore this email.</p>',
+      '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
       '  </div>',
       '</div>'
     ].join('');
@@ -16265,11 +16296,8 @@ function buildAccountDocumentTeamReviewUrl_(documentType, token, cfg) {
   const id = trimString_(token);
   if (!id) return '';
   const definition = getAccountDocumentDefinition_(documentType, cfg);
-  const portalUrl = buildPortalDirectUrl_(id);
-  const params = { mode: 'team' };
   const reviewQueryValue = trimString_(definition && definition.teamReviewQueryValue);
-  if (reviewQueryValue) params.teamReview = reviewQueryValue;
-  return appendQueryParamsToUrl_(portalUrl, params);
+  return buildLifecycleEmailTeamReviewUrl_(id, reviewQueryValue);
 }
 
 function sanitizeAccountDocumentClientMeta_(meta) {
@@ -16623,6 +16651,10 @@ function buildExternalPortalUrl_(token) {
   return 'https://www.redthreads.com/portal?t=' + encodeURIComponent(tokenValue);
 }
 
+function buildExternalPortalBaseUrl_() {
+  return 'https://www.redthreads.com/portal';
+}
+
 function isPublicRedThreadsPortalUrl_(value) {
   const clean = trimString_(value);
   if (!clean) return false;
@@ -16684,8 +16716,23 @@ function buildExternalPortalDashboardUrl_(accountSummary, options) {
 function buildTeamSnapshotPortalUrl_(token) {
   const tokenValue = trimString_(token);
   if (!tokenValue) return '';
-  return appendQueryParamsToUrl_(buildPortalDirectUrl_(tokenValue), {
+  return buildLifecycleEmailTeamUrl_(tokenValue);
+}
+
+function buildLifecycleEmailTeamUrl_(token) {
+  const tokenValue = trimString_(token);
+  if (!tokenValue) return '';
+  return appendQueryParamsToUrl_(buildExternalPortalUrl_(tokenValue), {
     mode: 'team'
+  });
+}
+
+function buildLifecycleEmailTeamReviewUrl_(token, reviewType) {
+  const baseUrl = buildLifecycleEmailTeamUrl_(token);
+  const reviewValue = trimString_(reviewType);
+  if (!baseUrl || !reviewValue) return baseUrl;
+  return appendQueryParamsToUrl_(baseUrl, {
+    teamReview: reviewValue
   });
 }
 
@@ -16702,6 +16749,16 @@ function buildPortalSummaryUrl_(token, extraParams) {
   return appendQueryParamsToUrl_(buildExternalPortalUrl_(token), Object.assign({
     summary: '1'
   }, extra));
+}
+
+function buildLifecycleEmailInvoiceUrl_(token, extraParams) {
+  return buildPortalSummaryUrl_(token, extraParams);
+}
+
+function buildLifecycleEmailApStatusUrl_(token) {
+  return buildLifecycleEmailInvoiceUrl_(token, {
+    paymentOrigin: 'ap'
+  });
 }
 
 function buildPurchaseOrderResumePortalUrl_(token, options) {
@@ -19888,13 +19945,169 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
 }
 
 function buildFinalInvoiceAttachment_(orderSummary, fileNameOverride) {
-  const invoiceUrl = trimString_(orderSummary && orderSummary.invoicePdfUrl);
-  const invoiceFileId = extractDriveFileIdFromUrl_(invoiceUrl);
-  const invoiceFile = invoiceFileId ? getDriveFileByIdSafe_(invoiceFileId) : null;
-  if (!invoiceFile) return null;
-  return invoiceFile.getBlob().setName(
-    sanitizeUploadedDocumentName_(fileNameOverride, invoiceFile.getName())
+  const result = buildLifecycleEmailAttachmentSafe_(orderSummary, fileNameOverride);
+  return result && result.ok === true ? result.attachment : null;
+}
+
+function normalizeLifecycleEmailAttachmentPolicy_(policy) {
+  const raw = trimString_(policy).toUpperCase();
+  return Object.keys(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES).some(function(key) {
+    return LIFECYCLE_EMAIL_ATTACHMENT_POLICIES[key] === raw;
+  }) ? raw : LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.not_applicable;
+}
+
+function isRequiredLifecycleEmailAttachmentPolicy_(policy) {
+  const normalized = normalizeLifecycleEmailAttachmentPolicy_(policy);
+  return normalized === LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking ||
+    normalized === LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed;
+}
+
+function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
+  const source = (context && typeof context === 'object') ? context : {};
+  const type = trimString_(family).toLowerCase();
+  const policy = function(value, safeError) {
+    return {
+      policy: normalizeLifecycleEmailAttachmentPolicy_(value),
+      safeError: trimString_(safeError)
+    };
+  };
+  if (type === 'standard_ach') {
+    const baseType = getAchLifecycleBaseEmailJobType_(milestone);
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
+    }
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_receipt);
+    }
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  }
+  if (type === 'ap_ach') {
+    const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+    if (isApAchLifecycleFailureMilestone_(normalized) || normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
+    }
+    if (isApAchLifecycleReceiptMilestone_(normalized)) {
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_receipt);
+    }
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  }
+  if (type === 'payment_lifecycle') {
+    const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+    if (isPaymentLifecycleFailureMilestone_(normalized)) {
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
+    }
+    if (isPaymentLifecycleReceiptMilestone_(normalized)) {
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_receipt);
+    }
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  }
+  if (type === 'ap_payment_link' ||
+      type === 'locked_order_confirmation' ||
+      type === 'purchase_order_invoice_email') {
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  }
+  if (type === 'account_document_source' || type === 'account_document_approved') {
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
+  }
+  if (source.required === true) {
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, source.safeError || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
+  }
+  return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.not_applicable, '');
+}
+
+function buildLifecycleEmailAttachmentSafe_(invoiceOrFileSource, fileNameOverride) {
+  const source = (invoiceOrFileSource && typeof invoiceOrFileSource === 'object') ? invoiceOrFileSource : {};
+  let file = null;
+  if (source && typeof source.getBlob === 'function' && typeof source.getName === 'function') {
+    file = source;
+  } else {
+    const fileId = trimString_(
+      source.fileId ||
+      source.invoiceFileId ||
+      source.driveFileId ||
+      source.artifactFileId
+    ) || extractDriveFileIdFromUrl_(
+      trimString_(source.invoicePdfUrl || source.fileUrl || source.artifactUrl || source.url)
+    );
+    file = fileId ? getDriveFileByIdSafe_(fileId) : null;
+  }
+  if (!file) {
+    return {
+      ok: false,
+      attachment: null,
+      attachments: [],
+      error: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document
+    };
+  }
+  const fileName = sanitizeUploadedDocumentName_(
+    fileNameOverride ||
+      source.fileName ||
+      source.invoiceFileName ||
+      source.artifactName ||
+      file.getName(),
+    file.getName()
   );
+  const attachment = file.getBlob().setName(fileName);
+  return {
+    ok: true,
+    attachment: attachment,
+    attachments: [attachment],
+    fileName: fileName,
+    error: ''
+  };
+}
+
+function resolveLifecycleEmailAttachment_(source, policyInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const info = (policyInfo && typeof policyInfo === 'object')
+    ? policyInfo
+    : { policy: normalizeLifecycleEmailAttachmentPolicy_(policyInfo) };
+  const policy = normalizeLifecycleEmailAttachmentPolicy_(info.policy);
+  if (policy === LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.not_applicable) {
+    return {
+      ok: true,
+      policy: policy,
+      attachment: null,
+      attachments: [],
+      error: ''
+    };
+  }
+  const result = buildLifecycleEmailAttachmentSafe_(source, trimString_(opts.fileNameOverride || opts.fileName));
+  if (result && result.ok === true && result.attachment) {
+    return Object.assign({}, result, {
+      policy: policy
+    });
+  }
+  const safeError = trimString_(opts.safeError || info.safeError) ||
+    (isRequiredLifecycleEmailAttachmentPolicy_(policy)
+      ? LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document
+      : LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
+  if (isRequiredLifecycleEmailAttachmentPolicy_(policy)) {
+    return {
+      ok: false,
+      policy: policy,
+      attachment: null,
+      attachments: [],
+      error: safeError
+    };
+  }
+  return {
+    ok: true,
+    policy: policy,
+    attachment: null,
+    attachments: [],
+    warning: safeError,
+    error: ''
+  };
+}
+
+function assertRequiredEmailAttachment_(attachmentResult, safeMessage) {
+  const result = (attachmentResult && typeof attachmentResult === 'object') ? attachmentResult : {};
+  if (result.ok === true && Array.isArray(result.attachments) && result.attachments.length) return result;
+  if (isRequiredLifecycleEmailAttachmentPolicy_(result.policy)) {
+    throw new Error(trimString_(safeMessage || result.error) || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
+  }
+  return result;
 }
 
 function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
@@ -19904,8 +20117,13 @@ function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
   const paymentEmail = buildLockedOrderPaymentEmailContent_(ctx, summary, {
     intro: trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.'
   });
-  const attachment = buildFinalInvoiceAttachment_(summary, trimString_(opts.fileName));
-  const attachments = attachment ? [attachment] : [];
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('locked_order_confirmation', '', {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(summary, attachmentPolicy, {
+    fileNameOverride: trimString_(opts.fileName),
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+  });
+  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  const attachments = attachmentResult.attachments;
   const subject = invoiceNumber
     ? ('Red Threads order confirmation · ' + invoiceNumber)
     : 'Red Threads order confirmation';
@@ -20057,25 +20275,19 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
 
 function sendPurchaseOrderInvoiceEmailWithAttachment_(token, recipients, invoiceInfo, options) {
   const invoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
-  const invoiceUrl = trimString_(invoice.invoicePdfUrl);
-  const invoiceFileId = extractDriveFileIdFromUrl_(invoiceUrl);
-  const invoiceFile = invoiceFileId ? getDriveFileByIdSafe_(invoiceFileId) : null;
-  if (!invoiceFile) {
-    throw new Error('The purchase order invoice PDF could not be found.');
-  }
-  const attachment = invoiceFile.getBlob().setName(
-    sanitizeUploadedDocumentName_(
-      invoice.fileName,
-      invoiceFile.getName()
-    )
-  );
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('purchase_order_invoice_email', '', {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(invoice, attachmentPolicy, {
+    fileNameOverride: invoice.fileName,
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+  });
+  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
   const content = buildPurchaseOrderInvoiceEmailContent_(token, invoice, options);
   sendNotificationEmail_({
     toList: recipients,
     subject: content.subject,
     body: content.body,
     htmlBody: content.htmlBody,
-    attachments: [attachment],
+    attachments: attachmentResult.attachments,
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
   });
@@ -20347,6 +20559,8 @@ function logAchLifecycleEmailQueueEvent_(eventName, payload) {
     ccCount: Math.max(0, parseInt(String(p.ccCount || 0), 10) || 0),
     recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
     invoicePdfPresent: p.invoicePdfPresent === true,
+    attachmentRequired: p.attachmentRequired === true,
+    attachmentPresent: p.attachmentPresent === true,
     status: trimString_(p.status),
     error: trimString_(p.error)
   };
@@ -20515,6 +20729,26 @@ function queueAchLifecycleEmailJobSafely_(orderInfo, stripeObj, jobType, options
   try {
     const opts = (options && typeof options === 'object') ? options : {};
     const orderSummary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+    const milestonePolicy = resolveCommunicationMilestonePolicy_(type, '', orderInfo, {
+      meta: opts.meta,
+      recipientClass: recipientClass,
+      paymentOrigin: opts.paymentOrigin,
+      achPaymentSource: opts.achPaymentSource
+    });
+    if (milestonePolicy.enabled === false) {
+      logAchLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: milestonePolicy.reason,
+        jobType: type,
+        recipientClass: recipientClass,
+        token: trimString_(orderSummary.token),
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl)
+      });
+      return null;
+    }
     if (!shouldQueueAchLifecycleEmailForOrder_(orderInfo, type)) {
       logAchLifecycleEmailQueueEvent_('not_queued', {
         ok: false,
@@ -20822,6 +21056,7 @@ function logApAchLifecycleEmailQueueEvent_(eventName, payload) {
     recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
     invoicePdfPresent: p.invoicePdfPresent === true,
     attachmentRequired: p.attachmentRequired === true,
+    attachmentPresent: p.attachmentPresent === true,
     status: trimString_(p.status),
     error: trimString_(p.error)
   };
@@ -20855,6 +21090,55 @@ function queueApAchLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, opt
     const orderSummary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
     const token = getApAchLifecycleOrderToken_(orderInfo, orderSummary);
     const attachmentRequired = isApAchLifecycleAttachmentRequired_(normalized);
+    const emailPolicy = resolveLifecycleEmailPolicy_(
+      PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+      normalized,
+      recipientClass,
+      opts.meta
+    );
+    if (emailPolicy.enabled === false) {
+      logApAchLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: emailPolicy.reason,
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+        attachmentRequired: attachmentRequired
+      });
+      return null;
+    }
+    const milestonePolicy = resolveCommunicationMilestonePolicy_(
+      PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+      normalized,
+      orderInfo,
+      {
+        meta: Object.assign({}, opts.meta || {}, {
+          achPaymentSource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link
+        }),
+        recipientClass: recipientClass,
+        paymentOrigin: opts.paymentOrigin,
+        achPaymentSource: opts.achPaymentSource || ACH_PAYMENT_METHOD_SOURCES.ap_payment_link
+      }
+    );
+    if (milestonePolicy.enabled === false) {
+      logApAchLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: milestonePolicy.reason,
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+        attachmentRequired: attachmentRequired
+      });
+      return null;
+    }
     if (!shouldQueueApAchLifecycleEmailForOrder_(orderInfo, normalized)) {
       logApAchLifecycleEmailQueueEvent_('not_queued', {
         ok: false,
@@ -21019,15 +21303,22 @@ function resolveApAchLifecycleInvoiceInfo_(orderInfo, milestone, options) {
 function getApAchLifecycleCtaLabel_(milestone, recipientClass) {
   const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
   if (trimString_(recipientClass) === 'team') return 'View project in portal';
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) return 'Open AP ACH payment';
   if (isApAchLifecycleReceiptMilestone_(normalized)) return 'View Red Threads receipt';
   if (isApAchLifecycleFailureMilestone_(normalized)) return 'Return to AP payment link';
-  return 'Open AP ACH payment';
+  return 'View AP payment status';
 }
 
-function getApAchLifecycleCtaUrl_(token, recipientClass) {
-  return trimString_(recipientClass) === 'team'
-    ? buildTeamSnapshotPortalUrl_(token)
-    : buildAchApPaymentPortalUrl_(token);
+function getApAchLifecycleCtaUrl_(token, recipientClass, milestone) {
+  if (trimString_(recipientClass) === 'team') return buildLifecycleEmailTeamUrl_(token);
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  if (
+    normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started ||
+    isApAchLifecycleFailureMilestone_(normalized)
+  ) {
+    return buildAchApPaymentPortalUrl_(token);
+  }
+  return buildLifecycleEmailApStatusUrl_(token);
 }
 
 function getApAchLifecycleNextStepText_(milestone, recipientClass, fallback) {
@@ -21092,49 +21383,16 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     isReceipt: isApAchLifecycleReceiptMilestone_(normalized)
   }));
   const summary = emailContext.orderSummary || {};
-  const invoiceNumber = trimString_(emailContext.invoiceNumber);
-  let subject = '';
-  let intro = '';
-  let statusCopy = '';
-  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: AP ACH checkout started - invoice ' + invoiceNumber) : 'Team alert: AP ACH checkout started')
-      : (invoiceNumber ? ('AP ACH checkout started - Red Threads invoice ' + invoiceNumber) : 'AP ACH checkout started for a Red Threads invoice');
-    intro = isTeamAlert ? 'Accounts Payable opened ACH checkout for this order.' : 'ACH checkout has started for this Red Threads invoice.';
-    statusCopy = isTeamAlert
-      ? 'The AP payment link is being used. Payment is not received until Stripe and the bank confirm the ACH debit.'
-      : 'The invoice is still open until Stripe and the bank confirm the ACH debit.';
-  } else if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: AP ACH payment pending - invoice ' + invoiceNumber) : 'Team alert: AP ACH payment pending')
-      : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' - AP ACH payment pending') : 'AP ACH payment pending for a Red Threads invoice');
-    intro = isTeamAlert ? 'Accounts Payable submitted ACH payment for this order.' : 'ACH payment has been submitted for this Red Threads invoice.';
-    statusCopy = isTeamAlert
-      ? 'The payment is pending Stripe/bank confirmation. ACH payments can take several business days to confirm.'
-      : 'The payment is pending Stripe/bank confirmation. ACH payments can take several business days to confirm. The current invoice is attached.';
-  } else if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: AP ACH payment received - invoice ' + invoiceNumber) : 'Team alert: AP ACH payment received')
-      : (invoiceNumber ? ('AP ACH payment received - Red Threads invoice ' + invoiceNumber) : 'AP ACH payment received for a Red Threads invoice');
-    intro = isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'ACH payment has been received for this Red Threads invoice.';
-    statusCopy = isTeamAlert
-      ? 'The order is now authorized for production according to the portal lifecycle state.'
-      : 'The order is now authorized for production. The updated invoice/receipt is attached.';
-  } else {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: AP ACH payment issue - invoice ' + invoiceNumber) : 'Team alert: AP ACH payment issue')
-      : (invoiceNumber ? ('Action needed - AP ACH payment issue for invoice ' + invoiceNumber) : 'Action needed - AP ACH payment issue for a Red Threads invoice');
-    intro = isTeamAlert ? 'Stripe reported an issue with an AP ACH payment.' : 'Stripe reported an issue with this AP ACH payment.';
-    statusCopy = isTeamAlert
-      ? 'The order needs team review before production continues. Use the portal and Stripe dashboard for details.'
-      : 'Payment must be resolved before production can continue. Return to the AP payment link or contact Red Threads for help.';
-  }
+  const copy = buildApAchLifecycleEmailCopy_(normalized, emailContext, {
+    isTeamAlert: isTeamAlert
+  });
   const token = getApAchLifecycleOrderToken_(orderInfo, summary);
-  const ctaUrl = getApAchLifecycleCtaUrl_(token, recipientClass);
+  const ctaUrl = getApAchLifecycleCtaUrl_(token, recipientClass, normalized);
   const shell = buildLifecycleEmailShell_({
-    intro: intro,
-    statusCopy: statusCopy,
+    intro: copy.intro,
+    statusCopy: copy.statusCopy,
     nextStep: getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText),
+    attachmentNote: copy.attachmentNote,
     blocks: [
       buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
       buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
@@ -21146,7 +21404,7 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     ]
   });
   return {
-    subject: subject,
+    subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody
   };
@@ -21162,12 +21420,32 @@ function processApAchLifecycleEmailQueueJob_(jobInfo, options) {
   const milestone = normalizeApAchLifecycleEmailMilestone_(meta.milestone);
   const recipientClass = trimString_(meta.recipientClass) === 'team' ? 'team' : 'ap';
   if (!milestone) throw new Error('AP ACH lifecycle email queue job is missing a milestone.');
+  if (isLifecycleEmailSuppressedByPolicy_(
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+    milestone,
+    recipientClass,
+    meta
+  )) {
+    return { skipped: true, skipReason: COMMUNICATION_POLICY_DISABLED_REASON, invoiceInfo: null };
+  }
   const orderInfo = resolveApAchLifecycleOrderForQueueJob_(jobInfo, {
     cfg: cfg,
     ss: ss,
     infra: infra
   });
   if (!orderInfo) throw new Error('AP ACH lifecycle queue order could not be found.');
+  const milestonePolicy = resolveCommunicationMilestonePolicy_(
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+    milestone,
+    orderInfo,
+    {
+      meta: meta,
+      recipientClass: recipientClass
+    }
+  );
+  if (milestonePolicy.enabled === false) {
+    return { skipped: true, skipReason: milestonePolicy.reason, invoiceInfo: null };
+  }
   if (!shouldQueueApAchLifecycleEmailForOrder_(orderInfo, milestone)) {
     return { skipped: true, skipReason: 'state_not_eligible_for_' + milestone, invoiceInfo: null };
   }
@@ -21185,13 +21463,14 @@ function processApAchLifecycleEmailQueueJob_(jobInfo, options) {
     queuedInvoiceInfo: queuedInvoiceInfo
   });
   const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
-  const attachment = buildFinalInvoiceAttachment_(Object.assign({}, summary, {
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('ap_ach', milestone, {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(Object.assign({}, summary, {
     invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl) || trimString_(summary.invoicePdfUrl)
-  }), trimString_(invoiceInfo && invoiceInfo.fileName));
-  if (isApAchLifecycleAttachmentRequired_(milestone) && !attachment) {
-    throw new Error('AP ACH lifecycle invoice PDF could not be found.');
-  }
+  }), attachmentPolicy, {
+    fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
+  });
+  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
   const content = buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, {
     cfg: cfg,
     ss: ss,
@@ -21204,7 +21483,7 @@ function processApAchLifecycleEmailQueueJob_(jobInfo, options) {
     subject: content.subject,
     body: content.body,
     htmlBody: content.htmlBody,
-    attachments: attachment ? [attachment] : [],
+    attachments: attachmentResult.attachments,
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
   });
@@ -21224,7 +21503,8 @@ function processApAchLifecycleEmailQueueJob_(jobInfo, options) {
     ccCount: recipients.ccList.length,
     recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
     invoicePdfPresent: !!trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
-    attachmentRequired: isApAchLifecycleAttachmentRequired_(milestone),
+    attachmentRequired: isRequiredLifecycleEmailAttachmentPolicy_(attachmentPolicy.policy),
+    attachmentPresent: !!(attachmentResult.attachments && attachmentResult.attachments.length),
     status: PORTAL_EMAIL_QUEUE_STATUSES.sent
   });
   return {
@@ -21241,6 +21521,204 @@ function normalizePortalLifecycleEmailMilestone_(value) {
 
 function isPortalLifecycleEmailJobType_(value) {
   return trimString_(value).toLowerCase() === PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email;
+}
+
+function resolveLifecycleEmailPolicy_(jobType, milestone, recipientClass, meta) {
+  const type = trimString_(jobType).toLowerCase();
+  const source = (meta && typeof meta === 'object') ? meta : {};
+  const requestedMilestone = trimString_(milestone || source.milestone);
+  if (isPortalLifecycleEmailJobType_(type)) {
+    const normalized = normalizePortalLifecycleEmailMilestone_(requestedMilestone);
+    if (COMMUNICATION_POLICY_DISABLED_PORTAL_LIFECYCLE_MILESTONES.indexOf(normalized) >= 0) {
+      return {
+        enabled: false,
+        reason: COMMUNICATION_POLICY_DISABLED_REASON,
+        jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+        milestone: normalized,
+        recipientClass: getPortalLifecycleEmailRecipientClass_(recipientClass || source.recipientClass)
+      };
+    }
+    return {
+      enabled: true,
+      reason: '',
+      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+      milestone: normalized,
+      recipientClass: getPortalLifecycleEmailRecipientClass_(recipientClass || source.recipientClass)
+    };
+  }
+  if (isApAchLifecycleEmailJobType_(type)) {
+    const apMilestone = normalizeApAchLifecycleEmailMilestone_(requestedMilestone);
+    const apRecipientClass = trimString_(recipientClass || source.recipientClass) === 'team' ? 'team' : 'ap';
+    if (COMMUNICATION_POLICY_DISABLED_AP_ACH_LIFECYCLE_MILESTONES.indexOf(apMilestone) >= 0) {
+      return {
+        enabled: false,
+        reason: COMMUNICATION_POLICY_DISABLED_REASON,
+        jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+        milestone: apMilestone,
+        recipientClass: apRecipientClass
+      };
+    }
+    return {
+      enabled: true,
+      reason: '',
+      jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ap_ach_lifecycle_email,
+      milestone: apMilestone,
+      recipientClass: apRecipientClass
+    };
+  }
+  return {
+    enabled: true,
+    reason: '',
+    jobType: type,
+    milestone: requestedMilestone,
+    recipientClass: trimString_(recipientClass || source.recipientClass)
+  };
+}
+
+function isLifecycleEmailSuppressedByPolicy_(jobType, milestone, recipientClass, meta) {
+  return resolveLifecycleEmailPolicy_(jobType, milestone, recipientClass, meta).enabled === false;
+}
+
+function resolvePaymentCommunicationMilestone_(jobType, milestone, orderInfo, options) {
+  const type = trimString_(jobType).toLowerCase();
+  if (normalizeAchLifecycleEmailJobType_(type)) {
+    const baseType = getAchLifecycleBaseEmailJobType_(type);
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) return 'standard_ach_submitted';
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) return 'standard_ach_confirmed';
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) return 'standard_ach_failed';
+  }
+  if (isApAchLifecycleEmailJobType_(type)) {
+    return normalizeApAchLifecycleEmailMilestone_(milestone);
+  }
+  if (isPaymentLifecycleEmailJobType_(type)) {
+    return normalizePaymentLifecycleEmailMilestone_(milestone);
+  }
+  const opts = (options && typeof options === 'object') ? options : {};
+  const meta = opts.meta && typeof opts.meta === 'object' ? opts.meta : {};
+  return trimString_(milestone || meta.milestone);
+}
+
+function isCommunicationPaymentPaid_(orderSummary) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  return paymentState === PAYMENT_STATES.paid ||
+    paymentState === PAYMENT_STATES.manual_received ||
+    !!trimString_(summary.paidAt);
+}
+
+function isCommunicationPaymentFailureActionState_(orderSummary) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  const eventType = trimString_(summary.stripeLatestEventType).toLowerCase();
+  const failureSignal = [
+    summary.achFailureCode,
+    summary.achFailureMessage,
+    eventType
+  ].join(' ').toLowerCase();
+  return paymentState === PAYMENT_STATES.failed ||
+    eventType === 'charge.dispute.created' ||
+    failureSignal.indexOf('dispute') >= 0 ||
+    failureSignal.indexOf('mandate') >= 0 ||
+    failureSignal.indexOf('blocked') >= 0;
+}
+
+function buildCommunicationMilestonePolicyResult_(enabled, jobType, milestone, recipientClass, detail) {
+  return {
+    enabled: enabled !== false,
+    reason: enabled === false ? COMMUNICATION_MILESTONE_SUPERSEDED_REASON : '',
+    jobType: trimString_(jobType).toLowerCase(),
+    milestone: trimString_(milestone),
+    recipientClass: trimString_(recipientClass),
+    detail: trimString_(detail)
+  };
+}
+
+function resolveCommunicationMilestonePolicy_(jobType, milestone, orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const meta = opts.meta && typeof opts.meta === 'object' ? opts.meta : {};
+  const type = trimString_(jobType).toLowerCase();
+  const recipientClass = trimString_(opts.recipientClass || meta.recipientClass);
+  const resolvedMilestone = resolvePaymentCommunicationMilestone_(type, milestone, orderInfo, opts);
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const method = trimString_(summary.paymentMethodSelected).toLowerCase();
+  const rawAchSource = trimString_(
+    summary.achPaymentSource ||
+    meta.achPaymentSource ||
+    meta.paymentOrigin ||
+    opts.achPaymentSource ||
+    opts.paymentOrigin
+  );
+  const achSource = normalizeAchPaymentSource_(rawAchSource);
+  const paid = isCommunicationPaymentPaid_(summary);
+  const failureAction = isCommunicationPaymentFailureActionState_(summary);
+  const allow = function() {
+    return buildCommunicationMilestonePolicyResult_(true, type, resolvedMilestone, recipientClass, '');
+  };
+  const suppress = function(detail) {
+    return buildCommunicationMilestonePolicyResult_(false, type, resolvedMilestone, recipientClass, detail);
+  };
+
+  if (normalizeAchLifecycleEmailJobType_(type)) {
+    const baseType = getAchLifecycleBaseEmailJobType_(type);
+    if (method && method !== PAYMENT_METHODS.ach) return suppress('standard_ach_competing_payment_method');
+    if (achSource === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link) return suppress('standard_ach_ap_lane');
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email && (paid || failureAction)) {
+      return suppress('standard_ach_pending_terminal');
+    }
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email && paid && !failureAction) {
+      return suppress('standard_ach_failure_already_paid');
+    }
+    return allow();
+  }
+
+  if (isApAchLifecycleEmailJobType_(type)) {
+    const apMilestone = normalizeApAchLifecycleEmailMilestone_(milestone || meta.milestone);
+    if (method && method !== PAYMENT_METHODS.ach) return suppress('ap_ach_competing_payment_method');
+    if (achSource !== ACH_PAYMENT_METHOD_SOURCES.ap_payment_link) return suppress('ap_ach_standard_lane');
+    if ((apMilestone === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started ||
+         apMilestone === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) &&
+        (paid || failureAction)) {
+      return suppress('ap_ach_pending_terminal');
+    }
+    if (apMilestone === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed && paid && !failureAction) {
+      return suppress('ap_ach_failure_already_paid');
+    }
+    return allow();
+  }
+
+  if (isPaymentLifecycleEmailJobType_(type)) {
+    const paymentMilestone = normalizePaymentLifecycleEmailMilestone_(milestone || meta.milestone);
+    const manualMethod = method === PAYMENT_METHODS.check || method === PAYMENT_METHODS.cash;
+    if (method === PAYMENT_METHODS.ach) return suppress('payment_lifecycle_ach_lane');
+    if (paymentMilestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid &&
+        method && method !== PAYMENT_METHODS.card) {
+      return suppress('card_paid_competing_payment_method');
+    }
+    if (paymentMilestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
+      if (paid) return suppress('card_failed_already_paid');
+      if (method && method !== PAYMENT_METHODS.card) return suppress('card_failed_competing_payment_method');
+    }
+    if (paymentMilestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
+      if (paid || failureAction) return suppress('manual_pending_terminal');
+      if (method && !manualMethod) return suppress('manual_pending_competing_payment_method');
+    }
+    if (paymentMilestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received &&
+        method && !manualMethod) {
+      return suppress('manual_received_competing_payment_method');
+    }
+    if (paymentMilestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
+      if (paid || failureAction) return suppress('po_submitted_terminal');
+      if (method && method !== PAYMENT_METHODS.purchase_order) return suppress('po_submitted_competing_payment_method');
+    }
+    if (paymentMilestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received &&
+        method && method !== PAYMENT_METHODS.purchase_order) {
+      return suppress('po_payment_received_competing_payment_method');
+    }
+    return allow();
+  }
+
+  return allow();
 }
 
 function isPortalLifecycleAccountDocumentMilestone_(milestone) {
@@ -21471,10 +21949,29 @@ function queuePortalLifecycleEmailJobSafely_(source, milestone, options) {
   });
   try {
     const ctx = resolvePortalLifecycleEmailContext_(source, opts);
+    const orderSummary = ctx.orderInfo ? buildPortalOrderSummary_(ctx.orderInfo.rowObjNormalized) : {};
+    const emailPolicy = resolveLifecycleEmailPolicy_(
+      PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+      normalized,
+      recipientClass,
+      meta
+    );
+    if (emailPolicy.enabled === false) {
+      logPortalLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: emailPolicy.reason,
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: ctx.token,
+        orderId: trimString_(orderSummary.orderId),
+        attachmentCount: Array.isArray(meta.attachmentFileIds) ? meta.attachmentFileIds.length : 0,
+        attachmentRequired: meta.attachmentRequired === true
+      });
+      return null;
+    }
     const recipients = recipientClass === 'team'
       ? buildPortalLifecycleEmailTeamRecipients_()
       : buildPortalLifecycleEmailClientRecipients_(ctx, meta);
-    const orderSummary = ctx.orderInfo ? buildPortalOrderSummary_(ctx.orderInfo.rowObjNormalized) : {};
     if (!ctx.token && !trimString_(orderSummary.orderId)) {
       logPortalLifecycleEmailQueueEvent_('not_queued', {
         ok: false,
@@ -21709,6 +22206,58 @@ function buildPortalLifecycleEmailDetailBlock_(lines) {
   };
 }
 
+function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  const isTeam = getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team';
+  const documentLabel = trimString_(meta && meta.documentLabel) || 'Account document';
+  const reason = trimString_(meta && meta.reason);
+  const paymentTermsLabel = trimString_(meta && meta.paymentTermsLabel);
+  const details = [];
+  if (paymentTermsLabel) details.push('Approved payment terms: ' + paymentTermsLabel);
+  if (reason) details.push('Reason: ' + reason);
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted) {
+    return {
+      subject: isTeam ? ('Team review required — ' + documentLabel) : (documentLabel + ' submitted'),
+      intro: isTeam ? 'A client submitted an account document for review.' : 'Your account document was submitted for Red Threads review.',
+      statusCopy: isTeam ? 'Review the submitted document in Team Mode.' : 'Red Threads will review the document and update the portal.',
+      details: details
+    };
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
+    return {
+      subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (documentLabel + ' approved'),
+      intro: isTeam ? 'An account document was approved.' : 'Your account document has been approved.',
+      statusCopy: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
+        ? 'Purchase-order submission is available according to the approved terms.'
+        : 'The approved tax exemption status is now reflected in the portal.',
+      details: details
+    };
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
+    return {
+      subject: isTeam ? ('Team alert: ' + documentLabel + ' needs attention') : 'Update on your Red Threads document submission',
+      intro: isTeam ? 'An account document review decision was recorded.' : 'Red Threads reviewed your account document submission.',
+      statusCopy: trimString_(meta && meta.hardDenied) === 'true'
+        ? 'The submission was not approved. Review the portal for the current status.'
+        : 'A correction is needed before approval. Review the portal for the next step.',
+      details: details
+    };
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
+    return {
+      subject: isTeam ? ('Team alert: ' + documentLabel + ' reset') : (documentLabel + ' reset'),
+      intro: isTeam ? 'An account document workflow was reset.' : 'Red Threads reset an account document workflow.',
+      statusCopy: 'Return to the portal if a new submission is required.',
+      details: details
+    };
+  }
+  return null;
+}
+
 function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext, meta, cfg) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   const isTeam = getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team';
@@ -21776,33 +22325,12 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     statusCopy = completedCount && totalCount
       ? (completedCount + ' of ' + totalCount + ' tracked jobs are marked complete.')
       : 'The current completion status is shown below.';
-  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
-      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted) {
-    subjectParts.push(isTeam ? ('Team review required: ' + (documentLabel || 'account document')) : (documentLabel || 'Account document') + ' submitted');
-    intro = isTeam ? 'A client submitted an account document for review.' : 'Your account document was submitted for Red Threads review.';
-    statusCopy = isTeam ? 'Review the submission in Team Mode.' : 'Red Threads will review the document and update the portal.';
-    if (cfg && cfg.teamModePassword && isTeam) details.push('Team Mode password: ' + trimString_(cfg.teamModePassword));
-  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
-      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
-    subjectParts.push(isTeam ? ('Team alert: ' + (documentLabel || 'account document') + ' approved') : (documentLabel || 'Account document') + ' approved');
-    intro = isTeam ? 'An account document was approved.' : 'Your account document has been approved.';
-    statusCopy = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
-      ? 'Purchase-order submission is available according to the approved terms.'
-      : 'The approved tax exemption status is now reflected in the portal.';
-    if (trimString_(meta && meta.paymentTermsLabel)) details.push('Approved payment terms: ' + trimString_(meta.paymentTermsLabel));
-  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
-      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
-    subjectParts.push(isTeam ? ('Team alert: ' + (documentLabel || 'account document') + ' needs attention') : 'Update on your Red Threads document submission');
-    intro = isTeam ? 'An account document review decision was recorded.' : 'Red Threads reviewed your account document submission.';
-    statusCopy = trimString_(meta && meta.hardDenied) === 'true'
-      ? 'The submission was denied. Review the portal for the current status.'
-      : 'A correction is needed before approval. Review the portal for the next step.';
-    if (trimString_(meta && meta.reason)) details.push('Reason: ' + trimString_(meta.reason));
-  } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
-      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
-    subjectParts.push(isTeam ? ('Team alert: ' + (documentLabel || 'account document') + ' reset') : (documentLabel || 'Account document') + ' reset');
-    intro = isTeam ? 'An account document workflow was reset.' : 'Red Threads reset an account document workflow.';
-    statusCopy = 'Return to the portal if a new submission is required.';
+  } else if (isPortalLifecycleAccountDocumentMilestone_(normalized)) {
+    const docCopy = buildAccountDocumentEmailCopy_(normalized, recipientClass, meta);
+    subjectParts.push(docCopy && docCopy.subject ? docCopy.subject : (isTeam ? 'Team alert: account document update' : 'Account document update'));
+    intro = docCopy && docCopy.intro ? docCopy.intro : 'An account document update was recorded.';
+    statusCopy = docCopy && docCopy.statusCopy ? docCopy.statusCopy : 'Review the portal for the current status.';
+    details = docCopy && Array.isArray(docCopy.details) ? docCopy.details : details;
   } else {
     subjectParts.push(isTeam ? 'Team alert: Red Threads portal update' : 'Red Threads portal update');
     intro = 'A portal lifecycle update was recorded.';
@@ -21882,6 +22410,14 @@ function processPortalLifecycleEmailQueueJob_(jobInfo, options) {
   const milestone = normalizePortalLifecycleEmailMilestone_(meta.milestone);
   const recipientClass = getPortalLifecycleEmailRecipientClass_(meta.recipientClass);
   if (!milestone) throw new Error('Portal lifecycle email queue job is missing a milestone.');
+  if (isLifecycleEmailSuppressedByPolicy_(
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
+    milestone,
+    recipientClass,
+    meta
+  )) {
+    return { skipped: true, skipReason: COMMUNICATION_POLICY_DISABLED_REASON, invoiceInfo: null };
+  }
   const lifecycleContext = resolvePortalLifecycleEmailContext_({
     token: trimString_(row.token || meta.token)
   }, {
@@ -22086,6 +22622,7 @@ function logPaymentLifecycleEmailQueueEvent_(eventName, payload) {
     recipientDomains: Array.isArray(p.recipientDomains) ? p.recipientDomains : [],
     invoicePdfPresent: p.invoicePdfPresent === true,
     attachmentRequired: p.attachmentRequired === true,
+    attachmentPresent: p.attachmentPresent === true,
     status: trimString_(p.status),
     error: trimString_(p.error)
   };
@@ -22112,6 +22649,32 @@ function queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, o
     const orderSummary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
     const token = getPaymentLifecycleOrderToken_(orderInfo, orderSummary);
     const attachmentRequired = isPaymentLifecycleAttachmentRequired_(normalized);
+    const milestonePolicy = resolveCommunicationMilestonePolicy_(
+      PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
+      normalized,
+      orderInfo,
+      {
+        meta: opts.meta,
+        recipientClass: recipientClass,
+        paymentOrigin: opts.paymentOrigin,
+        achPaymentSource: opts.achPaymentSource
+      }
+    );
+    if (milestonePolicy.enabled === false) {
+      logPaymentLifecycleEmailQueueEvent_('not_queued', {
+        ok: false,
+        reason: milestonePolicy.reason,
+        milestone: normalized,
+        recipientClass: recipientClass,
+        token: token,
+        orderId: trimString_(orderSummary.orderId),
+        paymentIntentId: trimString_(orderSummary.stripePaymentIntentId),
+        sessionId: trimString_(orderSummary.stripeSessionId),
+        invoicePdfPresent: !!trimString_(orderSummary.invoicePdfUrl),
+        attachmentRequired: attachmentRequired
+      });
+      return null;
+    }
     if (!shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, normalized)) {
       logPaymentLifecycleEmailQueueEvent_('not_queued', {
         ok: false,
@@ -22312,64 +22875,16 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
   const summary = emailContext.orderSummary || {};
   const method = trimString_(summary.paymentMethodSelected).toLowerCase();
   const methodLabel = getPaymentLifecycleMethodLabel_(method);
-  const invoiceNumber = trimString_(emailContext.invoiceNumber);
   const isTeamAlert = recipientClass === 'team';
-  let subject = '';
-  let intro = '';
-  let statusCopy = '';
-  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: card payment received - invoice ' + invoiceNumber) : 'Team alert: card payment received')
-      : (invoiceNumber ? ('Payment received - Red Threads invoice ' + invoiceNumber) : 'Payment received - your Red Threads order is entering production');
-    intro = isTeamAlert ? 'A credit card payment has been received.' : 'Your credit card payment has been received.';
-    statusCopy = isTeamAlert
-      ? 'The order is now authorized for production according to the portal lifecycle state.'
-      : 'Your order is now authorized for production. Your updated invoice/receipt is attached.';
-  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: card payment issue - invoice ' + invoiceNumber) : 'Team alert: card payment issue')
-      : (invoiceNumber ? ('Action needed - payment issue for invoice ' + invoiceNumber) : 'Action needed - payment issue for your Red Threads order');
-    intro = isTeamAlert ? 'Stripe reported a card payment issue.' : 'Stripe reported an issue with your card payment.';
-    statusCopy = isTeamAlert
-      ? 'The order needs team review or client payment retry before production continues.'
-      : 'Production cannot continue until payment is resolved. Please return to your Red Threads invoice to retry payment or contact Red Threads for help.';
-  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: manual payment pending - invoice ' + invoiceNumber) : 'Team alert: manual payment pending')
-      : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' - payment pending') : 'Red Threads order placed - payment pending');
-    intro = isTeamAlert ? (methodLabel + ' payment order was placed.') : 'Your order has been placed and your invoice is attached.';
-    statusCopy = isTeamAlert
-      ? 'Production is waiting for the team to record payment received.'
-      : 'Production will begin after Red Threads records your payment received.';
-  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: manual payment received - invoice ' + invoiceNumber) : 'Team alert: manual payment received')
-      : (invoiceNumber ? ('Payment received - Red Threads invoice ' + invoiceNumber) : 'Payment received - your Red Threads order is entering production');
-    intro = isTeamAlert ? (methodLabel + ' payment has been recorded received.') : 'Your payment has been received.';
-    statusCopy = isTeamAlert
-      ? 'The order is now authorized for production according to the portal lifecycle state.'
-      : 'Your order is now authorized for production. Your updated invoice/receipt is attached.';
-  } else if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: purchase order submitted - invoice ' + invoiceNumber) : 'Team alert: purchase order submitted')
-      : (invoiceNumber ? ('Purchase order submitted - Red Threads invoice ' + invoiceNumber) : 'Purchase order submitted - Red Threads order confirmed');
-    intro = isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully and your final invoice is attached.';
-    statusCopy = isTeamAlert
-      ? 'The order is authorized for production. Payment remains open until funds are recorded received.'
-      : 'Your order is authorized for production. Payment remains open according to your approved terms until Red Threads records funds received.';
-  } else {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: purchase order payment received - invoice ' + invoiceNumber) : 'Team alert: purchase order payment received')
-      : (invoiceNumber ? ('Payment received - Red Threads invoice ' + invoiceNumber) : 'Payment received - your Red Threads order');
-    intro = isTeamAlert ? 'Purchase order payment has been recorded received.' : 'Your purchase order payment has been received.';
-    statusCopy = isTeamAlert
-      ? 'The order payment is now recorded received.'
-      : 'Thank you. Your updated invoice/receipt is attached.';
-  }
+  const copy = buildPaymentLifecycleEmailCopy_(normalized, emailContext, {
+    isTeamAlert: isTeamAlert,
+    methodLabel: methodLabel
+  });
   const shell = buildLifecycleEmailShell_({
-    intro: intro,
-    statusCopy: statusCopy,
+    intro: copy.intro,
+    statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
+    attachmentNote: copy.attachmentNote,
     blocks: [
       buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
       buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
@@ -22382,7 +22897,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     ]
   });
   return {
-    subject: subject,
+    subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody
   };
@@ -22404,6 +22919,18 @@ function processPaymentLifecycleEmailQueueJob_(jobInfo, options) {
     infra: infra
   });
   if (!orderInfo) throw new Error('Payment lifecycle queue order could not be found.');
+  const milestonePolicy = resolveCommunicationMilestonePolicy_(
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
+    milestone,
+    orderInfo,
+    {
+      meta: meta,
+      recipientClass: recipientClass
+    }
+  );
+  if (milestonePolicy.enabled === false) {
+    return { skipped: true, skipReason: milestonePolicy.reason, invoiceInfo: null };
+  }
   if (!shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, milestone)) {
     return { skipped: true, skipReason: 'state_not_eligible_for_' + milestone, invoiceInfo: null };
   }
@@ -22420,27 +22947,27 @@ function processPaymentLifecycleEmailQueueJob_(jobInfo, options) {
     infra: infra,
     queuedInvoiceInfo: queuedInvoiceInfo
   });
-  const attachment = buildFinalInvoiceAttachment_(Object.assign({}, buildPortalOrderSummary_(orderInfo.rowObjNormalized), {
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('payment_lifecycle', milestone, {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(Object.assign({}, buildPortalOrderSummary_(orderInfo.rowObjNormalized), {
     invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber),
     invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl)
-  }), trimString_(invoiceInfo && invoiceInfo.fileName));
-  if (isPaymentLifecycleAttachmentRequired_(milestone) && !attachment) {
-    throw new Error('Payment lifecycle invoice PDF could not be found.');
-  }
+  }), attachmentPolicy, {
+    fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
+  });
+  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
   const content = buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, {
     cfg: cfg,
     ss: ss,
     infra: infra,
     recipientClass: recipientClass
   });
-  const attachments = attachment ? [attachment] : [];
   const emailResult = sendNotificationEmail_({
     toList: recipients.toList,
     ccList: recipients.ccList,
     subject: content.subject,
     body: content.body,
     htmlBody: content.htmlBody,
-    attachments: attachments,
+    attachments: attachmentResult.attachments,
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
   });
@@ -22461,7 +22988,8 @@ function processPaymentLifecycleEmailQueueJob_(jobInfo, options) {
     ccCount: recipients.ccList.length,
     recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
     invoicePdfPresent: !!trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
-    attachmentRequired: isPaymentLifecycleAttachmentRequired_(milestone),
+    attachmentRequired: isRequiredLifecycleEmailAttachmentPolicy_(attachmentPolicy.policy),
+    attachmentPresent: !!(attachmentResult.attachments && attachmentResult.attachments.length),
     status: PORTAL_EMAIL_QUEUE_STATUSES.sent
   });
   return {
@@ -22636,10 +23164,23 @@ function buildLifecycleEmailCtaBlock_(label, url) {
   };
 }
 
+function buildStandardNoReplyFooterCopy_() {
+  return NOTIFICATION_REPLY_NOTICE;
+}
+
+function buildLifecycleEmailAttachmentNoteBlock_(note) {
+  const clean = trimString_(note);
+  if (!clean) return { text: '', html: '' };
+  return {
+    text: 'Attachment: ' + clean,
+    html: '<p style="margin:0 0 18px;color:#475569;"><strong>Attachment:</strong> ' + escapeHtml_(clean) + '</p>'
+  };
+}
+
 function buildLifecycleEmailFooter_() {
   return {
-    text: NOTIFICATION_REPLY_NOTICE,
-    html: '<p style="margin:0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>'
+    text: buildStandardNoReplyFooterCopy_(),
+    html: '<p style="margin:0;color:#64748b;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>'
   };
 }
 
@@ -22648,11 +23189,13 @@ function buildLifecycleEmailShell_(options) {
   const intro = trimString_(opts.intro);
   const statusCopy = trimString_(opts.statusCopy);
   const nextStep = trimString_(opts.nextStep);
+  const attachmentNote = trimString_(opts.attachmentNote);
   const blocks = Array.isArray(opts.blocks) ? opts.blocks : [];
   const textParts = [
     intro,
     statusCopy,
-    nextStep ? ('Next step: ' + nextStep) : ''
+    nextStep ? ('Next step: ' + nextStep) : '',
+    attachmentNote ? ('Attachment: ' + attachmentNote) : ''
   ];
   blocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
@@ -22662,7 +23205,8 @@ function buildLifecycleEmailShell_(options) {
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
     intro ? ('<p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>') : '',
     statusCopy ? ('<p style="margin:0 0 14px;color:#475569;">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
-    nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid #be123c;background:#fff1f2;color:#7f1d1d;"><strong>Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : ''
+    nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid #be123c;background:#fff1f2;color:#7f1d1d;"><strong>Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
+    buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
   ];
   blocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
@@ -22853,6 +23397,12 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
   const paymentMethodLabel = trimString_(opts.paymentMethodLabel) ||
     getPaymentLifecycleMethodLabel_(summary.paymentMethodSelected || PAYMENT_METHODS.ach);
   const ctaLabel = trimString_(opts.ctaLabel) || (isReceipt ? 'View Red Threads receipt' : 'View Red Threads invoice');
+  const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'client';
+  const ctaUrl = trimString_(opts.ctaUrl) || (
+    recipientClass === 'team'
+      ? buildLifecycleEmailTeamUrl_(token)
+      : buildLifecycleEmailInvoiceUrl_(token)
+  );
   return {
     orderSummary: summary,
     workflowContext: workflowContext,
@@ -22867,7 +23417,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     invoiceNumber: invoiceNumber,
     amount: amount,
     paymentDate: paymentDate,
-    ctaUrl: buildPortalSummaryUrl_(token),
+    ctaUrl: ctaUrl,
     ctaLabel: ctaLabel,
     referenceFields: [
       { label: 'Project', value: projectName },
@@ -22881,17 +23431,217 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
       milestone: milestone
     }),
     nextStepText: formatLifecycleEmailNextActionText_(workflowContext, {
-      recipientClass: trimString_(opts.recipientClass),
+      recipientClass: recipientClass,
       jobType: type
     })
   };
+}
+
+function buildLifecycleEmailCopyModel_(copy) {
+  const source = (copy && typeof copy === 'object') ? copy : {};
+  return {
+    subject: trimString_(source.subject),
+    intro: trimString_(source.intro),
+    statusCopy: trimString_(source.statusCopy),
+    attachmentNote: trimString_(source.attachmentNote)
+  };
+}
+
+function formatLifecycleEmailInvoiceSubject_(prefix, invoiceNumber, fallback) {
+  const cleanPrefix = trimString_(prefix);
+  const cleanInvoice = trimString_(invoiceNumber);
+  if (cleanPrefix && cleanInvoice) return cleanPrefix + ' — Red Threads invoice ' + cleanInvoice;
+  if (cleanPrefix) return cleanPrefix;
+  return trimString_(fallback);
+}
+
+function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
+  const type = normalizeAchLifecycleEmailJobType_(jobType);
+  const baseType = getAchLifecycleBaseEmailJobType_(type);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const isTeamAlert = opts.isTeamAlert === true;
+  const verificationRequired = opts.verificationRequired === true;
+  const usedConnectedBank = opts.usedConnectedBank === true;
+  const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
+    if (verificationRequired) {
+      return buildLifecycleEmailCopyModel_({
+        subject: isTeamAlert
+          ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH bank verification needed', invoiceNumber, 'Team alert: ACH bank verification needed')
+          : formatLifecycleEmailInvoiceSubject_('Action needed — verify your bank', invoiceNumber, 'Action needed — verify your bank for your Red Threads invoice'),
+        intro: isTeamAlert
+          ? 'A standard ACH order needs bank verification before payment can finish.'
+          : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish.',
+        statusCopy: isTeamAlert
+          ? 'Monitor the portal payment state before production begins.'
+          : 'Stripe may send a secure bank-verification email. You can also open your Red Threads invoice and use Verify with Stripe if that action is available. Red Threads does not collect microdeposit values.',
+        attachmentNote: 'Your invoice is attached.'
+      });
+    }
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment pending', invoiceNumber, 'Team alert: ACH payment pending')
+        : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — ACH payment pending') : 'Red Threads ACH payment pending'),
+      intro: isTeamAlert
+        ? 'A standard ACH order checkout was submitted.'
+        : 'Your Red Threads order has been placed.',
+      statusCopy: isTeamAlert
+        ? 'The ACH payment is pending bank confirmation. ACH payments can take several business days to confirm.'
+        : (usedConnectedBank
+          ? 'Your ACH payment was submitted with a connected bank and is pending bank confirmation. ACH payments can take several business days to confirm.'
+          : 'Your ACH payment was submitted and is pending bank confirmation. ACH payments can take several business days to confirm. Production begins after payment is confirmed unless Red Threads has separately approved production while payment is pending.'),
+      attachmentNote: 'Your invoice is attached.'
+    });
+  }
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment received', invoiceNumber, 'Team alert: ACH payment received')
+        : formatLifecycleEmailInvoiceSubject_('ACH payment received', invoiceNumber, 'ACH payment received for your Red Threads order'),
+      intro: isTeamAlert
+        ? 'A standard ACH payment has been received.'
+        : 'Your ACH payment has been received.',
+      statusCopy: isTeamAlert
+        ? 'Continue with the production workflow according to the current portal status.'
+        : 'Your order is authorized for production when reflected by the current portal status.',
+      attachmentNote: 'Your updated receipt is attached.'
+    });
+  }
+  return buildLifecycleEmailCopyModel_({
+    subject: isTeamAlert
+      ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment issue', invoiceNumber, 'Team alert: ACH payment issue')
+      : formatLifecycleEmailInvoiceSubject_('Action needed — ACH payment issue', invoiceNumber, 'Action needed — ACH payment issue for your Red Threads order'),
+    intro: isTeamAlert
+      ? 'A standard ACH payment needs review.'
+      : 'Your ACH payment could not be completed or needs review.',
+    statusCopy: isTeamAlert
+      ? 'Review the portal payment state before production continues.'
+      : 'Production cannot continue until payment is resolved. Open your Red Threads invoice to retry payment or contact Red Threads for help.',
+    attachmentNote: 'An invoice/status PDF may be attached when available.'
+  });
+}
+
+function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const isTeamAlert = opts.isTeamAlert === true;
+  const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH checkout started', invoiceNumber, 'Team alert: AP ACH checkout started')
+        : formatLifecycleEmailInvoiceSubject_('AP ACH checkout started', invoiceNumber, 'AP ACH checkout started for a Red Threads invoice'),
+      intro: isTeamAlert ? 'Accounts Payable opened ACH checkout for this order.' : 'ACH checkout has started for this Red Threads invoice.',
+      statusCopy: 'Payment is not received until the ACH debit is confirmed.',
+      attachmentNote: ''
+    });
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment pending', invoiceNumber, 'Team alert: AP ACH payment pending')
+        : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — AP ACH payment pending') : 'AP ACH payment pending for a Red Threads invoice'),
+      intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for this order.' : 'Accounts Payable has submitted ACH payment for this Red Threads invoice.',
+      statusCopy: isTeamAlert
+        ? 'The payment is pending bank confirmation. ACH payments can take several business days to confirm.'
+        : 'The payment is pending bank confirmation. ACH payments can take several business days to confirm. The purchaser/client will be updated when payment is confirmed.',
+      attachmentNote: 'The invoice/status document is attached.'
+    });
+  }
+  if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment received', invoiceNumber, 'Team alert: AP ACH payment received')
+        : formatLifecycleEmailInvoiceSubject_('AP ACH payment received', invoiceNumber, 'AP ACH payment received for a Red Threads invoice'),
+      intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'ACH payment has been received for this Red Threads invoice.',
+      statusCopy: isTeamAlert
+        ? 'Continue with the production workflow according to the current portal status.'
+        : 'The order is authorized for production when reflected by the current portal status.',
+      attachmentNote: 'The updated receipt is attached.'
+    });
+  }
+  return buildLifecycleEmailCopyModel_({
+    subject: isTeamAlert
+      ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment issue', invoiceNumber, 'Team alert: AP ACH payment issue')
+      : formatLifecycleEmailInvoiceSubject_('Action needed — AP ACH payment issue', invoiceNumber, 'Action needed — AP ACH payment issue for a Red Threads invoice'),
+    intro: isTeamAlert ? 'An AP ACH payment needs review.' : 'The AP ACH payment could not be completed.',
+    statusCopy: isTeamAlert
+      ? 'Review the portal payment state before production continues.'
+      : 'Payment must be resolved before production can continue. Return to the AP payment page or contact Red Threads for help.',
+    attachmentNote: 'An invoice/status PDF may be attached when available.'
+  });
+}
+
+function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const isTeamAlert = opts.isTeamAlert === true;
+  const methodLabel = trimString_(opts.methodLabel) || 'Payment';
+  const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment received', invoiceNumber, 'Team alert: card payment received')
+        : formatLifecycleEmailInvoiceSubject_('Card payment received', invoiceNumber, 'Card payment received for your Red Threads order'),
+      intro: isTeamAlert ? 'A card payment has been received.' : 'Your card payment has been received.',
+      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : 'Your order is authorized for production when reflected by the current portal status.',
+      attachmentNote: 'Your updated receipt is attached.'
+    });
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment issue', invoiceNumber, 'Team alert: card payment issue')
+        : formatLifecycleEmailInvoiceSubject_('Action needed — card payment issue', invoiceNumber, 'Action needed — card payment issue for your Red Threads order'),
+      intro: isTeamAlert ? 'A card payment could not be completed.' : 'Your card payment could not be completed.',
+      statusCopy: isTeamAlert ? 'Review the portal payment state or wait for the client to retry payment.' : 'Open your Red Threads invoice to retry payment or contact Red Threads for help.',
+      attachmentNote: 'An invoice/status PDF may be attached when available.'
+    });
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment pending', invoiceNumber, 'Team alert: manual payment pending')
+        : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — payment pending') : 'Red Threads order placed — payment pending'),
+      intro: isTeamAlert ? (methodLabel + ' payment order was placed.') : 'Your Red Threads order has been placed.',
+      statusCopy: isTeamAlert ? 'Production is waiting for the team to record payment as received.' : 'Production begins after Red Threads records payment as received unless otherwise approved.',
+      attachmentNote: 'Your invoice is attached.'
+    });
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment received', invoiceNumber, 'Team alert: manual payment received')
+        : formatLifecycleEmailInvoiceSubject_('Payment received', invoiceNumber, 'Payment received for your Red Threads order'),
+      intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received.',
+      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : 'Your order is authorized for production when reflected by the current portal status.',
+      attachmentNote: 'Your updated receipt is attached.'
+    });
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_('Team alert: purchase order submitted', invoiceNumber, 'Team alert: purchase order submitted')
+        : formatLifecycleEmailInvoiceSubject_('Purchase order submitted', invoiceNumber, 'Purchase order submitted for your Red Threads order'),
+      intro: isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully.',
+      statusCopy: isTeamAlert ? 'The order status is active under approved terms. Payment remains open until funds are recorded as received.' : 'Your order status is active under your approved terms. Payment remains open until Red Threads records funds as received.',
+      attachmentNote: 'Your invoice is attached.'
+    });
+  }
+  return buildLifecycleEmailCopyModel_({
+    subject: isTeamAlert
+      ? formatLifecycleEmailInvoiceSubject_('Team alert: PO payment received', invoiceNumber, 'Team alert: PO payment received')
+      : formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received for your Red Threads order'),
+    intro: isTeamAlert ? 'Purchase order payment has been recorded as received.' : 'Your purchase order payment has been received.',
+    statusCopy: isTeamAlert ? 'The order payment is recorded as received.' : 'Your updated invoice/receipt is available in the portal.',
+    attachmentNote: 'Your updated receipt is attached.'
+  });
 }
 
 function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options) {
   const type = normalizeAchLifecycleEmailJobType_(jobType);
   const baseType = getAchLifecycleBaseEmailJobType_(type);
   const isTeamAlert = isAchLifecycleTeamAlertEmailJobType_(type);
-  const isReceipt = baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email;
   const opts = (options && typeof options === 'object') ? options : {};
   const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, Object.assign({}, opts, {
     jobType: type,
@@ -22904,54 +23654,16 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
   const verificationRequired = isAchVerificationRequiredForEmail_(summary);
   const usedConnectedBank = trimString_(draft.achCheckoutIntent).toLowerCase() === ACH_CHECKOUT_INTENTS.saved_bank &&
     /(verified|succeeded|processing)/i.test(trimString_(summary.achVerificationStatus));
-  let subject = '';
-  let intro = '';
-  let statusCopy = '';
-  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: ACH payment pending — invoice ' + invoiceNumber) : 'Team alert: ACH payment pending')
-      : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — ACH payment pending') : 'Red Threads ACH payment submitted');
-    intro = isTeamAlert
-      ? 'A standard ACH order checkout was submitted.'
-      : 'Your order has been placed and your invoice is attached.';
-    if (verificationRequired) {
-      statusCopy = isTeamAlert
-        ? 'Stripe is waiting for bank verification before this ACH payment can finish. Monitor the order before production begins.'
-        : 'Stripe is waiting for bank verification before this ACH payment can finish. You may receive an email from Stripe with a secure verification link. You can also return to your Red Threads invoice and choose Verify with Stripe.\n\nProduction will begin after ACH payment is verified and confirmed.';
-    } else if (usedConnectedBank) {
-      statusCopy = isTeamAlert
-        ? 'The ACH payment was submitted using a connected bank and is pending Stripe/bank confirmation.'
-        : 'Your ACH payment has been submitted using your connected bank and is pending Stripe/bank confirmation. We will send you an updated email when payment is received and production begins.';
-    } else {
-      statusCopy = isTeamAlert
-        ? 'The ACH payment was submitted and is pending Stripe/bank confirmation. ACH payments can take several business days to confirm.'
-        : 'Your ACH payment has been submitted and is pending Stripe/bank confirmation. ACH payments can take several business days to confirm. We will send you an updated email when payment is received and production begins.';
-    }
-  } else if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: ACH payment received — invoice ' + invoiceNumber) : 'Team alert: ACH payment received')
-      : (invoiceNumber ? ('ACH payment received — Red Threads invoice ' + invoiceNumber) : 'Payment received — your Red Threads order is entering production');
-    intro = isTeamAlert
-      ? 'A standard ACH payment has been received.'
-      : 'Good news — your ACH payment has been received.';
-    statusCopy = isTeamAlert
-      ? 'The order is now authorized for production according to the portal lifecycle state.'
-      : 'Your order is now authorized for production. Your updated invoice/receipt is attached.\n\nProduction is now underway according to the schedule shown on your invoice.';
-  } else {
-    subject = isTeamAlert
-      ? (invoiceNumber ? ('Team alert: ACH payment issue — invoice ' + invoiceNumber) : 'Team alert: ACH payment issue')
-      : (invoiceNumber ? ('Action needed — ACH payment issue for invoice ' + invoiceNumber) : 'Action needed — ACH payment issue for your Red Threads order');
-    intro = isTeamAlert
-      ? 'Stripe reported an issue with a standard ACH payment.'
-      : 'Stripe reported an issue with your ACH payment.';
-    statusCopy = isTeamAlert
-      ? 'The order needs team review before production continues. Do not rely on this email for raw Stripe details; use the portal and Stripe dashboard as needed.'
-      : 'Production cannot continue until payment is resolved. Please return to your Red Threads invoice to retry payment or contact Red Threads for help.';
-  }
+  const copy = buildAchLifecycleEmailCopy_(type, emailContext, {
+    isTeamAlert: isTeamAlert,
+    verificationRequired: verificationRequired,
+    usedConnectedBank: usedConnectedBank
+  });
   const shell = buildLifecycleEmailShell_({
-    intro: intro,
-    statusCopy: statusCopy,
+    intro: copy.intro,
+    statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
+    attachmentNote: copy.attachmentNote,
     blocks: [
       buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
       buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
@@ -22963,7 +23675,7 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     ]
   });
   return {
-    subject: subject,
+    subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody
   };
@@ -22977,25 +23689,35 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
   const row = jobInfo && jobInfo.rowObjNormalized ? jobInfo.rowObjNormalized : {};
   const jobType = normalizeAchLifecycleEmailJobType_(row.jobtype);
   if (!jobType) throw new Error('Unsupported ACH email queue job type.');
+  const meta = safeJsonParse_(row.portalstatejson, {}) || {};
   const orderInfo = resolveAchLifecycleOrderForQueueJob_(jobInfo, {
     cfg: cfg,
     ss: ss,
     infra: infra
   });
   if (!orderInfo) throw new Error('ACH email queue order could not be found.');
-  if (!isStandardOrderCheckoutAchOrder_(orderInfo)) {
-    return { skipped: true, skipReason: 'not_standard_order_checkout_ach', invoiceInfo: null };
-  }
   const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
   const paymentState = trimString_(summary.paymentState).toLowerCase();
   const baseJobType = getAchLifecycleBaseEmailJobType_(jobType);
+  const milestonePolicy = resolveCommunicationMilestonePolicy_(jobType, '', orderInfo, {
+    meta: meta,
+    recipientClass: getAchLifecycleEmailRecipientClass_(jobType)
+  });
+  if (milestonePolicy.enabled === false) {
+    return { skipped: true, skipReason: milestonePolicy.reason, invoiceInfo: null };
+  }
+  if (!isStandardOrderCheckoutAchOrder_(orderInfo)) {
+    return { skipped: true, skipReason: 'not_standard_order_checkout_ach', invoiceInfo: null };
+  }
   if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email && paymentState === PAYMENT_STATES.paid) {
     return { skipped: true, skipReason: 'ach_submitted_job_already_paid', invoiceInfo: null };
   }
   if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email && paymentState !== PAYMENT_STATES.paid && !trimString_(summary.paidAt)) {
     return { skipped: true, skipReason: 'ach_receipt_job_not_paid', invoiceInfo: null };
   }
-  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email && paymentState === PAYMENT_STATES.paid) {
+  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email &&
+      paymentState === PAYMENT_STATES.paid &&
+      !isCommunicationPaymentFailureActionState_(summary)) {
     return { skipped: true, skipReason: 'ach_failed_job_already_paid', invoiceInfo: null };
   }
   const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
@@ -23005,11 +23727,14 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
     ss: ss,
     infra: infra
   });
-  const attachment = buildFinalInvoiceAttachment_(Object.assign({}, summary, {
+  const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('standard_ach', jobType, {});
+  const attachmentResult = resolveLifecycleEmailAttachment_(Object.assign({}, summary, {
     invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl) || trimString_(summary.invoicePdfUrl)
-  }), trimString_(invoiceInfo && invoiceInfo.fileName));
-  if (!attachment) throw new Error('ACH lifecycle invoice PDF could not be found.');
+  }), attachmentPolicy, {
+    fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
+  });
+  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
   const content = buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, {
     cfg: cfg,
     ss: ss,
@@ -23021,7 +23746,7 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
     subject: content.subject,
     body: content.body,
     htmlBody: content.htmlBody,
-    attachments: [attachment],
+    attachments: attachmentResult.attachments,
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
   });
@@ -23040,6 +23765,8 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
     ccCount: recipients.ccList.length,
     recipientDomains: summarizeEmailDomainsForLog_(recipients.toList.concat(recipients.ccList)),
     invoicePdfPresent: !!trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
+    attachmentRequired: isRequiredLifecycleEmailAttachmentPolicy_(attachmentPolicy.policy),
+    attachmentPresent: !!(attachmentResult.attachments && attachmentResult.attachments.length),
     status: PORTAL_EMAIL_QUEUE_STATUSES.sent
   });
   if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email &&
@@ -24394,7 +25121,7 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
   const invoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
   const email = normalizeEmail_(opts.to || order.personEmail || order.personemail);
   if (!email) return { ok: false, skipped: true, reason: 'missing-email' };
-  const portalUrl = trimString_(buildPortalDirectUrl_(order.token));
+  const portalUrl = trimString_(buildLifecycleEmailInvoiceUrl_(order.token));
   const invoicePdfUrl = trimString_(invoice.invoicePdfUrl || order.invoicePdfUrl);
   const subject = 'Red Threads Invoice ' + trimString_(invoice.invoiceNumber || order.invoiceNumber || '');
   const body = [
@@ -24405,17 +25132,14 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
     'Invoice PDF: ' + (invoicePdfUrl || '--'),
     portalUrl ? ('Portal: ' + portalUrl) : '',
     '',
-    'This inbox is not monitored.',
-    portalUrl
-      ? NOTIFICATION_REPLY_NOTICE
-      : 'Please use your Red Threads portal link to view updates or respond.'
+    buildStandardNoReplyFooterCopy_()
   ].filter(Boolean).join('\n');
   const htmlBody = [
     '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
     '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
     '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your Invoice Is Ready</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">Use the portal to review updates or respond. Your invoice PDF is linked below for reference.</p>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">Use the portal to review your invoice and project status. Your invoice PDF is linked below for reference.</p>',
     '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#f7f9fc;border:1px solid #e6ebf3;">',
     '      <div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Project:</strong> ' + escapeHtml_(trimString_(order.projectName || order.projectname || '--')) + '</div>',
     '      <div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Invoice Number:</strong> ' + escapeHtml_(trimString_(invoice.invoiceNumber || order.invoiceNumber || '--')) + '</div>',
@@ -24424,9 +25148,9 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
       : '      <div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Invoice PDF:</strong> Pending</div>',
     '    </div>',
     portalUrl
-      ? ('    <p style="margin:0 0 14px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
+      ? ('    <p style="margin:0 0 14px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Red Threads Invoice</a></p>')
       : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(portalUrl ? NOTIFICATION_REPLY_NOTICE : 'This inbox is not monitored. Please use your Red Threads portal link to view updates or respond.') + '</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -24457,7 +25181,7 @@ function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
   const sentAt = new Date();
   const subjectTimeLabel = Utilities.formatDate(sentAt, Session.getScriptTimeZone(), 'M/d/yyyy h:mm:ss a');
   const subject = [
-    '🚩 ' + senderName + ' has responded to your message',
+    'New message from Red Threads',
     projectName || '',
     subjectTimeLabel
   ].filter(Boolean).join(' — ');
@@ -24467,7 +25191,7 @@ function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
     senderName + ' has responded to your message in your Red Threads portal.',
     portalUrl ? ('Open your portal here: ' + portalUrl) : '',
     '',
-    'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+    buildStandardNoReplyFooterCopy_(),
     '',
     '- Red Threads Team'
   ].filter(Boolean).join('\n');
@@ -24484,7 +25208,7 @@ function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
     portalUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">Open Your Portal Message</a></p>')
       : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -24504,14 +25228,13 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
   const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
   const teamInboxEmail = normalizeEmail_(opts.teamInboxEmail || DOCUMENT_REVIEW_EMAIL);
   if (!teamInboxEmail) return { ok: false, skipped: true, reason: 'missing-team-email' };
-  const teamModePassword = trimString_(getConfig_().teamModePassword || DEFAULT_TEAM_MODE_PASSWORD);
 
   const senderName = trimString_(opts.senderName || deriveSenderNameForNotification_(row, 'client', opts) || 'Client');
   const projectName = trimString_(opts.projectName || deriveProjectNameForNotification_(row, safeJsonParse_(row.snapshotjson, null), opts));
   const portalUrl = buildTeamSnapshotPortalUrl_(trimString_(opts.token || row.token));
   const messageText = String(opts.messageText || (message && message.text) || '').trim();
   const clientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
-  const subject = '🚩 New client portal message' + (projectName ? (' — ' + projectName) : '');
+  const subject = 'New client portal message' + (projectName ? (' — ' + projectName) : '');
   const body = [
     'A client sent a new portal message.',
     '',
@@ -24521,9 +25244,6 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
     '',
     'Message:',
     messageText || '--',
-    '',
-    teamModePassword ? ('Team password: ' + teamModePassword) : '',
-    '',
     portalUrl ? ('Open portal: ' + portalUrl) : ''
   ].filter(Boolean).join('\n');
   const htmlBody = [
@@ -24540,17 +25260,10 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
     '      <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#9f1239;font-weight:800;margin-bottom:10px;">Message</div>',
     '      <div style="font-size:16px;line-height:1.7;color:#35435a;white-space:pre-wrap;">' + escapeHtml_(messageText || '--') + '</div>',
     '    </div>',
-    teamModePassword
-      ? ('    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:linear-gradient(135deg,#ecfeff 0%, #cffafe 100%);border:1px solid #67e8f9;box-shadow:0 10px 22px rgba(34,211,238,.16);">'
-        + '<div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#0f766e;font-weight:800;margin-bottom:10px;">Team Password</div>'
-        + '<div style="display:inline-block;padding:10px 14px;border-radius:12px;background:#042f2e;color:#99f6e4;font-size:22px;line-height:1.2;font-weight:900;letter-spacing:0.04em;">'
-        + escapeHtml_(teamModePassword)
-        + '</div></div>')
-      : '',
     portalUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">Open Team Snapshot</a></p>')
       : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated notification from the Red Threads portal.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -26496,9 +27209,6 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const clientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
   const clientName = trimString_(row.personname || row.clientname || row.orgname || 'there');
   const firstName = trimString_(clientName.split(/\s+/)[0]) || 'there';
-  const teamModePassword = isTeamDigest
-    ? trimString_(getConfig_().teamModePassword || DEFAULT_TEAM_MODE_PASSWORD)
-    : '';
   const portalUrl = isTeamDigest
     ? buildTeamSnapshotPortalUrl_(token)
     : buildExternalPortalUrl_(token);
@@ -26533,7 +27243,6 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         'Messages:',
         plainMessageLines.join('\n').trim(),
         '',
-        teamModePassword ? ('Team password: ' + teamModePassword) : '',
         portalUrl ? ('Open portal: ' + portalUrl) : ''
       ].filter(Boolean).join('\n')
     : [
@@ -26547,7 +27256,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         '',
         portalUrl ? ('Open your portal: ' + portalUrl) : '',
         '',
-        'This is an automated message from an unmonitored inbox. Please do not reply or respond.',
+        buildStandardNoReplyFooterCopy_(),
         '',
         '- Red Threads Team'
       ].filter(Boolean).join('\n');
@@ -26579,19 +27288,10 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     '      <tr><td style="padding:12px 16px;background:#f7f9fc;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#73829a;font-weight:800;">Messages</td></tr>',
     htmlMessages,
     '    </table>',
-    teamModePassword
-      ? ('    <div style="margin:0 0 20px;padding:16px 18px;border-radius:12px;background:#ecfeff;border:1px solid #67e8f9;">'
-        + '<div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#0f766e;font-weight:800;margin-bottom:10px;">Team Password</div>'
-        + '<div style="display:inline-block;padding:9px 12px;border-radius:10px;background:#042f2e;color:#99f6e4;font-size:20px;line-height:1.2;font-weight:900;letter-spacing:0.04em;">'
-        + escapeHtml_(teamModePassword)
-        + '</div></div>')
-      : '',
     portalUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:13px 20px;border-radius:999px;background:#f43f5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;">' + escapeHtml_(ctaLabel) + '</a></p>')
       : '',
-    isTeamDigest
-      ? '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated notification from the Red Threads portal.</p>'
-      : '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">This is an automated message from an unmonitored inbox. Please do not reply or respond.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');

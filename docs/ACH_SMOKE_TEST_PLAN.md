@@ -106,17 +106,18 @@ The second command should show only redaction, safety, or documentation referenc
 69. Standard order-checkout ACH failed/disputed/blocked state queues one action-needed client email and one team alert to `hello@redthreads.com`, and does not expose raw Stripe failure payloads.
 70. ACH lifecycle queue rows use recipient-class idempotency, immediately attempt safe queue processing, and fall back to the processor trigger when a lock or send failure prevents immediate completion. Queue status must distinguish `sent`, `failed`, and state-based `skipped` rows.
 71. ACH lifecycle client emails and matching team alerts render through the shared lifecycle email shell with a reference block, email-safe progress snapshot, current next step, history bullets when dates exist, CTA, no-reply footer, and invoice/receipt attachment.
-72. AP/order-only ACH remains excluded from the standard ACH lifecycle client/team lifecycle emails, but uses its own `ap_ach_lifecycle_email` queue job for checkout-started, submitted/pending, confirmed/receipt, and failed/action-needed milestones.
+72. AP/order-only ACH remains excluded from the standard ACH lifecycle client/team lifecycle emails, but uses its own `ap_ach_lifecycle_email` queue job for submitted/pending, confirmed/receipt, and failed/action-needed milestones. Deployed communication policy suppresses AP checkout-started emails for future sends.
 73. Non-ACH payment lifecycle milestones use `PORTAL_EMAIL_QUEUE` job type `payment_lifecycle_email` with recipient-class idempotency: card paid, card failed/action-needed, manual check/cash pending, manual payment received, PO submitted, and PO payment received each queue one client email and one team alert to `hello@redthreads.com`.
 74. Non-ACH payment lifecycle emails render through the shared lifecycle email shell with the five-stage progress snapshot, payment-method-specific reference copy, current next step, history bullets when dates exist, CTA, no-reply footer, and the required invoice/receipt attachment except card failed/action-needed, where an existing invoice may attach but missing attachment must not block the action-needed email.
-75. AP lifecycle emails render through the shared lifecycle email shell with AP ACH reference copy, the five-stage progress snapshot, current next step, AP payment CTA, history bullets when dates exist, and no-reply footer. AP-facing emails go to the stored AP recipient with purchaser/client visible CC when distinct; matching team alerts go to `hello@redthreads.com`.
+75. Active AP lifecycle emails render through the shared lifecycle email shell with AP ACH reference copy, the five-stage progress snapshot, current next step, AP payment CTA, history bullets when dates exist, and no-reply footer. AP-facing emails go to the stored AP recipient with purchaser/client visible CC when distinct; matching team alerts go to `hello@redthreads.com`.
 76. AP submitted/pending and confirmed/receipt lifecycle emails require invoice/receipt attachments. AP failed/action-needed attaches the invoice/status PDF when available, but missing attachment must not block the action-needed email.
 77. Portal chat notifications use queued `chat_message_digest_email` jobs with a 10-minute `portalStateJson.notBefore` debounce. Client messages digest to `hello@redthreads.com`, team replies digest to the project client email, and queue payloads store message IDs/timing only, not message text.
-78. Non-payment portal lifecycle milestones use queued `portal_lifecycle_email` jobs with recipient-class idempotency: artwork approved/change requested, project ready to order, Team Mode unlock/reset/reopen/hold/cancel, ACH pending-production authorization, job/project completion, and tax-exempt/credit-terms submission/approval/denial/reset events.
+78. Non-payment portal lifecycle milestones use queued `portal_lifecycle_email` jobs with recipient-class idempotency. Deployed communication policy suppresses future sends for artwork approved/change requested, project ready to order, Team Hold, Project Unlock, Checkout Reset, client flow canceled/reset, standalone production authorized, and job/project completion; tax-exempt/credit-terms submission/approval/denial/reset events remain active.
 79. `portal_lifecycle_email` messages render through the shared lifecycle email shell with the five-stage progress snapshot when project context exists, current next step, history bullets when dates exist, CTA, no-reply footer, and safe document attachments when the event requires them.
 80. Utility/direct emails that are intentionally not lifecycle triggers remain direct: AP payment-link send, blank account-document send, submitted tax-form copy send, password reset code, summary PDF send, and explicit admin resend actions.
 81. Due `PORTAL_EMAIL_QUEUE` jobs can be processed by the normal queue trigger or by the bounded portal-traffic nudge on direct portal loads/chat saves. Nudge logs must remain safe and must not include tokens, raw recipient emails, chat message text, Stripe secrets, or bank details.
 82. Portal-generated emails use Apps Script `MailApp` `noReply: true` transport rather than the removed `noreply@redthreads.com` Workspace alias; reply tests should confirm replies bounce, fail, or otherwise do not arrive in the owner Workspace inbox.
+83. Queue hygiene audits should remain read-only by default. Use `tools/report-portal-email-queue-hygiene.mjs` against a sanitized `PORTAL_EMAIL_QUEUE` CSV/TSV export to count job types, statuses, age buckets, recipient classes, skipped/failed reason categories, policy-disabled queued rows, stale queued rows, stuck processing rows, and duplicate-ish redacted groups without printing tokens, raw recipient emails, idempotency keys, queue payloads, message text, Drive URLs, or payment identifiers.
 
 ## Post-896 Communication Tranche Smoke Evidence
 
@@ -168,9 +169,50 @@ For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID an
 - `payment_intent.payment_failed` or `charge.failed`: failed/action-needed, with unsafe saved-bank default blocked for hard bank/mandate/verification failures and one ACH action-needed email plus one team alert queued/sent for standard order-checkout ACH.
 - `charge.updated`: expected debit date and safe bank summary fields updated when available.
 - `charge.dispute.created`: failed/team review, no silent retry, saved bank marked unusable, one ACH action-needed email plus one team alert queued/sent for standard order-checkout ACH.
+
+## Communication CTA Smoke
+
+After the local undeployed CTA hardening is approved and deployed:
+
+- Standard ACH pending, verification/action-needed, and receipt emails open the public invoice/status route `/portal?t=<token>&summary=1`; matching team alerts open `/portal?t=<token>&mode=team`.
+- AP payment-link send opens `/portal?t=<token>&summary=1&payNow=ach&paymentOrigin=ap`.
+- AP ACH pending/submitted and confirmed/receipt emails open `/portal?t=<token>&summary=1&paymentOrigin=ap` without `payNow=ach`; AP ACH failed/action-needed keeps the AP retry route with `payNow=ach&paymentOrigin=ap`.
+- Card, PO, and manual/check/cash lifecycle client emails open invoice/status or receipt routes, while matching team alerts open Team Mode.
+- Tax/credit team review emails open the public Team Mode review route with `mode=team` and the correct `teamReview` value.
+- Chat digest client-to-team emails open Team Mode; team-to-client digests open the client portal.
+- Password reset emails open public `/portal`, not the Apps Script `/exec` URL.
+- No email exposes raw Stripe Checkout URLs, hosted verification URLs, `client_secret`, Apps Script sandbox URLs, or direct Apps Script web-app CTAs.
+
+## Communication Attachment Smoke
+
+After the local undeployed attachment hardening is approved and deployed:
+
+- Standard ACH pending/verification emails attach the current invoice/status PDF; if the required attachment cannot be loaded, the queue row fails safely with `required_invoice_attachment_missing`.
+- Standard ACH receipt emails attach a regenerated paid invoice/receipt that reflects payment status, method, and date; missing required receipt attachments fail safely with `required_receipt_attachment_missing`.
+- Standard ACH failed/disputed/action-needed emails still send when an optional invoice/status attachment cannot be loaded, and safe diagnostics distinguish optional missing attachment from send failure.
+- AP payment-link send blocks before email transport if the current AP invoice attachment cannot be loaded.
+- AP ACH submitted/pending and confirmed/receipt emails require the AP locked-order invoice/receipt attachment; AP ACH failed/action-needed emails may send without the optional attachment.
+- Card paid, PO submitted, PO payment received, manual/check/cash pending, and manual/check/cash received lifecycle emails attach the required current invoice or regenerated receipt; card failed/action-needed may send without an optional attachment.
+- PO invoice prepared/sent and explicit locked-order/admin resend emails fail clearly before transport if the invoice attachment is unavailable.
+- Blank tax/credit/source document emails fail before transport if the configured source PDF cannot be loaded.
+- Tax/credit submitted and approved emails attach the required submitted/approved artifacts; denied/reset emails remain optional unless a later owner policy changes that rule.
+- Chat digest and password reset emails send with no attachments.
+- No attachment contains bank details, raw Stripe payloads, hosted verification URLs, `client_secret`, raw webhook payloads, or microdeposit values.
+
+## Communication Content Smoke
+
+After the local undeployed content hardening is approved and deployed:
+
+- Standard ACH pending, verification-required, receipt, and failed/action-needed emails have concise event-accurate subjects, one clear next step, one primary CTA, correct attachment notes, and no raw Stripe implementation terms.
+- AP payment-link and AP ACH pending, receipt, and failed/action-needed emails explain the AP/order-only lane clearly, avoid duplicate-payment language on pending/receipt status links, and keep bank details out of the copy.
+- Card paid/failed, PO submitted/paid, and manual/check/cash pending/paid emails use payment-state-accurate language; payment receipt emails may mention production authorization only when supported by the current lifecycle state.
+- Tax-exempt and credit-terms submitted, approved, denied, and reset emails use calm professional wording, sanitized reason text, correct review/account next steps, and required document attachment notes.
+- Chat digest emails in both directions show grouped messages, correct project/customer reference, and the correct Team Snapshot or client portal CTA without including the Team Mode password.
+- Password reset, explicit summary/PDF send, blank account-document source, submitted tax-form copy, and admin resend emails use the shared automated-notification footer and do not invite replies.
+- No active email content includes Team Mode passwords, emoji/icon prefixes, legacy "do not reply" wording, `PaymentIntent`, `webhook`, `checkout.session`, `client_secret`, hosted verification URLs, raw Stripe Checkout URLs, bank account/routing values, or microdeposit values.
 - `setup_intent.succeeded`: saved bank summary stored.
 - `setup_intent.setup_failed`: setup failed with retry path; if exactly one matching `dashboard_saved` ACH row can be identified by safe setup/payment method/customer/account linkage, that row moves to failed/unavailable and is not default-eligible.
-- AP-link checkout-started: creating the locked-order AP ACH Checkout Session queues/sends one AP-facing checkout-started email plus purchaser/client visible CC when distinct and one team alert; replaying the same checkout-started source does not duplicate sent rows.
+- AP-link checkout-started: creating the locked-order AP ACH Checkout Session does not queue or send AP-facing/team checkout-started emails under the local undeployed communication suppression policy. AP payment-link send remains active, and AP submitted/pending, confirmed/receipt, and failed/action-needed milestones remain active.
 - AP-link `checkout.session.completed` / `payment_intent.processing`: order-level ACH fields update, `PORTAL_ACCOUNTS.achPaymentMethodsJson` is not expanded with a dashboard-visible bank, and one AP-facing submitted/pending email plus one team alert are queued/sent with attachment-required handling.
 - AP-link `checkout.session.async_payment_succeeded` / `payment_intent.succeeded`: one AP-facing receipt email plus one team alert are queued/sent with updated invoice/receipt attachment, and duplicate success signals collapse by AP lifecycle idempotency.
 - AP-link `checkout.session.async_payment_failed`, `payment_intent.payment_failed`, `charge.failed`, or `charge.dispute.created`: one AP-facing action-needed email plus one team alert are queued/sent, missing optional invoice attachment does not block the action-needed send, and no raw Stripe payload or bank detail is exposed.
@@ -200,13 +242,11 @@ For each event below, confirm `PORTAL_STRIPE_EVENTS` has one row per event ID an
 
 ## Portal Lifecycle Email Smokes
 
-- Artwork approved: approving a print job queues/sends one `portal_lifecycle_email` team alert to `hello@redthreads.com`; approving the same job again does not duplicate the sent row.
-- Project ready to order: once quantities/artwork make `nextClientAction=place_order`, one client ready-to-order email and one team alert queue/send with the shared progress snapshot.
-- Artwork change requested: clearing approval queues/sends one team alert to `hello@redthreads.com`.
-- Team Mode unlock/reset/reopen/hold: each successful admin transition queues/sends the expected client email and matching team alert; repeated clicks do not duplicate the same milestone.
-- Client cancels a pending manual/PO flow: the action returns the project to editable mode and queues/sends one team alert to `hello@redthreads.com`.
-- ACH pending-production approval: enabling production for an eligible pending ACH order queues/sends one production-authorized client email and one team alert.
-- Job/project completion: marking some jobs complete queues/sends job-completion emails; marking all tracked jobs complete queues/sends project-complete emails.
+- Communication suppression policy: artwork approved/change requested, project ready to order, Team Hold, Project Unlock, Checkout Reset, client flow canceled/reset, standalone production authorized, jobs completed, project completed, and AP checkout-started should not create future email queue rows. If stale queued rows for these milestones are encountered, they should become `skipped` with `lastError=communication_policy_disabled`.
+- Communication collision guard: AP ACH paid should produce only AP ACH confirmed/receipt emails plus the team alert, not PO paid or standard ACH receipt emails. Standard ACH paid, card paid, manual/check/cash received, and PO payment received should each produce one receipt email plus one team alert, and no standalone production-authorized email.
+- Duplicate Stripe ACH event guard: overlapping ACH pending, success, and failure signals should collapse to one client/AP-facing email and one team alert per active milestone. Stale queued competing payment rows should become `skipped` with `lastError=communication_milestone_superseded`.
+- PO submission reopened: remains active unless separately disabled by owner decision; reopening PO submission queues/sends the expected client email and matching team alert.
+- Production authorization caused by payment receipt: no standalone production-authorized email sends; the payment receipt email carries the production-authorized copy where applicable.
 - Account document submitted: tax-exempt and credit-terms submissions queue/send one team-review email to `hello@redthreads.com` with the submitted document attachment.
 - Account document approved/denied/reset: tax-exempt and credit-terms decisions queue/send client emails and team alerts with appropriate CTA, reason text when denied, and approved-document attachment when required.
 - Queue failure behavior: missing required document attachment records a safe `failed` queue row, while missing recipients records safe skipped/not-queued diagnostics.
