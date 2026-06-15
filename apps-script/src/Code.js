@@ -2213,10 +2213,11 @@ function buildDashboardProjectProjectionContext_(rowStateOrInfo, options) {
   let latestOrderSummary = (opts.latestOrderSummary && typeof opts.latestOrderSummary === 'object') ? opts.latestOrderSummary : null;
 
   if (includeLatestOrderSummary && !latestOrderSummary && trimString_(row.token) && cfg && ss && infra) {
-    latestOrderInfo = latestOrderInfo || getLatestPortalOrderByToken_(trimString_(row.token), {
+    latestOrderInfo = latestOrderInfo || getCurrentPortalOrderForRow_(info || row, {
       cfg: cfg,
       ss: ss,
-      ordersSheet: infra.ordersSheet
+      ordersSheet: infra.ordersSheet,
+      token: trimString_(row.token)
     });
     latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
   }
@@ -5664,7 +5665,7 @@ function getAccountStatus(payload) {
       identity = mergeAccountIdentity_(identity, deriveOrgContextFromRow_(rowInfo.rowObjNormalized));
     }
     const latestOrderInfo = trimString_(p.token)
-      ? getLatestPortalOrderByToken_(trimString_(p.token), { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet })
+      ? getCurrentPortalOrderForRow_(rowInfo, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet, token: trimString_(p.token) })
       : null;
     const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
 
@@ -5697,7 +5698,7 @@ function buildCheckoutReturnResponse_(status, token, rowInfo, orderInfo, account
   const freshRowInfo = rowInfo ? buildRowInfoFromSheet_(infra.exportSheet, rowInfo.row) : findRowByToken_(infra.exportSheet, cleanToken);
   const latestOrderInfo = orderInfo
     ? buildRowInfoFromSheet_(infra.ordersSheet, orderInfo.row)
-    : getLatestPortalOrderByToken_(cleanToken, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet });
+    : getCurrentPortalOrderForRow_(freshRowInfo, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet, token: cleanToken });
   const orderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
   const accountSummary = accountInfo && accountInfo.summary
     ? accountInfo.summary
@@ -8421,10 +8422,11 @@ function lockCurrentOrderPointersToPurchaseOrderDraftState_(ctx, portalState, dr
 }
 
 function buildLatestClientWorkflowContextForAction_(ctx) {
-  const latestOrderInfo = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+  const latestOrderInfo = getCurrentPortalOrderForRow_(ctx.rowInfo, {
     cfg: ctx.cfg,
     ss: ctx.ss,
-    ordersSheet: ctx.infra.ordersSheet
+    ordersSheet: ctx.infra.ordersSheet,
+    token: ctx.orderDraft.token
   });
   const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : {};
   const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(
@@ -11326,10 +11328,11 @@ function emailTaxExemptSubmissionCopy(payload) {
 function generateInvoice(payload) {
   try {
     const ctx = buildOrderActionContext_(payload);
-    const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+    const latestOrder = getCurrentPortalOrderForRow_(ctx.rowInfo, {
       cfg: ctx.cfg,
       ss: ctx.ss,
-      ordersSheet: ctx.infra.ordersSheet
+      ordersSheet: ctx.infra.ordersSheet,
+      token: ctx.orderDraft.token
     });
     const source = latestOrder ? latestOrder.rowObjNormalized : ctx.orderDraft;
     const invoice = generateInvoiceDocumentForOrder_(source, { cfg: ctx.cfg });
@@ -11348,10 +11351,11 @@ function buildTeamOrderAdminContext_(payload) {
   const token = resolveAccountDocumentPortalToken_(ctx);
   if (!token) throw new Error('Missing token.');
   const rowInfo = ctx.exportRowInfo || findRowByToken_(ctx.infra.exportSheet, token);
-  const latestOrder = getLatestPortalOrderByToken_(token, {
+  const latestOrder = getCurrentPortalOrderForRow_(rowInfo, {
     cfg: ctx.cfg,
     ss: ctx.ss,
-    ordersSheet: ctx.infra.ordersSheet
+    ordersSheet: ctx.infra.ordersSheet,
+    token: token
   });
   const latestOrderSummary = latestOrder ? buildPortalOrderSummary_(latestOrder.rowObjNormalized) : null;
   const currentStateSummary = buildCurrentOrderStateSummaryFromRow_(
@@ -17963,12 +17967,13 @@ function getLatestPortalOrderByToken_(token, options) {
 function comparePortalOrderInfosDesc_(a, b) {
   const rowA = a && a.rowObjNormalized ? a.rowObjNormalized : {};
   const rowB = b && b.rowObjNormalized ? b.rowObjNormalized : {};
+  const tsA = parseIsoDateMs_(rowA.lastupdatedat || rowA.createdat);
+  const tsB = parseIsoDateMs_(rowB.lastupdatedat || rowB.createdat);
+  if (tsA !== tsB) return tsB - tsA;
   const revA = Math.max(1, parseInt(String(rowA.orderrevision || 1), 10) || 1);
   const revB = Math.max(1, parseInt(String(rowB.orderrevision || 1), 10) || 1);
   if (revA !== revB) return revB - revA;
-  const tsA = parseIsoDateMs_(rowA.lastupdatedat || rowA.createdat);
-  const tsB = parseIsoDateMs_(rowB.lastupdatedat || rowB.createdat);
-  return tsB - tsA;
+  return 0;
 }
 
 function buildLatestPortalOrderInfoMapByToken_(tokens, options) {
@@ -18003,12 +18008,13 @@ function listPortalOrdersByToken_(token, options) {
   const ordersSheet = opts.ordersSheet || getOrderSheet_(ss, cfg);
   return findOrderRowsByToken_(ordersSheet, cleanToken)
     .sort((a, b) => {
+      const tsA = parseIsoDateMs_(a.rowObjNormalized.lastupdatedat || a.rowObjNormalized.createdat);
+      const tsB = parseIsoDateMs_(b.rowObjNormalized.lastupdatedat || b.rowObjNormalized.createdat);
+      if (tsA !== tsB) return tsB - tsA;
       const revA = Math.max(1, parseInt(String(a.rowObjNormalized.orderrevision || 1), 10) || 1);
       const revB = Math.max(1, parseInt(String(b.rowObjNormalized.orderrevision || 1), 10) || 1);
       if (revA !== revB) return revB - revA;
-      const tsA = parseIsoDateMs_(a.rowObjNormalized.lastupdatedat || a.rowObjNormalized.createdat);
-      const tsB = parseIsoDateMs_(b.rowObjNormalized.lastupdatedat || b.rowObjNormalized.createdat);
-      return tsB - tsA;
+      return 0;
     });
 }
 
@@ -18146,6 +18152,21 @@ function getPortalOrderByOrderId_(orderId, options) {
     return revB - revA;
   });
   return matches[0];
+}
+
+function getCurrentPortalOrderForRow_(rowInfoOrRow, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = rowInfoOrRow && rowInfoOrRow.rowObjNormalized
+    ? rowInfoOrRow.rowObjNormalized
+    : ((rowInfoOrRow && typeof rowInfoOrRow === 'object') ? rowInfoOrRow : {});
+  const token = trimString_(opts.token || row.token);
+  const activeOrderId = trimString_(opts.activeOrderId || row.activeorderid || row.activeOrderId);
+  if (activeOrderId) {
+    const activeOrder = getPortalOrderByOrderId_(activeOrderId, opts);
+    const activeToken = trimString_(activeOrder && activeOrder.rowObjNormalized && activeOrder.rowObjNormalized.token);
+    if (activeOrder && (!token || activeToken === token)) return activeOrder;
+  }
+  return token ? getLatestPortalOrderByToken_(token, opts) : null;
 }
 
 function createPortalOrder_(opts) {
@@ -20178,10 +20199,11 @@ function ensurePurchaseOrderInvoice_(payload) {
       message: 'Terms approval is required before you can submit a purchase order.'
     };
   }
-  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+  const latestOrder = getCurrentPortalOrderForRow_(ctx.rowInfo, {
     cfg: ctx.cfg,
     ss: ctx.ss,
-    ordersSheet: ctx.infra.ordersSheet
+    ordersSheet: ctx.infra.ordersSheet,
+    token: ctx.orderDraft.token
   });
   if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
     const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
@@ -23901,10 +23923,11 @@ function queuePurchaseOrderInvoiceEmail_(payload) {
       message: 'Terms approval is required before you can submit a purchase order.'
     };
   }
-  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+  const latestOrder = getCurrentPortalOrderForRow_(ctx.rowInfo, {
     cfg: ctx.cfg,
     ss: ctx.ss,
-    ordersSheet: ctx.infra.ordersSheet
+    ordersSheet: ctx.infra.ordersSheet,
+    token: ctx.orderDraft.token
   });
   if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
     const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
@@ -24662,10 +24685,11 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     });
   }
   markCheckoutTiming_(timing, 'latest_order_lookup_start', { paymentMethodSelected: method });
-  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+  const latestOrder = getCurrentPortalOrderForRow_(ctx.rowInfo, {
     cfg: ctx.cfg,
     ss: ctx.ss,
-    ordersSheet: ctx.infra.ordersSheet
+    ordersSheet: ctx.infra.ordersSheet,
+    token: ctx.orderDraft.token
   });
   markCheckoutTiming_(timing, 'latest_order_lookup_end', { ok: !!latestOrder, paymentMethodSelected: method });
   if (!latestOrder) {
@@ -24861,10 +24885,11 @@ function submitPurchaseOrder_(payload) {
   if (!purchaseOrderDraft || !trimString_(purchaseOrderDraft.invoicePdfUrl)) {
     return { ok: false, error: 'No purchase-order invoice is ready yet. Email or download the invoice first.' };
   }
-  const latestOrder = getLatestPortalOrderByToken_(ctx.orderDraft.token, {
+  const latestOrder = getCurrentPortalOrderForRow_(ctx.rowInfo, {
     cfg: ctx.cfg,
     ss: ctx.ss,
-    ordersSheet: ctx.infra.ordersSheet
+    ordersSheet: ctx.infra.ordersSheet,
+    token: ctx.orderDraft.token
   });
   if (latestOrder && !isSupersedableOrderRowForPaymentPathSwitch_(latestOrder)) {
     const latestSummary = buildPortalOrderSummary_(latestOrder.rowObjNormalized);
