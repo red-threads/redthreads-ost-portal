@@ -1607,8 +1607,14 @@ function doPost(e) {
     if (action === 'initiate_purchase_order') {
       return jsonOutput_(initiatePurchaseOrder(payload));
     }
+    if (action === 'queue_purchase_order_invoice_email') {
+      return jsonOutput_(queuePurchaseOrderInvoiceEmail(payload));
+    }
     if (action === 'generate_invoice') {
       return jsonOutput_(generateInvoice(payload));
+    }
+    if (action === 'auth_send_reset_code') {
+      return jsonOutput_(authSendResetCode(payload));
     }
     if (action === 'get_account_status') {
       return jsonOutput_(getAccountStatus(payload));
