@@ -1658,11 +1658,33 @@ function doPost(e) {
     if (action === 'get_tax_exempt_team_review') {
       return jsonOutput_(getTaxExemptTeamReview(payload));
     }
+    if (action === 'get_credit_terms_team_review') {
+      return jsonOutput_(getCreditTermsTeamReview(payload));
+    }
     if (action === 'approve_tax_exempt_submission') {
       return jsonOutput_(approveTaxExemptSubmission(payload));
     }
     if (action === 'deny_tax_exempt_submission') {
       return jsonOutput_(denyTaxExemptSubmission(payload));
+    }
+    if (action === 'approve_credit_terms_submission') {
+      return jsonOutput_(approveCreditTermsSubmission(payload));
+    }
+    if (action === 'deny_credit_terms_submission') {
+      return jsonOutput_(denyCreditTermsSubmission(payload));
+    }
+    if (action === 'hard_deny_credit_terms_submission') {
+      return jsonOutput_(hardDenyCreditTermsSubmission(payload));
+    }
+    if (action === 'submit_purchase_order') {
+      return jsonOutput_(submitPurchaseOrder(payload));
+    }
+    if (action === 'append_chat_message') {
+      if (String(payload.sender || '').trim().toLowerCase() === 'team' &&
+          !validateTeamModeAuthKey_(String(payload.token || '').trim(), String(payload.teamAuthKey || '').trim(), getConfig_())) {
+        return jsonOutput_({ ok: false, error: 'Team authorization expired. Re-enter the team password and try again.' });
+      }
+      return jsonOutput_(appendChatMessage(payload));
     }
     if (action === 'admin_mark_manual_payment_received') {
       return jsonOutput_(adminMarkManualPaymentReceived(payload));
