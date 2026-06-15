@@ -24816,6 +24816,7 @@ function createLockedOrderPaymentCheckout_(payload, timing) {
     orderRowInfo: latestOrder,
     checkoutAttemptId: checkoutAttemptId,
     stripeSessionId: trimString_(stripe.sessionId),
+    paymentMethodSelected: method,
     achPaymentSource: method === PAYMENT_METHODS.ach ? paymentOrigin : '',
     achPaymentVisibilityScope: method === PAYMENT_METHODS.ach ? ACH_PAYMENT_VISIBILITY_SCOPES.order_only : '',
     stripeAchCustomerId: method === PAYMENT_METHODS.ach ? trimString_(ctx.stripeCustomerId) : '',
