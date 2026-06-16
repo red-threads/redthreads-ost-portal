@@ -38304,6 +38304,59 @@
     }
   }
 
+  function buildEmailReviewSuiteInvoiceFileName_(){
+    const dealNumber = String(getDealNumber() || 'EmailReview').trim() || 'EmailReview';
+    const now = new Date();
+    const yyyy = String(now.getFullYear());
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return 'Red Threads Project-' + dealNumber + '-Invoice-' + yyyy + '-' + mm + '-' + dd + '.pdf';
+  }
+
+  async function buildEmailReviewSuitePortalRenderedArtifact_(){
+    if (CURRENT_VIEW !== VIEW_SNAPSHOT || !String(CURRENT_TOKEN || INITIAL_TOKEN || '').trim()) {
+      throw new Error('Open a project portal page before sending the email review suite.');
+    }
+    if (!IS_TEAM || !TEAM_MODE_UNLOCKED || !TEAM_MODE_AUTH_KEY) {
+      throw new Error('Unlock Team Mode before sending the email review suite.');
+    }
+    if (activePanel !== 'summary' || !summaryRoot || summaryRoot.hidden) {
+      setActiveSummaryPanel({ render: true });
+      await settleSummaryExportLayout_();
+      await settleSummaryExportLayout_();
+    }
+    const pdfResult = await buildSummaryExportPdf_({
+      fileName: buildEmailReviewSuiteInvoiceFileName_(),
+      fallbackMessage: 'Unable to generate the email review invoice PDF. Please try again.'
+    });
+    const base64Data = await readBlobAsBase64_(pdfResult.blob);
+    if (!base64Data) throw new Error('Unable to package the email review invoice PDF.');
+    return {
+      fileName: pdfResult.fileName,
+      mimeType: 'application/pdf',
+      base64Data: base64Data
+    };
+  }
+
+  async function sendEmailReviewSuiteFromPortal_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const artifact = await buildEmailReviewSuitePortalRenderedArtifact_();
+    const resp = await callServer('sendEmailReviewSuite', {
+      token: CURRENT_TOKEN || INITIAL_TOKEN,
+      teamAuthKey: TEAM_MODE_AUTH_KEY,
+      teamEmail: opts.teamEmail || 'hello@redthreads.com',
+      clientEmail: opts.clientEmail || 'josiah@redthreads.com',
+      apEmail: opts.apEmail || opts.clientEmail || 'josiah@redthreads.com',
+      resetFixtures: opts.resetFixtures !== false,
+      reviewInvoiceArtifact: artifact
+    });
+    window.RED_THREADS_LAST_EMAIL_REVIEW_SUITE_RESULT = resp;
+    return resp;
+  }
+
+  window.RED_THREADS_BUILD_EMAIL_REVIEW_ARTIFACT = buildEmailReviewSuitePortalRenderedArtifact_;
+  window.RED_THREADS_SEND_EMAIL_REVIEW_SUITE = sendEmailReviewSuiteFromPortal_;
+
   function setQuantityMapValue(jobId, skuId, colorway, size, qty){
     if (!PORTAL_STATE.quantities || typeof PORTAL_STATE.quantities !== 'object') PORTAL_STATE.quantities = {};
     const key = quantityStateKey(jobId, skuId, colorway, size);

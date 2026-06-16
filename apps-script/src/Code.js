@@ -314,9 +314,13 @@ const LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS = {
   required_invoice: 'required_invoice_attachment_missing',
   required_receipt: 'required_receipt_attachment_missing',
   required_portal_rendered_invoice: 'required_portal_rendered_invoice_missing',
+  non_portal_rendered_invoice: 'non_portal_rendered_invoice_attachment_rejected',
   required_document: 'required_document_attachment_missing',
   optional_unavailable: 'optional_attachment_unavailable'
 };
+const PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER = 'redthreads_portal_rendered_summary_invoice_v1';
+const PORTAL_RENDERED_INVOICE_FILE_NAME_RE = /^Red Threads Project(?:-[^-]+)?-(?:Invoice|Receipt|Summary)(?:-|\.)/i;
+const LEGACY_SERVER_INVOICE_FILE_NAME_RE = /^INV-\d{8}-[A-Z0-9]{8}\b/i;
 const CHAT_MESSAGE_DIGEST_DELAY_MS = 10 * 60 * 1000;
 const CHAT_MESSAGE_DIGEST_DIRECTIONS = {
   client_to_team: 'client_to_team',
@@ -1619,6 +1623,9 @@ function doPost(e) {
     }
     if (action === 'send_email_review_suite') {
       return jsonOutput_(sendEmailReviewSuite(payload));
+    }
+    if (action === 'audit_email_review_artifacts') {
+      return jsonOutput_(auditEmailReviewArtifacts(payload));
     }
     if (action === 'get_account_status') {
       return jsonOutput_(getAccountStatus(payload));
@@ -19853,7 +19860,13 @@ function storePortalPdfBlobInInvoiceFolder_(opts) {
   const defaultName = trimString_(options.defaultFileName || options.fileName || 'Red-Threads-Invoice.pdf');
   const fileName = sanitizeUploadedDocumentName_(options.fileName, defaultName);
   const blob = Utilities.newBlob(bytes, trimString_(options.mimeType) || MimeType.PDF, fileName);
+  if (doesPdfBlobContainLegacyInvoiceMarker_(blob)) {
+    throw new Error(LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice);
+  }
   const file = folder.createFile(blob);
+  try {
+    file.setDescription(PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER);
+  } catch (_) {}
   return {
     fileId: file.getId(),
     fileName: file.getName(),
@@ -20030,7 +20043,9 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
 }
 
 function buildFinalInvoiceAttachment_(orderSummary, fileNameOverride) {
-  const result = buildLifecycleEmailAttachmentSafe_(orderSummary, fileNameOverride);
+  const result = buildLifecycleEmailAttachmentSafe_(orderSummary, fileNameOverride, {
+    requirePortalRenderedInvoice: true
+  });
   return result && result.ok === true ? result.attachment : null;
 }
 
@@ -20050,46 +20065,47 @@ function isRequiredLifecycleEmailAttachmentPolicy_(policy) {
 function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
   const source = (context && typeof context === 'object') ? context : {};
   const type = trimString_(family).toLowerCase();
-  const policy = function(value, safeError) {
+  const policy = function(value, safeError, portalRenderedInvoice) {
     return {
       policy: normalizeLifecycleEmailAttachmentPolicy_(value),
-      safeError: trimString_(safeError)
+      safeError: trimString_(safeError),
+      portalRenderedInvoice: portalRenderedInvoice === true
     };
   };
   if (type === 'standard_ach') {
     const baseType = getAchLifecycleBaseEmailJobType_(milestone);
     if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable, true);
     }
     if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
     }
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
   }
   if (type === 'ap_ach') {
     const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
     if (isApAchLifecycleFailureMilestone_(normalized) || normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable, true);
     }
     if (isApAchLifecycleReceiptMilestone_(normalized)) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
     }
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
   }
   if (type === 'payment_lifecycle') {
     const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
     if (isPaymentLifecycleFailureMilestone_(normalized)) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable, true);
     }
     if (isPaymentLifecycleReceiptMilestone_(normalized)) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
     }
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
   }
   if (type === 'ap_payment_link' ||
       type === 'locked_order_confirmation' ||
       type === 'purchase_order_invoice_email') {
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
   }
   if (type === 'account_document_source' || type === 'account_document_approved') {
     return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
@@ -20100,8 +20116,56 @@ function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
   return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.not_applicable, '');
 }
 
-function buildLifecycleEmailAttachmentSafe_(invoiceOrFileSource, fileNameOverride) {
+function getDriveFileDescriptionSafe_(file) {
+  try {
+    return trimString_(file && typeof file.getDescription === 'function' ? file.getDescription() : '');
+  } catch (_) {
+    return '';
+  }
+}
+
+function doesPdfBlobContainLegacyInvoiceMarker_(blob) {
+  try {
+    const text = String(blob && typeof blob.getDataAsString === 'function' ? blob.getDataAsString() : '');
+    return /Red Threads Portal Invoice/i.test(text);
+  } catch (_) {
+    return false;
+  }
+}
+
+function validatePortalRenderedInvoiceAttachmentFile_(file, attachmentFileName, blob) {
+  const driveName = trimString_(file && typeof file.getName === 'function' ? file.getName() : '');
+  const outboundName = trimString_(attachmentFileName);
+  const description = getDriveFileDescriptionSafe_(file);
+  if (description.indexOf(PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER) !== -1) {
+    return { ok: true, reason: 'portal_rendered_marker' };
+  }
+  if (doesPdfBlobContainLegacyInvoiceMarker_(blob)) {
+    return { ok: false, reason: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice };
+  }
+  if (LEGACY_SERVER_INVOICE_FILE_NAME_RE.test(driveName)) {
+    return { ok: false, reason: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice };
+  }
+  if (LEGACY_SERVER_INVOICE_FILE_NAME_RE.test(outboundName)) {
+    return { ok: false, reason: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice };
+  }
+  if (PORTAL_RENDERED_INVOICE_FILE_NAME_RE.test(driveName)) {
+    return { ok: true, reason: 'portal_rendered_filename' };
+  }
+  return { ok: false, reason: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice };
+}
+
+function shouldRequirePortalRenderedInvoiceAttachment_(policyInfo, options) {
+  const info = (policyInfo && typeof policyInfo === 'object') ? policyInfo : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  return opts.requirePortalRenderedInvoice === true ||
+    info.portalRenderedInvoice === true ||
+    trimString_(opts.safeError || info.safeError) === LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice;
+}
+
+function buildLifecycleEmailAttachmentSafe_(invoiceOrFileSource, fileNameOverride, options) {
   const source = (invoiceOrFileSource && typeof invoiceOrFileSource === 'object') ? invoiceOrFileSource : {};
+  const opts = (options && typeof options === 'object') ? options : {};
   let file = null;
   if (source && typeof source.getBlob === 'function' && typeof source.getName === 'function') {
     file = source;
@@ -20132,7 +20196,20 @@ function buildLifecycleEmailAttachmentSafe_(invoiceOrFileSource, fileNameOverrid
       file.getName(),
     file.getName()
   );
-  const attachment = file.getBlob().setName(fileName);
+  const blob = file.getBlob();
+  if (opts.requirePortalRenderedInvoice === true) {
+    const validation = validatePortalRenderedInvoiceAttachmentFile_(file, fileName, blob);
+    if (!validation || validation.ok !== true) {
+      return {
+        ok: false,
+        attachment: null,
+        attachments: [],
+        fileName: fileName,
+        error: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice
+      };
+    }
+  }
+  const attachment = blob.setName(fileName);
   return {
     ok: true,
     attachment: attachment,
@@ -20157,13 +20234,16 @@ function resolveLifecycleEmailAttachment_(source, policyInfo, options) {
       error: ''
     };
   }
-  const result = buildLifecycleEmailAttachmentSafe_(source, trimString_(opts.fileNameOverride || opts.fileName));
+  const requirePortalRenderedInvoice = shouldRequirePortalRenderedInvoiceAttachment_(info, opts);
+  const result = buildLifecycleEmailAttachmentSafe_(source, trimString_(opts.fileNameOverride || opts.fileName), {
+    requirePortalRenderedInvoice: requirePortalRenderedInvoice
+  });
   if (result && result.ok === true && result.attachment) {
     return Object.assign({}, result, {
       policy: policy
     });
   }
-  const safeError = trimString_(opts.safeError || info.safeError) ||
+  const safeError = trimString_(result && result.error) || trimString_(opts.safeError || info.safeError) ||
     (isRequiredLifecycleEmailAttachmentPolicy_(policy)
       ? LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document
       : LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
@@ -25407,6 +25487,9 @@ function sendSummaryEstimatePdfEmail(payload) {
       : (dealNumber ? ('Red Threads Project-' + dealNumber + '-Summary.pdf') : 'Red Threads Project-Summary.pdf')
   );
   const blob = Utilities.newBlob(bytes, trimString_(p.mimeType) || MimeType.PDF, fileName);
+  if (doesPdfBlobContainLegacyInvoiceMarker_(blob)) {
+    throw new Error(LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice);
+  }
   const subject = documentKind === 'invoice'
     ? (dealNumber ? ('Red Threads Project ' + dealNumber + ' Invoice') : 'Red Threads Project Invoice')
     : (dealNumber ? ('Red Threads Project ' + dealNumber + ' Summary') : 'Red Threads Project Summary');
@@ -25455,6 +25538,17 @@ function sendEmailReviewSuite(payload) {
   }
 }
 
+function auditEmailReviewArtifacts(payload) {
+  try {
+    return auditEmailReviewArtifacts_(payload);
+  } catch (err) {
+    return {
+      ok: false,
+      error: normalizeEmailReviewError_(err)
+    };
+  }
+}
+
 function sendEmailReviewSuite_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   const cfg = getConfig_();
@@ -25464,10 +25558,20 @@ function sendEmailReviewSuite_(payload) {
   }
 
   const recipients = buildEmailReviewRecipients_(p);
+  const reviewInvoiceArtifact = storeEmailReviewPortalRenderedInvoiceArtifact_(p, cfg);
+  if (!reviewInvoiceArtifact) {
+    return {
+      ok: false,
+      review: true,
+      error: 'email_review_portal_rendered_invoice_required'
+    };
+  }
   const ss = SpreadsheetApp.openById(cfg.sheetId);
   const resetSummary = p.resetFixtures === false ? null : resetEmailReviewFixtures_(ss, cfg);
+  const artifactRefreshSummary = refreshEmailReviewOrderArtifactPointers_(ss, cfg, reviewInvoiceArtifact);
   const infra = ensurePortalInfrastructure_(ss, cfg);
   const fixture = buildEmailReviewFixtureContext_(ss, cfg, infra);
+  fixture.reviewInvoiceArtifact = reviewInvoiceArtifact;
   const results = [];
 
   sendEmailReviewStandardAchExamples_(results, fixture, recipients);
@@ -25483,12 +25587,88 @@ function sendEmailReviewSuite_(payload) {
   return {
     ok: failedCount === 0,
     review: true,
+    portalRenderedInvoiceArtifact: true,
     resetFixtures: !!resetSummary,
     resetSummary: resetSummary,
+    artifactRefreshSummary: artifactRefreshSummary,
     sentCount: sentCount,
     skippedCount: skippedCount,
     failedCount: failedCount,
     results: results
+  };
+}
+
+function storeEmailReviewPortalRenderedInvoiceArtifact_(payload, cfg) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const artifact = (p.reviewInvoiceArtifact && typeof p.reviewInvoiceArtifact === 'object') ? p.reviewInvoiceArtifact : {};
+  const base64Data = trimString_(artifact.base64Data || p.reviewInvoiceBase64Data);
+  if (!base64Data) return null;
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd');
+  const stored = storePortalPdfBlobInInvoiceFolder_({
+    cfg: cfg || getConfig_(),
+    base64Data: base64Data,
+    mimeType: trimString_(artifact.mimeType || p.reviewInvoiceMimeType) || MimeType.PDF,
+    fileName: trimString_(artifact.fileName || p.reviewInvoiceFileName),
+    defaultFileName: 'Red Threads Project-EmailReview-Invoice-' + stamp + '.pdf'
+  });
+  return {
+    invoicePdfUrl: trimString_(stored.fileUrl),
+    invoiceFileId: trimString_(stored.fileId),
+    fileName: trimString_(stored.fileName),
+    marker: PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER
+  };
+}
+
+function refreshEmailReviewOrderArtifactPointers_(ss, cfg, artifact) {
+  const source = (artifact && typeof artifact === 'object') ? artifact : {};
+  if (!trimString_(source.invoicePdfUrl || source.invoiceFileId)) {
+    return { ok: false, error: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice };
+  }
+  const targetNames = uniqueTrimmedStrings_([
+    cfg && cfg.portalOrdersSheetName,
+    'FIXTURE_PORTAL_ORDERS'
+  ]);
+  return {
+    ok: true,
+    targets: targetNames.map(function(sheetName) {
+      return refreshEmailReviewOrderArtifactPointersForSheet_(ss, sheetName, source);
+    })
+  };
+}
+
+function refreshEmailReviewOrderArtifactPointersForSheet_(ss, sheetName, artifact) {
+  const sheet = ss && ss.getSheetByName(trimString_(sheetName));
+  if (!sheet) return { sheet: trimString_(sheetName), ok: false, skipped: true, reason: 'sheet_missing' };
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return { sheet: trimString_(sheetName), ok: true, updatedRows: 0 };
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(header) {
+    return trimString_(header).toLowerCase();
+  });
+  const tokenCol = headers.indexOf('token');
+  const invoiceUrlCol = headers.indexOf('invoicepdfurl');
+  const invoiceFileIdCol = headers.indexOf('invoicefileid');
+  const invoiceFileNameCol = headers.indexOf('invoicefilename');
+  if (invoiceUrlCol < 0) {
+    return { sheet: trimString_(sheetName), ok: false, skipped: true, reason: 'invoice_column_missing' };
+  }
+  const values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  let updatedRows = 0;
+  values.forEach(function(row) {
+    const hasToken = tokenCol >= 0 ? !!trimString_(row[tokenCol]) : row.some(function(value) { return !!trimString_(value); });
+    if (!hasToken) return;
+    row[invoiceUrlCol] = trimString_(artifact.invoicePdfUrl);
+    if (invoiceFileIdCol >= 0) row[invoiceFileIdCol] = trimString_(artifact.invoiceFileId);
+    if (invoiceFileNameCol >= 0) row[invoiceFileNameCol] = trimString_(artifact.fileName);
+    updatedRows += 1;
+  });
+  if (updatedRows) {
+    sheet.getRange(2, 1, values.length, lastCol).setValues(values);
+  }
+  return {
+    sheet: trimString_(sheetName),
+    ok: true,
+    updatedRows: updatedRows
   };
 }
 
@@ -25678,6 +25858,63 @@ function findEmailReviewExportRowForOrder_(exportRows, orderInfo) {
   return null;
 }
 
+function auditEmailReviewArtifacts_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const cfg = getConfig_();
+  const token = trimString_(p.token);
+  if (!validateTeamModeAuthKey_(token, trimString_(p.teamAuthKey), cfg)) {
+    return { ok: false, error: 'Team authorization expired. Re-enter Team Mode and try again.' };
+  }
+  const ss = SpreadsheetApp.openById(cfg.sheetId);
+  const infra = ensurePortalInfrastructure_(ss, cfg);
+  const fixture = buildEmailReviewFixtureContext_(ss, cfg, infra);
+  const rows = [];
+  [
+    { label: 'Standard ACH pending', family: 'standard_ach', recipientClass: 'client', order: fixture.standardAchPending || fixture.baseOrder, required: true },
+    { label: 'Standard ACH receipt', family: 'standard_ach', recipientClass: 'client', order: fixture.standardAchPaid || fixture.standardAchPending || fixture.baseOrder, required: true },
+    { label: 'AP ACH pending', family: 'ap_ach', recipientClass: 'ap', order: fixture.apAch || fixture.baseOrder, required: true },
+    { label: 'AP ACH receipt', family: 'ap_ach', recipientClass: 'ap', order: fixture.apAch || fixture.baseOrder, required: true },
+    { label: 'Card paid', family: 'payment_lifecycle', recipientClass: 'client', order: fixture.baseOrder || fixture.standardAchPaid, required: true },
+    { label: 'PO submitted', family: 'payment_lifecycle', recipientClass: 'client', order: fixture.po || fixture.baseOrder, required: true },
+    { label: 'Manual/check/cash pending', family: 'payment_lifecycle', recipientClass: 'client', order: fixture.manual || fixture.baseOrder, required: true },
+    { label: 'Locked-order resend', family: 'locked_order_confirmation', recipientClass: 'client', order: fixture.baseOrder || fixture.standardAchPaid, required: true }
+  ].forEach(function(item) {
+    rows.push(auditEmailReviewStoredArtifactRow_(item));
+  });
+  const rejectedCount = rows.filter(function(row) { return row.accepted !== true; }).length;
+  return {
+    ok: rejectedCount === 0,
+    reviewArtifactAudit: true,
+    checkedCount: rows.length,
+    rejectedCount: rejectedCount,
+    results: rows
+  };
+}
+
+function auditEmailReviewStoredArtifactRow_(item) {
+  const orderInfo = item && item.order;
+  const summary = buildPortalOrderSummary_(orderInfo && orderInfo.rowObjNormalized);
+  const source = {
+    invoicePdfUrl: trimString_(summary.invoicePdfUrl),
+    invoiceFileId: trimString_(summary.invoiceFileId),
+    fileName: trimString_(summary.invoiceFileName || summary.fileName)
+  };
+  const result = buildLifecycleEmailAttachmentSafe_(source, '', {
+    requirePortalRenderedInvoice: true
+  });
+  return {
+    label: trimString_(item && item.label),
+    family: trimString_(item && item.family),
+    recipientClass: trimString_(item && item.recipientClass),
+    attachmentRequired: item && item.required === true,
+    fileName: trimString_(result && result.fileName),
+    accepted: result && result.ok === true,
+    reason: result && result.ok === true
+      ? 'portal_rendered_attachment_accepted'
+      : trimString_(result && result.error) || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
+  };
+}
+
 function cloneEmailReviewOrderInfo_(orderInfo, overrides) {
   const base = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const row = Object.assign({}, base, overrides || {});
@@ -25726,13 +25963,31 @@ function buildEmailReviewFailedOrderInfo_(orderInfo, paymentMethod, options) {
   }, opts.overrides || {}));
 }
 
+function buildEmailReviewInvoiceAttachmentName_(summary, fallbackFileName, options) {
+  const source = (summary && typeof summary === 'object') ? summary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const dealNumber = trimString_(source.dealNumber || source.dealnumber);
+  const kind = trimString_(opts.kind).toLowerCase() === 'receipt' ? 'Receipt' : 'Invoice';
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd');
+  if (dealNumber) return 'Red Threads Project-' + dealNumber + '-' + kind + '-' + stamp + '.pdf';
+  return trimString_(fallbackFileName) || ('Red Threads Project-EmailReview-' + kind + '-' + stamp + '.pdf');
+}
+
 function buildEmailReviewInvoiceInfo_(fixture, orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
+  const override = fixture && fixture.reviewInvoiceArtifact ? fixture.reviewInvoiceArtifact : null;
+  if (!override || !trimString_(override.invoicePdfUrl || override.invoiceFileId)) {
+    throw new Error('email_review_portal_rendered_invoice_required');
+  }
   return {
     invoiceNumber: trimString_(summary.invoiceNumber),
-    invoicePdfUrl: trimString_(summary.invoicePdfUrl),
-    fileName: ''
+    invoicePdfUrl: trimString_(override.invoicePdfUrl),
+    invoiceFileId: trimString_(override.invoiceFileId),
+    fileName: buildEmailReviewInvoiceAttachmentName_(summary, override.fileName, {
+      kind: opts.fresh === true ? 'receipt' : 'invoice'
+    })
   };
 }
 
