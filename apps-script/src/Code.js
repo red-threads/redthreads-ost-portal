@@ -1616,6 +1616,9 @@ function doPost(e) {
     if (action === 'auth_send_reset_code') {
       return jsonOutput_(authSendResetCode(payload));
     }
+    if (action === 'send_email_review_suite') {
+      return jsonOutput_(sendEmailReviewSuite(payload));
+    }
     if (action === 'get_account_status') {
       return jsonOutput_(getAccountStatus(payload));
     }
@@ -25476,6 +25479,854 @@ function sendSummaryEstimatePdfEmail(payload) {
     attachments: [blob],
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
+  });
+}
+
+/* ---------------- Owner Email Review Harness ---------------- */
+
+function sendEmailReviewSuite(payload) {
+  try {
+    return sendEmailReviewSuite_(payload);
+  } catch (err) {
+    return {
+      ok: false,
+      error: normalizeEmailReviewError_(err)
+    };
+  }
+}
+
+function sendEmailReviewSuite_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const cfg = getConfig_();
+  const token = trimString_(p.token);
+  if (!validateTeamModeAuthKey_(token, trimString_(p.teamAuthKey), cfg)) {
+    return { ok: false, error: 'Team authorization expired. Re-enter Team Mode and try again.' };
+  }
+
+  const recipients = buildEmailReviewRecipients_(p);
+  const ss = SpreadsheetApp.openById(cfg.sheetId);
+  const resetSummary = p.resetFixtures === false ? null : resetEmailReviewFixtures_(ss, cfg);
+  const infra = ensurePortalInfrastructure_(ss, cfg);
+  const fixture = buildEmailReviewFixtureContext_(ss, cfg, infra);
+  const results = [];
+
+  sendEmailReviewStandardAchExamples_(results, fixture, recipients);
+  sendEmailReviewApAchExamples_(results, fixture, recipients);
+  sendEmailReviewPaymentExamples_(results, fixture, recipients);
+  sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients);
+  sendEmailReviewChatExamples_(results, fixture, recipients);
+  sendEmailReviewUtilityExamples_(results, fixture, recipients);
+
+  const sentCount = results.filter(function(item) { return item.ok === true && item.sent === true; }).length;
+  const skippedCount = results.filter(function(item) { return item.skipped === true; }).length;
+  const failedCount = results.filter(function(item) { return item.ok === false && item.skipped !== true; }).length;
+  return {
+    ok: failedCount === 0,
+    review: true,
+    resetFixtures: !!resetSummary,
+    resetSummary: resetSummary,
+    sentCount: sentCount,
+    skippedCount: skippedCount,
+    failedCount: failedCount,
+    results: results
+  };
+}
+
+function buildEmailReviewRecipients_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  return {
+    client: assertEmailReviewRecipient_(p.clientEmail || 'josiah@redthreads.com', 'clientEmail'),
+    ap: assertEmailReviewRecipient_(p.apEmail || p.clientEmail || 'josiah@redthreads.com', 'apEmail'),
+    team: assertEmailReviewRecipient_(p.teamEmail || DOCUMENT_REVIEW_EMAIL, 'teamEmail')
+  };
+}
+
+function assertEmailReviewRecipient_(email, label) {
+  const normalized = normalizeEmail_(email);
+  if (!normalized || !/@redthreads\.com$/i.test(normalized)) {
+    throw new Error(trimString_(label) + ' must be a redthreads.com email.');
+  }
+  return normalized;
+}
+
+function resetEmailReviewFixtures_(ss, cfg) {
+  const operations = [];
+  operations.push(copyEmailReviewFixtureSheet_(ss, 'FIXTURE_EXPORT', cfg.exportLogSheetName));
+  operations.push(copyEmailReviewFixtureSheet_(ss, 'FIXTURE_PORTAL_ORDERS', cfg.portalOrdersSheetName));
+  operations.push(copyEmailReviewFixtureSheet_(ss, 'FIXTURE_STRIPE_EVENTS', PORTAL_STRIPE_EVENTS_SHEET_NAME, {
+    columnCount: PORTAL_STRIPE_EVENTS_HEADERS.length
+  }));
+  operations.push(clearEmailReviewQueueRows_(getPortalEmailQueueSheet_(ss)));
+  SpreadsheetApp.flush();
+  return {
+    ok: true,
+    operations: operations
+  };
+}
+
+function copyEmailReviewFixtureSheet_(ss, sourceName, targetName, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const source = ss.getSheetByName(sourceName);
+  const target = ss.getSheetByName(targetName);
+  if (!source) throw new Error('Fixture source sheet missing: ' + sourceName);
+  if (!target) throw new Error('Fixture target sheet missing: ' + targetName);
+  const sourceRows = Math.max(1, source.getLastRow());
+  const sourceCols = Math.max(1, Math.min(
+    Math.max(1, parseInt(String(opts.columnCount || source.getLastColumn()), 10) || source.getLastColumn()),
+    source.getLastColumn()
+  ));
+  assertEmailReviewFixtureHeadersMatch_(source, target, sourceCols);
+  if (target.getMaxRows() < sourceRows) {
+    target.insertRowsAfter(target.getMaxRows(), sourceRows - target.getMaxRows());
+  }
+  if (target.getMaxColumns() < sourceCols) {
+    target.insertColumnsAfter(target.getMaxColumns(), sourceCols - target.getMaxColumns());
+  }
+  const clearCols = Math.max(target.getLastColumn(), sourceCols);
+  target.getRange(1, 1, target.getMaxRows(), clearCols).clearContent();
+  const values = source.getRange(1, 1, sourceRows, sourceCols).getValues();
+  target.getRange(1, 1, sourceRows, sourceCols).setValues(values);
+  return {
+    source: sourceName,
+    target: targetName,
+    rows: sourceRows,
+    columns: sourceCols
+  };
+}
+
+function assertEmailReviewFixtureHeadersMatch_(source, target, columnCount) {
+  const cols = Math.max(1, parseInt(String(columnCount || 0), 10) || 0);
+  if (!cols) throw new Error('fixture_header_check_failed');
+  if (target.getLastColumn() < cols) {
+    throw new Error('fixture_header_mismatch');
+  }
+  const sourceHeaders = source.getRange(1, 1, 1, cols).getValues()[0].map(function(value) {
+    return trimString_(value).toLowerCase();
+  });
+  const targetHeaders = target.getRange(1, 1, 1, cols).getValues()[0].map(function(value) {
+    return trimString_(value).toLowerCase();
+  });
+  for (let i = 0; i < cols; i++) {
+    if (sourceHeaders[i] !== targetHeaders[i]) {
+      throw new Error('fixture_header_mismatch');
+    }
+  }
+  return true;
+}
+
+function clearEmailReviewQueueRows_(queueSheet) {
+  const lastCol = Math.max(queueSheet.getLastColumn(), PORTAL_EMAIL_QUEUE_HEADERS.length);
+  if (queueSheet.getMaxRows() > 1) {
+    queueSheet.getRange(2, 1, queueSheet.getMaxRows() - 1, lastCol).clearContent();
+  }
+  return {
+    target: PORTAL_EMAIL_QUEUE_SHEET_NAME,
+    rowsCleared: Math.max(0, queueSheet.getMaxRows() - 1),
+    columns: lastCol
+  };
+}
+
+function buildEmailReviewFixtureContext_(ss, cfg, infra) {
+  const exportRows = listSheetRowInfos_(infra.exportSheet).filter(function(info) {
+    return !!trimString_(info && info.rowObjNormalized && info.rowObjNormalized.token);
+  });
+  const orderRows = listSheetRowInfos_(infra.ordersSheet).filter(function(info) {
+    return !!trimString_(info && info.rowObjNormalized && info.rowObjNormalized.token);
+  });
+  const accountRows = listSheetRowInfos_(infra.accountsSheet).filter(function(info) {
+    return !!trimString_(info && info.rowObjNormalized && info.rowObjNormalized.accountid);
+  });
+
+  const firstOrder = function(predicate) {
+    for (let i = 0; i < orderRows.length; i++) {
+      if (predicate(orderRows[i].rowObjNormalized || {})) return orderRows[i];
+    }
+    return null;
+  };
+  const standardAchPending = firstOrder(function(row) {
+    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.ach &&
+      trimString_(row.achpaymentsource).toLowerCase() === ACH_PAYMENT_METHOD_SOURCES.order_checkout &&
+      trimString_(row.paymentstate).toLowerCase() !== PAYMENT_STATES.paid;
+  });
+  const standardAchPaid = firstOrder(function(row) {
+    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.ach &&
+      trimString_(row.achpaymentsource).toLowerCase() === ACH_PAYMENT_METHOD_SOURCES.order_checkout &&
+      trimString_(row.paymentstate).toLowerCase() === PAYMENT_STATES.paid;
+  });
+  const apAch = firstOrder(function(row) {
+    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.ach &&
+      trimString_(row.achpaymentsource).toLowerCase() === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  });
+  const manual = firstOrder(function(row) {
+    const method = trimString_(row.paymentmethodselected).toLowerCase();
+    return method === PAYMENT_METHODS.check || method === PAYMENT_METHODS.cash;
+  });
+  const po = firstOrder(function(row) {
+    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.purchase_order;
+  });
+  const baseOrder = standardAchPaid || standardAchPending || manual || po || apAch || orderRows[0] || null;
+  const chatRow = findEmailReviewExportRowForOrder_(exportRows, baseOrder) || exportRows[0] || null;
+  const accountContext = buildEmailReviewAccountContext_(cfg, ss, infra, accountRows, chatRow);
+  return {
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    exportRows: exportRows,
+    orderRows: orderRows,
+    accountRows: accountRows,
+    baseOrder: baseOrder,
+    standardAchPending: standardAchPending,
+    standardAchPaid: standardAchPaid,
+    apAch: apAch,
+    manual: manual,
+    po: po,
+    chatRow: chatRow,
+    accountContext: accountContext
+  };
+}
+
+function buildEmailReviewAccountContext_(cfg, ss, infra, accountRows, fallbackExportRow) {
+  const accountInfo = accountRows.length ? {
+    rowInfo: accountRows[0],
+    summary: buildPortalAccountSummary_(accountRows[0].rowObjNormalized, cfg)
+  } : null;
+  const identity = fallbackExportRow
+    ? deriveOrgContextFromRow_(fallbackExportRow.rowObjNormalized)
+    : {};
+  return {
+    ok: true,
+    payload: {},
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    token: trimString_(fallbackExportRow && fallbackExportRow.rowObjNormalized && fallbackExportRow.rowObjNormalized.token),
+    identity: identity,
+    exportRowInfo: fallbackExportRow || null,
+    accountInfo: accountInfo || {
+      summary: buildEphemeralAccountSummary_(identity, cfg),
+      rowInfo: null
+    }
+  };
+}
+
+function findEmailReviewExportRowForOrder_(exportRows, orderInfo) {
+  const token = trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.token);
+  if (!token) return null;
+  for (let i = 0; i < exportRows.length; i++) {
+    if (trimString_(exportRows[i].rowObjNormalized && exportRows[i].rowObjNormalized.token) === token) return exportRows[i];
+  }
+  return null;
+}
+
+function cloneEmailReviewOrderInfo_(orderInfo, overrides) {
+  const base = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const row = Object.assign({}, base, overrides || {});
+  if (!trimString_(row.lastupdatedat)) row.lastupdatedat = nowIso_();
+  return {
+    row: orderInfo && orderInfo.row,
+    rowObj: orderInfo && orderInfo.rowObj,
+    rowObjNormalized: row,
+    colMap: orderInfo && orderInfo.colMap
+  };
+}
+
+function buildEmailReviewPaidOrderInfo_(orderInfo, paymentMethod, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const now = nowIso_();
+  return cloneEmailReviewOrderInfo_(orderInfo, Object.assign({
+    paymentmethodselected: trimString_(paymentMethod),
+    paymentstate: PAYMENT_STATES.paid,
+    orderstate: ORDER_STATES.ready_for_production,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    paidat: now,
+    paymentreceivedmanuallyat: trimString_(paymentMethod) === PAYMENT_METHODS.check || trimString_(paymentMethod) === PAYMENT_METHODS.cash ? now : '',
+    authorizedtoproduceat: now,
+    stripelatesteventtype: '',
+    stripelatesteventat: now,
+    lastupdatedat: now
+  }, opts.overrides || {}));
+}
+
+function buildEmailReviewFailedOrderInfo_(orderInfo, paymentMethod, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const now = nowIso_();
+  return cloneEmailReviewOrderInfo_(orderInfo, Object.assign({
+    paymentmethodselected: trimString_(paymentMethod),
+    paymentstate: PAYMENT_STATES.failed,
+    orderstate: ORDER_STATES.awaiting_payment_confirmation,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    paidat: '',
+    paymentreceivedmanuallyat: '',
+    authorizedtoproduceat: '',
+    achfailurecode: 'review_fixture_payment_failed',
+    achfailuremessage: 'Payment could not be completed in this review fixture.',
+    stripelatesteventtype: 'payment_intent.payment_failed',
+    stripelatesteventat: now,
+    lastupdatedat: now
+  }, opts.overrides || {}));
+}
+
+function buildEmailReviewInvoiceInfo_(fixture, orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  if (opts.fresh === true || !trimString_(summary.invoicePdfUrl)) {
+    return generateInvoiceDocumentForOrder_(row, {
+      cfg: fixture.cfg,
+      invoiceNumber: trimString_(summary.invoiceNumber)
+    });
+  }
+  return {
+    invoiceNumber: trimString_(summary.invoiceNumber),
+    invoicePdfUrl: trimString_(summary.invoicePdfUrl),
+    fileName: ''
+  };
+}
+
+function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const summary = buildPortalOrderSummary_(orderInfo && orderInfo.rowObjNormalized);
+  const policy = resolveLifecycleEmailAttachmentPolicy_(family, milestone, opts.context || {});
+  const result = resolveLifecycleEmailAttachment_(Object.assign({}, summary, {
+    invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber),
+    invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl) || trimString_(summary.invoicePdfUrl),
+    invoiceFileId: trimString_(invoiceInfo && invoiceInfo.invoiceFileId),
+    fileName: trimString_(invoiceInfo && invoiceInfo.fileName)
+  }), policy, {
+    fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
+  });
+  if (result.ok !== true) throw new Error(result.error || 'required_attachment_missing');
+  return result.attachments || [];
+}
+
+function sendEmailReviewContent_(results, label, family, recipientClass, recipients, content, attachments, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const toList = normalizeEmailRecipients_(recipients);
+  try {
+    if (!toList.length) throw new Error('missing_review_recipient');
+    const htmlBody = [
+      '<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.5;color:#334155;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:12px 14px;margin:0 0 16px;">',
+      '<strong>Email review fixture:</strong> ' + escapeHtml_(label),
+      '</div>',
+      trimString_(content && content.htmlBody)
+    ].filter(Boolean).join('\n');
+    const body = [
+      '[EMAIL REVIEW: ' + label + ']',
+      '',
+      String((content && content.body) || '').trim()
+    ].join('\n');
+    const emailResult = sendNotificationEmail_({
+      toList: toList,
+      ccList: normalizeEmailRecipients_(opts.ccList),
+      subject: '[EMAIL REVIEW] ' + label + ' - ' + trimString_(content && content.subject),
+      body: body,
+      htmlBody: htmlBody,
+      attachments: Array.isArray(attachments) ? attachments : []
+    });
+    results.push({
+      ok: emailResult && emailResult.ok === true,
+      sent: emailResult && emailResult.ok === true,
+      label: label,
+      family: family,
+      recipientClass: recipientClass,
+      attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
+      transport: trimString_(emailResult && emailResult.transport),
+      noReply: emailResult && emailResult.noReply === true
+    });
+  } catch (err) {
+    results.push({
+      ok: false,
+      label: label,
+      family: family,
+      recipientClass: recipientClass,
+      attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
+      error: normalizeEmailReviewError_(err)
+    });
+  }
+}
+
+function skipEmailReviewResult_(results, label, family, recipientClass, reason) {
+  results.push({
+    ok: true,
+    skipped: true,
+    label: label,
+    family: family,
+    recipientClass: recipientClass,
+    reason: trimString_(reason) || 'fixture_missing'
+  });
+}
+
+function normalizeEmailReviewError_(err) {
+  const raw = String((err && err.message) || err || 'email_review_failed');
+  if (/client_secret|hosted_verification_url|routing|account_number|raw webhook/i.test(raw)) return 'email_review_failed';
+  return raw.replace(/\s+/g, ' ').slice(0, 160);
+}
+
+function sendEmailReviewStandardAchExamples_(results, fixture, recipients) {
+  const pendingBase = fixture.standardAchPending || fixture.standardAchPaid || fixture.baseOrder;
+  const paidBase = fixture.standardAchPaid || pendingBase;
+  if (!pendingBase) {
+    skipEmailReviewResult_(results, 'Standard ACH pending', 'standard_ach', 'client', 'fixture_missing');
+    return;
+  }
+  const pending = cloneEmailReviewOrderInfo_(pendingBase, {
+    paymentmethodselected: PAYMENT_METHODS.ach,
+    paymentstate: PAYMENT_STATES.pending,
+    orderstate: ORDER_STATES.awaiting_payment_confirmation,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.order_checkout,
+    achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    achverificationstatus: ACH_DETAIL_STATES.processing
+  });
+  const pendingInvoice = buildEmailReviewInvoiceInfo_(fixture, pending, {});
+  const pendingAttachments = buildEmailReviewAttachments_('standard_ach', PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email, pending, pendingInvoice);
+  [
+    { label: 'Standard ACH pending client', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email, recipientClass: 'client', to: recipients.client },
+    { label: 'Standard ACH pending team', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email, recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'standard_ach', item.recipientClass, [item.to],
+      buildAchLifecycleEmailContent_(item.jobType, pending, pendingInvoice, { cfg: fixture.cfg, ss: fixture.ss, infra: fixture.infra }),
+      pendingAttachments);
+  });
+
+  const verification = cloneEmailReviewOrderInfo_(pendingBase, {
+    paymentmethodselected: PAYMENT_METHODS.ach,
+    paymentstate: PAYMENT_STATES.submitted,
+    orderstate: ORDER_STATES.awaiting_payment_confirmation,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.order_checkout,
+    achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    achverificationstatus: ACH_DETAIL_STATES.bank_verification_pending
+  });
+  const verificationInvoice = buildEmailReviewInvoiceInfo_(fixture, verification, {});
+  const verificationAttachments = buildEmailReviewAttachments_('standard_ach', PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email, verification, verificationInvoice);
+  [
+    { label: 'Standard ACH verification client', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email, recipientClass: 'client', to: recipients.client },
+    { label: 'Standard ACH verification team', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email, recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'standard_ach', item.recipientClass, [item.to],
+      buildAchLifecycleEmailContent_(item.jobType, verification, verificationInvoice, { cfg: fixture.cfg, ss: fixture.ss, infra: fixture.infra }),
+      verificationAttachments);
+  });
+
+  const paid = buildEmailReviewPaidOrderInfo_(paidBase, PAYMENT_METHODS.ach, {
+    overrides: {
+      achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.order_checkout,
+      achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+      achverificationstatus: ACH_DETAIL_STATES.paid
+    }
+  });
+  const paidInvoice = buildEmailReviewInvoiceInfo_(fixture, paid, { fresh: true });
+  const paidAttachments = buildEmailReviewAttachments_('standard_ach', PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email, paid, paidInvoice);
+  [
+    { label: 'Standard ACH receipt client', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email, recipientClass: 'client', to: recipients.client },
+    { label: 'Standard ACH receipt team', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_team_alert_email, recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'standard_ach', item.recipientClass, [item.to],
+      buildAchLifecycleEmailContent_(item.jobType, paid, paidInvoice, { cfg: fixture.cfg, ss: fixture.ss, infra: fixture.infra }),
+      paidAttachments);
+  });
+
+  const failed = buildEmailReviewFailedOrderInfo_(pendingBase, PAYMENT_METHODS.ach, {
+    overrides: {
+      achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.order_checkout,
+      achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+      achverificationstatus: ACH_DETAIL_STATES.failed
+    }
+  });
+  const failedInvoice = buildEmailReviewInvoiceInfo_(fixture, failed, {});
+  const failedAttachments = buildEmailReviewAttachments_('standard_ach', PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email, failed, failedInvoice);
+  [
+    { label: 'Standard ACH failed client', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email, recipientClass: 'client', to: recipients.client },
+    { label: 'Standard ACH failed team', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email, recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'standard_ach', item.recipientClass, [item.to],
+      buildAchLifecycleEmailContent_(item.jobType, failed, failedInvoice, { cfg: fixture.cfg, ss: fixture.ss, infra: fixture.infra }),
+      failedAttachments);
+  });
+}
+
+function sendEmailReviewApAchExamples_(results, fixture, recipients) {
+  const base = fixture.apAch || fixture.standardAchPending || fixture.baseOrder;
+  if (!base) {
+    skipEmailReviewResult_(results, 'AP ACH lifecycle', 'ap_ach', 'ap', 'fixture_missing');
+    return;
+  }
+  const apBase = cloneEmailReviewOrderInfo_(base, {
+    paymentmethodselected: PAYMENT_METHODS.ach,
+    achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+    achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    invoicesenttoemail: recipients.ap
+  });
+  const apSummary = buildPortalOrderSummary_(apBase.rowObjNormalized);
+  const apPaymentLink = buildAchApPaymentPortalUrl_(trimString_(apSummary.token));
+  const apInvoice = buildEmailReviewInvoiceInfo_(fixture, apBase, {});
+  const apLinkAttachments = buildEmailReviewAttachments_('ap_payment_link', '', apBase, apInvoice);
+  const apDraft = safeJsonParse_(apBase.rowObjNormalized.orderdraftjson, {}) || {};
+  sendEmailReviewContent_(results, 'AP payment link sent', 'ap_payment_link', 'ap', [recipients.ap],
+    buildAchApPaymentLinkEmailContent_({ orderDraft: apDraft }, Object.assign({}, apSummary, apInvoice), {
+      apName: 'Accounts Payable',
+      apPaymentLink: apPaymentLink,
+      note: 'Email review copy.'
+    }),
+    apLinkAttachments);
+
+  const submitted = cloneEmailReviewOrderInfo_(apBase, {
+    paymentstate: PAYMENT_STATES.pending,
+    orderstate: ORDER_STATES.awaiting_payment_confirmation,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    achverificationstatus: ACH_DETAIL_STATES.processing
+  });
+  const submittedInvoice = buildEmailReviewInvoiceInfo_(fixture, submitted, {});
+  const submittedAttachments = buildEmailReviewAttachments_('ap_ach', AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted, submitted, submittedInvoice);
+  [
+    { label: 'AP ACH pending AP', recipientClass: 'ap', to: recipients.ap },
+    { label: 'AP ACH pending team', recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'ap_ach', item.recipientClass, [item.to],
+      buildApAchLifecycleEmailContent_(AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted, submitted, submittedInvoice, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        recipientClass: item.recipientClass
+      }),
+      submittedAttachments);
+  });
+
+  const paid = buildEmailReviewPaidOrderInfo_(apBase, PAYMENT_METHODS.ach, {
+    overrides: {
+      achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+      achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+      achverificationstatus: ACH_DETAIL_STATES.paid
+    }
+  });
+  const paidInvoice = buildEmailReviewInvoiceInfo_(fixture, paid, { fresh: true });
+  const paidAttachments = buildEmailReviewAttachments_('ap_ach', AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed, paid, paidInvoice);
+  [
+    { label: 'AP ACH receipt AP', recipientClass: 'ap', to: recipients.ap },
+    { label: 'AP ACH receipt team', recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'ap_ach', item.recipientClass, [item.to],
+      buildApAchLifecycleEmailContent_(AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed, paid, paidInvoice, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        recipientClass: item.recipientClass
+      }),
+      paidAttachments);
+  });
+
+  const failed = buildEmailReviewFailedOrderInfo_(apBase, PAYMENT_METHODS.ach, {
+    overrides: {
+      achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
+      achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+      achverificationstatus: ACH_DETAIL_STATES.failed
+    }
+  });
+  const failedInvoice = buildEmailReviewInvoiceInfo_(fixture, failed, {});
+  const failedAttachments = buildEmailReviewAttachments_('ap_ach', AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed, failed, failedInvoice);
+  [
+    { label: 'AP ACH failed AP', recipientClass: 'ap', to: recipients.ap },
+    { label: 'AP ACH failed team', recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'ap_ach', item.recipientClass, [item.to],
+      buildApAchLifecycleEmailContent_(AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed, failed, failedInvoice, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        recipientClass: item.recipientClass
+      }),
+      failedAttachments);
+  });
+}
+
+function sendEmailReviewPaymentExamples_(results, fixture, recipients) {
+  const base = fixture.baseOrder || fixture.standardAchPaid || fixture.manual || fixture.po;
+  if (!base) {
+    skipEmailReviewResult_(results, 'Payment lifecycle', 'payment_lifecycle', 'client', 'fixture_missing');
+    return;
+  }
+  const manualBase = fixture.manual || base;
+  const poBase = fixture.po || base;
+  const examples = [
+    { label: 'Card paid', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid, order: buildEmailReviewPaidOrderInfo_(base, PAYMENT_METHODS.card), fresh: true },
+    { label: 'Card failed', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed, order: buildEmailReviewFailedOrderInfo_(base, PAYMENT_METHODS.card), fresh: false },
+    { label: 'Manual payment pending', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending, order: cloneEmailReviewOrderInfo_(manualBase, {
+      paymentmethodselected: trimString_(manualBase.rowObjNormalized.paymentmethodselected) || PAYMENT_METHODS.check,
+      paymentstate: PAYMENT_STATES.manual_pending,
+      orderstate: ORDER_STATES.awaiting_manual_payment,
+      productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized
+    }), fresh: false },
+    { label: 'Manual payment received', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received, order: buildEmailReviewPaidOrderInfo_(manualBase, trimString_(manualBase.rowObjNormalized.paymentmethodselected) || PAYMENT_METHODS.check, {
+      overrides: { paymentstate: PAYMENT_STATES.manual_received }
+    }), fresh: true },
+    { label: 'PO submitted', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted, order: cloneEmailReviewOrderInfo_(poBase, {
+      paymentmethodselected: PAYMENT_METHODS.purchase_order,
+      paymentstate: PAYMENT_STATES.not_started,
+      orderstate: ORDER_STATES.awaiting_po_submission,
+      productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.po_pending
+    }), fresh: false },
+    { label: 'PO payment received', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, order: buildEmailReviewPaidOrderInfo_(poBase, PAYMENT_METHODS.purchase_order), fresh: true }
+  ];
+  examples.forEach(function(example) {
+    const invoiceInfo = buildEmailReviewInvoiceInfo_(fixture, example.order, { fresh: example.fresh });
+    const attachments = buildEmailReviewAttachments_('payment_lifecycle', example.milestone, example.order, invoiceInfo);
+    [
+      { suffix: 'client', recipientClass: 'client', to: recipients.client },
+      { suffix: 'team', recipientClass: 'team', to: recipients.team }
+    ].forEach(function(item) {
+      sendEmailReviewContent_(results, example.label + ' ' + item.suffix, 'payment_lifecycle', item.recipientClass, [item.to],
+        buildPaymentLifecycleEmailContent_(example.milestone, example.order, invoiceInfo, {
+          cfg: fixture.cfg,
+          ss: fixture.ss,
+          infra: fixture.infra,
+          recipientClass: item.recipientClass
+        }),
+        attachments);
+    });
+  });
+}
+
+function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
+  const order = fixture.baseOrder || fixture.standardAchPaid || fixture.standardAchPending;
+  if (!order) {
+    skipEmailReviewResult_(results, 'Account document lifecycle', 'portal_lifecycle', 'client', 'fixture_missing');
+    return;
+  }
+  const ctx = fixture.accountContext || {};
+  const metas = [
+    { label: 'Tax exempt submitted team review', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', attachmentRequired: false },
+    { label: 'Tax exempt approved client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
+    { label: 'Tax exempt approved team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
+    { label: 'Tax exempt denied client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', reason: 'Review fixture correction requested.' },
+    { label: 'Tax exempt reset client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
+    { label: 'Credit terms submitted team review', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', attachmentRequired: false },
+    { label: 'Credit terms approved client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30' },
+    { label: 'Credit terms approved team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30' },
+    { label: 'Credit terms denied client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', reason: 'Review fixture correction requested.' },
+    { label: 'Credit terms reset client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application' }
+  ];
+  metas.forEach(function(item) {
+    const meta = {
+      documentType: item.documentType,
+      documentLabel: item.documentLabel,
+      reason: item.reason || '',
+      paymentTermsLabel: item.paymentTermsLabel || '',
+      attachmentRequired: item.attachmentRequired === true
+    };
+    const attachments = buildPortalLifecycleEmailAttachments_(meta);
+    sendEmailReviewContent_(results, item.label, 'portal_lifecycle', item.recipientClass, [item.to],
+      buildPortalLifecycleEmailContent_(item.milestone, order, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        recipientClass: item.recipientClass,
+        lifecycleContext: ctx,
+        meta: meta
+      }),
+      attachments);
+  });
+}
+
+function sendEmailReviewChatExamples_(results, fixture, recipients) {
+  const rowInfo = fixture.chatRow;
+  if (!rowInfo) {
+    skipEmailReviewResult_(results, 'Chat digest', 'chat_message_digest', 'team', 'fixture_missing');
+    return;
+  }
+  const now = nowIso_();
+  const messages = [
+    { id: 'review-client-1', sender: 'client', authorName: 'Client', text: 'Review fixture client message one.', ts: now },
+    { id: 'review-client-2', sender: 'client', authorName: 'Client', text: 'Review fixture client message two.', ts: now }
+  ];
+  sendEmailReviewContent_(results, 'Chat digest client to team', 'chat_message_digest', 'team', [recipients.team],
+    buildChatMessageDigestEmailContent_(rowInfo, messages, {
+      direction: CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team,
+      token: trimString_(rowInfo.rowObjNormalized.token)
+    }),
+    []);
+  sendEmailReviewContent_(results, 'Chat digest team to client', 'chat_message_digest', 'client', [recipients.client],
+    buildChatMessageDigestEmailContent_(rowInfo, [
+      { id: 'review-team-1', sender: 'team', authorName: 'Red Threads Team', text: 'Review fixture team reply.', ts: now }
+    ], {
+      direction: CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client,
+      token: trimString_(rowInfo.rowObjNormalized.token)
+    }),
+    []);
+}
+
+function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
+  const order = fixture.baseOrder || fixture.standardAchPaid || fixture.standardAchPending;
+  if (!order) {
+    skipEmailReviewResult_(results, 'Utility emails', 'utility', 'client', 'fixture_missing');
+    return;
+  }
+  const invoiceInfo = buildEmailReviewInvoiceInfo_(fixture, order, { fresh: true });
+  const attachments = buildEmailReviewAttachments_('locked_order_confirmation', '', order, invoiceInfo);
+  const summary = Object.assign({}, buildPortalOrderSummary_(order.rowObjNormalized), invoiceInfo);
+  const draft = safeJsonParse_(order.rowObjNormalized.orderdraftjson, {}) || {};
+  const lockedContent = buildLockedOrderPaymentEmailContent_({ orderDraft: draft }, summary, {
+    intro: 'Your order confirmation has been resent for review.'
+  });
+  const poInvoiceContent = buildPurchaseOrderInvoiceEmailContent_(trimString_(summary.token), invoiceInfo, {
+    projectName: trimString_(summary.projectName)
+  });
+  sendEmailReviewContent_(results, 'PO invoice prepared client', 'purchase_order_invoice', 'client', [recipients.client],
+    poInvoiceContent,
+    attachments);
+  sendEmailReviewContent_(results, 'Explicit locked-order resend client', 'locked_order_resend', 'client', [recipients.client], {
+    subject: trimString_(summary.invoiceNumber) ? ('Red Threads order confirmation - ' + trimString_(summary.invoiceNumber)) : 'Red Threads order confirmation',
+    body: lockedContent.body,
+    htmlBody: lockedContent.htmlBody
+  }, attachments);
+  sendEmailReviewContent_(results, 'Explicit locked-order resend team', 'locked_order_resend', 'team', [recipients.team], {
+    subject: trimString_(summary.invoiceNumber) ? ('Red Threads order confirmation - ' + trimString_(summary.invoiceNumber)) : 'Red Threads order confirmation',
+    body: lockedContent.body,
+    htmlBody: lockedContent.htmlBody
+  }, attachments);
+
+  try {
+    const sourceAttachment = attachments[0];
+    if (sourceAttachment && typeof sourceAttachment.getBytes === 'function') {
+      const summaryResult = sendSummaryEstimatePdfEmail({
+        recipients: [recipients.client],
+        base64Data: Utilities.base64Encode(sourceAttachment.getBytes()),
+        mimeType: MimeType.PDF,
+        fileName: 'Red Threads Email Review Summary.pdf',
+        documentKind: 'summary',
+        dealNumber: trimString_(summary.dealNumber),
+        projectName: trimString_(summary.projectName)
+      });
+      results.push({
+        ok: summaryResult && summaryResult.ok === true,
+        sent: summaryResult && summaryResult.ok === true,
+        label: 'Summary/invoice explicit send client',
+        family: 'summary_pdf',
+        recipientClass: 'client',
+        attachmentCount: 1,
+        transport: trimString_(summaryResult && summaryResult.transport),
+        noReply: summaryResult && summaryResult.noReply === true
+      });
+    } else {
+      skipEmailReviewResult_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client', 'fixture_missing');
+    }
+  } catch (err) {
+    results.push({
+      ok: false,
+      label: 'Summary/invoice explicit send client',
+      family: 'summary_pdf',
+      recipientClass: 'client',
+      attachmentCount: 0,
+      error: normalizeEmailReviewError_(err)
+    });
+  }
+
+  sendEmailReviewAccountDocumentSource_(results, fixture, recipients, ACCOUNT_DOCUMENT_TYPES.tax_exempt, 'Blank tax document source client');
+  sendEmailReviewAccountDocumentSource_(results, fixture, recipients, ACCOUNT_DOCUMENT_TYPES.credit_terms, 'Blank credit terms source client');
+  skipEmailReviewResult_(results, 'Submitted tax-form copy client', 'submitted_tax_copy', 'client', 'fixture_missing_submission_artifact');
+
+  const passwordResult = authSendResetCode({
+    email: recipients.client
+  });
+  if (passwordResult && passwordResult.ok === true) {
+    results.push({
+      ok: true,
+      sent: true,
+      label: 'Password reset client',
+      family: 'password_reset',
+      recipientClass: 'client',
+      attachmentCount: 0,
+      transport: 'mailapp_noreply',
+      noReply: true
+    });
+  } else {
+    sendEmailReviewPasswordResetFallback_(results, recipients.client);
+  }
+}
+
+function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, documentType, label) {
+  try {
+    const definition = getAccountDocumentDefinition_(documentType, fixture.cfg);
+    if (!definition) {
+      skipEmailReviewResult_(results, label, 'account_document_source', 'client', 'fixture_missing');
+      return;
+    }
+    const payload = buildAccountDocumentBlankEmailPayload_(fixture.accountContext, definition, [recipients.client]);
+    const result = sendNotificationEmail_(Object.assign({}, payload, {
+      subject: '[EMAIL REVIEW] ' + label + ' - ' + trimString_(payload.subject)
+    }));
+    results.push({
+      ok: result && result.ok === true,
+      sent: result && result.ok === true,
+      label: label,
+      family: 'account_document_source',
+      recipientClass: 'client',
+      attachmentCount: Array.isArray(payload.attachments) ? payload.attachments.length : 0,
+      transport: trimString_(result && result.transport),
+      noReply: result && result.noReply === true
+    });
+  } catch (err) {
+    results.push({
+      ok: false,
+      label: label,
+      family: 'account_document_source',
+      recipientClass: 'client',
+      attachmentCount: 0,
+      error: normalizeEmailReviewError_(err)
+    });
+  }
+}
+
+function sendEmailReviewPasswordResetFallback_(results, recipient) {
+  const portalUrl = trimString_(buildExternalPortalBaseUrl_());
+  const code = '000000';
+  const body = [
+    '[EMAIL REVIEW: Password reset client]',
+    '',
+    'Your Red Threads reset code is: ' + code,
+    '',
+    'This code expires in 15 minutes.',
+    '',
+    portalUrl
+      ? ('Please return to the portal to enter this code and continue: ' + portalUrl)
+      : 'Please return to the Red Threads portal to enter this code and continue.',
+    '',
+    'If you did not request this, you can ignore this email.',
+    '',
+    buildStandardNoReplyFooterCopy_()
+  ].join('\n');
+  const htmlBody = [
+    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '    <div style="font-size:13px;line-height:1.5;color:#334155;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:12px 14px;margin:0 0 16px;"><strong>Email review fixture:</strong> Password reset client</div>',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Password Reset Code</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">Use the code below to reset your portal password.</p>',
+    '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f1728;color:#ffffff;font-size:32px;line-height:1;font-weight:700;letter-spacing:0.28em;text-align:center;">' + escapeHtml_(code) + '</div>',
+    '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#35435a;">This code expires in 15 minutes.</p>',
+    portalUrl
+      ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
+      : '',
+    '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#5f6f86;">If you did not request this, you can ignore this email.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '  </div>',
+    '</div>'
+  ].join('');
+  const result = sendNotificationEmail_({
+    to: recipient,
+    subject: '[EMAIL REVIEW] Password reset client - Red Threads password reset code',
+    body: body,
+    htmlBody: htmlBody
+  });
+  results.push({
+    ok: result && result.ok === true,
+    sent: result && result.ok === true,
+    label: 'Password reset client',
+    family: 'password_reset',
+    recipientClass: 'client',
+    attachmentCount: 0,
+    transport: trimString_(result && result.transport),
+    noReply: result && result.noReply === true
   });
 }
 
