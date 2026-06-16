@@ -35166,11 +35166,7 @@
         });
       }
     }
-    return {
-      source: 'server_fallback',
-      payload: null,
-      warnings: attemptWarnings
-    };
+    throw new Error(friendlyArtifactFailure);
   }
 
   async function prepareManualOrderInvoiceArtifactClient_(options){
@@ -35225,6 +35221,26 @@
 
   async function buildManualOrderInvoiceArtifactPayload_(options){
     return prepareManualOrderInvoiceArtifactClient_(options);
+  }
+
+  async function buildOrderFlowCheckoutInvoiceArtifactPayload_(){
+    const friendlyArtifactFailure = 'Unable to create the final invoice artifact needed to start checkout. Please try again.';
+    const pdfResult = await buildOrderFlowSummaryViewerPdf_({
+      fileName: buildOrderFlowPurchaseOrderFileName_(),
+      fallbackMessage: friendlyArtifactFailure
+    });
+    const base64Data = await readBlobAsBase64_(pdfResult.blob);
+    if (!base64Data) {
+      throw new Error(friendlyArtifactFailure);
+    }
+    return {
+      source: 'rendered_summary_invoice',
+      payload: {
+        fileName: pdfResult.fileName,
+        mimeType: 'application/pdf',
+        base64Data: base64Data
+      }
+    };
   }
 
   function buildOrderFlowPurchaseOrderFileName_(){
@@ -36575,12 +36591,12 @@
       paymentMethodSelected: PAYMENT_METHODS.ach,
       paymentOrigin: 'ap_payment_link',
       portalState: JSON.stringify(clickedPortalState || buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })),
-      clientArtifactStrategy: 'server_fallback'
+      clientArtifactStrategy: 'portal_rendered_required'
     };
   }
 
   async function buildOrderFlowApEmailInvoiceArtifactPayload_(){
-    const friendlyArtifactFailure = 'Unable to generate the current invoice PDF for the AP email. Please try again.';
+    const friendlyArtifactFailure = 'Unable to generate the current invoice PDF for the AP payment link. Please try again.';
     const pdfResult = await buildOrderFlowSummaryViewerPdf_({
       fileName: buildOrderFlowPurchaseOrderFileName_(),
       fallbackMessage: friendlyArtifactFailure
@@ -36629,14 +36645,12 @@
     }
     try {
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
-      const artifact = sendEmail
-        ? await buildOrderFlowApEmailInvoiceArtifactPayload_()
-        : null;
+      const artifact = await buildOrderFlowApEmailInvoiceArtifactPayload_();
       const payload = Object.assign(buildOrderFlowApBasePayload_(clickedPortalState), {
         apEmail: apEmail,
         apName: apName,
         note: note,
-        clientArtifactStrategy: artifact ? artifact.source : 'server_fallback',
+        clientArtifactStrategy: artifact.source,
         fileName: artifact && artifact.payload ? artifact.payload.fileName : '',
         mimeType: artifact && artifact.payload ? artifact.payload.mimeType : '',
         base64Data: artifact && artifact.payload ? artifact.payload.base64Data : ''
@@ -37701,11 +37715,20 @@
       markClientCheckoutTiming_(checkoutTiming, 'client_payload_serialize_end', {
         bytes: clickedPortalStateJson.length
       });
+      markClientCheckoutTiming_(checkoutTiming, 'invoice_artifact_build_start');
+      const artifact = await buildOrderFlowCheckoutInvoiceArtifactPayload_();
+      markClientCheckoutTiming_(checkoutTiming, 'invoice_artifact_build_end', {
+        ok: !!(artifact && artifact.payload && artifact.payload.base64Data)
+      });
       markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_start');
       const requestPayload = {
         token: CURRENT_TOKEN,
         paymentMethodSelected: normalizedMethod,
-        portalState: clickedPortalStateJson
+        portalState: clickedPortalStateJson,
+        clientArtifactStrategy: artifact.source,
+        fileName: artifact && artifact.payload ? artifact.payload.fileName : '',
+        mimeType: artifact && artifact.payload ? artifact.payload.mimeType : '',
+        base64Data: artifact && artifact.payload ? artifact.payload.base64Data : ''
       };
       if (normalizedMethod === PAYMENT_METHODS.ach) {
         const preferredAchPaymentMethodId = String(opts.preferredAchPaymentMethodId || '').trim();

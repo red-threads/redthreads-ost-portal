@@ -313,6 +313,7 @@ const LIFECYCLE_EMAIL_ATTACHMENT_POLICIES = {
 const LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS = {
   required_invoice: 'required_invoice_attachment_missing',
   required_receipt: 'required_receipt_attachment_missing',
+  required_portal_rendered_invoice: 'required_portal_rendered_invoice_missing',
   required_document: 'required_document_attachment_missing',
   optional_unavailable: 'optional_attachment_unavailable'
 };
@@ -7719,9 +7720,11 @@ function shouldAttachStripeCustomerToPaymentCheckout_(paymentMethodSelected, opt
   return shouldCollectPayerEmailInCheckout_(method, options) !== true;
 }
 
-function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe) {
+function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe, invoiceArtifacts) {
   const identity = (checkoutIdentity && typeof checkoutIdentity === 'object') ? checkoutIdentity : {};
   const stripeResult = (stripe && typeof stripe === 'object') ? stripe : {};
+  const artifacts = (invoiceArtifacts && typeof invoiceArtifacts === 'object') ? invoiceArtifacts : {};
+  const invoiceInfo = (artifacts.invoiceInfo && typeof artifacts.invoiceInfo === 'object') ? artifacts.invoiceInfo : {};
   const orderDraft = applyStripeCheckoutChargeSummaryToOrderDraft_(Object.assign({}, ctx.orderDraft, {
     paymentMethodSelected: paymentMethodSelected,
     paymentState: PAYMENT_STATES.checkout_created,
@@ -7744,6 +7747,8 @@ function buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, che
     orderState: ORDER_STATES.payment_in_progress,
     productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
     portalLockState: PORTAL_LOCK_STATES.editable,
+    invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
+    invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl),
     stripeSessionId: trimString_(stripeResult.sessionId),
     achPaymentSource: paymentMethodSelected === PAYMENT_METHODS.ach ? buildAchOrderPaymentSource_(ctx, null) : '',
     achPaymentVisibilityScope: paymentMethodSelected === PAYMENT_METHODS.ach ? ACH_PAYMENT_VISIBILITY_SCOPES.order_only : '',
@@ -7884,14 +7889,14 @@ function buildOrderInvoiceArtifacts_(ctx, payload) {
     };
   } else {
     if (clientArtifactWarnings.length) {
-      console.log('[RT-MANUAL-INVOICE-ARTIFACT-FALLBACK] ' + JSON.stringify({
-        ok: true,
-        token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
-        strategy: clientArtifactStrategy || 'server_fallback',
-        warnings: clientArtifactWarnings
+      console.log('[RT-INVOICE-ARTIFACT-MISSING] ' + JSON.stringify({
+        ok: false,
+        tokenPresent: !!trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token),
+        strategy: clientArtifactStrategy || 'portal_rendered_required',
+        warningCount: clientArtifactWarnings.length
       }));
     }
-    invoiceInfo = generateInvoiceDocumentForOrder_(ctx.orderDraft, { cfg: ctx.cfg });
+    throw new Error(LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   }
   return {
     invoiceInfo: invoiceInfo,
@@ -8598,6 +8603,28 @@ function createCheckoutAttempt(payload) {
     markCheckoutTiming_(timing, 'checkout_identity_build_start');
     const checkoutIdentity = buildCheckoutAttemptIdentity_();
     markCheckoutTiming_(timing, 'checkout_identity_build_end');
+    let invoiceArtifacts;
+    try {
+      markCheckoutTiming_(timing, 'invoice_artifact_store_start', { paymentMethodSelected: paymentMethodSelected });
+      invoiceArtifacts = buildOrderInvoiceArtifacts_(ctx, payload);
+      markCheckoutTiming_(timing, 'invoice_artifact_store_end', {
+        ok: true,
+        paymentMethodSelected: paymentMethodSelected,
+        invoicePdfPresent: !!trimString_(invoiceArtifacts && invoiceArtifacts.invoiceInfo && invoiceArtifacts.invoiceInfo.invoicePdfUrl)
+      });
+    } catch (artifactErr) {
+      markCheckoutTiming_(timing, 'invoice_artifact_store_end', { ok: false, paymentMethodSelected: paymentMethodSelected });
+      return attachCheckoutTiming_(buildCheckoutAttemptFailureResponse_(null, {
+        code: 'checkout_invoice_artifact_failed',
+        error: 'Unable to create the final invoice artifact needed to start checkout. Please try again.',
+        warnings: [String((artifactErr && artifactErr.message) || artifactErr)]
+      }), timing, {
+        ok: false,
+        stage: 'invoice_artifact',
+        paymentMethodSelected: paymentMethodSelected
+      });
+    }
+
     markCheckoutTiming_(timing, 'stripe_session_start', { paymentMethodSelected: paymentMethodSelected });
     const stripeOptions = buildCheckoutAttemptStripeOptions_(ctx, paymentMethodSelected, checkoutIdentity);
     stripeOptions.timing = timing;
@@ -8630,7 +8657,7 @@ function createCheckoutAttempt(payload) {
     try {
       markCheckoutTiming_(timing, 'portal_orders_write_start');
       created = createPortalOrder_(
-        buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe)
+        buildCheckoutAttemptOrderCreateOptions_(ctx, paymentMethodSelected, checkoutIdentity, stripe, invoiceArtifacts)
       );
       markCheckoutTiming_(timing, 'portal_orders_create_end');
       const finalOrderInfo = updateCheckoutAttemptOrderWithStripeSession_(ctx, created, stripe);
@@ -8935,12 +8962,12 @@ function sendAchApPaymentLinkEmail_(ctx, orderSummary, options) {
   const content = buildAchApPaymentLinkEmailContent_(ctx, orderSummary, opts);
   const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('ap_payment_link', '', {});
   const attachmentResult = resolveLifecycleEmailAttachment_(orderSummary, attachmentPolicy, {
-    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
   });
   if (attachmentResult.ok !== true) {
     return {
       ok: false,
-      code: attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice,
+      code: attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice,
       error: 'Unable to attach the current Red Threads invoice. Please regenerate the invoice and try again.'
     };
   }
@@ -8978,13 +9005,13 @@ function prepareAchApPaymentLink_(payload, options) {
   }
   const validationError = validateOrderPlacementForAction_(ctx, { requirePositiveCheckoutTotal: true });
   if (validationError) return validationError;
-  if (opts.sendEmail === true && !trimString_(payload && payload.base64Data)) {
+  if (!trimString_(payload && payload.base64Data)) {
     return buildOrderActionError_(
       'ach_ap_invoice_artifact_required',
-      'Unable to generate the current invoice PDF for the AP email. Please try again.',
+      'Unable to generate the current invoice PDF for the AP payment link. Please try again.',
       {
         stage: 'invoice_artifact',
-        warnings: ['AP email requires a client-rendered Summary/Invoice PDF payload.']
+        warnings: ['AP payment link preparation requires a client-rendered Summary/Invoice PDF payload.']
       }
     );
   }
@@ -11367,7 +11394,10 @@ function generateInvoice(payload) {
       token: ctx.orderDraft.token
     });
     const source = latestOrder ? latestOrder.rowObjNormalized : ctx.orderDraft;
-    const invoice = generateInvoiceDocumentForOrder_(source, { cfg: ctx.cfg });
+    const invoice = generateInvoiceDocumentForOrder_(source, {
+      cfg: ctx.cfg,
+      allowServerGeneratedInvoice: true
+    });
     return { ok: true, invoice: invoice };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
@@ -11838,9 +11868,9 @@ function adminResendLockedOrderLink_(payload) {
     });
     const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('locked_order_confirmation', '', {});
     const attachmentResult = resolveLifecycleEmailAttachment_(ctx.latestOrderSummary, attachmentPolicy, {
-      safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+      safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
     });
-    assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+    assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
     sendNotificationEmail_({
       toList: recipients,
       subject: trimString_(ctx.latestOrderSummary.invoiceNumber)
@@ -20032,9 +20062,9 @@ function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
       return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
     }
     if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_receipt);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
     }
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   }
   if (type === 'ap_ach') {
     const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
@@ -20042,9 +20072,9 @@ function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
       return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
     }
     if (isApAchLifecycleReceiptMilestone_(normalized)) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_receipt);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
     }
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   }
   if (type === 'payment_lifecycle') {
     const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
@@ -20052,14 +20082,14 @@ function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
       return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable);
     }
     if (isPaymentLifecycleReceiptMilestone_(normalized)) {
-      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_receipt);
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
     }
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   }
   if (type === 'ap_payment_link' ||
       type === 'locked_order_confirmation' ||
       type === 'purchase_order_invoice_email') {
-    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+    return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   }
   if (type === 'account_document_source' || type === 'account_document_approved') {
     return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_blocking, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
@@ -20175,9 +20205,9 @@ function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
   const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('locked_order_confirmation', '', {});
   const attachmentResult = resolveLifecycleEmailAttachment_(summary, attachmentPolicy, {
     fileNameOverride: trimString_(opts.fileName),
-    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
   });
-  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   const attachments = attachmentResult.attachments;
   const subject = invoiceNumber
     ? ('Red Threads order confirmation · ' + invoiceNumber)
@@ -20334,9 +20364,9 @@ function sendPurchaseOrderInvoiceEmailWithAttachment_(token, recipients, invoice
   const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('purchase_order_invoice_email', '', {});
   const attachmentResult = resolveLifecycleEmailAttachment_(invoice, attachmentPolicy, {
     fileNameOverride: invoice.fileName,
-    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice
+    safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
   });
-  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   const content = buildPurchaseOrderInvoiceEmailContent_(token, invoice, options);
   sendNotificationEmail_({
     toList: recipients,
@@ -20922,35 +20952,13 @@ function resolveAchLifecycleOrderForQueueJob_(jobInfo, options) {
 }
 
 function resolveAchLifecycleInvoiceInfo_(orderInfo, jobType, options) {
-  const opts = (options && typeof options === 'object') ? options : {};
-  const cfg = opts.cfg || getConfig_();
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
-  const type = getAchLifecycleBaseEmailJobType_(jobType);
-  const shouldGenerate = !trimString_(summary.invoicePdfUrl) ||
-    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email;
-  if (!shouldGenerate) {
-    return {
-      invoiceNumber: trimString_(summary.invoiceNumber),
-      invoicePdfUrl: trimString_(summary.invoicePdfUrl),
-      fileName: ''
-    };
-  }
-  const invoiceInfo = generateInvoiceDocumentForOrder_(row, {
-    cfg: cfg,
-    invoiceNumber: trimString_(summary.invoiceNumber)
-  });
-  if (invoiceInfo && trimString_(invoiceInfo.invoicePdfUrl)) {
-    updatePortalOrderState_({
-      cfg: cfg,
-      ss: opts.ss,
-      infra: opts.infra,
-      orderRowInfo: orderInfo,
-      invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
-      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl)
-    });
-  }
-  return invoiceInfo;
+  return {
+    invoiceNumber: trimString_(summary.invoiceNumber),
+    invoicePdfUrl: trimString_(summary.invoicePdfUrl),
+    fileName: trimString_(summary.invoiceFileName)
+  };
 }
 
 function normalizeApAchLifecycleEmailMilestone_(value) {
@@ -21324,36 +21332,14 @@ function resolveApAchLifecycleOrderForQueueJob_(jobInfo, options) {
 
 function resolveApAchLifecycleInvoiceInfo_(orderInfo, milestone, options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const cfg = opts.cfg || getConfig_();
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
   const queued = (opts.queuedInvoiceInfo && typeof opts.queuedInvoiceInfo === 'object') ? opts.queuedInvoiceInfo : {};
-  let invoiceInfo = {
+  return {
     invoiceNumber: trimString_(queued.invoiceNumber) || trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(queued.invoicePdfUrl) || trimString_(summary.invoicePdfUrl),
     fileName: trimString_(queued.fileName || queued.invoiceFileName)
   };
-  const attachmentRequired = isApAchLifecycleAttachmentRequired_(milestone);
-  const shouldGenerate = attachmentRequired && (
-    !trimString_(invoiceInfo.invoicePdfUrl) ||
-    isApAchLifecycleReceiptMilestone_(milestone)
-  );
-  if (!shouldGenerate) return invoiceInfo;
-  invoiceInfo = generateInvoiceDocumentForOrder_(row, {
-    cfg: cfg,
-    invoiceNumber: trimString_(invoiceInfo.invoiceNumber)
-  });
-  if (invoiceInfo && trimString_(invoiceInfo.invoicePdfUrl)) {
-    updatePortalOrderState_({
-      cfg: cfg,
-      ss: opts.ss,
-      infra: opts.infra,
-      orderRowInfo: orderInfo,
-      invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
-      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl)
-    });
-  }
-  return invoiceInfo;
 }
 
 function getApAchLifecycleCtaLabel_(milestone, recipientClass) {
@@ -21526,7 +21512,7 @@ function processApAchLifecycleEmailQueueJob_(jobInfo, options) {
   }), attachmentPolicy, {
     fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
   });
-  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   const content = buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, {
     cfg: cfg,
     ss: ss,
@@ -22859,37 +22845,14 @@ function resolvePaymentLifecycleOrderForQueueJob_(jobInfo, options) {
 
 function resolvePaymentLifecycleInvoiceInfo_(orderInfo, milestone, options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const cfg = opts.cfg || getConfig_();
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
-  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
   const queued = (opts.queuedInvoiceInfo && typeof opts.queuedInvoiceInfo === 'object') ? opts.queuedInvoiceInfo : {};
-  let invoiceInfo = {
+  return {
     invoiceNumber: trimString_(queued.invoiceNumber) || trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(queued.invoicePdfUrl) || trimString_(summary.invoicePdfUrl),
     fileName: trimString_(queued.fileName || queued.invoiceFileName)
   };
-  const attachmentRequired = isPaymentLifecycleAttachmentRequired_(normalized);
-  const shouldGenerate = attachmentRequired && (
-    !trimString_(invoiceInfo.invoicePdfUrl) ||
-    isPaymentLifecycleReceiptMilestone_(normalized)
-  );
-  if (!shouldGenerate) return invoiceInfo;
-  invoiceInfo = generateInvoiceDocumentForOrder_(row, {
-    cfg: cfg,
-    invoiceNumber: trimString_(invoiceInfo.invoiceNumber)
-  });
-  if (invoiceInfo && trimString_(invoiceInfo.invoicePdfUrl)) {
-    updatePortalOrderState_({
-      cfg: cfg,
-      ss: opts.ss,
-      infra: opts.infra,
-      orderRowInfo: orderInfo,
-      invoiceNumber: trimString_(invoiceInfo.invoiceNumber),
-      invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl)
-    });
-  }
-  return invoiceInfo;
 }
 
 function getPaymentLifecycleCtaLabel_(milestone) {
@@ -23010,7 +22973,7 @@ function processPaymentLifecycleEmailQueueJob_(jobInfo, options) {
   }), attachmentPolicy, {
     fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
   });
-  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   const content = buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, {
     cfg: cfg,
     ss: ss,
@@ -23790,7 +23753,7 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
   }), attachmentPolicy, {
     fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
   });
-  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_invoice);
+  if (attachmentResult.ok !== true) throw new Error(attachmentResult.error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   const content = buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, {
     cfg: cfg,
     ss: ss,
@@ -24196,12 +24159,6 @@ function processPurchaseOrderInvoiceEmailQueueJob_(jobInfo, options) {
     invoicePdfUrl: trimString_(row.invoicepdfurl || (queuedDraft && queuedDraft.invoicePdfUrl)),
     fileName: trimString_(row.invoicefilename || (queuedDraft && queuedDraft.invoiceFileName))
   };
-  if (!invoiceInfo.invoicePdfUrl) {
-    invoiceInfo = generateInvoiceDocumentForOrder_(orderDraft, {
-      cfg: cfg,
-      invoiceNumber: invoiceInfo.invoiceNumber
-    });
-  }
   sendPurchaseOrderInvoiceEmailWithAttachment_(token, recipients, invoiceInfo, {
     projectName: trimString_(orderDraft.projectName)
   });
@@ -25107,6 +25064,9 @@ function cancelPendingClientOrderFlow(payload) {
 function generateInvoiceDocumentForOrder_(orderRowOrDraft, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const cfg = opts.cfg || getConfig_();
+  if (opts.allowServerGeneratedInvoice !== true) {
+    throw new Error('server_invoice_renderer_deprecated_for_email');
+  }
   const order = (orderRowOrDraft && typeof orderRowOrDraft === 'object') ? orderRowOrDraft : {};
   const draft = safeJsonParse_(order.orderdraftjson || order.orderDraftJson, null) || order;
   const invoiceNumber = trimString_(opts.invoiceNumber || order.invoicenumber || order.invoiceNumber) || nextInvoiceNumber_();
@@ -25767,15 +25727,8 @@ function buildEmailReviewFailedOrderInfo_(orderInfo, paymentMethod, options) {
 }
 
 function buildEmailReviewInvoiceInfo_(fixture, orderInfo, options) {
-  const opts = (options && typeof options === 'object') ? options : {};
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
-  if (opts.fresh === true || !trimString_(summary.invoicePdfUrl)) {
-    return generateInvoiceDocumentForOrder_(row, {
-      cfg: fixture.cfg,
-      invoiceNumber: trimString_(summary.invoiceNumber)
-    });
-  }
   return {
     invoiceNumber: trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(summary.invoicePdfUrl),
