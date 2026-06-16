@@ -71,7 +71,7 @@ const DEFAULT_STRIPE_ACH_REQUIRE_CUSTOMER = true;
 const DEFAULT_STRIPE_ACH_DEFAULT_PENDING_PRODUCTION_APPROVED = false;
 const NOTIFICATION_SENDER_NAME = 'Red Threads';
 const NOTIFICATION_FROM_ALIAS = 'noreply@redthreads.com';
-const NOTIFICATION_REPLY_NOTICE = 'This is an automated Red Threads notification. Please use the portal link above or contact Red Threads through your usual support channel if you need help.';
+const NOTIFICATION_REPLY_NOTICE = 'This is an automated Red Threads notification. Please do not reply to this email. If you would like to contact the Red Threads team, please do so through your portal link.';
 const DOCUMENT_REVIEW_EMAIL = 'hello@redthreads.com';
 const MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_SUMMARY_EXPORT_PDF_BYTES = 20 * 1024 * 1024;
@@ -8925,10 +8925,10 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     footer
   ].filter(Boolean);
   const htmlBody = [
-    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">' + escapeHtml_(greeting) + '</p>',
     '  <p style="margin:0 0 14px;">A secure Red Threads ACH payment page is ready for this invoice.</p>',
-    '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">',
+    '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #1e293b;border-radius:14px;background:#0f172a;">',
     invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
     dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
     projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
@@ -8937,12 +8937,12 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     paymentLink
       ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(paymentLink) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">Open secure ACH payment page</a></p>')
       : '',
-    '  <p style="margin:0 0 14px;color:#475569;">You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.</p>',
-    '  <p style="margin:0 0 14px;color:#475569;"><strong>Attachment:</strong> The invoice is attached.</p>',
+    '  <p style="margin:0 0 14px;color:#94a3b8;">You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.</p>',
+    '  <p style="margin:0 0 14px;color:#94a3b8;"><strong>Attachment:</strong> The invoice is attached.</p>',
     note
-      ? ('  <div style="margin:0 0 16px;padding:14px 16px;border-left:4px solid #be123c;background:#fff1f2;"><strong>Note from ' + escapeHtml_(purchaserName || 'the purchaser') + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
+      ? ('  <div style="margin:0 0 16px;padding:14px 16px;border-left:4px solid #be123c;background:#170b12;"><strong>Note from ' + escapeHtml_(purchaserName || 'the purchaser') + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
       : '',
-    '  <p style="margin:0;color:#64748b;">' + escapeHtml_(footer) + '</p>',
+    '  <p style="margin:0;color:#94a3b8;">' + escapeHtml_(footer) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
   return {
@@ -8950,7 +8950,11 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
       ? ('Red Threads ACH payment page — invoice ' + invoiceNumber)
       : 'Red Threads ACH payment page',
     body: bodyLines.join('\n'),
-    htmlBody: htmlBody
+    htmlBody: buildPortalNativeEmailShellHtml_({
+      heading: 'Secure ACH payment page ready.',
+      badgeLabel: 'Payment Ready',
+      bodyHtml: htmlBody
+    })
   };
 }
 
@@ -9858,18 +9862,18 @@ function buildDefaultAccountDocumentBlankEmailPayload_(ctx, definition, recipien
     NOTIFICATION_REPLY_NOTICE
   ].filter(Boolean).join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">' + escapeHtml_(definition.label) + '</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">The blank PDF is attached for your department to review and complete.</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">' + escapeHtml_(definition.label) + '</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">The blank PDF is attached for your department to review and complete.</p>',
     definition.sourceDocumentUrl
-      ? ('    <p style="margin:0 0 12px;"><a href="' + escapeHtml_(definition.sourceDocumentUrl) + '" style="color:#12b5ea;">View Source Document</a></p>')
+      ? ('    <p style="margin:0 0 12px;"><a href="' + escapeHtml_(definition.sourceDocumentUrl) + '" style="color:#00c8ff;">View Source Document</a></p>')
       : '',
     definition.sourceDocumentDownloadUrl
-      ? ('    <p style="margin:0 0 12px;"><a href="' + escapeHtml_(definition.sourceDocumentDownloadUrl) + '" style="color:#12b5ea;">Download Blank PDF</a></p>')
+      ? ('    <p style="margin:0 0 12px;"><a href="' + escapeHtml_(definition.sourceDocumentDownloadUrl) + '" style="color:#00c8ff;">Download Blank PDF</a></p>')
       : '',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -9902,12 +9906,12 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
     taxBlankEmailFooter
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">' + escapeHtml_(definition.label) + '</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">The blank PDF is attached for your department to review and complete. Please log back into your portal and upload the finished document. Red Threads will review the complete document and notify you upon successful review.</p>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(taxBlankEmailFooter) + '</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">' + escapeHtml_(definition.label) + '</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">The blank PDF is attached for your department to review and complete. Please log back into your portal and upload the finished document. Red Threads will review the complete document and notify you upon successful review.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(taxBlankEmailFooter) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -9940,12 +9944,12 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
     creditTermsBlankEmailFooter
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">' + escapeHtml_(definition.label) + '</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.7;color:#35435a;">The blank PDF is attached for your department to review and complete. When the document is complete, please log back into your portal and upload the completed file. The Red Threads team will notify you if your terms have been approved and purchase order submission ability unlocked.</p>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(creditTermsBlankEmailFooter) + '</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">' + escapeHtml_(definition.label) + '</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.7;color:#cbd5e1;">The blank PDF is attached for your department to review and complete. When the document is complete, please log back into your portal and upload the completed file. The Red Threads team will notify you if your terms have been approved and purchase order submission ability unlocked.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(creditTermsBlankEmailFooter) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -10012,23 +10016,23 @@ function buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, optio
   const artifactUrl = trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl));
   const teamReviewUrl = trimString_(opts.teamReviewUrl);
   return [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:20px;font-family:Arial,sans-serif;color:#142033;">',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:20px;font-family:Arial,sans-serif;color:#f8fafc;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Team Review Required</div>',
-    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#142033;">Signed credit terms document submitted</h1>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A client uploaded a completed credit terms document and needs Red Threads review.</p>',
-    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#fff6f7;border:1px solid #fecdd3;">',
-    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Submitted At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
+    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#f8fafc;">Signed credit terms document submitted</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A client uploaded a completed credit terms document and needs Red Threads review.</p>',
+    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#170b12;border:1px solid #9f1239;">',
+    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Submitted At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
     artifactUrl
-      ? ('      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
+      ? ('      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
       : '',
     '    </div>',
     teamReviewUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Click Here to Review Credit Terms</a></p>')
       : '',
-    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -10157,26 +10161,26 @@ function buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, options
   const teamReviewUrl = trimString_(opts.teamReviewUrl);
   const portalUrl = trimString_(opts.portalUrl);
   return [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:20px;font-family:Arial,sans-serif;color:#142033;">',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:20px;font-family:Arial,sans-serif;color:#f8fafc;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Team Review Required</div>',
-    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#142033;">Michigan sales tax exemption form submitted</h1>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A client has completed the sales tax exempt form and needs review.</p>',
-    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#fff6f7;border:1px solid #fecdd3;">',
-    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Completed At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
+    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#f8fafc;">Michigan sales tax exemption form submitted</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A client has completed the sales tax exempt form and needs review.</p>',
+    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#170b12;border:1px solid #9f1239;">',
+    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
+    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Completed At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
     artifactUrl
-      ? ('      <div style="font-size:14px;line-height:1.9;color:#3f2937;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
+      ? ('      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
       : '',
     '    </div>',
     teamReviewUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Open team review</a></p>')
       : '',
     portalUrl
-      ? ('    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#64748b;">If the button does not open, use this direct portal link: <a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;">Open portal</a></p>')
+      ? ('    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#94a3b8;">If the button does not open, use this direct portal link: <a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;">Open portal</a></p>')
       : '',
-    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -10329,16 +10333,16 @@ function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
     buildStandardNoReplyFooterCopy_()
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">We need a correction before approval</h1>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Your signed credit terms document was reviewed, but it could not be approved yet.</p>',
-    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">We need a correction before approval</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#cbd5e1;">Your signed credit terms document was reviewed, but it could not be approved yet.</p>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#170b12;border:1px solid #9f1239;color:#cbd5e1;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
     portalUrl
       ? ('    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;"><a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Please return to the portal, update the form, and resubmit it for review.</a></p>')
-      : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#35435a;">Please return to the portal, update the form, and resubmit it for review.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+      : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#cbd5e1;">Please return to the portal, update the form, and resubmit it for review.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -10380,14 +10384,14 @@ function sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason) {
     buildStandardNoReplyFooterCopy_()
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your credit terms document was denied</h1>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Red Threads reviewed the signed credit terms submission, but it could not be approved.</p>',
-    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
-    '    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#35435a;">Purchase-order ordering will remain unavailable until the Red Threads team reopens this workflow or provides next steps.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Your credit terms document was denied</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#cbd5e1;">Red Threads reviewed the signed credit terms submission, but it could not be approved.</p>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#170b12;border:1px solid #9f1239;color:#cbd5e1;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
+    '    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#cbd5e1;">Purchase-order ordering will remain unavailable until the Red Threads team reopens this workflow or provides next steps.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -10447,17 +10451,17 @@ function sendApprovedCreditTermsEmail_(ctx, submissionEntry, paymentTermsSelecti
     '- Red Threads Team'
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your credit terms are approved</h1>',
-    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Your Red Threads credit terms have been approved.</p>',
-    '    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#35435a;"><strong>Approved payment terms:</strong> ' + escapeHtml_(paymentLabel) + '</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">You can now place orders with a purchase order inside the Red Threads portal.</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">The signed credit terms document is attached for your records.</p>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
-    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Your credit terms are approved</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#51ffb7;font-weight:800;">Your Red Threads credit terms have been approved.</p>',
+    '    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#cbd5e1;"><strong>Approved payment terms:</strong> ' + escapeHtml_(paymentLabel) + '</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">You can now place orders with a purchase order inside the Red Threads portal.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">The signed credit terms document is attached for your records.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#f8fafc;font-weight:700;">- Red Threads Team</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -10502,16 +10506,16 @@ function sendTaxExemptDenialEmail_(ctx, submissionEntry, reason) {
     buildStandardNoReplyFooterCopy_()
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Red Threads Review</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">We need a correction before approval</h1>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#35435a;">Your Michigan sales tax exemption form was reviewed, but it could not be approved yet.</p>',
-    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;color:#3f2937;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">We need a correction before approval</h1>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#cbd5e1;">Your Michigan sales tax exemption form was reviewed, but it could not be approved yet.</p>',
+    '    <div style="margin:0 0 18px;padding:16px 18px;border-radius:14px;background:#170b12;border:1px solid #9f1239;color:#cbd5e1;font-size:15px;line-height:1.7;"><strong>Reason:</strong><br>' + escapeHtml_(cleanReason).replace(/\n/g, '<br>') + '</div>',
     portalUrl
       ? ('    <p style="margin:0 0 16px;font-size:16px;line-height:1.7;"><a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Please return to the portal, update the form, and resubmit it for review.</a></p>')
-      : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#35435a;">Please return to the portal, update the form, and resubmit it for review.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+      : '    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#cbd5e1;">Please return to the portal, update the form, and resubmit it for review.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -11293,18 +11297,18 @@ function emailTaxExemptSubmissionCopy_(payload) {
     '- Red Threads Team'
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Copy of your completed tax exemption form</h1>',
-    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A copy of your completed Michigan sales tax exemption form is attached.</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Your form is under review by the Red Threads team. You will receive an update when the review is complete.</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Copy of your completed tax exemption form</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A copy of your completed Michigan sales tax exemption form is attached.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">Your form is under review by the Red Threads team. You will receive an update when the review is complete.</p>',
     portalUrl
-      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Red Threads Portal</a></p>')
+      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#00c8ff;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Red Threads Portal</a></p>')
       : '',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
-    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#f8fafc;font-weight:700;">- Red Threads Team</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -11361,16 +11365,16 @@ function sendApprovedTaxExemptEmail_(ctx, submissionEntry) {
     '- Red Threads Team'
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Tax exemption form approved</h1>',
-    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#166534;font-weight:800;">Your Michigan sales tax exemption form has been approved.</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">The exemption status is now reflected for eligible Red Threads purchases. Your approved form is attached for your records.</p>',
-    '    <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#35435a;">Red Threads does not provide tax or legal advice. If you are unsure whether a purchase qualifies, please consult your accountant or tax professional.</p>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
-    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#142033;font-weight:700;">- Red Threads Team</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Tax exemption form approved</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#51ffb7;font-weight:800;">Your Michigan sales tax exemption form has been approved.</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">The exemption status is now reflected for eligible Red Threads purchases. Your approved form is attached for your records.</p>',
+    '    <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#cbd5e1;">Red Threads does not provide tax or legal advice. If you are unsure whether a purchase qualifies, please consult your accountant or tax professional.</p>',
+    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#f8fafc;font-weight:700;">- Red Threads Team</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -14490,18 +14494,18 @@ function authSendResetCode(payload) {
       buildStandardNoReplyFooterCopy_()
     ].join('\n');
     const htmlBody = [
-      '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-      '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-      '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-      '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Password Reset Code</h1>',
-      '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">Use the code below to reset your portal password.</p>',
+      '<div style="margin:0;padding:24px 0;background:#000000;">',
+      '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+      '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+      '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Password Reset Code</h1>',
+      '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the code below to reset your portal password.</p>',
       '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f1728;color:#ffffff;font-size:32px;line-height:1;font-weight:700;letter-spacing:0.28em;text-align:center;">' + escapeHtml_(code) + '</div>',
-      '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#35435a;">This code expires in 15 minutes.</p>',
+      '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">This code expires in 15 minutes.</p>',
       portalUrl
-        ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
+        ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#00c8ff;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
         : '',
-      '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#5f6f86;">If you did not request this, you can ignore this email.</p>',
-      '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+      '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#94a3b8;">If you did not request this, you can ignore this email.</p>',
+      '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
       '  </div>',
       '</div>'
     ].join('');
@@ -19985,7 +19989,7 @@ function buildCheckPaymentInstructionsText_(orderSummary) {
 function buildCheckPaymentInstructionsHtml_(orderSummary) {
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   return [
-    '<div style="margin:16px 0 0;padding:14px 16px;border-radius:14px;border:1px solid #fde68a;background:#fffbea;color:#3f2f08;">',
+    '<div style="margin:16px 0 0;padding:14px 16px;border-radius:14px;border:1px solid #1e293b;background:#111827;color:#cbd5e1;">',
     '  <div style="font-weight:800;margin-bottom:6px;">Paying by check</div>',
     '  <div style="font-size:14px;line-height:1.7;">Mail the check for <strong>' + escapeHtml_(formatUsdAmount_(summary.amountGrandTotal)) + '</strong> to:<br>Red Threads<br>505 South Saginaw Road<br>Midland, Michigan 48640</div>',
     '</div>'
@@ -20017,7 +20021,7 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     NOTIFICATION_REPLY_NOTICE
   ].filter(Boolean);
   const html = [
-    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>',
     invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
     projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
@@ -20026,18 +20030,22 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
       ? ('  <p style="margin:0 0 12px;"><a href="' + escapeHtml_(links.summaryUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">View your order summary</a></p>')
       : '',
     links.cardUrl
-      ? ('  <p style="margin:0 0 8px;"><a href="' + escapeHtml_(links.cardUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Pay by credit card</a> <span style="color:#64748b;">(3% card fee applies)</span></p>')
+      ? ('  <p style="margin:0 0 8px;"><a href="' + escapeHtml_(links.cardUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Pay by credit card</a> <span style="color:#94a3b8;">(3% card fee applies)</span></p>')
       : '',
     links.achUrl
       ? ('  <p style="margin:0 0 8px;"><a href="' + escapeHtml_(links.achUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Pay by ACH bank transfer</a></p>')
       : '',
     buildCheckPaymentInstructionsHtml_(summary),
-    '  <p style="margin:16px 0 0;color:#64748b;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '  <p style="margin:16px 0 0;color:#94a3b8;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
   return {
     body: lines.join('\n'),
-    htmlBody: html,
+    htmlBody: buildPortalNativeEmailShellHtml_({
+      heading: 'Order confirmation.',
+      badgeLabel: 'Invoice Ready',
+      bodyHtml: html
+    }),
     links: links
   };
 }
@@ -20417,7 +20425,7 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     NOTIFICATION_REPLY_NOTICE
   ].filter(Boolean).join('\n');
   const htmlBody = [
-    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1f2937;">',
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">Your Red Threads invoice is attached.</p>',
     invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
     projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
@@ -20429,13 +20437,17 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     resumeUrl
       ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(resumeUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">Return to the purchase-order upload step</a></p>')
       : '',
-    '  <p style="margin:0;color:#5f6f86;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '  <p style="margin:0;color:#94a3b8;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
   return {
     subject: subject,
     body: body,
-    htmlBody: htmlBody
+    htmlBody: buildPortalNativeEmailShellHtml_({
+      heading: 'Purchase order needed.',
+      badgeLabel: 'PO Step',
+      bodyHtml: htmlBody
+    })
   };
 }
 
@@ -21511,6 +21523,8 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
   const token = getApAchLifecycleOrderToken_(orderInfo, summary);
   const ctaUrl = getApAchLifecycleCtaUrl_(token, recipientClass, normalized);
   const shell = buildLifecycleEmailShell_({
+    heading: copy.heading,
+    badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
     nextStep: getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText),
@@ -22315,13 +22329,13 @@ function buildPortalLifecycleEmailDetailBlock_(lines) {
   const cleanLines = uniqueTrimmedStrings_(lines);
   if (!cleanLines.length) return { text: '', html: '' };
   const htmlRows = cleanLines.map(function(line) {
-    return '<div style="margin:0 0 6px;color:#334155;">' + escapeHtml_(line) + '</div>';
+    return '<div style="margin:0 0 6px;color:#cbd5e1;">' + escapeHtml_(line) + '</div>';
   }).join('');
   return {
     text: buildLifecycleEmailTextBlock_('Details', cleanLines),
     html: [
-      '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;">',
-      '<div style="font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;margin:0 0 8px;">Details</div>',
+      '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid #1e293b;border-radius:12px;background:#0f172a;">',
+      '<div style="font-size:12px;text-transform:uppercase;color:#55dfff;font-weight:800;margin:0 0 8px;letter-spacing:.08em;">Details</div>',
       htmlRows,
       '</div>'
     ].join('')
@@ -22501,6 +22515,8 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
   emailContext.ctaLabel = trimString_(cta.label);
   const copy = buildPortalLifecycleEmailCopy_(normalized, recipientClass, emailContext, meta, ctx.cfg || opts.cfg);
   const shell = buildLifecycleEmailShell_({
+    heading: copy.heading,
+    badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
@@ -22956,7 +22972,7 @@ function buildPaymentLifecycleInstructionsBlock_(milestone, orderSummary) {
     const text = 'Coordinate cash payment directly with Red Threads. Production begins after the team records payment received.';
     return {
       text: buildLifecycleEmailTextBlock_('Payment instructions', [text]),
-      html: '<div style="margin:16px 0 18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;color:#334155;"><strong>Payment instructions</strong><br>' + escapeHtml_(text) + '</div>'
+      html: '<div style="margin:16px 0 18px;padding:14px 16px;border:1px solid #1e293b;border-radius:12px;background:#0f172a;color:#cbd5e1;"><strong>Payment instructions</strong><br>' + escapeHtml_(text) + '</div>'
     };
   }
   return { text: '', html: '' };
@@ -22980,6 +22996,8 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     methodLabel: methodLabel
   });
   const shell = buildLifecycleEmailShell_({
+    heading: copy.heading,
+    badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
@@ -23136,7 +23154,172 @@ function buildLifecycleEmailTextBlock_(title, lines) {
   return [cleanTitle ? (cleanTitle + ':') : ''].concat(cleanLines).filter(Boolean).join('\n');
 }
 
+function getPortalNativeEmailTheme_() {
+  return {
+    outerBg: '#000000',
+    shellBg: '#05060a',
+    shellBorder: '#1e293b',
+    headerBg: '#020617',
+    panelBg: '#0f172a',
+    panelAltBg: '#111827',
+    panelBorder: '#1e293b',
+    panelBorderSoft: '#263244',
+    text: '#f8fafc',
+    textMuted: '#cbd5e1',
+    textSoft: '#94a3b8',
+    futureText: '#94a3b8',
+    futureBg: '#111827',
+    brandRed: '#e11d48',
+    brandRedMid: '#f43f5e',
+    brandRedDark: '#be123c',
+    currentAqua: '#00c8ff',
+    currentAquaDark: '#00b3e6',
+    currentAquaSoft: '#55dfff',
+    currentInk: '#061116',
+    successGreen: '#51ffb7',
+    successGreenDark: '#34d399',
+    successGreenSoft: '#73ffd0',
+    successInk: '#032317',
+    fontFamily: 'Arial,sans-serif'
+  };
+}
+
+function buildPortalNativeEmailStyle_(styles) {
+  const source = (styles && typeof styles === 'object') ? styles : {};
+  return Object.keys(source).map(function(key) {
+    const value = source[key];
+    return value == null || value === '' ? '' : (key + ':' + value);
+  }).filter(Boolean).join(';');
+}
+
+function buildPortalNativeEmailBadgeHtml_(label) {
+  const clean = trimString_(label);
+  if (!clean) return '';
+  const theme = getPortalNativeEmailTheme_();
+  return '<span style="' + buildPortalNativeEmailStyle_({
+    display: 'inline-block',
+    padding: '7px 11px',
+    'border-radius': '999px',
+    border: '1px solid ' + theme.currentAqua,
+    background: theme.currentAqua,
+    color: theme.currentInk,
+    'font-size': '11px',
+    'line-height': '1.1',
+    'font-weight': '900',
+    'letter-spacing': '.08em',
+    'text-transform': 'uppercase',
+    'white-space': 'nowrap'
+  }) + '">' + escapeHtml_(clean) + '</span>';
+}
+
+function buildPortalNativeEmailReviewBannerHtml_(label) {
+  const clean = trimString_(label);
+  if (!clean) return '';
+  const theme = getPortalNativeEmailTheme_();
+  return '<div style="' + buildPortalNativeEmailStyle_({
+    margin: '0 0 16px',
+    padding: '12px 14px',
+    border: '1px solid ' + theme.panelBorder,
+    'border-left': '4px solid ' + theme.brandRed,
+    'border-radius': '12px',
+    background: theme.panelAltBg,
+    color: theme.textMuted,
+    'font-family': theme.fontFamily,
+    'font-size': '13px',
+    'line-height': '1.5'
+  }) + '"><strong style="color:' + theme.text + ';">Email review fixture:</strong> ' + escapeHtml_(clean) + '</div>';
+}
+
+function buildPortalNativeEmailShellHtml_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const theme = getPortalNativeEmailTheme_();
+  const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal';
+  const heading = trimString_(opts.heading) || 'Red Threads portal update';
+  const badge = buildPortalNativeEmailBadgeHtml_(opts.badgeLabel);
+  const bodyHtml = trimString_(opts.bodyHtml);
+  const maxWidth = trimString_(opts.maxWidth) || '680px';
+  const headingRow = [
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">',
+    '<tr>',
+    '<td style="padding:0 12px 0 0;vertical-align:top;">',
+    '<div style="' + buildPortalNativeEmailStyle_({
+      margin: '0 0 8px',
+      color: theme.currentAquaSoft,
+      'font-size': '12px',
+      'font-weight': '900',
+      'letter-spacing': '.16em',
+      'text-transform': 'uppercase'
+    }) + '">' + escapeHtml_(eyebrow) + '</div>',
+    '<h1 style="' + buildPortalNativeEmailStyle_({
+      margin: '0',
+      color: theme.text,
+      'font-size': '28px',
+      'line-height': '1.18',
+      'font-weight': '900',
+      'letter-spacing': '0'
+    }) + '">' + escapeHtml_(heading) + '</h1>',
+    '</td>',
+    badge ? ('<td style="padding:2px 0 0;vertical-align:top;text-align:right;width:1%;">' + badge + '</td>') : '',
+    '</tr>',
+    '</table>'
+  ].filter(Boolean).join('');
+  return [
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="' + buildPortalNativeEmailStyle_({
+      margin: '0',
+      padding: '0',
+      background: theme.outerBg,
+      'border-collapse': 'collapse'
+    }) + '">',
+    '<tr><td align="center" style="padding:28px 12px;">',
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="' + buildPortalNativeEmailStyle_({
+      width: '100%',
+      'max-width': maxWidth,
+      background: theme.shellBg,
+      border: '1px solid ' + theme.shellBorder,
+      'border-radius': '18px',
+      'border-collapse': 'separate',
+      overflow: 'hidden',
+      'font-family': theme.fontFamily
+    }) + '">',
+    '<tr><td style="' + buildPortalNativeEmailStyle_({
+      padding: '26px 28px 22px',
+      background: theme.headerBg,
+      'border-bottom': '1px solid ' + theme.panelBorder
+    }) + '">' + headingRow + '</td></tr>',
+    '<tr><td style="padding:24px 28px 28px;">',
+    bodyHtml,
+    '</td></tr>',
+    '</table>',
+    '</td></tr>',
+    '</table>'
+  ].join('\n');
+}
+
+function deriveLifecycleEmailHeadingFromSubject_(subject) {
+  const clean = trimString_(subject);
+  if (!clean) return '';
+  function finalize(value) {
+    const normalized = trimString_(value).replace(/[.]+$/, '');
+    if (!normalized) return '';
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1) + '.';
+  }
+  const redThreadsInvoiceMatch = clean.match(/^Red Threads invoice\s+[^—-]+[—-]\s*(.+)$/i);
+  if (redThreadsInvoiceMatch && redThreadsInvoiceMatch[1]) return finalize(redThreadsInvoiceMatch[1]);
+  const invoiceSuffix = clean.replace(/\s+—\s+Red Threads invoice\s+.+$/i, '');
+  if (invoiceSuffix && invoiceSuffix !== clean) return finalize(invoiceSuffix);
+  const orderSuffix = clean.replace(/\s+for (your|a) Red Threads (order|invoice).*$/i, '');
+  return finalize(orderSuffix || clean);
+}
+
+function getLifecycleEmailCurrentStepLabel_(steps) {
+  const current = (Array.isArray(steps) ? steps : []).filter(function(step) {
+    return trimString_(step && step.state).toLowerCase() === 'current';
+  })[0];
+  return trimString_(current && current.label) || 'Portal Current';
+}
+
 function buildLifecycleEmailReferenceBlock_(fields) {
+  const theme = getPortalNativeEmailTheme_();
   const rows = (Array.isArray(fields) ? fields : []).map(function(field) {
     const item = (field && typeof field === 'object') ? field : {};
     return {
@@ -23152,16 +23335,16 @@ function buildLifecycleEmailReferenceBlock_(fields) {
   }).join('\n');
   const htmlRows = rows.map(function(field) {
     return '<tr>' +
-      '<td style="padding:6px 12px 6px 0;color:#64748b;font-weight:700;white-space:nowrap;vertical-align:top;">' + escapeHtml_(field.label) + '</td>' +
-      '<td style="padding:6px 0;color:#111827;vertical-align:top;">' + escapeHtml_(field.value) + '</td>' +
+      '<td style="padding:6px 12px 6px 0;color:' + theme.textSoft + ';font-weight:700;white-space:nowrap;vertical-align:top;">' + escapeHtml_(field.label) + '</td>' +
+      '<td style="padding:6px 0;color:' + theme.text + ';vertical-align:top;">' + escapeHtml_(field.value) + '</td>' +
       '</tr>';
   }).join('');
   return {
     text: buildLifecycleEmailTextBlock_('Reference', text.split('\n')),
     html: [
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;border-collapse:separate;">',
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:12px;background:' + theme.panelBg + ';border-collapse:separate;">',
       '<tr><td style="padding:12px 16px;">',
-      '<div style="font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;margin:0 0 6px;">Reference</div>',
+      '<div style="font-size:12px;text-transform:uppercase;color:' + theme.currentAquaSoft + ';font-weight:800;margin:0 0 6px;letter-spacing:.08em;">Reference</div>',
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' + htmlRows + '</table>',
       '</td></tr>',
       '</table>'
@@ -23170,6 +23353,7 @@ function buildLifecycleEmailReferenceBlock_(fields) {
 }
 
 function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, options) {
+  const theme = getPortalNativeEmailTheme_();
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const opts = (options && typeof options === 'object') ? options : {};
   let steps = Array.isArray(opts.steps) ? opts.steps : [];
@@ -23207,13 +23391,18 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
     return step.label + ': ' + (stateLabel[step.state] || step.state);
   }).join('\n');
   const htmlCells = normalizedSteps.map(function(step) {
-    const color = step.state === 'complete' ? '#047857' : (step.state === 'current' ? '#be123c' : '#64748b');
-    const background = step.state === 'complete' ? '#ecfdf5' : (step.state === 'current' ? '#fff1f2' : '#f8fafc');
-    const border = step.state === 'current' ? '#fecdd3' : '#e2e8f0';
+    const color = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? theme.currentInk : theme.futureText);
+    const statusColor = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? theme.currentInk : theme.futureText);
+    const background = step.state === 'complete'
+      ? theme.successGreen
+      : (step.state === 'current' ? theme.currentAqua : theme.futureBg);
+    const border = step.state === 'complete'
+      ? theme.successGreenSoft
+      : (step.state === 'current' ? theme.currentAquaSoft : theme.panelBorder);
     return '<td style="padding:0 4px 8px 0;vertical-align:top;width:20%;">' +
       '<div style="border:1px solid ' + border + ';background:' + background + ';border-radius:8px;padding:10px 8px;min-height:56px;">' +
-      '<div style="font-size:13px;line-height:1.25;font-weight:800;color:#111827;">' + escapeHtml_(step.label) + '</div>' +
-      '<div style="margin-top:4px;font-size:12px;line-height:1.25;font-weight:700;color:' + color + ';">' + escapeHtml_(stateLabel[step.state] || step.state) + '</div>' +
+      '<div style="font-size:13px;line-height:1.25;font-weight:800;color:' + color + ';">' + escapeHtml_(step.label) + '</div>' +
+      '<div style="margin-top:4px;font-size:12px;line-height:1.25;font-weight:800;color:' + statusColor + ';">' + escapeHtml_(stateLabel[step.state] || step.state) + '</div>' +
       '</div>' +
       '</td>';
   }).join('');
@@ -23221,7 +23410,7 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
     text: buildLifecycleEmailTextBlock_('Progress', text.split('\n')),
     html: [
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">',
-      '<tr><td style="padding:0 0 8px;font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;">Order Progress</td></tr>',
+      '<tr><td style="padding:0 0 8px;font-size:12px;text-transform:uppercase;color:' + theme.currentAquaSoft + ';font-weight:800;letter-spacing:.08em;">Order Progress</td></tr>',
       '<tr><td>',
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>',
       htmlCells,
@@ -23237,16 +23426,17 @@ function buildLifecycleEmailProgressBlock_(workflowContext, orderSummary, option
 }
 
 function buildLifecycleEmailHistoryBlock_(historyLines) {
+  const theme = getPortalNativeEmailTheme_();
   const lines = uniqueTrimmedStrings_(historyLines);
   if (!lines.length) return { text: '', html: '' };
   const htmlItems = lines.map(function(line) {
-    return '<li style="margin:0 0 6px;color:#334155;">' + escapeHtml_(line) + '</li>';
+    return '<li style="margin:0 0 6px;color:' + theme.textMuted + ';">' + escapeHtml_(line) + '</li>';
   }).join('');
   return {
     text: buildLifecycleEmailTextBlock_('History', lines),
     html: [
-      '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;">',
-      '<div style="font-size:12px;text-transform:uppercase;color:#9f1239;font-weight:800;margin:0 0 8px;">History</div>',
+      '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid ' + theme.panelBorder + ';border-radius:12px;background:' + theme.panelBg + ';">',
+      '<div style="font-size:12px;text-transform:uppercase;color:' + theme.currentAquaSoft + ';font-weight:800;margin:0 0 8px;letter-spacing:.08em;">History</div>',
       '<ul style="margin:0;padding-left:18px;">' + htmlItems + '</ul>',
       '</div>'
     ].join('')
@@ -23254,12 +23444,13 @@ function buildLifecycleEmailHistoryBlock_(historyLines) {
 }
 
 function buildLifecycleEmailCtaBlock_(label, url) {
+  const theme = getPortalNativeEmailTheme_();
   const cleanUrl = trimString_(url);
   const cleanLabel = trimString_(label) || 'Open Red Threads portal';
   if (!cleanUrl) return { text: '', html: '' };
   return {
     text: cleanLabel + ': ' + cleanUrl,
-    html: '<p style="margin:0 0 18px;"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">' + escapeHtml_(cleanLabel) + '</a></p>'
+    html: '<p style="margin:0 0 18px;"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(cleanLabel) + '</a></p>'
   };
 }
 
@@ -23268,23 +23459,28 @@ function buildStandardNoReplyFooterCopy_() {
 }
 
 function buildLifecycleEmailAttachmentNoteBlock_(note) {
+  const theme = getPortalNativeEmailTheme_();
   const clean = trimString_(note);
   if (!clean) return { text: '', html: '' };
   return {
     text: 'Attachment: ' + clean,
-    html: '<p style="margin:0 0 18px;color:#475569;"><strong>Attachment:</strong> ' + escapeHtml_(clean) + '</p>'
+    html: '<p style="margin:0 0 18px;color:' + theme.textMuted + ';"><strong style="color:' + theme.text + ';">Attachment:</strong> ' + escapeHtml_(clean) + '</p>'
   };
 }
 
 function buildLifecycleEmailFooter_() {
+  const theme = getPortalNativeEmailTheme_();
   return {
     text: buildStandardNoReplyFooterCopy_(),
-    html: '<p style="margin:0;color:#64748b;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>'
+    html: '<p style="margin:0;color:' + theme.textSoft + ';font-size:13px;line-height:1.6;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>'
   };
 }
 
 function buildLifecycleEmailShell_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
+  const theme = getPortalNativeEmailTheme_();
+  const heading = trimString_(opts.heading) || 'Red Threads portal update';
+  const badgeLabel = trimString_(opts.badgeLabel) || 'Portal Current';
   const intro = trimString_(opts.intro);
   const statusCopy = trimString_(opts.statusCopy);
   const nextStep = trimString_(opts.nextStep);
@@ -23300,21 +23496,25 @@ function buildLifecycleEmailShell_(options) {
     const item = (block && typeof block === 'object') ? block : {};
     if (trimString_(item.text)) textParts.push(trimString_(item.text));
   });
-  const htmlParts = [
-    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#1f2937;">',
-    intro ? ('<p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>') : '',
-    statusCopy ? ('<p style="margin:0 0 14px;color:#475569;">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
-    nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid #be123c;background:#fff1f2;color:#7f1d1d;"><strong>Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
+  const htmlInnerParts = [
+    '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
+    intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
+    statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
+    nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.currentAqua + ';background:' + theme.panelAltBg + ';color:' + theme.textMuted + ';border-radius:12px;"><strong style="color:' + theme.text + ';">Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
     buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
   ];
   blocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
-    if (trimString_(item.html)) htmlParts.push(trimString_(item.html));
+    if (trimString_(item.html)) htmlInnerParts.push(trimString_(item.html));
   });
-  htmlParts.push('</div>');
+  htmlInnerParts.push('</div>');
   return {
-    body: textParts.filter(Boolean).join('\n\n'),
-    htmlBody: htmlParts.filter(Boolean).join('\n')
+    body: [heading].concat(textParts).filter(Boolean).join('\n\n'),
+    htmlBody: buildPortalNativeEmailShellHtml_({
+      heading: heading,
+      badgeLabel: badgeLabel,
+      bodyHtml: htmlInnerParts.filter(Boolean).join('\n')
+    })
   };
 }
 
@@ -23538,8 +23738,11 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
 
 function buildLifecycleEmailCopyModel_(copy) {
   const source = (copy && typeof copy === 'object') ? copy : {};
+  const subject = trimString_(source.subject);
   return {
-    subject: trimString_(source.subject),
+    subject: subject,
+    heading: trimString_(source.heading) || deriveLifecycleEmailHeadingFromSubject_(subject),
+    badgeLabel: trimString_(source.badgeLabel),
     intro: trimString_(source.intro),
     statusCopy: trimString_(source.statusCopy),
     attachmentNote: trimString_(source.attachmentNote)
@@ -23759,6 +23962,8 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     usedConnectedBank: usedConnectedBank
   });
   const shell = buildLifecycleEmailShell_({
+    heading: copy.heading,
+    badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
@@ -25235,22 +25440,22 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
     buildStandardNoReplyFooterCopy_()
   ].filter(Boolean).join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Your Invoice Is Ready</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">Use the portal to review your invoice and project status. Your invoice PDF is linked below for reference.</p>',
-    '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#f7f9fc;border:1px solid #e6ebf3;">',
-    '      <div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Project:</strong> ' + escapeHtml_(trimString_(order.projectName || order.projectname || '--')) + '</div>',
-    '      <div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Invoice Number:</strong> ' + escapeHtml_(trimString_(invoice.invoiceNumber || order.invoiceNumber || '--')) + '</div>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Your Invoice Is Ready</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the portal to review your invoice and project status. Your invoice PDF is linked below for reference.</p>',
+    '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f172a;border:1px solid #1e293b;">',
+    '      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Project:</strong> ' + escapeHtml_(trimString_(order.projectName || order.projectname || '--')) + '</div>',
+    '      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Invoice Number:</strong> ' + escapeHtml_(trimString_(invoice.invoiceNumber || order.invoiceNumber || '--')) + '</div>',
     invoicePdfUrl
-      ? ('      <div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Invoice PDF:</strong> <a href="' + escapeHtml_(invoicePdfUrl) + '" style="color:#12b5ea;">View PDF</a></div>')
-      : '      <div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Invoice PDF:</strong> Pending</div>',
+      ? ('      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Invoice PDF:</strong> <a href="' + escapeHtml_(invoicePdfUrl) + '" style="color:#00c8ff;">View PDF</a></div>')
+      : '      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Invoice PDF:</strong> Pending</div>',
     '    </div>',
     portalUrl
-      ? ('    <p style="margin:0 0 14px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Red Threads Invoice</a></p>')
+      ? ('    <p style="margin:0 0 14px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#00c8ff;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Red Threads Invoice</a></p>')
       : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('\n');
@@ -25296,19 +25501,19 @@ function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
     '- Red Threads Team'
   ].filter(Boolean).join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads Portal Message</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">You have a new message</h1>',
-    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ',</p>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;"><strong>' + escapeHtml_(senderName) + '</strong> has responded to your message in your Red Threads portal.</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads Portal Message</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">You have a new message</h1>',
+    '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ',</p>',
+    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;"><strong>' + escapeHtml_(senderName) + '</strong> has responded to your message in your Red Threads portal.</p>',
     projectName
-      ? ('    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#f7f9fc;border:1px solid #e6ebf3;"><div style="font-size:14px;line-height:1.8;color:#35435a;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div></div>')
+      ? ('    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f172a;border:1px solid #1e293b;"><div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div></div>')
       : '',
     portalUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">Open Your Portal Message</a></p>')
       : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -25347,23 +25552,23 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
     portalUrl ? ('Open portal: ' + portalUrl) : ''
   ].filter(Boolean).join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads Client Message</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">A client sent a new portal message</h1>',
-    '    <div style="margin:0 0 18px;padding:18px 20px;border-radius:14px;background:#f7f9fc;border:1px solid #e6ebf3;font-size:14px;line-height:1.8;color:#35435a;">',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads Client Message</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">A client sent a new portal message</h1>',
+    '    <div style="margin:0 0 18px;padding:18px 20px;border-radius:14px;background:#0f172a;border:1px solid #1e293b;font-size:14px;line-height:1.8;color:#cbd5e1;">',
     '      <div><strong>From:</strong> ' + escapeHtml_(senderName || 'Client') + '</div>',
     clientEmail ? ('      <div><strong>Email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '',
     projectName ? ('      <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
     '    </div>',
-    '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#fff6f7;border:1px solid #fecdd3;">',
+    '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#170b12;border:1px solid #9f1239;">',
     '      <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#9f1239;font-weight:800;margin-bottom:10px;">Message</div>',
-    '      <div style="font-size:16px;line-height:1.7;color:#35435a;white-space:pre-wrap;">' + escapeHtml_(messageText || '--') + '</div>',
+    '      <div style="font-size:16px;line-height:1.7;color:#cbd5e1;white-space:pre-wrap;">' + escapeHtml_(messageText || '--') + '</div>',
     '    </div>',
     portalUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">Open Team Snapshot</a></p>')
       : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -25504,13 +25709,13 @@ function sendSummaryEstimatePdfEmail(payload) {
     NOTIFICATION_REPLY_NOTICE
   ].filter(Boolean).join('\n');
   const htmlBody = [
-    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#1f2937;">',
+    '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">' + escapeHtml_(documentKind === 'invoice'
       ? 'Your Red Threads invoice document is attached.'
       : 'Your Red Threads Summary document is attached.') + '</p>',
     dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
     projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
-    '  <p style="margin:0;color:#5f6f86;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
+    '  <p style="margin:0;color:#94a3b8;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
 
@@ -25518,7 +25723,11 @@ function sendSummaryEstimatePdfEmail(payload) {
     toList: recipients,
     subject: subject,
     body: body,
-    htmlBody: htmlBody,
+    htmlBody: buildPortalNativeEmailShellHtml_({
+      heading: documentKind === 'invoice' ? 'Invoice document attached.' : 'Project summary attached.',
+      badgeLabel: 'Document Ready',
+      bodyHtml: htmlBody
+    }),
     attachments: [blob],
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
@@ -26013,9 +26222,7 @@ function sendEmailReviewContent_(results, label, family, recipientClass, recipie
   try {
     if (!toList.length) throw new Error('missing_review_recipient');
     const htmlBody = [
-      '<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.5;color:#334155;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:12px 14px;margin:0 0 16px;">',
-      '<strong>Email review fixture:</strong> ' + escapeHtml_(label),
-      '</div>',
+      buildPortalNativeEmailReviewBannerHtml_(label),
       trimString_(content && content.htmlBody)
     ].filter(Boolean).join('\n');
     const body = [
@@ -26504,19 +26711,19 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
     buildStandardNoReplyFooterCopy_()
   ].join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:13px;line-height:1.5;color:#334155;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:12px 14px;margin:0 0 16px;"><strong>Email review fixture:</strong> Password reset client</div>',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#142033;">Password Reset Code</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#35435a;">Use the code below to reset your portal password.</p>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    ' + buildPortalNativeEmailReviewBannerHtml_('Password reset client'),
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
+    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Password Reset Code</h1>',
+    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the code below to reset your portal password.</p>',
     '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f1728;color:#ffffff;font-size:32px;line-height:1;font-weight:700;letter-spacing:0.28em;text-align:center;">' + escapeHtml_(code) + '</div>',
-    '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#35435a;">This code expires in 15 minutes.</p>',
+    '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">This code expires in 15 minutes.</p>',
     portalUrl
-      ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#12b5ea;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
+      ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#00c8ff;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
       : '',
-    '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#5f6f86;">If you did not request this, you can ignore this email.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#94a3b8;">If you did not request this, you can ignore this email.</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].join('');
@@ -28379,35 +28586,35 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const htmlMessages = messageRows.map(function(messageRow) {
     return [
       '      <tr>',
-      '        <td style="padding:14px 16px;border-top:1px solid #e6ebf3;">',
-      '          <div style="font-size:13px;line-height:1.5;color:#5f6f86;"><strong style="color:#142033;">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:#73829a;">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
-      '          <div style="margin-top:8px;font-size:15px;line-height:1.65;color:#35435a;white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
+      '        <td style="padding:14px 16px;border-top:1px solid #1e293b;">',
+      '          <div style="font-size:13px;line-height:1.5;color:#94a3b8;"><strong style="color:#f8fafc;">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:#94a3b8;">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
+      '          <div style="margin-top:8px;font-size:15px;line-height:1.65;color:#cbd5e1;white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
       '        </td>',
       '      </tr>'
     ].join('\n');
   }).join('\n');
   const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#f4f6fb;">',
-    '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#ffffff;border:1px solid #e6ebf3;border-radius:18px;font-family:Arial,sans-serif;color:#142033;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#73829a;font-weight:700;margin-bottom:12px;">Red Threads Portal Messages</div>',
-    '    <h1 style="margin:0 0 12px;font-size:26px;line-height:1.25;color:#142033;">' + escapeHtml_(isTeamDigest ? 'Client portal message digest' : 'You have new portal messages') + '</h1>',
+    '<div style="margin:0;padding:24px 0;background:#000000;">',
+    '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads Portal Messages</div>',
+    '    <h1 style="margin:0 0 12px;font-size:26px;line-height:1.25;color:#f8fafc;">' + escapeHtml_(isTeamDigest ? 'Client portal message digest' : 'You have new portal messages') + '</h1>',
     isTeamDigest
-      ? ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.</p>')
-      : ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#35435a;">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>'),
+      ? ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.</p>')
+      : ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>'),
     (projectName || clientEmail)
-      ? ('    <div style="margin:0 0 18px;padding:16px 18px;border-radius:12px;background:#f7f9fc;border:1px solid #e6ebf3;font-size:14px;line-height:1.8;color:#35435a;">'
+      ? ('    <div style="margin:0 0 18px;padding:16px 18px;border-radius:12px;background:#0f172a;border:1px solid #1e293b;font-size:14px;line-height:1.8;color:#cbd5e1;">'
         + (projectName ? ('<div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '')
         + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
         + '</div>')
       : '',
-    '    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 20px;border:1px solid #e6ebf3;border-radius:12px;overflow:hidden;">',
-    '      <tr><td style="padding:12px 16px;background:#f7f9fc;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#73829a;font-weight:800;">Messages</td></tr>',
+    '    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 20px;border:1px solid #1e293b;border-radius:12px;overflow:hidden;">',
+    '      <tr><td style="padding:12px 16px;background:#0f172a;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;font-weight:800;">Messages</td></tr>',
     htmlMessages,
     '    </table>',
     portalUrl
       ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:13px 20px;border-radius:999px;background:#f43f5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;">' + escapeHtml_(ctaLabel) + '</a></p>')
       : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#5f6f86;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
