@@ -23828,6 +23828,12 @@ function buildPortalNativeEmailShellHtml_(options) {
   const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal - Notification';
   const heading = trimString_(opts.heading) || 'Red Threads portal update';
   const subheading = trimString_(opts.subheading);
+  const headingColor = /(?:^|\s+—\s+)action required\b/i.test(heading)
+    ? theme.currentAqua
+    : theme.text;
+  const subheadingColor = /^action required\b/i.test(subheading)
+    ? theme.currentAqua
+    : theme.textMuted;
   const badge = opts.showBadge === true ? buildPortalNativeEmailBadgeHtml_(opts.badgeLabel) : '';
   const bodyHtml = trimString_(opts.bodyHtml);
   const maxWidth = trimString_(opts.maxWidth) || '680px';
@@ -23845,7 +23851,7 @@ function buildPortalNativeEmailShellHtml_(options) {
     }) + '">' + escapeHtml_(eyebrow) + '</div>',
     '<h1 style="' + buildPortalNativeEmailStyle_({
       margin: '0',
-      color: theme.text,
+      color: headingColor,
       'font-size': '28px',
       'line-height': '1.18',
       'font-weight': '900',
@@ -23853,7 +23859,7 @@ function buildPortalNativeEmailShellHtml_(options) {
     }) + '">' + escapeHtml_(heading) + '</h1>',
     subheading ? ('<div style="' + buildPortalNativeEmailStyle_({
       margin: '10px 0 0',
-      color: theme.textMuted,
+      color: subheadingColor,
       'font-size': '16px',
       'line-height': '1.4',
       'font-weight': '800',
@@ -23951,9 +23957,9 @@ function normalizeLifecycleEmailProgressStageLabel_(key, label) {
   const normalized = trimString_(key).toLowerCase();
   const raw = trimString_(label).toLowerCase();
   if (normalized === 'qty_sizes' || normalized === 'quantity' || normalized === 'quantities' || normalized === 'sizes') {
-    return 'Add Quantity / Sizes';
+    return 'Add QTY / Sizes';
   }
-  if (raw.indexOf('qty') >= 0 || raw.indexOf('size') >= 0) return 'Add Quantity / Sizes';
+  if (raw.indexOf('qty') >= 0 || raw.indexOf('quantity') >= 0 || raw.indexOf('size') >= 0) return 'Add QTY / Sizes';
   if (normalized === 'artwork' || normalized === 'art' || raw.indexOf('art') >= 0) return 'Approve Artwork';
   if (normalized === 'order' || normalized === 'place_order' || normalized === 'po_order' || raw.indexOf('order') >= 0) return 'Place Order';
   if (normalized === 'payment' || normalized === 'pay' || raw.indexOf('pay') >= 0) return 'Make Payment';
@@ -24202,7 +24208,10 @@ function shouldOmitLifecycleProjectDetailsField_(label) {
   return clean === 'project #' ||
     clean === 'project number' ||
     clean === 'deal number' ||
-    clean === 'payment method';
+    clean === 'payment method' ||
+    clean === 'invoice' ||
+    clean === 'estimate' ||
+    clean === 'receipt';
 }
 
 function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
@@ -24472,8 +24481,7 @@ function buildLifecycleEmailUpdateSubheading_(heading) {
   if (actionRequired && updateLabel) {
     updateLabel = 'Action required — ' + updateLabel;
   }
-  if (documentLabel && updateLabel) return documentLabel + ' — ' + updateLabel;
-  return documentLabel || updateLabel || clean;
+  return updateLabel || documentLabel || clean;
 }
 
 function buildLifecycleEmailHeaderDisplay_(heading, blocks) {
@@ -24489,9 +24497,10 @@ function buildLifecycleEmailHeaderDisplay_(heading, blocks) {
       subheading: ''
     };
   }
+  const updateLabel = buildLifecycleEmailUpdateSubheading_(cleanHeading);
   return {
-    heading: 'Project #' + projectNumber,
-    subheading: buildLifecycleEmailUpdateSubheading_(cleanHeading)
+    heading: 'Project # ' + projectNumber + (updateLabel ? (' — ' + updateLabel) : ''),
+    subheading: ''
   };
 }
 
@@ -24539,7 +24548,9 @@ function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, s
 
 function shouldSuppressLifecycleEmailActionCta_(cta) {
   const label = trimString_(cta && cta.label).toLowerCase();
-  return label === 'view red threads receipt';
+  return label === 'view red threads invoice' ||
+    label === 'view red threads estimate' ||
+    label === 'view red threads receipt';
 }
 
 function shouldOmitLifecycleProjectDetailLineForActionCard_(line, productionTimingActionLine) {
@@ -24567,7 +24578,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (intro) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>');
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
   if (attachmentSentence) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(attachmentSentence) + '</p>');
-  if (nextStep && !suppressNextAction) paragraphs.push('<p style="margin:0;color:' + theme.textMuted + ';"><strong style="color:' + theme.text + ';">Next action:</strong> ' + escapeHtml_(nextStep) + '</p>');
+  if (nextStep && !suppressNextAction) paragraphs.push('<p style="margin:0;color:' + theme.currentAqua + ';font-weight:900;"><strong style="color:' + theme.currentAqua + ';">Next action:</strong> ' + escapeHtml_(nextStep) + '</p>');
   if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
   const ctaHtml = trimString_(cta && cta.url) && !shouldSuppressLifecycleEmailActionCta_(cta)
     ? ('<div style="margin:14px 0 0;"><a href="' + escapeHtml_(cta.url) + '" style="' + buildPortalNativeEmailStyle_({
@@ -24697,7 +24708,7 @@ function buildLifecycleEmailShell_(options) {
     hasOrderContext ? actionCardHtml : primaryCtaHtml,
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
-    !hasOrderContext && nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.currentAqua + ';background:' + theme.panelAltBg + ';color:' + theme.textMuted + ';border-radius:12px;"><strong style="color:' + theme.text + ';">Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
+    !hasOrderContext && nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.currentAqua + ';background:' + theme.panelAltBg + ';color:' + theme.currentAqua + ';font-weight:900;border-radius:12px;"><strong style="color:' + theme.currentAqua + ';">Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
     progressHtml,
     detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
   ];
@@ -27187,14 +27198,6 @@ function sendEmailReviewSuiteHeadless_(payload) {
   return runEmailReviewSuiteWithLock_(function() {
     const ss = SpreadsheetApp.openById(cfg.sheetId);
     const reviewInvoiceArtifact = resolveEmailReviewHeadlessPortalRenderedArtifact_(ss, cfg);
-    if (!reviewInvoiceArtifact) {
-      return {
-        ok: false,
-        review: true,
-        headless: true,
-        error: 'email_review_portal_rendered_artifact_missing'
-      };
-    }
     return runEmailReviewSuiteCore_(ss, cfg, p, reviewInvoiceArtifact, {
       headless: true,
       dryRun: parseConfigBoolean_(p.dryRun, false)
@@ -27210,11 +27213,15 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
   const resetSummary = p.resetFixtures === false
     ? null
     : (dryRun ? dryRunEmailReviewFixtureReset_(ss, cfg) : resetEmailReviewFixtures_(ss, cfg));
-  const artifactRefreshSummary = dryRun
-    ? { ok: true, dryRun: true, skipped: true, reason: 'dry_run' }
-    : refreshEmailReviewOrderArtifactPointers_(ss, cfg, reviewInvoiceArtifact);
+  const artifactSelectionSummary = {
+    ok: true,
+    mode: 'order_specific_first',
+    fallbackAvailable: !!(reviewInvoiceArtifact && trimString_(reviewInvoiceArtifact.invoicePdfUrl || reviewInvoiceArtifact.invoiceFileId)),
+    dryRun: dryRun
+  };
   const infra = ensurePortalInfrastructure_(ss, cfg);
   const fixture = buildEmailReviewFixtureContext_(ss, cfg, infra);
+  fixture.reviewInvoiceFallbackArtifact = reviewInvoiceArtifact;
   fixture.reviewInvoiceArtifact = reviewInvoiceArtifact;
   const results = [];
 
@@ -27227,7 +27234,12 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
       portalRenderedInvoiceArtifact: true,
       resetFixtures: !!resetSummary,
       resetSummary: resetSummary,
-      artifactRefreshSummary: artifactRefreshSummary,
+      artifactSelectionSummary: artifactSelectionSummary,
+      artifactRefreshSummary: {
+        ok: true,
+        skipped: true,
+        reason: 'global_artifact_refresh_removed'
+      },
       sentCount: 0,
       skippedCount: 0,
       failedCount: 0,
@@ -27245,6 +27257,8 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
   const sentCount = results.filter(function(item) { return item.ok === true && item.sent === true; }).length;
   const skippedCount = results.filter(function(item) { return item.skipped === true; }).length;
   const failedCount = results.filter(function(item) { return item.ok === false && item.skipped !== true; }).length;
+  const attachmentMatchedCount = results.filter(function(item) { return item.attachmentMatched === true; }).length;
+  const attachmentFallbackCount = results.filter(function(item) { return item.attachmentFallback === true; }).length;
   return {
     ok: failedCount === 0,
     review: true,
@@ -27252,10 +27266,17 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
     portalRenderedInvoiceArtifact: true,
     resetFixtures: !!resetSummary,
     resetSummary: resetSummary,
-    artifactRefreshSummary: artifactRefreshSummary,
+    artifactSelectionSummary: artifactSelectionSummary,
+    artifactRefreshSummary: {
+      ok: true,
+      skipped: true,
+      reason: 'global_artifact_refresh_removed'
+    },
     sentCount: sentCount,
     skippedCount: skippedCount,
     failedCount: failedCount,
+    attachmentMatchedCount: attachmentMatchedCount,
+    attachmentFallbackCount: attachmentFallbackCount,
     results: results
   };
 }
@@ -27374,59 +27395,6 @@ function parseEmailReviewArtifactTimestamp_(row) {
     if (!Number.isNaN(date.getTime())) return date.getTime();
   }
   return 0;
-}
-
-function refreshEmailReviewOrderArtifactPointers_(ss, cfg, artifact) {
-  const source = (artifact && typeof artifact === 'object') ? artifact : {};
-  if (!trimString_(source.invoicePdfUrl || source.invoiceFileId)) {
-    return { ok: false, error: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice };
-  }
-  const targetNames = uniqueTrimmedStrings_([
-    cfg && cfg.portalOrdersSheetName,
-    'FIXTURE_PORTAL_ORDERS'
-  ]);
-  return {
-    ok: true,
-    targets: targetNames.map(function(sheetName) {
-      return refreshEmailReviewOrderArtifactPointersForSheet_(ss, sheetName, source);
-    })
-  };
-}
-
-function refreshEmailReviewOrderArtifactPointersForSheet_(ss, sheetName, artifact) {
-  const sheet = ss && ss.getSheetByName(trimString_(sheetName));
-  if (!sheet) return { sheet: trimString_(sheetName), ok: false, skipped: true, reason: 'sheet_missing' };
-  const lastRow = sheet.getLastRow();
-  const lastCol = sheet.getLastColumn();
-  if (lastRow < 2 || lastCol < 1) return { sheet: trimString_(sheetName), ok: true, updatedRows: 0 };
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(header) {
-    return trimString_(header).toLowerCase();
-  });
-  const tokenCol = headers.indexOf('token');
-  const invoiceUrlCol = headers.indexOf('invoicepdfurl');
-  const invoiceFileIdCol = headers.indexOf('invoicefileid');
-  const invoiceFileNameCol = headers.indexOf('invoicefilename');
-  if (invoiceUrlCol < 0) {
-    return { sheet: trimString_(sheetName), ok: false, skipped: true, reason: 'invoice_column_missing' };
-  }
-  const values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-  let updatedRows = 0;
-  values.forEach(function(row) {
-    const hasToken = tokenCol >= 0 ? !!trimString_(row[tokenCol]) : row.some(function(value) { return !!trimString_(value); });
-    if (!hasToken) return;
-    row[invoiceUrlCol] = trimString_(artifact.invoicePdfUrl);
-    if (invoiceFileIdCol >= 0) row[invoiceFileIdCol] = trimString_(artifact.invoiceFileId);
-    if (invoiceFileNameCol >= 0) row[invoiceFileNameCol] = trimString_(artifact.fileName);
-    updatedRows += 1;
-  });
-  if (updatedRows) {
-    sheet.getRange(2, 1, values.length, lastCol).setValues(values);
-  }
-  return {
-    sheet: trimString_(sheetName),
-    ok: true,
-    updatedRows: updatedRows
-  };
 }
 
 function buildEmailReviewRecipients_(payload) {
@@ -27673,6 +27641,8 @@ function auditEmailReviewArtifacts_(payload) {
   const ss = SpreadsheetApp.openById(cfg.sheetId);
   const infra = ensurePortalInfrastructure_(ss, cfg);
   const fixture = buildEmailReviewFixtureContext_(ss, cfg, infra);
+  fixture.reviewInvoiceFallbackArtifact = resolveEmailReviewHeadlessPortalRenderedArtifact_(ss, cfg);
+  fixture.reviewInvoiceArtifact = fixture.reviewInvoiceFallbackArtifact;
   const rows = [];
   [
     { label: 'Standard ACH pending', family: 'standard_ach', recipientClass: 'client', order: fixture.standardAchPending || fixture.baseOrder, required: true },
@@ -27684,6 +27654,7 @@ function auditEmailReviewArtifacts_(payload) {
     { label: 'Manual/check/cash pending', family: 'payment_lifecycle', recipientClass: 'client', order: fixture.manual || fixture.baseOrder, required: true },
     { label: 'Locked-order resend', family: 'locked_order_confirmation', recipientClass: 'client', order: fixture.baseOrder || fixture.standardAchPaid, required: true }
   ].forEach(function(item) {
+    item.fixture = fixture;
     rows.push(auditEmailReviewStoredArtifactRow_(item));
   });
   const rejectedCount = rows.filter(function(row) { return row.accepted !== true; }).length;
@@ -27698,25 +27669,27 @@ function auditEmailReviewArtifacts_(payload) {
 
 function auditEmailReviewStoredArtifactRow_(item) {
   const orderInfo = item && item.order;
-  const summary = buildPortalOrderSummary_(orderInfo && orderInfo.rowObjNormalized);
-  const source = {
-    invoicePdfUrl: trimString_(summary.invoicePdfUrl),
-    invoiceFileId: trimString_(summary.invoiceFileId),
-    fileName: trimString_(summary.invoiceFileName || summary.fileName)
-  };
-  const result = buildLifecycleEmailAttachmentSafe_(source, '', {
-    requirePortalRenderedInvoice: true
-  });
+  const fixture = item && item.fixture;
+  let artifact = null;
+  let error = '';
+  try {
+    artifact = resolveEmailReviewOrderInvoiceArtifact_(fixture, orderInfo, {});
+  } catch (err) {
+    error = normalizeEmailReviewError_(err);
+  }
+  const meta = artifact && artifact.emailReviewAttachmentMeta ? artifact.emailReviewAttachmentMeta : null;
   return {
     label: trimString_(item && item.label),
     family: trimString_(item && item.family),
     recipientClass: trimString_(item && item.recipientClass),
     attachmentRequired: item && item.required === true,
-    fileName: trimString_(result && result.fileName),
-    accepted: result && result.ok === true,
-    reason: result && result.ok === true
-      ? 'portal_rendered_attachment_accepted'
-      : trimString_(result && result.error) || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
+    fileName: trimString_(artifact && artifact.fileName),
+    accepted: !!artifact,
+    attachmentMatched: meta && meta.matched === true,
+    attachmentFallback: meta && meta.fallback === true,
+    reason: artifact
+      ? normalizeEmailReviewAttachmentReason_(meta && meta.reason)
+      : error || LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
   };
 }
 
@@ -27802,26 +27775,148 @@ function buildEmailReviewInvoiceAttachmentName_(summary, fallbackFileName, optio
   return ref.fileName || trimString_(fallbackFileName);
 }
 
+function buildEmailReviewOrderArtifactSource_(orderInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : ((orderInfo && typeof orderInfo === 'object') ? orderInfo : {});
+  const summary = buildPortalOrderSummary_(row);
+  return {
+    invoicePdfUrl: trimString_(summary.invoicePdfUrl || row.invoicepdfurl || row.invoicePdfUrl),
+    invoiceFileId: trimString_(row.invoicefileid || row.invoiceFileId),
+    fileName: trimString_(row.invoicefilename || row.invoiceFileName || summary.invoiceFileName || summary.fileName),
+    source: 'order'
+  };
+}
+
+function validateEmailReviewPortalRenderedArtifactSource_(artifact) {
+  const source = (artifact && typeof artifact === 'object') ? artifact : {};
+  if (!trimString_(source.invoicePdfUrl || source.invoiceFileId)) {
+    return {
+      ok: false,
+      reason: 'artifact_missing'
+    };
+  }
+  const result = buildLifecycleEmailAttachmentSafe_(source, '', {
+    requirePortalRenderedInvoice: true
+  });
+  if (!result || result.ok !== true) {
+    return {
+      ok: false,
+      reason: normalizeEmailReviewAttachmentReason_(result && result.error)
+    };
+  }
+  return {
+    ok: true,
+    fileName: trimString_(result.fileName || source.fileName),
+    reason: 'portal_rendered_valid'
+  };
+}
+
+function normalizeEmailReviewAttachmentReason_(value) {
+  const clean = trimString_(value).replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase();
+  return clean || 'artifact_unavailable';
+}
+
+function doesEmailReviewArtifactSemanticallyMatchOrder_(artifact, validation, summary) {
+  const projectNumber = getPortalDocumentProjectNumber_(summary);
+  if (!projectNumber) {
+    return { ok: true, reason: 'project_unavailable' };
+  }
+  const haystack = [
+    artifact && artifact.fileName,
+    validation && validation.fileName
+  ].map(function(value) {
+    return trimString_(value).toLowerCase();
+  }).filter(Boolean).join(' ');
+  if (!haystack) {
+    return { ok: false, reason: 'artifact_filename_missing' };
+  }
+  const compact = haystack.replace(/[^a-z0-9]+/g, '');
+  const projectCompact = trimString_(projectNumber).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!projectCompact) {
+    return { ok: true, reason: 'project_unavailable' };
+  }
+  if (compact.indexOf(projectCompact) === -1) {
+    return { ok: false, reason: 'artifact_project_mismatch' };
+  }
+  return { ok: true, reason: 'order_artifact_matched' };
+}
+
+function buildEmailReviewAttachmentMeta_(matched, fallback, reason) {
+  return {
+    matched: matched === true,
+    fallback: fallback === true,
+    reason: normalizeEmailReviewAttachmentReason_(reason)
+  };
+}
+
+function resolveEmailReviewOrderInvoiceArtifact_(fixture, orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const semanticSource = Object.assign({}, summary, {
+    rowObjNormalized: row
+  });
+  const ownArtifact = buildEmailReviewOrderArtifactSource_(orderInfo);
+  const ownValidation = validateEmailReviewPortalRenderedArtifactSource_(ownArtifact);
+  if (ownValidation.ok === true) {
+    const semanticMatch = doesEmailReviewArtifactSemanticallyMatchOrder_(ownArtifact, ownValidation, semanticSource, opts);
+    if (semanticMatch.ok === true) {
+      return {
+        invoicePdfUrl: trimString_(ownArtifact.invoicePdfUrl),
+        invoiceFileId: trimString_(ownArtifact.invoiceFileId),
+        fileName: trimString_(ownValidation.fileName || ownArtifact.fileName),
+        emailReviewAttachmentMeta: buildEmailReviewAttachmentMeta_(true, false, semanticMatch.reason || 'order_artifact_matched')
+      };
+    }
+  }
+
+  const fallback = fixture && (fixture.reviewInvoiceFallbackArtifact || fixture.reviewInvoiceArtifact)
+    ? (fixture.reviewInvoiceFallbackArtifact || fixture.reviewInvoiceArtifact)
+    : null;
+  const fallbackValidation = validateEmailReviewPortalRenderedArtifactSource_(fallback);
+  if (fallbackValidation.ok === true) {
+    const ownReason = ownValidation.ok === true
+      ? doesEmailReviewArtifactSemanticallyMatchOrder_(ownArtifact, ownValidation, semanticSource, opts).reason
+      : ownValidation.reason;
+    return {
+      invoicePdfUrl: trimString_(fallback.invoicePdfUrl),
+      invoiceFileId: trimString_(fallback.invoiceFileId),
+      fileName: trimString_(fallbackValidation.fileName || fallback.fileName),
+      emailReviewAttachmentMeta: buildEmailReviewAttachmentMeta_(false, true, ownReason || 'fallback_latest_portal_rendered_artifact')
+    };
+  }
+
+  if (ownValidation.ok === true) {
+    return {
+      invoicePdfUrl: trimString_(ownArtifact.invoicePdfUrl),
+      invoiceFileId: trimString_(ownArtifact.invoiceFileId),
+      fileName: trimString_(ownValidation.fileName || ownArtifact.fileName),
+      emailReviewAttachmentMeta: buildEmailReviewAttachmentMeta_(false, false, 'order_artifact_valid_but_unmatched')
+    };
+  }
+
+  throw new Error('email_review_portal_rendered_artifact_missing');
+}
+
 function buildEmailReviewInvoiceInfo_(fixture, orderInfo, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
-  const override = fixture && fixture.reviewInvoiceArtifact ? fixture.reviewInvoiceArtifact : null;
-  if (!override || !trimString_(override.invoicePdfUrl || override.invoiceFileId)) {
-    throw new Error('email_review_portal_rendered_invoice_required');
-  }
+  const artifact = resolveEmailReviewOrderInvoiceArtifact_(fixture, orderInfo, opts);
   const invoiceInfo = {
     invoiceNumber: trimString_(summary.invoiceNumber),
-    invoicePdfUrl: trimString_(override.invoicePdfUrl),
-    invoiceFileId: trimString_(override.invoiceFileId),
-    fileName: buildEmailReviewInvoiceAttachmentName_(summary, override.fileName, {
+    invoicePdfUrl: trimString_(artifact.invoicePdfUrl),
+    invoiceFileId: trimString_(artifact.invoiceFileId),
+    fileName: buildEmailReviewInvoiceAttachmentName_(summary, artifact.fileName, {
       kind: opts.fresh === true ? 'receipt' : 'invoice'
-    })
+    }),
+    emailReviewAttachmentMeta: artifact.emailReviewAttachmentMeta
   };
-  return attachPortalDocumentReferenceToInvoiceInfo_(invoiceInfo, orderInfo, {
+  const attached = attachPortalDocumentReferenceToInvoiceInfo_(invoiceInfo, orderInfo, {
     documentKind: opts.fresh === true ? PORTAL_DOCUMENT_KINDS.receipt : PORTAL_DOCUMENT_KINDS.invoice,
     forceFileName: true
   });
+  attached.emailReviewAttachmentMeta = invoiceInfo.emailReviewAttachmentMeta;
+  return attached;
 }
 
 function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo, options) {
@@ -27837,12 +27932,17 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
     fileNameOverride: trimString_(invoiceInfo && invoiceInfo.fileName)
   });
   if (result.ok !== true) throw new Error(result.error || 'required_attachment_missing');
-  return result.attachments || [];
+  const attachments = result.attachments || [];
+  attachments.emailReviewAttachmentMeta = invoiceInfo && invoiceInfo.emailReviewAttachmentMeta
+    ? invoiceInfo.emailReviewAttachmentMeta
+    : null;
+  return attachments;
 }
 
 function sendEmailReviewContent_(results, label, family, recipientClass, recipients, content, attachments, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const toList = normalizeEmailRecipients_(recipients);
+  const attachmentMeta = opts.attachmentMeta || (attachments && attachments.emailReviewAttachmentMeta) || null;
   try {
     if (!toList.length) throw new Error('missing_review_recipient');
     const htmlBody = [
@@ -27862,7 +27962,7 @@ function sendEmailReviewContent_(results, label, family, recipientClass, recipie
       htmlBody: htmlBody,
       attachments: Array.isArray(attachments) ? attachments : []
     });
-    results.push({
+    const result = {
       ok: emailResult && emailResult.ok === true,
       sent: emailResult && emailResult.ok === true,
       label: label,
@@ -27871,16 +27971,28 @@ function sendEmailReviewContent_(results, label, family, recipientClass, recipie
       attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
       transport: trimString_(emailResult && emailResult.transport),
       noReply: emailResult && emailResult.noReply === true
-    });
+    };
+    if (attachmentMeta) {
+      result.attachmentMatched = attachmentMeta.matched === true;
+      result.attachmentFallback = attachmentMeta.fallback === true;
+      result.attachmentReason = normalizeEmailReviewAttachmentReason_(attachmentMeta.reason);
+    }
+    results.push(result);
   } catch (err) {
-    results.push({
+    const result = {
       ok: false,
       label: label,
       family: family,
       recipientClass: recipientClass,
       attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
       error: normalizeEmailReviewError_(err)
-    });
+    };
+    if (attachmentMeta) {
+      result.attachmentMatched = attachmentMeta.matched === true;
+      result.attachmentFallback = attachmentMeta.fallback === true;
+      result.attachmentReason = normalizeEmailReviewAttachmentReason_(attachmentMeta.reason);
+    }
+    results.push(result);
   }
 }
 

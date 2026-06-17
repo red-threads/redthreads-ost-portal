@@ -131,6 +131,8 @@ async function main() {
     sentCount: json.sentCount || 0,
     skippedCount: json.skippedCount || 0,
     failedCount: json.failedCount || 0,
+    attachmentMatchedCount: json.attachmentMatchedCount || 0,
+    attachmentFallbackCount: json.attachmentFallbackCount || 0,
     error: json.error || '',
     results: Array.isArray(json.results)
       ? json.results.map((item) => ({
@@ -141,6 +143,9 @@ async function main() {
         sent: item && item.sent,
         skipped: item && item.skipped,
         attachmentCount: item && item.attachmentCount,
+        attachmentMatched: item && item.attachmentMatched,
+        attachmentFallback: item && item.attachmentFallback,
+        attachmentReason: item && item.attachmentReason,
         error: item && item.error
       }))
       : []
