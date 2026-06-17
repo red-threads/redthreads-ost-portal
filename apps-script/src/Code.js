@@ -628,6 +628,7 @@ const AUTH_POLICY = {
   DEBUG_AUTH_TIMING: true,
   PROJECT_CACHE_TTL_SEC: 300
 };
+const AUTH_RESET_RETURN_CACHE_PREFIX = 'auth_reset_return_';
 
 const EXPORT_LOG_PERSON_EMAIL_HEADER = 'personemail';
 const LOGIN_DENY_MESSAGE =
@@ -759,7 +760,9 @@ function buildPortalRequestRouteMeta_(e) {
     accountAccessToken: String(params.accountAccessToken || params.dashboardAccessToken || '').trim(),
     paymentOrigin: String(params.paymentOrigin || '').trim(),
     mode: normalizeMode_(params.mode) === 'team' ? 'team' : '',
-    teamReview: trimString_(params.teamReview)
+    teamReview: trimString_(params.teamReview),
+    reset: String(params.reset || '').trim() === '1' ? '1' : '',
+    resetToken: normalizeResetReturnToken_(params.resetToken)
   };
 }
 
@@ -785,7 +788,9 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     accountAccessToken: String(meta.accountAccessToken || '').trim(),
     paymentOrigin: String(meta.paymentOrigin || '').trim(),
     mode: normalizeMode_(meta.mode) === 'team' ? 'team' : '',
-    teamReview: trimString_(meta.teamReview)
+    teamReview: trimString_(meta.teamReview),
+    reset: String(meta.reset || '').trim() === '1' ? '1' : '',
+    resetToken: normalizeResetReturnToken_(meta.resetToken)
   };
   return payload;
 }
@@ -1631,6 +1636,9 @@ function doPost(e) {
     }
     if (action === 'auth_send_reset_code') {
       return jsonOutput_(authSendResetCode(payload));
+    }
+    if (action === 'auth_resolve_reset_return_token') {
+      return jsonOutput_(authResolveResetReturnToken(payload));
     }
     if (action === 'send_email_review_suite') {
       return jsonOutput_(sendEmailReviewSuite(payload));
@@ -14495,6 +14503,162 @@ function assertTeamModeAuthorized_(ctx, payload) {
   return true;
 }
 
+function normalizeResetReturnToken_(value) {
+  const clean = trimString_(value);
+  return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(clean)
+    ? clean.toLowerCase()
+    : '';
+}
+
+function generateResetReturnToken_() {
+  return normalizeResetReturnToken_(Utilities.getUuid());
+}
+
+function buildResetReturnCacheKey_(token) {
+  const clean = normalizeResetReturnToken_(token);
+  return clean ? (AUTH_RESET_RETURN_CACHE_PREFIX + clean) : '';
+}
+
+function cacheResetReturnToken_(token, email, expiresAtMs) {
+  const cleanToken = normalizeResetReturnToken_(token);
+  const cleanEmail = normalizeEmail_(email);
+  const expiry = Number(expiresAtMs || 0);
+  if (!cleanToken || !cleanEmail || !expiry) return false;
+  const ttlSeconds = Math.min(
+    Math.floor(AUTH_POLICY.RESET_CODE_TTL_MS / 1000),
+    Math.floor((expiry - Date.now()) / 1000)
+  );
+  if (!ttlSeconds || ttlSeconds <= 0) return false;
+  const key = buildResetReturnCacheKey_(cleanToken);
+  if (!key) return false;
+  CacheService.getScriptCache().put(key, JSON.stringify({
+    email: cleanEmail,
+    expiresAt: new Date(expiry).toISOString()
+  }), ttlSeconds);
+  return true;
+}
+
+function resolveResetReturnToken_(token) {
+  const cleanToken = normalizeResetReturnToken_(token);
+  const key = buildResetReturnCacheKey_(cleanToken);
+  if (!key) return { ok: false, error: 'reset_link_expired' };
+  const cache = CacheService.getScriptCache();
+  const raw = trimString_(cache.get(key));
+  if (!raw) return { ok: false, error: 'reset_link_expired' };
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_) {
+    parsed = null;
+  }
+  const email = normalizeEmail_(parsed && parsed.email);
+  const expiresAtMs = parseIsoDateMs_(parsed && parsed.expiresAt);
+  if (!email || !expiresAtMs || expiresAtMs <= Date.now()) {
+    try {
+      cache.remove(key);
+    } catch (_) {}
+    return { ok: false, error: 'reset_link_expired' };
+  }
+  return {
+    ok: true,
+    email: email,
+    expiresAt: new Date(expiresAtMs).toISOString()
+  };
+}
+
+function buildPasswordResetReturnUrl_(token) {
+  const cleanToken = normalizeResetReturnToken_(token);
+  if (!cleanToken) return '';
+  return appendQueryParamsToUrl_(buildExternalPortalBaseUrl_(), {
+    reset: '1',
+    resetToken: cleanToken
+  });
+}
+
+function buildPasswordResetEmailContent_(code, resetUrl) {
+  const cleanCode = trimString_(code);
+  const cleanUrl = trimString_(resetUrl);
+  const theme = getPortalNativeEmailTheme_();
+  const cta = buildLifecycleEmailCtaBlock_(
+    'Return to the portal to reset your password',
+    cleanUrl
+  );
+  const fallback = 'If the button does not work, open the portal and choose Forgot password, then enter this code.';
+  const body = [
+    'Use this code to reset your Red Threads portal password.',
+    '',
+    'Reset code: ' + cleanCode,
+    '',
+    'This code expires in 15 minutes.',
+    '',
+    cleanUrl ? cta.text : '',
+    '',
+    fallback,
+    '',
+    'If you did not request this, you can ignore this email.',
+    '',
+    buildStandardNoReplyFooterCopy_()
+  ].filter(function(line, idx, arr) {
+    if (line) return true;
+    return idx > 0 && idx < arr.length - 1;
+  }).join('\n');
+  const bodyHtml = [
+    '<div style="' + buildPortalNativeEmailStyle_({
+      'font-family': theme.fontFamily,
+      'font-size': '15px',
+      'line-height': '1.7',
+      color: theme.textMuted
+    }) + '">',
+    '<p style="margin:0 0 16px;color:' + theme.text + ';">Use this code to reset your Red Threads portal password.</p>',
+    '<div style="' + buildPortalNativeEmailStyle_({
+      margin: '0 0 18px',
+      padding: '18px 20px',
+      'border-radius': '14px',
+      border: '1px solid ' + theme.panelBorder,
+      background: theme.panelBg,
+      color: theme.text,
+      'font-size': '32px',
+      'line-height': '1',
+      'font-weight': '900',
+      'letter-spacing': '.28em',
+      'text-align': 'center'
+    }) + '">' + escapeHtml_(cleanCode) + '</div>',
+    '<p style="margin:0 0 16px;color:' + theme.textMuted + ';">This code expires in 15 minutes.</p>',
+    cta.html,
+    '<p style="margin:0 0 14px;color:' + theme.textSoft + ';">' + escapeHtml_(fallback) + '</p>',
+    '<p style="margin:0 0 18px;color:' + theme.textSoft + ';">If you did not request this, you can ignore this email.</p>',
+    buildLifecycleEmailFooter_().html,
+    '</div>'
+  ].filter(Boolean).join('\n');
+  return {
+    subject: 'Reset your Red Threads portal password',
+    body: body,
+    htmlBody: buildPortalNativeEmailShellHtml_({
+      heading: 'Reset your Red Threads portal password',
+      badgeLabel: 'Password reset',
+      bodyHtml: bodyHtml,
+      maxWidth: '640px'
+    })
+  };
+}
+
+function authResolveResetReturnToken(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const resolved = resolveResetReturnToken_(p.resetToken || p.token);
+    if (!resolved || resolved.ok !== true) {
+      return { ok: false, error: 'This reset link expired. Enter your email to request a new code.' };
+    }
+    return {
+      ok: true,
+      email: resolved.email,
+      expiresAt: resolved.expiresAt
+    };
+  } catch (_) {
+    return { ok: false, error: 'This reset link expired. Enter your email to request a new code.' };
+  }
+}
+
 function authSendResetCode(payload) {
   try {
     const p = (payload && typeof payload === 'object') ? payload : {};
@@ -14525,40 +14689,25 @@ function authSendResetCode(payload) {
     }
 
     const code = generateResetCode_();
-    const expiresAt = new Date(now + AUTH_POLICY.RESET_CODE_TTL_MS).toISOString();
+    const expiresAtMs = now + AUTH_POLICY.RESET_CODE_TTL_MS;
+    const expiresAt = new Date(expiresAtMs).toISOString();
     updateUserResetCode_(usersSheet, user, code, expiresAt);
 
-    const subject = 'Red Threads password reset code';
-    const body = [
-      'Your Red Threads reset code is: ' + code,
-      '',
-      'This code expires in 15 minutes.',
-      '',
-      'Please return to the Red Threads portal to enter this code and continue.',
-      '',
-      'If you did not request this, you can ignore this email.',
-      '',
-      buildStandardNoReplyFooterCopy_()
-    ].join('\n');
-    const htmlBody = [
-      '<div style="margin:0;padding:24px 0;background:#000000;">',
-      '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
-      '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-      '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Password Reset Code</h1>',
-      '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the code below to reset your portal password.</p>',
-      '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f1728;color:#ffffff;font-size:32px;line-height:1;font-weight:700;letter-spacing:0.28em;text-align:center;">' + escapeHtml_(code) + '</div>',
-      '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">This code expires in 15 minutes.</p>',
-      '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">Return to the Red Threads portal to enter this code and continue.</p>',
-      '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#94a3b8;">If you did not request this, you can ignore this email.</p>',
-      '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
-      '  </div>',
-      '</div>'
-    ].join('');
+    let resetReturnUrl = '';
+    try {
+      const resetReturnToken = generateResetReturnToken_();
+      if (cacheResetReturnToken_(resetReturnToken, email, expiresAtMs)) {
+        resetReturnUrl = buildPasswordResetReturnUrl_(resetReturnToken);
+      }
+    } catch (_) {
+      resetReturnUrl = '';
+    }
+    const emailContent = buildPasswordResetEmailContent_(code, resetReturnUrl);
     sendNotificationEmail_({
       to: email,
-      subject: subject,
-      body: body,
-      htmlBody: htmlBody
+      subject: emailContent.subject,
+      body: emailContent.body,
+      htmlBody: emailContent.htmlBody
     });
 
     return { ok: true };
@@ -27382,38 +27531,17 @@ function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, doc
 
 function sendEmailReviewPasswordResetFallback_(results, recipient) {
   const code = '000000';
-  const body = [
-    '[EMAIL REVIEW: Password reset client]',
-    '',
-    'Your Red Threads reset code is: ' + code,
-    '',
-    'This code expires in 15 minutes.',
-    '',
-    'Please return to the Red Threads portal to enter this code and continue.',
-    '',
-    'If you did not request this, you can ignore this email.',
-    '',
-    buildStandardNoReplyFooterCopy_()
-  ].join('\n');
-  const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#000000;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
-    '    ' + buildPortalNativeEmailReviewBannerHtml_('Password reset client'),
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Password Reset Code</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the code below to reset your portal password.</p>',
-    '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f1728;color:#ffffff;font-size:32px;line-height:1;font-weight:700;letter-spacing:0.28em;text-align:center;">' + escapeHtml_(code) + '</div>',
-    '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">This code expires in 15 minutes.</p>',
-    '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">Return to the Red Threads portal to enter this code and continue.</p>',
-    '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#94a3b8;">If you did not request this, you can ignore this email.</p>',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
-    '  </div>',
-    '</div>'
-  ].join('');
+  const resetUrl = buildPasswordResetReturnUrl_('00000000-0000-4000-8000-000000000000');
+  const content = buildPasswordResetEmailContent_(code, resetUrl);
+  const htmlBody = content.htmlBody.replace(
+    '<div style="margin:0 0 8px;color:#55dfff;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase">Red Threads Portal</div>',
+    buildPortalNativeEmailReviewBannerHtml_('Password reset client') +
+      '<div style="margin:0 0 8px;color:#55dfff;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase">Red Threads Portal</div>'
+  );
   const result = sendNotificationEmail_({
     to: recipient,
-    subject: '[EMAIL REVIEW] Password reset client - Red Threads password reset code',
-    body: body,
+    subject: '[EMAIL REVIEW] Password reset client - ' + content.subject,
+    body: '[EMAIL REVIEW: Password reset client]\n\n' + content.body,
     htmlBody: htmlBody
   });
   results.push({

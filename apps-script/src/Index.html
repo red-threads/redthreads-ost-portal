@@ -22183,6 +22183,8 @@
   const PAY_NOW_METHOD = String(VM_REQUEST_ROUTE_META.payNow || URL_QUERY_PARAMS.get('payNow') || '').trim().toLowerCase();
   const PAYMENT_ORIGIN_PARAM_RAW = String(VM_REQUEST_ROUTE_META.paymentOrigin || URL_QUERY_PARAMS.get('paymentOrigin') || '').trim().toLowerCase();
   const PAYMENT_ORIGIN_PARAM = PAYMENT_ORIGIN_PARAM_RAW || (SUMMARY_DEEPLINK_REQUEST && PAY_NOW_METHOD === 'ach' ? 'ap' : '');
+  const PASSWORD_RESET_RETURN_REQUEST = URL_QUERY_PARAMS.get('reset') === '1' || VM_REQUEST_ROUTE_META.reset === '1';
+  const PASSWORD_RESET_RETURN_TOKEN = String(VM_REQUEST_ROUTE_META.resetToken || URL_QUERY_PARAMS.get('resetToken') || '').trim();
   const PO_RESUME_REQUEST = URL_QUERY_PARAMS.get('resumePo') === '1';
   const PO_RESUME_STAGE = String(URL_QUERY_PARAMS.get('poStage') || '').trim().toLowerCase();
   let HAS_PORTAL_TOKEN = false;
@@ -22383,7 +22385,9 @@
     'accountDocAction',
     'teamReview',
     'paymentOrigin',
-    'mode'
+    'mode',
+    'reset',
+    'resetToken'
   ];
   const TEAM_MODE_UNLOCK_STORAGE_PREFIX = 'rtTeamModeUnlocked';
   const TEAM_MODE_AUTH_STORAGE_PREFIX = 'rtTeamModeAuth';
@@ -23614,11 +23618,11 @@
     const stripeSessionId = String(source.stripeSessionId || '').trim();
     if (stripeSessionId) normalized.stripeSessionId = stripeSessionId;
 
-    ['summary', 'resumePo'].forEach(key => {
+    ['summary', 'resumePo', 'reset'].forEach(key => {
       if (String(source[key] || '').trim() === '1') normalized[key] = '1';
     });
 
-    ['payNow', 'poStage', 'accountDoc', 'accountDocAction', 'teamReview', 'paymentOrigin', 'mode'].forEach(key => {
+    ['payNow', 'poStage', 'accountDoc', 'accountDocAction', 'teamReview', 'paymentOrigin', 'mode', 'resetToken'].forEach(key => {
       const value = String(source[key] || '').trim();
       if (value) normalized[key] = value;
     });
@@ -27139,13 +27143,62 @@
     });
   }
 
+  function showExpiredPasswordResetReturn_(){
+    if (authForgotEmail) authForgotEmail.value = '';
+    if (authResetEmail) authResetEmail.value = '';
+    if (authResetCode) authResetCode.value = '';
+    if (authResetPassword) authResetPassword.value = '';
+    setView(VIEW_RESET_REQUEST, { preserveMessage: true });
+    setAuthMessage('This reset link expired. Enter your email to request a new code.', true, {
+      view: VIEW_RESET_REQUEST,
+      preserve: true
+    });
+  }
+
+  function startPasswordResetReturnRoute_(){
+    if (!PASSWORD_RESET_RETURN_REQUEST) return false;
+    if (authResetCode) authResetCode.value = '';
+    if (authResetPassword) authResetPassword.value = '';
+    setView(VIEW_RESET_CONFIRM, { focus: false, preserveMessage: true });
+    setAuthMessage('Opening password reset. One moment...', false, {
+      view: VIEW_RESET_CONFIRM,
+      preserve: true
+    });
+    if (!PASSWORD_RESET_RETURN_TOKEN) {
+      showExpiredPasswordResetReturn_();
+      return true;
+    }
+    callServer('authResolveResetReturnToken', {
+      resetToken: PASSWORD_RESET_RETURN_TOKEN
+    }).then(resp => {
+      if (!resp || resp.ok !== true || !resp.email) {
+        showExpiredPasswordResetReturn_();
+        return;
+      }
+      const email = String(resp.email || '').trim();
+      if (authResetEmail) authResetEmail.value = email;
+      if (authForgotEmail) authForgotEmail.value = email;
+      if (authResetCode) authResetCode.value = '';
+      if (authResetPassword) authResetPassword.value = '';
+      setView(VIEW_RESET_CONFIRM, { preserveMessage: true });
+      setAuthMessage('Enter the reset code from your email and choose a new password.', false, {
+        view: VIEW_RESET_CONFIRM,
+        preserve: true
+      });
+    }).catch(() => {
+      showExpiredPasswordResetReturn_();
+    });
+    return true;
+  }
+
   function initAuthShell(){
     ensureAuthShellBindings();
     wireEvents();
     applyAuthShellRuntimeState();
     setView(VIEW_LOGIN, { focus: false });
     setAuthMessage('', false, { view: VIEW_LOGIN });
-    if (SETUP_RETURN_RESULT) {
+    const resetReturnHandled = startPasswordResetReturnRoute_();
+    if (!resetReturnHandled && SETUP_RETURN_RESULT) {
       const sid = String(AUTH_SESSION_ID || readStoredSessionId() || '').trim();
       if (sid) {
         const setupReturnResult = SETUP_RETURN_RESULT;
@@ -27171,9 +27224,9 @@
       }
     }
     warmAuthRuntime();
-    notifyPortalReady({ reason: 'auth-shell-ready' });
+    notifyPortalReady({ reason: resetReturnHandled ? 'auth-reset-return-ready' : 'auth-shell-ready' });
 
-    // Boot policy for base /exec: always start on login view.
+    // Boot policy for base /exec: start on login unless a reset/setup return route was supplied.
   }
 
   async function goHomeFromPortal(){
