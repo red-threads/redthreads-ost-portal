@@ -8902,18 +8902,33 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const greeting = apName ? ('Hi ' + apName + ',') : 'Hello,';
   const footer = buildStandardNoReplyFooterCopy_();
+  const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_(ctx, summary, {
+    family: 'ap_payment_link',
+    recipientClass: 'client',
+    lifecycleOrderInfo: opts.lifecycleOrderInfo || opts.orderInfo,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra,
+    token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token)
+  });
   const reference = [
     invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
     dealNumber ? ('Project #: ' + dealNumber) : '',
     projectName ? ('Project: ' + projectName) : '',
     'Amount due: ' + amountDue
   ].filter(Boolean);
+  const lifecycleText = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.text);
+  }).filter(Boolean).join('\n\n');
+  const lifecycleHtml = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.html);
+  }).filter(Boolean).join('\n');
   const bodyLines = [
     greeting,
     '',
     'A secure Red Threads ACH payment page is ready for this invoice.',
     '',
-    reference.join('\n'),
+    lifecycleText || reference.join('\n'),
     '',
     'Open secure ACH payment page:',
     paymentLink,
@@ -8928,12 +8943,14 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">' + escapeHtml_(greeting) + '</p>',
     '  <p style="margin:0 0 14px;">A secure Red Threads ACH payment page is ready for this invoice.</p>',
-    '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #1e293b;border-radius:14px;background:#0f172a;">',
-    invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
-    dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
-    projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
-    '    <div><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</div>',
-    '  </div>',
+    lifecycleHtml || [
+      '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #1e293b;border-radius:14px;background:#0f172a;">',
+      invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
+      dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
+      projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
+      '    <div><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</div>',
+      '  </div>'
+    ].filter(Boolean).join('\n'),
     paymentLink
       ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(paymentLink) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">Open secure ACH payment page</a></p>')
       : '',
@@ -8970,7 +8987,11 @@ function sendAchApPaymentLinkEmail_(ctx, orderSummary, options) {
   }
   const purchaserEmail = normalizeEmail_(ctx && ctx.orderDraft && ctx.orderDraft.personEmail);
   const ccList = purchaserEmail && recipients.indexOf(purchaserEmail) < 0 ? [purchaserEmail] : [];
-  const content = buildAchApPaymentLinkEmailContent_(ctx, orderSummary, opts);
+  const content = buildAchApPaymentLinkEmailContent_(ctx, orderSummary, Object.assign({}, opts, {
+    cfg: ctx && ctx.cfg,
+    ss: ctx && ctx.ss,
+    infra: ctx && ctx.infra
+  }));
   const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('ap_payment_link', '', {});
   const attachmentResult = resolveLifecycleEmailAttachment_(orderSummary, attachmentPolicy, {
     safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
@@ -14479,15 +14500,12 @@ function authSendResetCode(payload) {
     updateUserResetCode_(usersSheet, user, code, expiresAt);
 
     const subject = 'Red Threads password reset code';
-    const portalUrl = trimString_(buildExternalPortalBaseUrl_());
     const body = [
       'Your Red Threads reset code is: ' + code,
       '',
       'This code expires in 15 minutes.',
       '',
-      portalUrl
-        ? ('Please return to the portal to enter this code and continue: ' + portalUrl)
-        : 'Please return to the Red Threads portal to enter this code and continue.',
+      'Please return to the Red Threads portal to enter this code and continue.',
       '',
       'If you did not request this, you can ignore this email.',
       '',
@@ -14501,9 +14519,7 @@ function authSendResetCode(payload) {
       '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the code below to reset your portal password.</p>',
       '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f1728;color:#ffffff;font-size:32px;line-height:1;font-weight:700;letter-spacing:0.28em;text-align:center;">' + escapeHtml_(code) + '</div>',
       '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">This code expires in 15 minutes.</p>',
-      portalUrl
-        ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#00c8ff;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
-        : '',
+      '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">Return to the Red Threads portal to enter this code and continue.</p>',
       '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#94a3b8;">If you did not request this, you can ignore this email.</p>',
       '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
       '  </div>',
@@ -20005,12 +20021,29 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const projectName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.projectName);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const intro = trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.';
+  const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_(ctx, summary, {
+    family: 'locked_order_confirmation',
+    recipientClass: trimString_(opts.recipientClass) === 'team' ? 'team' : 'client',
+    lifecycleOrderInfo: opts.lifecycleOrderInfo || opts.orderInfo,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra,
+    token: token
+  });
+  const lifecycleText = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.text);
+  }).filter(Boolean).join('\n\n');
+  const lifecycleHtml = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.html);
+  }).filter(Boolean).join('\n');
   const lines = [
     intro,
     '',
-    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
-    projectName ? ('Project: ' + projectName) : '',
-    'Amount due: ' + amountDue,
+    lifecycleText || [
+      invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+      projectName ? ('Project: ' + projectName) : '',
+      'Amount due: ' + amountDue
+    ].filter(Boolean).join('\n'),
     '',
     links.summaryUrl ? ('View your order summary: ' + links.summaryUrl) : '',
     links.cardUrl ? ('Pay by credit card (3% card fee applies): ' + links.cardUrl) : '',
@@ -20023,9 +20056,11 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const html = [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>',
-    invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
-    projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
-    '  <p style="margin:0 0 16px;"><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</p>',
+    lifecycleHtml || [
+      invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
+      projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
+      '  <p style="margin:0 0 16px;"><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</p>'
+    ].filter(Boolean).join('\n'),
     links.summaryUrl
       ? ('  <p style="margin:0 0 12px;"><a href="' + escapeHtml_(links.summaryUrl) + '" style="color:#be123c;font-weight:800;text-decoration:underline;">View your order summary</a></p>')
       : '',
@@ -20411,11 +20446,29 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
   const subject = invoiceNumber
     ? ('Red Threads Invoice ' + invoiceNumber)
     : 'Red Threads Invoice';
+  const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_({}, invoice, {
+    family: 'purchase_order_invoice_email',
+    recipientClass: 'client',
+    lifecycleOrderInfo: opts.lifecycleOrderInfo || opts.orderInfo,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra,
+    rowInfo: opts.rowInfo,
+    token: token
+  });
+  const lifecycleText = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.text);
+  }).filter(Boolean).join('\n\n');
+  const lifecycleHtml = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.html);
+  }).filter(Boolean).join('\n');
   const body = [
     'Your Red Threads invoice is attached.',
     '',
-    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
-    projectName ? ('Project: ' + projectName) : '',
+    lifecycleText || [
+      invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+      projectName ? ('Project: ' + projectName) : ''
+    ].filter(Boolean).join('\n'),
     '',
     'Next steps:',
     '1. Email this invoice to your purchasing or accounts payable team so they can issue the company purchase order.',
@@ -20427,8 +20480,10 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
   const htmlBody = [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">Your Red Threads invoice is attached.</p>',
-    invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
-    projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
+    lifecycleHtml || [
+      invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
+      projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : ''
+    ].filter(Boolean).join('\n'),
     '  <ol style="margin:0 0 16px 20px;padding:0;">',
     '    <li style="margin:0 0 8px;">Email this invoice to your purchasing or accounts payable team so they can issue the company purchase order.</li>',
     '    <li style="margin:0 0 8px;">Use the return link below to reopen the portal directly in the purchase-order upload step.</li>',
@@ -20453,13 +20508,30 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
 
 function sendPurchaseOrderInvoiceEmailWithAttachment_(token, recipients, invoiceInfo, options) {
   const invoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
+  let contentOptions = (options && typeof options === 'object') ? Object.assign({}, options) : {};
+  if (trimString_(token) && (!contentOptions.cfg || !contentOptions.ss || !contentOptions.infra)) {
+    try {
+      const displayCtx = buildOrderActionContext_({
+        token: trimString_(token),
+        createAccountIfMissing: false
+      });
+      contentOptions = Object.assign({}, contentOptions, {
+        cfg: displayCtx.cfg,
+        ss: displayCtx.ss,
+        infra: displayCtx.infra,
+        rowInfo: displayCtx.rowInfo
+      });
+    } catch (err) {
+      // The invoice email remains valid without lifecycle display blocks.
+    }
+  }
   const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('purchase_order_invoice_email', '', {});
   const attachmentResult = resolveLifecycleEmailAttachment_(invoice, attachmentPolicy, {
     fileNameOverride: invoice.fileName,
     safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
   });
   assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
-  const content = buildPurchaseOrderInvoiceEmailContent_(token, invoice, options);
+  const content = buildPurchaseOrderInvoiceEmailContent_(token, invoice, contentOptions);
   sendNotificationEmail_({
     toList: recipients,
     subject: content.subject,
@@ -21516,12 +21588,26 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     ctaLabel: getApAchLifecycleCtaLabel_(normalized, recipientClass),
     isReceipt: isApAchLifecycleReceiptMilestone_(normalized)
   }));
+  if (isApAchLifecycleFailureMilestone_(normalized)) {
+    applyPaymentBlockedLifecycleEmailContext_(emailContext, {
+      paymentBlocked: true,
+      nextStepText: getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText)
+    });
+  }
   const summary = emailContext.orderSummary || {};
   const copy = buildApAchLifecycleEmailCopy_(normalized, emailContext, {
     isTeamAlert: isTeamAlert
   });
   const token = getApAchLifecycleOrderToken_(orderInfo, summary);
   const ctaUrl = getApAchLifecycleCtaUrl_(token, recipientClass, normalized);
+  const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
+    family: 'ap_ach',
+    milestone: normalized,
+    recipientClass: recipientClass === 'team' ? 'team' : 'client',
+    sectionPolicy: {
+      history: false
+    }
+  });
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
@@ -21529,15 +21615,11 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     statusCopy: copy.statusCopy,
     nextStep: getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText),
     attachmentNote: copy.attachmentNote,
-    blocks: [
-      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
-      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
-        steps: emailContext.steps
-      }),
+    blocks: sectionBlocks.concat([
       buildLifecycleEmailHistoryBlock_(buildApAchLifecycleEmailHistoryLines_(normalized, emailContext.workflowContext, emailContext.orderSummary)),
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, ctaUrl),
       buildLifecycleEmailFooter_()
-    ]
+    ])
   });
   return {
     subject: copy.subject,
@@ -22514,22 +22596,22 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
   emailContext.ctaUrl = trimString_(cta.url);
   emailContext.ctaLabel = trimString_(cta.label);
   const copy = buildPortalLifecycleEmailCopy_(normalized, recipientClass, emailContext, meta, ctx.cfg || opts.cfg);
+  const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
+    family: 'portal_lifecycle',
+    milestone: normalized,
+    recipientClass: recipientClass
+  });
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
-    blocks: [
-      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
-      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
-        steps: emailContext.steps
-      }),
-      buildLifecycleEmailHistoryBlock_(emailContext.historyLines),
+    blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
       buildLifecycleEmailFooter_()
-    ]
+    ])
   });
   return {
     subject: copy.subject,
@@ -22987,6 +23069,14 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     recipientClass: recipientClass,
     ctaLabel: getPaymentLifecycleCtaLabel_(normalized)
   }));
+  if (isPaymentLifecycleFailureMilestone_(normalized)) {
+    applyPaymentBlockedLifecycleEmailContext_(emailContext, {
+      paymentBlocked: true,
+      nextStepText: recipientClass === 'team'
+        ? 'Review the failed payment in Team Mode.'
+        : 'Open your Red Threads invoice to retry payment or review next steps.'
+    });
+  }
   const summary = emailContext.orderSummary || {};
   const method = trimString_(summary.paymentMethodSelected).toLowerCase();
   const methodLabel = getPaymentLifecycleMethodLabel_(method);
@@ -22995,6 +23085,11 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     isTeamAlert: isTeamAlert,
     methodLabel: methodLabel
   });
+  const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
+    family: 'payment_lifecycle',
+    milestone: normalized,
+    recipientClass: recipientClass
+  });
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
@@ -23002,16 +23097,11 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
     attachmentNote: copy.attachmentNote,
-    blocks: [
-      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
-      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
-        steps: emailContext.steps
-      }),
-      buildLifecycleEmailHistoryBlock_(emailContext.historyLines),
+    blocks: sectionBlocks.concat([
       buildPaymentLifecycleInstructionsBlock_(normalized, emailContext.orderSummary),
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
       buildLifecycleEmailFooter_()
-    ]
+    ])
   });
   return {
     subject: copy.subject,
@@ -23440,6 +23530,121 @@ function buildLifecycleEmailHistoryBlock_(historyLines) {
       '<ul style="margin:0;padding-left:18px;">' + htmlItems + '</ul>',
       '</div>'
     ].join('')
+  };
+}
+
+function isPortalLifecycleClientDocumentDecisionMilestone_(milestone) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  return normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset;
+}
+
+function resolveLifecycleEmailSectionPolicy_(family, milestone, recipientClass, options) {
+  const type = trimString_(family).toLowerCase();
+  const recipient = trimString_(recipientClass).toLowerCase() === 'team' ? 'team' : 'client';
+  const opts = (options && typeof options === 'object') ? options : {};
+  const policy = {
+    reference: opts.reference === false ? false : true,
+    progress: opts.progress === false ? false : true,
+    history: opts.history === false ? false : true
+  };
+  if (type === 'portal_lifecycle' &&
+      recipient === 'client' &&
+      isPortalLifecycleClientDocumentDecisionMilestone_(milestone)) {
+    policy.reference = false;
+    policy.progress = false;
+    policy.history = false;
+  }
+  return policy;
+}
+
+function applyPaymentBlockedLifecycleEmailContext_(emailContext, options) {
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (opts.paymentBlocked !== true) return ctx;
+  const steps = Array.isArray(ctx.steps) ? ctx.steps : [];
+  ctx.steps = steps.map(function(step) {
+    const item = (step && typeof step === 'object') ? step : {};
+    const key = trimString_(item.key).toLowerCase();
+    const next = Object.assign({}, item);
+    if (key === 'payment') next.state = 'current';
+    if (key === 'production' && opts.productionAuthorized !== true) next.state = 'future';
+    return next;
+  });
+  if (opts.nextStepText) ctx.nextStepText = trimString_(opts.nextStepText);
+  return ctx;
+}
+
+function buildLifecycleEmailSectionBlocks_(emailContext, options) {
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const policy = resolveLifecycleEmailSectionPolicy_(
+    opts.family,
+    opts.milestone,
+    opts.recipientClass,
+    opts.sectionPolicy
+  );
+  const blocks = [];
+  if (policy.reference) blocks.push(buildLifecycleEmailReferenceBlock_(ctx.referenceFields));
+  if (policy.progress) {
+    blocks.push(buildLifecycleEmailProgressBlock_(ctx.workflowContext, ctx.orderSummary, {
+      steps: ctx.steps
+    }));
+  }
+  if (policy.history) blocks.push(buildLifecycleEmailHistoryBlock_(ctx.historyLines));
+  return blocks;
+}
+
+function resolveDirectLifecycleEmailOrderInfo_(source, options) {
+  const ctx = (source && typeof source === 'object') ? source : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (opts.orderInfo && opts.orderInfo.rowObjNormalized) return opts.orderInfo;
+  if (opts.lifecycleOrderInfo && opts.lifecycleOrderInfo.rowObjNormalized) return opts.lifecycleOrderInfo;
+  if (ctx.latestOrderInfo && ctx.latestOrderInfo.rowObjNormalized) return ctx.latestOrderInfo;
+
+  const cfg = opts.cfg || ctx.cfg || null;
+  const ss = opts.ss || ctx.ss || null;
+  const infra = opts.infra || ctx.infra || null;
+  const token = trimString_(
+    opts.token ||
+    ctx.token ||
+    (ctx.orderDraft && ctx.orderDraft.token) ||
+    (ctx.rowInfo && ctx.rowInfo.rowObjNormalized && ctx.rowInfo.rowObjNormalized.token)
+  );
+  let rowInfo = opts.rowInfo || ctx.rowInfo || null;
+  try {
+    if (!rowInfo && token && cfg && ss && infra && infra.exportSheet) {
+      rowInfo = findRowByToken_(infra.exportSheet, token);
+    }
+    if (rowInfo && cfg && ss && infra) {
+      return getCurrentPortalOrderForRow_(rowInfo, {
+        cfg: cfg,
+        ss: ss,
+        ordersSheet: infra.ordersSheet,
+        token: token
+      });
+    }
+  } catch (err) {
+    return null;
+  }
+  return null;
+}
+
+function buildDirectLifecycleEmailSectionBlocks_(source, invoiceInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const orderInfo = resolveDirectLifecycleEmailOrderInfo_(source, opts);
+  if (!orderInfo) return { emailContext: null, blocks: [] };
+  const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo || null, Object.assign({}, opts, {
+    recipientClass: trimString_(opts.recipientClass) === 'team' ? 'team' : 'client'
+  }));
+  applyPaymentBlockedLifecycleEmailContext_(emailContext, opts);
+  return {
+    emailContext: emailContext,
+    blocks: buildLifecycleEmailSectionBlocks_(emailContext, opts)
   };
 }
 
@@ -23949,6 +24154,14 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     jobType: type,
     recipientClass: isTeamAlert ? 'team' : 'client'
   }));
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
+    applyPaymentBlockedLifecycleEmailContext_(emailContext, {
+      paymentBlocked: true,
+      nextStepText: isTeamAlert
+        ? 'Review the ACH payment issue in Team Mode.'
+        : 'Open your Red Threads invoice to retry payment or review next steps.'
+    });
+  }
   const summary = emailContext.orderSummary || {};
   const invoiceNumber = trimString_(emailContext.invoiceNumber);
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
@@ -23961,6 +24174,11 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     verificationRequired: verificationRequired,
     usedConnectedBank: usedConnectedBank
   });
+  const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
+    family: 'standard_ach',
+    milestone: baseType,
+    recipientClass: isTeamAlert ? 'team' : 'client'
+  });
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
@@ -23968,15 +24186,10 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     statusCopy: copy.statusCopy,
     nextStep: emailContext.nextStepText,
     attachmentNote: copy.attachmentNote,
-    blocks: [
-      buildLifecycleEmailReferenceBlock_(emailContext.referenceFields),
-      buildLifecycleEmailProgressBlock_(emailContext.workflowContext, emailContext.orderSummary, {
-        steps: emailContext.steps
-      }),
-      buildLifecycleEmailHistoryBlock_(emailContext.historyLines),
+    blocks: sectionBlocks.concat([
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
       buildLifecycleEmailFooter_()
-    ]
+    ])
   });
   return {
     subject: copy.subject,
@@ -24445,7 +24658,10 @@ function processPurchaseOrderInvoiceEmailQueueJob_(jobInfo, options) {
     fileName: trimString_(row.invoicefilename || (queuedDraft && queuedDraft.invoiceFileName))
   };
   sendPurchaseOrderInvoiceEmailWithAttachment_(token, recipients, invoiceInfo, {
-    projectName: trimString_(orderDraft.projectName)
+    projectName: trimString_(orderDraft.projectName),
+    cfg: cfg,
+    ss: ss,
+    infra: infra
   });
   const now = nowIso_();
   let refreshedRow = null;
@@ -25684,6 +25900,7 @@ function sendSummaryEstimatePdfEmail(payload) {
 
   const dealNumber = trimString_(p.dealNumber);
   const projectName = trimString_(p.projectName);
+  const token = trimString_(p.token);
   const documentKind = trimString_(p.documentKind).toLowerCase() === 'invoice' ? 'invoice' : 'summary';
   const fileName = sanitizeUploadedDocumentName_(
     p.fileName,
@@ -25698,13 +25915,36 @@ function sendSummaryEstimatePdfEmail(payload) {
   const subject = documentKind === 'invoice'
     ? (dealNumber ? ('Red Threads Project ' + dealNumber + ' Invoice') : 'Red Threads Project Invoice')
     : (dealNumber ? ('Red Threads Project ' + dealNumber + ' Summary') : 'Red Threads Project Summary');
+  let lifecycleSections = { blocks: [] };
+  if (token) {
+    try {
+      const displayCtx = buildOrderActionContext_({
+        token: token,
+        createAccountIfMissing: false
+      });
+      lifecycleSections = buildDirectLifecycleEmailSectionBlocks_(displayCtx, null, {
+        family: 'summary_pdf',
+        recipientClass: 'client'
+      });
+    } catch (err) {
+      lifecycleSections = { blocks: [] };
+    }
+  }
+  const lifecycleText = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.text);
+  }).filter(Boolean).join('\n\n');
+  const lifecycleHtml = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.html);
+  }).filter(Boolean).join('\n');
   const body = [
     documentKind === 'invoice'
       ? 'Your Red Threads invoice document is attached.'
       : 'Your Red Threads Summary document is attached.',
     '',
-    dealNumber ? ('Project #: ' + dealNumber) : '',
-    projectName ? ('Project Name: ' + projectName) : '',
+    lifecycleText || [
+      dealNumber ? ('Project #: ' + dealNumber) : '',
+      projectName ? ('Project Name: ' + projectName) : ''
+    ].filter(Boolean).join('\n'),
     '',
     NOTIFICATION_REPLY_NOTICE
   ].filter(Boolean).join('\n');
@@ -25713,8 +25953,10 @@ function sendSummaryEstimatePdfEmail(payload) {
     '  <p style="margin:0 0 14px;">' + escapeHtml_(documentKind === 'invoice'
       ? 'Your Red Threads invoice document is attached.'
       : 'Your Red Threads Summary document is attached.') + '</p>',
-    dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
-    projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
+    lifecycleHtml || [
+      dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
+      projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : ''
+    ].filter(Boolean).join('\n'),
     '  <p style="margin:0;color:#94a3b8;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -26156,6 +26398,20 @@ function buildEmailReviewPaidOrderInfo_(orderInfo, paymentMethod, options) {
 function buildEmailReviewFailedOrderInfo_(orderInfo, paymentMethod, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const now = nowIso_();
+  const base = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const portalState = safeJsonParse_(base.portalstatejson, {}) || {};
+  const failedPortalState = Object.assign({}, portalState, {
+    currentOrderState: ORDER_STATES.awaiting_payment_confirmation,
+    currentPaymentState: PAYMENT_STATES.failed,
+    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    currentPaymentMethod: trimString_(paymentMethod),
+    paidAt: '',
+    paidat: '',
+    authorizedToProduceAt: '',
+    authorizedtoproduceat: '',
+    productionStartedAt: '',
+    productionCompletedAt: ''
+  });
   return cloneEmailReviewOrderInfo_(orderInfo, Object.assign({
     paymentmethodselected: trimString_(paymentMethod),
     paymentstate: PAYMENT_STATES.failed,
@@ -26164,6 +26420,9 @@ function buildEmailReviewFailedOrderInfo_(orderInfo, paymentMethod, options) {
     paidat: '',
     paymentreceivedmanuallyat: '',
     authorizedtoproduceat: '',
+    productionstartedat: '',
+    productioncompletedat: '',
+    portalstatejson: JSON.stringify(failedPortalState),
     achfailurecode: 'review_fixture_payment_failed',
     achfailuremessage: 'Payment could not be completed in this review fixture.',
     stripelatesteventtype: 'payment_intent.payment_failed',
@@ -26382,7 +26641,11 @@ function sendEmailReviewApAchExamples_(results, fixture, recipients) {
     buildAchApPaymentLinkEmailContent_({ orderDraft: apDraft }, Object.assign({}, apSummary, apInvoice), {
       apName: 'Accounts Payable',
       apPaymentLink: apPaymentLink,
-      note: 'Email review copy.'
+      note: 'Email review copy.',
+      lifecycleOrderInfo: apBase,
+      cfg: fixture.cfg,
+      ss: fixture.ss,
+      infra: fixture.infra
     }),
     apLinkAttachments);
 
@@ -26557,7 +26820,10 @@ function sendEmailReviewChatExamples_(results, fixture, recipients) {
   sendEmailReviewContent_(results, 'Chat digest client to team', 'chat_message_digest', 'team', [recipients.team],
     buildChatMessageDigestEmailContent_(rowInfo, messages, {
       direction: CHAT_MESSAGE_DIGEST_DIRECTIONS.client_to_team,
-      token: trimString_(rowInfo.rowObjNormalized.token)
+      token: trimString_(rowInfo.rowObjNormalized.token),
+      cfg: fixture.cfg,
+      ss: fixture.ss,
+      infra: fixture.infra
     }),
     []);
   sendEmailReviewContent_(results, 'Chat digest team to client', 'chat_message_digest', 'client', [recipients.client],
@@ -26565,7 +26831,10 @@ function sendEmailReviewChatExamples_(results, fixture, recipients) {
       { id: 'review-team-1', sender: 'team', authorName: 'Red Threads Team', text: 'Review fixture team reply.', ts: now }
     ], {
       direction: CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client,
-      token: trimString_(rowInfo.rowObjNormalized.token)
+      token: trimString_(rowInfo.rowObjNormalized.token),
+      cfg: fixture.cfg,
+      ss: fixture.ss,
+      infra: fixture.infra
     }),
     []);
 }
@@ -26581,10 +26850,18 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
   const summary = Object.assign({}, buildPortalOrderSummary_(order.rowObjNormalized), invoiceInfo);
   const draft = safeJsonParse_(order.rowObjNormalized.orderdraftjson, {}) || {};
   const lockedContent = buildLockedOrderPaymentEmailContent_({ orderDraft: draft }, summary, {
-    intro: 'Your order confirmation has been resent for review.'
+    intro: 'Your order confirmation has been resent for review.',
+    lifecycleOrderInfo: order,
+    cfg: fixture.cfg,
+    ss: fixture.ss,
+    infra: fixture.infra
   });
   const poInvoiceContent = buildPurchaseOrderInvoiceEmailContent_(trimString_(summary.token), invoiceInfo, {
-    projectName: trimString_(summary.projectName)
+    projectName: trimString_(summary.projectName),
+    lifecycleOrderInfo: order,
+    cfg: fixture.cfg,
+    ss: fixture.ss,
+    infra: fixture.infra
   });
   sendEmailReviewContent_(results, 'PO invoice prepared client', 'purchase_order_invoice', 'client', [recipients.client],
     poInvoiceContent,
@@ -26609,6 +26886,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
         mimeType: MimeType.PDF,
         fileName: 'Red Threads Email Review Summary.pdf',
         documentKind: 'summary',
+        token: trimString_(summary.token),
         dealNumber: trimString_(summary.dealNumber),
         projectName: trimString_(summary.projectName)
       });
@@ -26693,7 +26971,6 @@ function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, doc
 }
 
 function sendEmailReviewPasswordResetFallback_(results, recipient) {
-  const portalUrl = trimString_(buildExternalPortalBaseUrl_());
   const code = '000000';
   const body = [
     '[EMAIL REVIEW: Password reset client]',
@@ -26702,9 +26979,7 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
     '',
     'This code expires in 15 minutes.',
     '',
-    portalUrl
-      ? ('Please return to the portal to enter this code and continue: ' + portalUrl)
-      : 'Please return to the Red Threads portal to enter this code and continue.',
+    'Please return to the Red Threads portal to enter this code and continue.',
     '',
     'If you did not request this, you can ignore this email.',
     '',
@@ -26719,9 +26994,7 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
     '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the code below to reset your portal password.</p>',
     '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f1728;color:#ffffff;font-size:32px;line-height:1;font-weight:700;letter-spacing:0.28em;text-align:center;">' + escapeHtml_(code) + '</div>',
     '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">This code expires in 15 minutes.</p>',
-    portalUrl
-      ? ('    <p style="margin:0 0 20px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#00c8ff;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Portal</a></p>')
-      : '',
+    '    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#cbd5e1;">Return to the Red Threads portal to enter this code and continue.</p>',
     '    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#94a3b8;">If you did not request this, you can ignore this email.</p>',
     '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
@@ -28540,6 +28813,22 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     ? 'New client portal messages'
     : 'New Red Threads portal messages';
   const subject = subjectPrefix + ' (' + messageCount + ')' + (projectName ? (' - ' + projectName) : '');
+  const lifecycleSections = !isTeamDigest
+    ? buildDirectLifecycleEmailSectionBlocks_({ rowInfo: rowInfo }, null, {
+        family: 'chat_message_digest',
+        recipientClass: 'client',
+        token: token,
+        cfg: opts.cfg,
+        ss: opts.ss,
+        infra: opts.infra
+      })
+    : { blocks: [] };
+  const lifecycleText = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.text);
+  }).filter(Boolean).join('\n\n');
+  const lifecycleHtml = lifecycleSections.blocks.map(function(block) {
+    return trimString_(block && block.html);
+  }).filter(Boolean).join('\n');
   const messageRows = safeMessages.map(function(message) {
     const senderName = trimString_(message.sender).toLowerCase() === 'team'
       ? trimString_(message.authorName || getVisibleTeamAuthorName_(row) || 'Red Threads Team')
@@ -28572,7 +28861,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         'Hi ' + firstName + ',',
         '',
         'You have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.',
-        projectName ? ('Project: ' + projectName) : '',
+        lifecycleText || (projectName ? ('Project: ' + projectName) : ''),
         '',
         'Messages:',
         plainMessageLines.join('\n').trim(),
@@ -28593,6 +28882,9 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
       '      </tr>'
     ].join('\n');
   }).join('\n');
+  const showProjectSummaryCard = isTeamDigest
+    ? !!(projectName || clientEmail)
+    : !!(projectName && !lifecycleHtml);
   const htmlBody = [
     '<div style="margin:0;padding:24px 0;background:#000000;">',
     '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
@@ -28601,12 +28893,13 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     isTeamDigest
       ? ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.</p>')
       : ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>'),
-    (projectName || clientEmail)
+    showProjectSummaryCard
       ? ('    <div style="margin:0 0 18px;padding:16px 18px;border-radius:12px;background:#0f172a;border:1px solid #1e293b;font-size:14px;line-height:1.8;color:#cbd5e1;">'
         + (projectName ? ('<div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '')
         + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
         + '</div>')
       : '',
+    lifecycleHtml,
     '    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 20px;border:1px solid #1e293b;border-radius:12px;overflow:hidden;">',
     '      <tr><td style="padding:12px 16px;background:#0f172a;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;font-weight:800;">Messages</td></tr>',
     htmlMessages,
@@ -28645,7 +28938,10 @@ function processChatMessageDigestEmailQueueJob_(jobInfo, options) {
   if (!messages.length) return { skipped: true, skipReason: 'no_digest_messages' };
   const content = buildChatMessageDigestEmailContent_(rowInfo, messages, {
     direction: direction,
-    token: token
+    token: token,
+    cfg: cfg,
+    ss: ss,
+    infra: infra
   });
   sendNotificationEmail_({
     toList: recipients.toList,

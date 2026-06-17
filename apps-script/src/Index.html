@@ -38275,6 +38275,7 @@
         mimeType: 'application/pdf',
         base64Data: base64Data,
         documentKind: isLockedInvoice ? 'invoice' : 'summary',
+        token: CURRENT_TOKEN || INITIAL_TOKEN || '',
         dealNumber: getDealNumber(),
         projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || ''
       });
