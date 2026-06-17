@@ -630,6 +630,7 @@ const AUTH_POLICY = {
   PROJECT_CACHE_TTL_SEC: 300
 };
 const AUTH_RESET_RETURN_CACHE_PREFIX = 'auth_reset_return_';
+const PASSWORD_RESET_RETURN_BRIDGE_PREFIX = 'reset_';
 
 const EXPORT_LOG_PERSON_EMAIL_HEADER = 'personemail';
 const LOGIN_DENY_MESSAGE =
@@ -742,6 +743,8 @@ function doGet(e) {
 
 function buildPortalRequestRouteMeta_(e) {
   const params = (e && e.parameter && typeof e.parameter === 'object') ? e.parameter : {};
+  const resetToken = normalizeResetReturnToken_(params.resetToken)
+    || normalizeResetReturnBridgeToken_(params.accountDocAction);
   const rawCheckoutResult = String(params.checkoutResult || '').trim().toLowerCase();
   const checkoutResult = (rawCheckoutResult === 'success' || rawCheckoutResult === 'cancel')
     ? rawCheckoutResult
@@ -762,8 +765,8 @@ function buildPortalRequestRouteMeta_(e) {
     paymentOrigin: String(params.paymentOrigin || '').trim(),
     mode: normalizeMode_(params.mode) === 'team' ? 'team' : '',
     teamReview: trimString_(params.teamReview),
-    reset: String(params.reset || '').trim() === '1' ? '1' : '',
-    resetToken: normalizeResetReturnToken_(params.resetToken)
+    reset: (String(params.reset || '').trim() === '1' || resetToken) ? '1' : '',
+    resetToken: resetToken
   };
 }
 
@@ -14514,6 +14517,17 @@ function normalizeResetReturnToken_(value) {
     : '';
 }
 
+function buildPasswordResetReturnBridgeValue_(token) {
+  const cleanToken = normalizeResetReturnToken_(token);
+  return cleanToken ? (PASSWORD_RESET_RETURN_BRIDGE_PREFIX + cleanToken) : '';
+}
+
+function normalizeResetReturnBridgeToken_(value) {
+  const clean = trimString_(value).toLowerCase();
+  if (!clean || clean.indexOf(PASSWORD_RESET_RETURN_BRIDGE_PREFIX) !== 0) return '';
+  return normalizeResetReturnToken_(clean.slice(PASSWORD_RESET_RETURN_BRIDGE_PREFIX.length));
+}
+
 function generateResetReturnToken_() {
   return normalizeResetReturnToken_(Utilities.getUuid());
 }
@@ -14574,8 +14588,7 @@ function buildPasswordResetReturnUrl_(token) {
   const cleanToken = normalizeResetReturnToken_(token);
   if (!cleanToken) return '';
   return appendQueryParamsToUrl_(buildExternalPortalBaseUrl_(), {
-    reset: '1',
-    resetToken: cleanToken
+    accountDocAction: buildPasswordResetReturnBridgeValue_(cleanToken)
   });
 }
 

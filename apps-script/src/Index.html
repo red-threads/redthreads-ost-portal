@@ -22170,21 +22170,34 @@
       return '';
     }
   }
+  const PASSWORD_RESET_RETURN_BRIDGE_PREFIX = 'reset_';
+  function normalizePasswordResetReturnToken_(value){
+    const clean = String(value || '').trim().toLowerCase();
+    return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(clean)
+      ? clean
+      : '';
+  }
+  function getPasswordResetReturnBridgeTokenFromQuery_(){
+    const raw = String(URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
+    if (!raw || raw.indexOf(PASSWORD_RESET_RETURN_BRIDGE_PREFIX) !== 0) return '';
+    return normalizePasswordResetReturnToken_(raw.slice(PASSWORD_RESET_RETURN_BRIDGE_PREFIX.length));
+  }
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
   const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
   const TEAM_REVIEW_REQUEST = String(VM_REQUEST_ROUTE_META.teamReview || URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
   const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1' || VM_REQUEST_ROUTE_META.dashboard === '1';
   const DASHBOARD_ACCOUNT_ID_PARAM = String(VM_REQUEST_ROUTE_META.accountId || URL_QUERY_PARAMS.get('accountId') || '').trim();
   const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
+  const PASSWORD_RESET_RETURN_BRIDGE_TOKEN = getPasswordResetReturnBridgeTokenFromQuery_();
   const ACCOUNT_DOC_DEEPLINK_TYPE = String(URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();
-  const ACCOUNT_DOC_DEEPLINK_ACTION = String(URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
+  const ACCOUNT_DOC_DEEPLINK_ACTION = PASSWORD_RESET_RETURN_BRIDGE_TOKEN ? '' : String(URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
   const SUMMARY_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('summary') === '1' || VM_REQUEST_ROUTE_META.summary === '1';
   const SETUP_RETURN_RESULT = normalizeSetupReturnResultValue_(VM_REQUEST_ROUTE_META.setupResult || URL_QUERY_PARAMS.get('setupResult'));
   const PAY_NOW_METHOD = String(VM_REQUEST_ROUTE_META.payNow || URL_QUERY_PARAMS.get('payNow') || '').trim().toLowerCase();
   const PAYMENT_ORIGIN_PARAM_RAW = String(VM_REQUEST_ROUTE_META.paymentOrigin || URL_QUERY_PARAMS.get('paymentOrigin') || '').trim().toLowerCase();
   const PAYMENT_ORIGIN_PARAM = PAYMENT_ORIGIN_PARAM_RAW || (SUMMARY_DEEPLINK_REQUEST && PAY_NOW_METHOD === 'ach' ? 'ap' : '');
-  const PASSWORD_RESET_RETURN_REQUEST = URL_QUERY_PARAMS.get('reset') === '1' || VM_REQUEST_ROUTE_META.reset === '1';
-  const PASSWORD_RESET_RETURN_TOKEN = String(VM_REQUEST_ROUTE_META.resetToken || URL_QUERY_PARAMS.get('resetToken') || '').trim();
+  const PASSWORD_RESET_RETURN_REQUEST = URL_QUERY_PARAMS.get('reset') === '1' || VM_REQUEST_ROUTE_META.reset === '1' || !!PASSWORD_RESET_RETURN_BRIDGE_TOKEN;
+  const PASSWORD_RESET_RETURN_TOKEN = String(VM_REQUEST_ROUTE_META.resetToken || URL_QUERY_PARAMS.get('resetToken') || PASSWORD_RESET_RETURN_BRIDGE_TOKEN || '').trim();
   const PO_RESUME_REQUEST = URL_QUERY_PARAMS.get('resumePo') === '1';
   const PO_RESUME_STAGE = String(URL_QUERY_PARAMS.get('poStage') || '').trim().toLowerCase();
   let HAS_PORTAL_TOKEN = false;
