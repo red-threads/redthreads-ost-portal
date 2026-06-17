@@ -320,7 +320,17 @@ const LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS = {
   optional_unavailable: 'optional_attachment_unavailable'
 };
 const PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER = 'redthreads_portal_rendered_summary_invoice_v1';
-const PORTAL_RENDERED_INVOICE_FILE_NAME_RE = /^Red Threads Project(?:-[^-]+)?-(?:Invoice|Receipt|Summary)(?:-|\.)/i;
+const PORTAL_DOCUMENT_KINDS = {
+  estimate: 'estimate',
+  invoice: 'invoice',
+  receipt: 'receipt',
+  ap_payment_request: 'ap_payment_request',
+  po_submission: 'po_submission',
+  summary_pdf: 'summary_pdf'
+};
+const PORTAL_DOCUMENT_REF_RE = /^(EST|INV)-(.+)-v(\d{1,4})$/i;
+const LEGACY_INVOICE_NUMBER_RE = /^INV-\d{8}-[A-Z0-9]{8}$/i;
+const PORTAL_RENDERED_INVOICE_FILE_NAME_RE = /^Red Threads(?: - Project [^-]+ - | Project(?:-[^-]+)?-)(?:Estimate|Invoice|Receipt|Receipt for Invoice|Summary)(?:\s+v\d{1,4}|-|\.)/i;
 const LEGACY_SERVER_INVOICE_FILE_NAME_RE = /^INV-\d{8}-[A-Z0-9]{8}\b/i;
 const CHAT_MESSAGE_DIGEST_DELAY_MS = 10 * 60 * 1000;
 const CHAT_MESSAGE_DIGEST_DIRECTIONS = {
@@ -7268,6 +7278,9 @@ function normalizePortalStateForOrderAction_(rawState, snapshot) {
     shippingChargeCents: Math.max(0, parseInt(String(source.shippingChargeCents || 0), 10) || 0),
     shippingModeLabel: trimString_(source.shippingModeLabel),
     shippingDetails: normalizeOrderDraftShippingDetailsInput_(source.shippingDetails),
+    documentReferences: source.documentReferences && typeof source.documentReferences === 'object' && !Array.isArray(source.documentReferences)
+      ? JSON.parse(JSON.stringify(source.documentReferences))
+      : {},
     printJobs: normalized.printJobs
   });
   if (normalized.purchaseOrderDraft) out.purchaseOrderDraft = normalized.purchaseOrderDraft;
@@ -7881,16 +7894,23 @@ function buildOrderInvoiceArtifacts_(ctx, payload) {
     : [];
   let invoiceInfo;
   if (base64Data) {
-    const invoiceNumber = nextInvoiceNumber_();
+    const invoiceReference = buildPortalDocumentReference_({
+      projectNumber: getPortalDocumentProjectNumber_(ctx && ctx.orderDraft),
+      documentKind: PORTAL_DOCUMENT_KINDS.invoice,
+      version: deriveNextInvoiceVersion_(ctx && ctx.orderDraft, { orderRevision: ctx && ctx.orderRevision })
+    });
     const storedInvoice = storePortalPdfBlobInInvoiceFolder_({
       cfg: ctx.cfg,
       base64Data: base64Data,
       mimeType: trimString_(p.mimeType) || MimeType.PDF,
-      fileName: trimString_(p.fileName),
-      defaultFileName: buildPurchaseOrderInvoiceFileName_(ctx)
+      fileName: invoiceReference.fileName,
+      defaultFileName: invoiceReference.fileName
     });
     invoiceInfo = {
-      invoiceNumber: invoiceNumber,
+      invoiceNumber: invoiceReference.documentRef,
+      documentRef: invoiceReference.documentRef,
+      displayLabel: invoiceReference.displayLabel,
+      documentReference: invoiceReference,
       invoicePdfUrl: trimString_(storedInvoice && storedInvoice.fileUrl),
       invoiceFileId: trimString_(storedInvoice && storedInvoice.fileId),
       fileName: trimString_(storedInvoice && storedInvoice.fileName)
@@ -7920,7 +7940,8 @@ function buildManualPaymentOrderCreateOptions_(ctx, method, invoiceArtifacts) {
     paymentState: PAYMENT_STATES.manual_pending,
     orderState: ORDER_STATES.awaiting_manual_payment,
     productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-    portalLockState: PORTAL_LOCK_STATES.locked
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    documentReference: invoiceInfo.documentReference || null
   });
   return Object.assign({}, ctx, {
     orderDraft: orderDraft,
@@ -8859,7 +8880,8 @@ function buildAchApPaymentOrderCreateOptions_(ctx, invoiceArtifacts, options) {
     paymentOrigin: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
     checkoutOrigin: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
     achPaymentSource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
-    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only
+    achPaymentVisibilityScope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
+    documentReference: invoiceInfo.documentReference || null
   });
   return Object.assign({}, ctx, {
     orderDraft: orderDraft,
@@ -8897,7 +8919,10 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const purchaserName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.personName);
   const note = trimString_(opts.note).slice(0, 1200);
   const paymentLink = trimString_(opts.apPaymentLink);
-  const invoiceNumber = trimString_(summary.invoiceNumber);
+  const invoiceReference = getCurrentInvoiceReferenceForOrder_(opts.lifecycleOrderInfo || summary || ctx, summary, {
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice
+  });
+  const invoiceNumber = invoiceReference.displayLabel;
   const projectName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.projectName);
   const dealNumber = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.dealNumber);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
@@ -8913,7 +8938,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token)
   });
   const reference = [
-    invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+    invoiceNumber ? ('Invoice: ' + invoiceNumber) : '',
     dealNumber ? ('Project #: ' + dealNumber) : '',
     projectName ? ('Project: ' + projectName) : '',
     'Amount due: ' + amountDue
@@ -8946,7 +8971,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     '  <p style="margin:0 0 14px;">A secure Red Threads ACH payment page is ready for this invoice.</p>',
     lifecycleHtml || [
       '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #1e293b;border-radius:14px;background:#0f172a;">',
-      invoiceNumber ? ('    <div><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
+      invoiceNumber ? ('    <div><strong>Invoice:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
       dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
       projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
       '    <div><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</div>',
@@ -8965,7 +8990,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   ].filter(Boolean).join('\n');
   return {
     subject: invoiceNumber
-      ? ('Red Threads ACH payment page — invoice ' + invoiceNumber)
+      ? ('Red Threads ACH payment page — ' + invoiceNumber)
       : 'Red Threads ACH payment page',
     body: bodyLines.join('\n'),
     htmlBody: buildPortalNativeEmailShellHtml_({
@@ -11904,10 +11929,13 @@ function adminResendLockedOrderLink_(payload) {
       safeError: LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice
     });
     assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
+    const invoiceLabel = getCurrentInvoiceReferenceForOrder_(ctx.latestOrderInfo, ctx.latestOrderSummary, {
+      documentKind: PORTAL_DOCUMENT_KINDS.invoice
+    }).displayLabel;
     sendNotificationEmail_({
       toList: recipients,
-      subject: trimString_(ctx.latestOrderSummary.invoiceNumber)
-        ? ('Red Threads order confirmation · ' + trimString_(ctx.latestOrderSummary.invoiceNumber))
+      subject: invoiceLabel
+        ? ('Red Threads order confirmation — ' + invoiceLabel)
         : 'Red Threads order confirmation',
       body: paymentEmail.body,
       htmlBody: paymentEmail.htmlBody,
@@ -17020,7 +17048,10 @@ function normalizePortalStateForOrder_(rawState, printJobs) {
   const parsed = safeJsonParse_(rawState, {});
   const source = (parsed && typeof parsed === 'object') ? parsed : {};
   const out = {
-    printJobs: {}
+    printJobs: {},
+    documentReferences: source.documentReferences && typeof source.documentReferences === 'object' && !Array.isArray(source.documentReferences)
+      ? JSON.parse(JSON.stringify(source.documentReferences))
+      : {}
   };
   function normalizeRemovedAddOnIndexes_(value) {
     const seen = {};
@@ -17433,6 +17464,7 @@ function normalizePurchaseOrderDraftState_(rawDraft) {
     || source.invoiceNumber != null
     || source.invoicePdfUrl != null
     || source.invoiceFileName != null
+    || source.documentReference != null
     || source.invoiceSentToEmail != null
     || source.invoiceSentAt != null
     || source.lastPreparedAt != null
@@ -17456,6 +17488,9 @@ function normalizePurchaseOrderDraftState_(rawDraft) {
     invoiceNumber: trimString_(source.invoiceNumber),
     invoicePdfUrl: trimString_(source.invoicePdfUrl),
     invoiceFileName: trimString_(source.invoiceFileName),
+    documentReference: source.documentReference && typeof source.documentReference === 'object'
+      ? buildPortalDocumentReference_(source.documentReference)
+      : null,
     invoiceSentToEmail: invoiceSentToEmail,
     invoiceSentAt: trimString_(source.invoiceSentAt),
     lastPreparedAt: trimString_(source.lastPreparedAt),
@@ -17505,6 +17540,9 @@ function buildPurchaseOrderDraftStateFromInvoice_(ctx, invoiceInfo, options) {
     invoiceNumber: trimString_(safeInvoice.invoiceNumber),
     invoicePdfUrl: trimString_(safeInvoice.invoicePdfUrl),
     invoiceFileName: trimString_(safeInvoice.fileName),
+    documentReference: safeInvoice.documentReference && typeof safeInvoice.documentReference === 'object'
+      ? safeInvoice.documentReference
+      : null,
     invoiceSentToEmail: opts.invoiceSentToEmail,
     invoiceSentAt: trimString_(opts.invoiceSentAt),
     lastPreparedAt: trimString_(opts.lastPreparedAt) || nowIso_(),
@@ -17989,6 +18027,9 @@ function buildPortalOrderSummary_(row) {
     paymentState: trimString_(order.paymentstate || order.paymentState) || PAYMENT_STATES.not_started,
     productionAuthorizationState: trimString_(order.productionauthorizationstate || order.productionAuthorizationState) || PRODUCTION_AUTHORIZATION_STATES.not_authorized,
     invoiceNumber: trimString_(order.invoicenumber || order.invoiceNumber),
+    invoiceDocumentReference: draft.documentReference && typeof draft.documentReference === 'object'
+      ? buildPortalDocumentReference_(draft.documentReference)
+      : null,
     invoicePdfUrl: trimString_(order.invoicepdfurl || order.invoicePdfUrl),
     invoiceSentToEmail: trimString_(order.invoicesenttoemail || order.invoiceSentToEmail),
     poNumber: trimString_(order.ponumber || order.poNumber),
@@ -18277,6 +18318,19 @@ function createPortalOrder_(opts) {
   const checkoutAttemptId = trimString_(options.checkoutAttemptId);
   const orderRevision = Math.max(1, parseInt(String(options.orderRevision || 1), 10) || 1);
   const invoiceNumber = trimString_(options.invoiceNumber);
+  const orderDocumentReference = invoiceNumber
+    ? getCurrentInvoiceReferenceForOrder_(Object.assign({}, draft, {
+      orderRevision: orderRevision,
+      invoiceNumber: invoiceNumber
+    }), {
+      invoiceNumber: invoiceNumber
+    }, {
+      orderRevision: orderRevision
+    })
+    : null;
+  const draftForStorage = orderDocumentReference
+    ? Object.assign({}, draft, { documentReference: orderDocumentReference })
+    : draft;
   const invoicePdfUrl = trimString_(options.invoicePdfUrl);
   const invoiceSentToEmail = normalizeEmail_(
     Object.prototype.hasOwnProperty.call(options, 'invoiceSentToEmail')
@@ -18351,7 +18405,7 @@ function createPortalOrder_(opts) {
     lockedAt: trimString_(options.lockedAt),
     paymentReceivedManuallyBy: trimString_(options.paymentReceivedManuallyBy),
     paymentReceivedManuallyAt: trimString_(options.paymentReceivedManuallyAt),
-    orderDraftJson: JSON.stringify(draft || {}),
+    orderDraftJson: JSON.stringify(draftForStorage || {}),
     revisionReason: trimString_(options.revisionReason),
     notes: trimString_(options.notes)
   };
@@ -19848,9 +19902,241 @@ function assertTeamWorkflowActionAllowed_(workflowContext, actionName) {
   throw new Error(messages[actionKey] || 'That team action is not available for the current project state.');
 }
 
-function nextInvoiceNumber_() {
-  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyyMMdd');
-  return 'INV-' + stamp + '-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+function normalizePortalDocumentKind_(documentKind) {
+  const normalized = trimString_(documentKind).toLowerCase();
+  if (normalized === 'summary' || normalized === 'estimate_pdf') return PORTAL_DOCUMENT_KINDS.estimate;
+  if (normalized === 'receipt' || normalized === 'paid_receipt') return PORTAL_DOCUMENT_KINDS.receipt;
+  if (normalized === PORTAL_DOCUMENT_KINDS.ap_payment_request) return PORTAL_DOCUMENT_KINDS.ap_payment_request;
+  if (normalized === PORTAL_DOCUMENT_KINDS.po_submission) return PORTAL_DOCUMENT_KINDS.po_submission;
+  if (normalized === PORTAL_DOCUMENT_KINDS.summary_pdf) return PORTAL_DOCUMENT_KINDS.summary_pdf;
+  return normalized === PORTAL_DOCUMENT_KINDS.estimate ? PORTAL_DOCUMENT_KINDS.estimate : PORTAL_DOCUMENT_KINDS.invoice;
+}
+
+function normalizePortalDocumentProjectNumber_(value) {
+  const clean = trimString_(value).replace(/[^A-Za-z0-9_-]+/g, '');
+  return clean || 'Project';
+}
+
+function zeroPadPortalDocumentVersion_(version) {
+  const n = Math.max(1, parseInt(String(version || 1), 10) || 1);
+  return n < 10 ? ('0' + n) : String(n);
+}
+
+function getPortalDocumentKindPrefix_(documentKind) {
+  return normalizePortalDocumentKind_(documentKind) === PORTAL_DOCUMENT_KINDS.estimate ? 'EST' : 'INV';
+}
+
+function parsePortalDocumentReference_(value) {
+  const source = (value && typeof value === 'object') ? value : null;
+  const clean = source
+    ? trimString_(source.documentRef || source.invoiceNumber || source.fileSafeRef)
+    : trimString_(value);
+  const match = clean.match(PORTAL_DOCUMENT_REF_RE);
+  if (!match) return null;
+  const prefix = trimString_(match[1]).toUpperCase();
+  const projectNumber = normalizePortalDocumentProjectNumber_(match[2]);
+  const version = Math.max(1, parseInt(String(match[3] || 1), 10) || 1);
+  const documentKind = prefix === 'EST' ? PORTAL_DOCUMENT_KINDS.estimate : PORTAL_DOCUMENT_KINDS.invoice;
+  return buildPortalDocumentReference_({
+    projectNumber: projectNumber,
+    documentKind: documentKind,
+    version: version
+  });
+}
+
+function getPortalDocumentProjectNumber_(source) {
+  const s = (source && typeof source === 'object') ? source : {};
+  const row = s.rowObjNormalized && typeof s.rowObjNormalized === 'object' ? s.rowObjNormalized : s;
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, null) || row.orderDraft || s.orderDraft || {};
+  return trimString_(
+    s.projectNumber ||
+    s.dealNumber ||
+    s.dealnumber ||
+    row.dealnumber ||
+    row.dealNumber ||
+    draft.dealNumber ||
+    draft.dealnumber
+  ).replace(/[^A-Za-z0-9_-]+/g, '');
+}
+
+function buildPortalDocumentReference_(input) {
+  const source = (input && typeof input === 'object') ? input : {};
+  const documentKind = normalizePortalDocumentKind_(source.documentKind);
+  const invoiceKind = documentKind === PORTAL_DOCUMENT_KINDS.receipt ? PORTAL_DOCUMENT_KINDS.invoice : documentKind;
+  const projectNumber = normalizePortalDocumentProjectNumber_(source.projectNumber || getPortalDocumentProjectNumber_(source));
+  const version = Math.max(1, parseInt(String(source.version || 1), 10) || 1);
+  const padded = zeroPadPortalDocumentVersion_(version);
+  const prefix = getPortalDocumentKindPrefix_(invoiceKind);
+  const documentRef = prefix + '-' + projectNumber + '-v' + padded;
+  const baseLabel = invoiceKind === PORTAL_DOCUMENT_KINDS.estimate
+    ? ('Estimate ' + projectNumber + '-v' + version)
+    : ('Invoice ' + projectNumber + '-v' + version);
+  const displayLabel = documentKind === PORTAL_DOCUMENT_KINDS.receipt
+    ? ('Receipt for ' + baseLabel)
+    : baseLabel;
+  return {
+    projectNumber: projectNumber,
+    documentKind: documentKind,
+    version: version,
+    documentRef: documentRef,
+    displayLabel: displayLabel,
+    fileSafeRef: prefix + '-' + projectNumber + '-v' + padded,
+    fileName: buildPortalDocumentFileName_({
+      projectNumber: projectNumber,
+      documentKind: documentKind,
+      version: version
+    }),
+    legacyInvoiceNumber: trimString_(source.legacyInvoiceNumber)
+  };
+}
+
+function buildClientFacingDocumentLabel_(documentReference) {
+  const parsed = parsePortalDocumentReference_(documentReference);
+  if (parsed) return parsed.displayLabel;
+  const source = (documentReference && typeof documentReference === 'object') ? documentReference : {};
+  return trimString_(source.displayLabel) || trimString_(documentReference);
+}
+
+function buildPortalDocumentFileSafeRef_(documentReference) {
+  const ref = (documentReference && typeof documentReference === 'object')
+    ? buildPortalDocumentReference_(documentReference)
+    : parsePortalDocumentReference_(documentReference);
+  return ref ? ref.fileSafeRef : trimString_(documentReference);
+}
+
+function buildPortalDocumentFileName_(documentReference) {
+  const source = (documentReference && typeof documentReference === 'object') ? documentReference : {};
+  const kind = normalizePortalDocumentKind_(source.documentKind);
+  const projectNumber = normalizePortalDocumentProjectNumber_(source.projectNumber || getPortalDocumentProjectNumber_(source));
+  const padded = zeroPadPortalDocumentVersion_(source.version || 1);
+  if (kind === PORTAL_DOCUMENT_KINDS.receipt) {
+    return 'Red Threads - Project ' + projectNumber + ' - Receipt for Invoice v' + padded + '.pdf';
+  }
+  if (kind === PORTAL_DOCUMENT_KINDS.estimate) {
+    return 'Red Threads - Project ' + projectNumber + ' - Estimate v' + padded + '.pdf';
+  }
+  return 'Red Threads - Project ' + projectNumber + ' - Invoice v' + padded + '.pdf';
+}
+
+function resolvePortalDocumentVersion_(source, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const parsed = parsePortalDocumentReference_(
+    opts.documentRef ||
+    opts.invoiceNumber ||
+    (source && source.documentRef) ||
+    (source && source.invoiceNumber) ||
+    (source && source.invoicenumber)
+  );
+  if (parsed) return parsed.version;
+  return Math.max(1, parseInt(String(
+    opts.version ||
+    opts.orderRevision ||
+    (source && (source.orderRevision || source.orderrevision)) ||
+    1
+  ), 10) || 1);
+}
+
+function buildPortalCommercialDocumentFingerprint_(source) {
+  const s = (source && typeof source === 'object') ? source : {};
+  const comparable = {
+    projectNumber: getPortalDocumentProjectNumber_(s),
+    fulfillmentMethod: trimString_(s.fulfillmentMethod || s.fulfillmentmethod),
+    shippingChargeCents: Math.max(0, parseInt(String(s.shippingChargeCents || s.shippingchargecents || 0), 10) || 0),
+    amountSubtotal: roundMoney_(s.amountSubtotal || s.amountsubtotal || 0),
+    amountShipping: roundMoney_(s.amountShipping || s.amountshipping || 0),
+    amountRush: roundMoney_(s.amountRush || s.amountrush || 0),
+    amountTax: roundMoney_(s.amountTax || s.amounttax || 0),
+    amountGrandTotal: roundMoney_(s.amountGrandTotal || s.amountgrandtotal || 0),
+    selectedJobs: buildPortalOrderSelectedJobsSummary_(s.selectedJobs || s.selectedjobs)
+  };
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(comparable));
+  return Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
+}
+
+function deriveNextEstimateVersion_(portalState, options) {
+  const state = (portalState && typeof portalState === 'object') ? portalState : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const existing = state.documentReferences && state.documentReferences.estimate
+    ? state.documentReferences.estimate
+    : {};
+  const currentVersion = Math.max(1, parseInt(String(existing.version || 1), 10) || 1);
+  const nextFingerprint = trimString_(opts.fingerprint);
+  const currentFingerprint = trimString_(existing.currentFingerprint || existing.fingerprint);
+  return nextFingerprint && currentFingerprint && nextFingerprint !== currentFingerprint
+    ? currentVersion + 1
+    : currentVersion;
+}
+
+function deriveNextInvoiceVersion_(source, options) {
+  return resolvePortalDocumentVersion_(source, options);
+}
+
+function getCurrentInvoiceReferenceForOrder_(orderInfo, invoiceInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : ((orderInfo && typeof orderInfo === 'object') ? orderInfo : {});
+  const summary = row && (row.orderid || row.orderId || row.invoicenumber || row.invoiceNumber)
+    ? buildPortalOrderSummary_(row)
+    : {};
+  const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const invoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
+  const existingDocRef = invoice.documentRef ||
+    (invoice.documentReference && invoice.documentReference.documentRef) ||
+    invoice.invoiceNumber ||
+    (draft.documentReference && draft.documentReference.documentRef) ||
+    summary.invoiceNumber ||
+    row.invoicenumber ||
+    row.invoiceNumber;
+  const parsed = parsePortalDocumentReference_(existingDocRef);
+  const legacyInvoiceNumber = LEGACY_INVOICE_NUMBER_RE.test(trimString_(existingDocRef))
+    ? trimString_(existingDocRef)
+    : trimString_(invoice.legacyInvoiceNumber || (draft.documentReference && draft.documentReference.legacyInvoiceNumber));
+  const version = parsed ? parsed.version : deriveNextInvoiceVersion_(summary, {
+    orderRevision: summary.orderRevision || row.orderrevision || row.orderRevision || opts.orderRevision
+  });
+  return buildPortalDocumentReference_({
+    projectNumber: (parsed && parsed.projectNumber) || getPortalDocumentProjectNumber_(invoice) || getPortalDocumentProjectNumber_(summary) || getPortalDocumentProjectNumber_(row),
+    documentKind: opts.documentKind || PORTAL_DOCUMENT_KINDS.invoice,
+    version: version,
+    legacyInvoiceNumber: legacyInvoiceNumber
+  });
+}
+
+function getCurrentEstimateReferenceForPortalState_(portalState, options) {
+  const state = (portalState && typeof portalState === 'object') ? portalState : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const existing = state.documentReferences && state.documentReferences.estimate
+    ? state.documentReferences.estimate
+    : {};
+  const parsed = parsePortalDocumentReference_(existing.documentRef || opts.documentRef);
+  const version = parsed ? parsed.version : deriveNextEstimateVersion_(state, opts);
+  return buildPortalDocumentReference_({
+    projectNumber: (parsed && parsed.projectNumber) || opts.projectNumber,
+    documentKind: PORTAL_DOCUMENT_KINDS.estimate,
+    version: version
+  });
+}
+
+function attachPortalDocumentReferenceToInvoiceInfo_(invoiceInfo, source, options) {
+  const info = (invoiceInfo && typeof invoiceInfo === 'object') ? Object.assign({}, invoiceInfo) : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const ref = getCurrentInvoiceReferenceForOrder_(source, info, opts);
+  info.invoiceNumber = ref.documentRef;
+  info.documentRef = ref.documentRef;
+  info.displayLabel = ref.displayLabel;
+  info.documentReference = ref;
+  if (!trimString_(info.fileName) || opts.forceFileName === true) {
+    info.fileName = ref.fileName;
+  }
+  return info;
+}
+
+function nextInvoiceNumber_(source, options) {
+  const ref = buildPortalDocumentReference_({
+    projectNumber: getPortalDocumentProjectNumber_(source),
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice,
+    version: deriveNextInvoiceVersion_(source, options)
+  });
+  return ref.documentRef;
 }
 
 function getDriveFolderByIdSafe_(folderId) {
@@ -19927,39 +20213,52 @@ function storePortalUploadBlobInInvoiceFolder_(opts) {
 
 function buildPurchaseOrderInvoiceFileName_(ctx) {
   const draft = (ctx && ctx.orderDraft && typeof ctx.orderDraft === 'object') ? ctx.orderDraft : {};
-  const dealNumber = trimString_(draft.dealNumber);
-  const projectName = trimString_(draft.projectName);
-  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd');
-  const baseName = dealNumber
-    ? ('Red Threads Project-' + dealNumber + '-Invoice-' + stamp + '.pdf')
-    : ('Red Threads Project-Invoice-' + stamp + '.pdf');
-  return sanitizeUploadedDocumentName_(projectName ? baseName : baseName, baseName);
+  const reference = buildPortalDocumentReference_({
+    projectNumber: getPortalDocumentProjectNumber_(draft),
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice,
+    version: deriveNextInvoiceVersion_(draft, { orderRevision: ctx && ctx.orderRevision })
+  });
+  return sanitizeUploadedDocumentName_(reference.fileName, reference.fileName);
 }
 
 function preparePurchaseOrderDraftInvoiceArtifact_(ctx, payload, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const existingDraft = normalizePurchaseOrderDraftState_(opts.existingDraft);
   const base64Data = trimString_(payload && payload.base64Data);
-  const invoiceNumber = trimString_(opts.invoiceNumber || (existingDraft && existingDraft.invoiceNumber)) || nextInvoiceNumber_();
+  const existingReference = existingDraft && existingDraft.documentReference ? existingDraft.documentReference : null;
+  const invoiceReference = existingReference && trimString_(existingReference.documentRef)
+    ? buildPortalDocumentReference_(existingReference)
+    : getCurrentInvoiceReferenceForOrder_(ctx && ctx.orderDraft, {
+      invoiceNumber: trimString_(opts.invoiceNumber || (existingDraft && existingDraft.invoiceNumber))
+    }, {
+      orderRevision: ctx && ctx.orderRevision
+    });
+  const invoiceNumber = invoiceReference.documentRef;
   if (!base64Data) {
     if (!existingDraft || !trimString_(existingDraft.invoicePdfUrl)) {
       throw new Error('Invoice PDF payload is missing.');
     }
     return {
       invoiceNumber: invoiceNumber,
+      documentRef: invoiceReference.documentRef,
+      displayLabel: invoiceReference.displayLabel,
+      documentReference: invoiceReference,
       invoicePdfUrl: trimString_(existingDraft.invoicePdfUrl),
-      fileName: trimString_(opts.fileName || existingDraft.invoiceFileName || buildPurchaseOrderInvoiceFileName_(ctx))
+      fileName: trimString_(opts.fileName || existingDraft.invoiceFileName || invoiceReference.fileName)
     };
   }
   const invoiceFile = storePortalPdfBlobInInvoiceFolder_({
     cfg: ctx.cfg,
     base64Data: base64Data,
     mimeType: payload && payload.mimeType,
-    fileName: payload && payload.fileName,
-    defaultFileName: buildPurchaseOrderInvoiceFileName_(ctx)
+    fileName: invoiceReference.fileName,
+    defaultFileName: invoiceReference.fileName
   });
   return {
     invoiceNumber: invoiceNumber,
+    documentRef: invoiceReference.documentRef,
+    displayLabel: invoiceReference.displayLabel,
+    documentReference: invoiceReference,
     invoicePdfUrl: trimString_(invoiceFile.fileUrl),
     fileName: trimString_(invoiceFile.fileName)
   };
@@ -20018,7 +20317,10 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
   const links = buildLockedOrderPaymentLinkBundle_(token);
-  const invoiceNumber = trimString_(summary.invoiceNumber);
+  const invoiceReference = getCurrentInvoiceReferenceForOrder_(opts.lifecycleOrderInfo || opts.orderInfo || summary || ctx, summary, {
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice
+  });
+  const invoiceNumber = invoiceReference.displayLabel;
   const projectName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.projectName);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const intro = trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.';
@@ -20041,7 +20343,7 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     intro,
     '',
     lifecycleText || [
-      invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+      invoiceNumber ? ('Invoice: ' + invoiceNumber) : '',
       projectName ? ('Project: ' + projectName) : '',
       'Amount due: ' + amountDue
     ].filter(Boolean).join('\n'),
@@ -20058,7 +20360,7 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">' + escapeHtml_(intro) + '</p>',
     lifecycleHtml || [
-      invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
+      invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
       projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
       '  <p style="margin:0 0 16px;"><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</p>'
     ].filter(Boolean).join('\n'),
@@ -20322,7 +20624,9 @@ function assertRequiredEmailAttachment_(attachmentResult, safeMessage) {
 function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   const opts = (options && typeof options === 'object') ? options : {};
-  const invoiceNumber = trimString_(summary.invoiceNumber);
+  const invoiceNumber = getCurrentInvoiceReferenceForOrder_(opts.orderInfo || summary || ctx, summary, {
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice
+  }).displayLabel;
   const paymentEmail = buildLockedOrderPaymentEmailContent_(ctx, summary, {
     intro: trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.'
   });
@@ -20334,7 +20638,7 @@ function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
   assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   const attachments = attachmentResult.attachments;
   const subject = invoiceNumber
-    ? ('Red Threads order confirmation · ' + invoiceNumber)
+    ? ('Red Threads order confirmation — ' + invoiceNumber)
     : 'Red Threads order confirmation';
   const clientRecipients = normalizeEmailRecipients_([
     ctx && ctx.orderDraft && ctx.orderDraft.personEmail,
@@ -20441,11 +20745,13 @@ function ensurePurchaseOrderInvoice(payload) {
 function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
   const invoice = (invoiceInfo && typeof invoiceInfo === 'object') ? invoiceInfo : {};
   const opts = (options && typeof options === 'object') ? options : {};
-  const invoiceNumber = trimString_(invoice.invoiceNumber);
+  const invoiceNumber = getCurrentInvoiceReferenceForOrder_(opts.lifecycleOrderInfo || opts.orderInfo || invoice, invoice, {
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice
+  }).displayLabel;
   const projectName = trimString_(opts.projectName);
   const resumeUrl = buildPurchaseOrderResumePortalUrl_(token, { stage: 'submit' });
   const subject = invoiceNumber
-    ? ('Red Threads Invoice ' + invoiceNumber)
+    ? ('Red Threads ' + invoiceNumber)
     : 'Red Threads Invoice';
   const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_({}, invoice, {
     family: 'purchase_order_invoice_email',
@@ -20467,7 +20773,7 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     'Your Red Threads invoice is attached.',
     '',
     lifecycleText || [
-      invoiceNumber ? ('Invoice #: ' + invoiceNumber) : '',
+      invoiceNumber ? ('Invoice: ' + invoiceNumber) : '',
       projectName ? ('Project: ' + projectName) : ''
     ].filter(Boolean).join('\n'),
     '',
@@ -20482,7 +20788,7 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#f8fafc;">',
     '  <p style="margin:0 0 14px;">Your Red Threads invoice is attached.</p>',
     lifecycleHtml || [
-      invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice #:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
+      invoiceNumber ? ('  <p style="margin:0 0 6px;"><strong>Invoice:</strong> ' + escapeHtml_(invoiceNumber) + '</p>') : '',
       projectName ? ('  <p style="margin:0 0 6px;"><strong>Project:</strong> ' + escapeHtml_(projectName) + '</p>') : ''
     ].filter(Boolean).join('\n'),
     '  <ol style="margin:0 0 16px 20px;padding:0;">',
@@ -21119,11 +21425,18 @@ function resolveAchLifecycleOrderForQueueJob_(jobInfo, options) {
 function resolveAchLifecycleInvoiceInfo_(orderInfo, jobType, options) {
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
-  return {
+  const baseInfo = {
     invoiceNumber: trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(summary.invoicePdfUrl),
     fileName: trimString_(summary.invoiceFileName)
   };
+  const baseType = getAchLifecycleBaseEmailJobType_(jobType);
+  return attachPortalDocumentReferenceToInvoiceInfo_(baseInfo, orderInfo, {
+    documentKind: baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email
+      ? PORTAL_DOCUMENT_KINDS.receipt
+      : PORTAL_DOCUMENT_KINDS.invoice,
+    forceFileName: baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email
+  });
 }
 
 function normalizeApAchLifecycleEmailMilestone_(value) {
@@ -21500,11 +21813,17 @@ function resolveApAchLifecycleInvoiceInfo_(orderInfo, milestone, options) {
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
   const queued = (opts.queuedInvoiceInfo && typeof opts.queuedInvoiceInfo === 'object') ? opts.queuedInvoiceInfo : {};
-  return {
+  const baseInfo = {
     invoiceNumber: trimString_(queued.invoiceNumber) || trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(queued.invoicePdfUrl) || trimString_(summary.invoicePdfUrl),
     fileName: trimString_(queued.fileName || queued.invoiceFileName)
   };
+  return attachPortalDocumentReferenceToInvoiceInfo_(baseInfo, orderInfo, {
+    documentKind: isApAchLifecycleReceiptMilestone_(milestone)
+      ? PORTAL_DOCUMENT_KINDS.receipt
+      : PORTAL_DOCUMENT_KINDS.invoice,
+    forceFileName: isApAchLifecycleReceiptMilestone_(milestone)
+  });
 }
 
 function getApAchLifecycleCtaLabel_(milestone, recipientClass) {
@@ -23027,11 +23346,17 @@ function resolvePaymentLifecycleInvoiceInfo_(orderInfo, milestone, options) {
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const summary = buildPortalOrderSummary_(row);
   const queued = (opts.queuedInvoiceInfo && typeof opts.queuedInvoiceInfo === 'object') ? opts.queuedInvoiceInfo : {};
-  return {
+  const baseInfo = {
     invoiceNumber: trimString_(queued.invoiceNumber) || trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(queued.invoicePdfUrl) || trimString_(summary.invoicePdfUrl),
     fileName: trimString_(queued.fileName || queued.invoiceFileName)
   };
+  return attachPortalDocumentReferenceToInvoiceInfo_(baseInfo, orderInfo, {
+    documentKind: isPaymentLifecycleReceiptMilestone_(milestone)
+      ? PORTAL_DOCUMENT_KINDS.receipt
+      : PORTAL_DOCUMENT_KINDS.invoice,
+    forceFileName: isPaymentLifecycleReceiptMilestone_(milestone)
+  });
 }
 
 function getPaymentLifecycleCtaLabel_(milestone) {
@@ -23894,7 +24219,10 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
   const isReceipt = opts.isReceipt === true ||
     baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ||
     isPaymentLifecycleReceiptMilestone_(milestone);
-  const invoiceNumber = trimString_(invoiceInfo && invoiceInfo.invoiceNumber) || trimString_(summary.invoiceNumber);
+  const invoiceReference = getCurrentInvoiceReferenceForOrder_(orderInfo, invoiceInfo, {
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice
+  });
+  const invoiceNumber = invoiceReference.displayLabel;
   const amount = isReceipt
     ? (roundMoney_(summary.amountChargedTotal) > 0 ? summary.amountChargedTotal : summary.amountGrandTotal)
     : summary.amountGrandTotal;
@@ -23920,6 +24248,8 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     projectName: projectName,
     dealNumber: dealNumber,
     invoiceNumber: invoiceNumber,
+    invoiceDocumentRef: invoiceReference.documentRef,
+    invoiceDocumentReference: invoiceReference,
     amount: amount,
     paymentDate: paymentDate,
     ctaUrl: ctaUrl,
@@ -23927,7 +24257,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     referenceFields: [
       { label: 'Project', value: projectName },
       { label: 'Project #', value: dealNumber },
-      { label: 'Invoice #', value: invoiceNumber },
+      { label: 'Invoice', value: invoiceNumber },
       { label: isReceipt ? 'Amount paid' : 'Amount due', value: formatUsdAmount_(amount) },
       { label: 'Payment method', value: paymentMethodLabel },
       { label: 'Payment date', value: isReceipt ? paymentDate : '' }
@@ -23957,8 +24287,8 @@ function buildLifecycleEmailCopyModel_(copy) {
 
 function formatLifecycleEmailInvoiceSubject_(prefix, invoiceNumber, fallback) {
   const cleanPrefix = trimString_(prefix);
-  const cleanInvoice = trimString_(invoiceNumber);
-  if (cleanPrefix && cleanInvoice) return cleanPrefix + ' — Red Threads invoice ' + cleanInvoice;
+  const cleanInvoice = buildClientFacingDocumentLabel_(invoiceNumber);
+  if (cleanPrefix && cleanInvoice) return cleanPrefix + ' — ' + cleanInvoice;
   if (cleanPrefix) return cleanPrefix;
   return trimString_(fallback);
 }
@@ -23989,7 +24319,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment pending', invoiceNumber, 'Team alert: ACH payment pending')
-        : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — ACH payment pending') : 'Red Threads ACH payment pending'),
+        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — ACH payment pending') : 'Red Threads ACH payment pending'),
       intro: isTeamAlert
         ? 'A standard ACH order checkout was submitted.'
         : 'Your Red Threads order has been placed.',
@@ -24048,7 +24378,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment pending', invoiceNumber, 'Team alert: AP ACH payment pending')
-        : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — AP ACH payment pending') : 'AP ACH payment pending for a Red Threads invoice'),
+        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — AP ACH payment pending') : 'AP ACH payment pending for a Red Threads invoice'),
       intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for this order.' : 'Accounts Payable has submitted ACH payment for this Red Threads invoice.',
       statusCopy: isTeamAlert
         ? 'The payment is pending bank confirmation. ACH payments can take several business days to confirm.'
@@ -24110,7 +24440,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment pending', invoiceNumber, 'Team alert: manual payment pending')
-        : (invoiceNumber ? ('Red Threads invoice ' + invoiceNumber + ' — payment pending') : 'Red Threads order placed — payment pending'),
+        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — payment pending') : 'Red Threads order placed — payment pending'),
       intro: isTeamAlert ? (methodLabel + ' payment order was placed.') : 'Your Red Threads order has been placed.',
       statusCopy: isTeamAlert ? 'Production is waiting for the team to record payment as received.' : 'Production begins after Red Threads records payment as received unless otherwise approved.',
       attachmentNote: 'Your invoice is attached.'
@@ -24346,7 +24676,14 @@ function schedulePortalEmailQueueProcessor_(delayMs) {
 function resolvePurchaseOrderQueueInvoiceInfo_(ctx, payload, existingDraft) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   const draft = normalizePurchaseOrderDraftState_(existingDraft);
-  const invoiceNumber = trimString_(draft && draft.invoiceNumber) || nextInvoiceNumber_();
+  const invoiceReference = draft && draft.documentReference
+    ? buildPortalDocumentReference_(draft.documentReference)
+    : getCurrentInvoiceReferenceForOrder_(ctx && ctx.orderDraft, {
+      invoiceNumber: trimString_(draft && draft.invoiceNumber)
+    }, {
+      orderRevision: ctx && ctx.orderRevision
+    });
+  const invoiceNumber = invoiceReference.documentRef;
   if (trimString_(p.base64Data)) {
     return preparePurchaseOrderDraftInvoiceArtifact_(ctx, p, {
       existingDraft: draft,
@@ -24356,8 +24693,11 @@ function resolvePurchaseOrderQueueInvoiceInfo_(ctx, payload, existingDraft) {
   const invoicePdfUrl = trimString_(p.invoicePdfUrl || (draft && draft.invoicePdfUrl));
   return {
     invoiceNumber: invoiceNumber,
+    documentRef: invoiceReference.documentRef,
+    displayLabel: invoiceReference.displayLabel,
+    documentReference: invoiceReference,
     invoicePdfUrl: invoicePdfUrl,
-    fileName: trimString_(p.invoiceFileName || p.fileName || (draft && draft.invoiceFileName) || buildPurchaseOrderInvoiceFileName_(ctx))
+    fileName: trimString_(p.invoiceFileName || p.fileName || (draft && draft.invoiceFileName) || invoiceReference.fileName)
   };
 }
 
@@ -25645,12 +25985,16 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
   if (!email) return { ok: false, skipped: true, reason: 'missing-email' };
   const portalUrl = trimString_(buildLifecycleEmailInvoiceUrl_(order.token));
   const invoicePdfUrl = trimString_(invoice.invoicePdfUrl || order.invoicePdfUrl);
-  const subject = 'Red Threads Invoice ' + trimString_(invoice.invoiceNumber || order.invoiceNumber || '');
+  const invoiceReference = getCurrentInvoiceReferenceForOrder_(order, invoice, {
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice
+  });
+  const invoiceLabel = invoiceReference.displayLabel;
+  const subject = 'Red Threads ' + invoiceLabel;
   const body = [
     'Your Red Threads order invoice is ready.',
     '',
     'Project: ' + trimString_(order.projectName || order.projectname || '--'),
-    'Invoice Number: ' + trimString_(invoice.invoiceNumber || order.invoiceNumber || '--'),
+    'Invoice: ' + invoiceLabel,
     'Invoice PDF: ' + (invoicePdfUrl || '--'),
     portalUrl ? ('Portal: ' + portalUrl) : '',
     '',
@@ -25664,7 +26008,7 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
     '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">Use the portal to review your invoice and project status. Your invoice PDF is linked below for reference.</p>',
     '    <div style="margin:0 0 20px;padding:18px 20px;border-radius:14px;background:#0f172a;border:1px solid #1e293b;">',
     '      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Project:</strong> ' + escapeHtml_(trimString_(order.projectName || order.projectname || '--')) + '</div>',
-    '      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Invoice Number:</strong> ' + escapeHtml_(trimString_(invoice.invoiceNumber || order.invoiceNumber || '--')) + '</div>',
+    '      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Invoice:</strong> ' + escapeHtml_(invoiceLabel) + '</div>',
     invoicePdfUrl
       ? ('      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Invoice PDF:</strong> <a href="' + escapeHtml_(invoicePdfUrl) + '" style="color:#00c8ff;">View PDF</a></div>')
       : '      <div style="font-size:14px;line-height:1.8;color:#cbd5e1;"><strong>Invoice PDF:</strong> Pending</div>',
@@ -25902,20 +26246,21 @@ function sendSummaryEstimatePdfEmail(payload) {
   const dealNumber = trimString_(p.dealNumber);
   const projectName = trimString_(p.projectName);
   const token = trimString_(p.token);
-  const documentKind = trimString_(p.documentKind).toLowerCase() === 'invoice' ? 'invoice' : 'summary';
-  const fileName = sanitizeUploadedDocumentName_(
-    p.fileName,
-    documentKind === 'invoice'
-      ? (dealNumber ? ('Red Threads Project-' + dealNumber + '-Invoice.pdf') : 'Red Threads Project-Invoice.pdf')
-      : (dealNumber ? ('Red Threads Project-' + dealNumber + '-Summary.pdf') : 'Red Threads Project-Summary.pdf')
-  );
+  const documentKind = trimString_(p.documentKind).toLowerCase() === 'invoice'
+    ? PORTAL_DOCUMENT_KINDS.invoice
+    : PORTAL_DOCUMENT_KINDS.estimate;
+  const parsedPayloadRef = parsePortalDocumentReference_(p.documentRef || p.documentReference);
+  const documentReference = parsedPayloadRef || buildPortalDocumentReference_({
+    projectNumber: dealNumber,
+    documentKind: documentKind,
+    version: p.documentVersion || 1
+  });
+  const fileName = sanitizeUploadedDocumentName_(documentReference.fileName, documentReference.fileName);
   const blob = Utilities.newBlob(bytes, trimString_(p.mimeType) || MimeType.PDF, fileName);
   if (doesPdfBlobContainLegacyInvoiceMarker_(blob)) {
     throw new Error(LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice);
   }
-  const subject = documentKind === 'invoice'
-    ? (dealNumber ? ('Red Threads Project ' + dealNumber + ' Invoice') : 'Red Threads Project Invoice')
-    : (dealNumber ? ('Red Threads Project ' + dealNumber + ' Summary') : 'Red Threads Project Summary');
+  const subject = 'Red Threads ' + documentReference.displayLabel;
   let lifecycleSections = { blocks: [] };
   if (token) {
     try {
@@ -25931,6 +26276,41 @@ function sendSummaryEstimatePdfEmail(payload) {
       lifecycleSections = { blocks: [] };
     }
   }
+  if (token && documentKind === PORTAL_DOCUMENT_KINDS.estimate) {
+    try {
+      const cfg = getConfig_();
+      const ss = SpreadsheetApp.openById(cfg.sheetId);
+      const exportSheet = ss.getSheetByName(cfg.exportLogSheetName);
+      const rowInfo = exportSheet ? findRowByToken_(exportSheet, token) : null;
+      if (rowInfo) {
+        const existingState = safeJsonParse_(rowInfo.rowObjNormalized.portalstatejson, {}) || { printJobs: {} };
+        const nextState = JSON.parse(JSON.stringify(existingState));
+        if (!nextState.documentReferences || typeof nextState.documentReferences !== 'object' || Array.isArray(nextState.documentReferences)) {
+          nextState.documentReferences = {};
+        }
+        const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes);
+        const fingerprint = trimString_(p.documentFingerprint) || Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
+        nextState.documentReferences.estimate = {
+          projectNumber: documentReference.projectNumber,
+          documentKind: PORTAL_DOCUMENT_KINDS.estimate,
+          version: documentReference.version,
+          documentRef: documentReference.documentRef,
+          displayLabel: documentReference.displayLabel,
+          fileName: documentReference.fileName,
+          currentFingerprint: fingerprint,
+          currentComparableKey: trimString_(p.documentFingerprint),
+          updatedAt: nowIso_()
+        };
+        persistPortalStateForRow_(exportSheet, rowInfo, nextState, {
+          token: token,
+          locked: isLockedPortalRow_(rowInfo.rowObjNormalized, existingState),
+          clearSubmittedAt: false
+        });
+      }
+    } catch (err) {
+      console.log('[RT-DOCUMENT-REFERENCE-PERSIST] ' + String((err && err.message) || err));
+    }
+  }
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
@@ -25938,9 +26318,7 @@ function sendSummaryEstimatePdfEmail(payload) {
     return trimString_(block && block.html);
   }).filter(Boolean).join('\n');
   const body = [
-    documentKind === 'invoice'
-      ? 'Your Red Threads invoice document is attached.'
-      : 'Your Red Threads Summary document is attached.',
+    documentReference.displayLabel + ' is attached.',
     '',
     lifecycleText || [
       dealNumber ? ('Project #: ' + dealNumber) : '',
@@ -25951,9 +26329,7 @@ function sendSummaryEstimatePdfEmail(payload) {
   ].filter(Boolean).join('\n');
   const htmlBody = [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#f8fafc;">',
-    '  <p style="margin:0 0 14px;">' + escapeHtml_(documentKind === 'invoice'
-      ? 'Your Red Threads invoice document is attached.'
-      : 'Your Red Threads Summary document is attached.') + '</p>',
+    '  <p style="margin:0 0 14px;">' + escapeHtml_(documentReference.displayLabel + ' is attached.') + '</p>',
     lifecycleHtml || [
       dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
       projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : ''
@@ -25967,7 +26343,7 @@ function sendSummaryEstimatePdfEmail(payload) {
     subject: subject,
     body: body,
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: documentKind === 'invoice' ? 'Invoice document attached.' : 'Project summary attached.',
+      heading: documentKind === PORTAL_DOCUMENT_KINDS.invoice ? 'Invoice document attached.' : 'Estimate document attached.',
       badgeLabel: 'Document Ready',
       bodyHtml: htmlBody
     }),
@@ -26055,13 +26431,16 @@ function storeEmailReviewPortalRenderedInvoiceArtifact_(payload, cfg) {
   const artifact = (p.reviewInvoiceArtifact && typeof p.reviewInvoiceArtifact === 'object') ? p.reviewInvoiceArtifact : {};
   const base64Data = trimString_(artifact.base64Data || p.reviewInvoiceBase64Data);
   if (!base64Data) return null;
-  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd');
   const stored = storePortalPdfBlobInInvoiceFolder_({
     cfg: cfg || getConfig_(),
     base64Data: base64Data,
     mimeType: trimString_(artifact.mimeType || p.reviewInvoiceMimeType) || MimeType.PDF,
     fileName: trimString_(artifact.fileName || p.reviewInvoiceFileName),
-    defaultFileName: 'Red Threads Project-EmailReview-Invoice-' + stamp + '.pdf'
+    defaultFileName: buildPortalDocumentFileName_({
+      projectNumber: 'EmailReview',
+      documentKind: PORTAL_DOCUMENT_KINDS.invoice,
+      version: 1
+    })
   });
   return {
     invoicePdfUrl: trimString_(stored.fileUrl),
@@ -26441,11 +26820,18 @@ function buildEmailReviewFailedOrderInfo_(orderInfo, paymentMethod, options) {
 function buildEmailReviewInvoiceAttachmentName_(summary, fallbackFileName, options) {
   const source = (summary && typeof summary === 'object') ? summary : {};
   const opts = (options && typeof options === 'object') ? options : {};
-  const dealNumber = trimString_(source.dealNumber || source.dealnumber);
-  const kind = trimString_(opts.kind).toLowerCase() === 'receipt' ? 'Receipt' : 'Invoice';
-  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd');
-  if (dealNumber) return 'Red Threads Project-' + dealNumber + '-' + kind + '-' + stamp + '.pdf';
-  return trimString_(fallbackFileName) || ('Red Threads Project-EmailReview-' + kind + '-' + stamp + '.pdf');
+  const documentKind = trimString_(opts.kind).toLowerCase() === 'receipt'
+    ? PORTAL_DOCUMENT_KINDS.receipt
+    : PORTAL_DOCUMENT_KINDS.invoice;
+  const ref = buildPortalDocumentReference_({
+    projectNumber: getPortalDocumentProjectNumber_(source) || 'EmailReview',
+    documentKind: documentKind,
+    version: resolvePortalDocumentVersion_(source, {
+      invoiceNumber: source.invoiceNumber,
+      orderRevision: source.orderRevision || source.orderrevision
+    })
+  });
+  return ref.fileName || trimString_(fallbackFileName);
 }
 
 function buildEmailReviewInvoiceInfo_(fixture, orderInfo, options) {
@@ -26456,7 +26842,7 @@ function buildEmailReviewInvoiceInfo_(fixture, orderInfo, options) {
   if (!override || !trimString_(override.invoicePdfUrl || override.invoiceFileId)) {
     throw new Error('email_review_portal_rendered_invoice_required');
   }
-  return {
+  const invoiceInfo = {
     invoiceNumber: trimString_(summary.invoiceNumber),
     invoicePdfUrl: trimString_(override.invoicePdfUrl),
     invoiceFileId: trimString_(override.invoiceFileId),
@@ -26464,6 +26850,10 @@ function buildEmailReviewInvoiceInfo_(fixture, orderInfo, options) {
       kind: opts.fresh === true ? 'receipt' : 'invoice'
     })
   };
+  return attachPortalDocumentReferenceToInvoiceInfo_(invoiceInfo, orderInfo, {
+    documentKind: opts.fresh === true ? PORTAL_DOCUMENT_KINDS.receipt : PORTAL_DOCUMENT_KINDS.invoice,
+    forceFileName: true
+  });
 }
 
 function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo, options) {
@@ -26855,6 +27245,9 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
   const invoiceInfo = buildEmailReviewInvoiceInfo_(fixture, order, { fresh: true });
   const attachments = buildEmailReviewAttachments_('locked_order_confirmation', '', order, invoiceInfo);
   const summary = Object.assign({}, buildPortalOrderSummary_(order.rowObjNormalized), invoiceInfo);
+  const summaryInvoiceLabel = getCurrentInvoiceReferenceForOrder_(order, invoiceInfo, {
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice
+  }).displayLabel;
   const draft = safeJsonParse_(order.rowObjNormalized.orderdraftjson, {}) || {};
   const lockedContent = buildLockedOrderPaymentEmailContent_({ orderDraft: draft }, summary, {
     intro: 'Your order confirmation has been resent for review.',
@@ -26874,12 +27267,12 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
     poInvoiceContent,
     attachments);
   sendEmailReviewContent_(results, 'Explicit locked-order resend client', 'locked_order_resend', 'client', [recipients.client], {
-    subject: trimString_(summary.invoiceNumber) ? ('Red Threads order confirmation - ' + trimString_(summary.invoiceNumber)) : 'Red Threads order confirmation',
+    subject: summaryInvoiceLabel ? ('Red Threads order confirmation — ' + summaryInvoiceLabel) : 'Red Threads order confirmation',
     body: lockedContent.body,
     htmlBody: lockedContent.htmlBody
   }, attachments);
   sendEmailReviewContent_(results, 'Explicit locked-order resend team', 'locked_order_resend', 'team', [recipients.team], {
-    subject: trimString_(summary.invoiceNumber) ? ('Red Threads order confirmation - ' + trimString_(summary.invoiceNumber)) : 'Red Threads order confirmation',
+    subject: summaryInvoiceLabel ? ('Red Threads order confirmation — ' + summaryInvoiceLabel) : 'Red Threads order confirmation',
     body: lockedContent.body,
     htmlBody: lockedContent.htmlBody
   }, attachments);
@@ -26891,8 +27284,18 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
         recipients: [recipients.client],
         base64Data: Utilities.base64Encode(sourceAttachment.getBytes()),
         mimeType: MimeType.PDF,
-        fileName: 'Red Threads Email Review Summary.pdf',
+        fileName: buildPortalDocumentFileName_({
+          projectNumber: getPortalDocumentProjectNumber_(summary) || 'EmailReview',
+          documentKind: PORTAL_DOCUMENT_KINDS.estimate,
+          version: 1
+        }),
         documentKind: 'summary',
+        documentRef: buildPortalDocumentReference_({
+          projectNumber: getPortalDocumentProjectNumber_(summary) || 'EmailReview',
+          documentKind: PORTAL_DOCUMENT_KINDS.estimate,
+          version: 1
+        }).documentRef,
+        documentVersion: 1,
         token: trimString_(summary.token),
         dealNumber: trimString_(summary.dealNumber),
         projectName: trimString_(summary.projectName)

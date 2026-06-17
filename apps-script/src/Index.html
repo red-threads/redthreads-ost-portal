@@ -19083,6 +19083,7 @@
       || Object.prototype.hasOwnProperty.call(source, 'invoiceNumber')
       || Object.prototype.hasOwnProperty.call(source, 'invoicePdfUrl')
       || Object.prototype.hasOwnProperty.call(source, 'invoiceFileName')
+      || Object.prototype.hasOwnProperty.call(source, 'documentReference')
       || Object.prototype.hasOwnProperty.call(source, 'invoiceSentToEmail')
       || Object.prototype.hasOwnProperty.call(source, 'invoiceSentAt')
       || Object.prototype.hasOwnProperty.call(source, 'lastPreparedAt')
@@ -19104,6 +19105,9 @@
       invoiceNumber: String(source.invoiceNumber || '').trim(),
       invoicePdfUrl: String(source.invoicePdfUrl || '').trim(),
       invoiceFileName: String(source.invoiceFileName || '').trim(),
+      documentReference: (source.documentReference && typeof source.documentReference === 'object')
+        ? clonePlainObject(source.documentReference)
+        : null,
       invoiceSentToEmail: invoiceSentToEmail,
       invoiceSentAt: String(source.invoiceSentAt || '').trim(),
       lastPreparedAt: String(source.lastPreparedAt || '').trim(),
@@ -19159,6 +19163,9 @@
       shippingModeLabel: String(parsed && parsed.shippingModeLabel ? parsed.shippingModeLabel : '').trim(),
       shippingDetails: normalizeOrderFlowShippingDetails_(parsed && parsed.shippingDetails),
       summaryOptions: normalizeSummaryOptions(parsed && parsed.summaryOptions),
+      documentReferences: (parsed && parsed.documentReferences && typeof parsed.documentReferences === 'object' && !Array.isArray(parsed.documentReferences))
+        ? clonePlainObject(parsed.documentReferences)
+        : {},
       messageLog: readMessageLogFromState(parsed),
       quantities: {},
       printJobs: {}
@@ -19558,6 +19565,9 @@
       paymentState: String(raw.paymentState || '').trim(),
       productionAuthorizationState: String(raw.productionAuthorizationState || '').trim(),
       invoiceNumber: String(raw.invoiceNumber || '').trim(),
+      invoiceDocumentReference: (raw.invoiceDocumentReference && typeof raw.invoiceDocumentReference === 'object')
+        ? clonePlainObject(raw.invoiceDocumentReference)
+        : null,
       invoicePdfUrl: String(raw.invoicePdfUrl || '').trim(),
       invoiceSentToEmail: String(raw.invoiceSentToEmail || '').trim(),
       poNumber: String(raw.poNumber || '').trim(),
@@ -19678,6 +19688,86 @@
     return normalized === SUMMARY_DOCUMENT_MODES.po_draft_invoice
       || normalized === SUMMARY_DOCUMENT_MODES.manual_pending_invoice
       || normalized === SUMMARY_DOCUMENT_MODES.locked_invoice;
+  }
+
+  function normalizeSummaryDocumentProjectNumber_(value){
+    return String(value || '').trim().replace(/[^A-Za-z0-9_-]+/g, '') || 'Project';
+  }
+
+  function zeroPadSummaryDocumentVersion_(version){
+    const n = Math.max(1, parseInt(String(version || 1), 10) || 1);
+    return n < 10 ? ('0' + n) : String(n);
+  }
+
+  function parseSummaryPortalDocumentReference_(value){
+    const clean = String(value || '').trim();
+    const match = clean.match(/^(EST|INV)-(.+)-v(\d{1,4})$/i);
+    if (!match) return null;
+    const prefix = String(match[1] || '').toUpperCase();
+    const projectNumber = normalizeSummaryDocumentProjectNumber_(match[2]);
+    const version = Math.max(1, parseInt(String(match[3] || 1), 10) || 1);
+    return buildSummaryPortalDocumentReference_(prefix === 'EST' ? 'estimate' : 'invoice', {
+      projectNumber: projectNumber,
+      version: version
+    });
+  }
+
+  function buildSummaryPortalDocumentReference_(documentKind, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const kind = String(documentKind || '').trim().toLowerCase() === 'estimate' ? 'estimate' : 'invoice';
+    const projectNumber = normalizeSummaryDocumentProjectNumber_(opts.projectNumber || getDealNumber());
+    const version = Math.max(1, parseInt(String(opts.version || 1), 10) || 1);
+    const padded = zeroPadSummaryDocumentVersion_(version);
+    const prefix = kind === 'estimate' ? 'EST' : 'INV';
+    const displayLabel = (kind === 'estimate' ? 'Estimate ' : 'Invoice ') + projectNumber + '-v' + version;
+    return {
+      projectNumber: projectNumber,
+      documentKind: kind,
+      version: version,
+      documentRef: prefix + '-' + projectNumber + '-v' + padded,
+      displayLabel: displayLabel,
+      fileName: 'Red Threads - Project ' + projectNumber + ' - ' + (kind === 'estimate' ? 'Estimate' : 'Invoice') + ' v' + padded + '.pdf'
+    };
+  }
+
+  function getSummaryCommercialDocumentFingerprint_(){
+    try {
+      return getComparablePortalStateKey(buildPortalStateFromUI({ messageLog: CHAT_MESSAGES }));
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function getSummaryDocumentReference_(mode){
+    const documentMode = String(mode || getSummaryDocumentMode_()).trim().toLowerCase() || SUMMARY_DOCUMENT_MODES.estimate;
+    const isInvoice = isInvoiceSummaryDocumentMode_(documentMode);
+    if (isInvoice) {
+      const parsed = parseSummaryPortalDocumentReference_(LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.invoiceNumber);
+      if (parsed) return parsed;
+      return buildSummaryPortalDocumentReference_('invoice', {
+        projectNumber: getDealNumber(),
+        version: Math.max(1, parseInt(String(LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.orderRevision || 1), 10) || 1)
+      });
+    }
+    const refs = PORTAL_STATE && PORTAL_STATE.documentReferences && typeof PORTAL_STATE.documentReferences === 'object'
+      ? PORTAL_STATE.documentReferences
+      : {};
+    const existing = refs.estimate && typeof refs.estimate === 'object' ? refs.estimate : {};
+    const parsedEstimate = parseSummaryPortalDocumentReference_(existing.documentRef);
+    const fingerprint = getSummaryCommercialDocumentFingerprint_();
+    const existingVersion = parsedEstimate
+      ? parsedEstimate.version
+      : Math.max(1, parseInt(String(existing.version || 1), 10) || 1);
+    const existingFingerprint = String(existing.currentComparableKey || '').trim();
+    const version = existingFingerprint && fingerprint && existingFingerprint !== fingerprint
+      ? existingVersion + 1
+      : existingVersion;
+    const ref = buildSummaryPortalDocumentReference_('estimate', {
+      projectNumber: getDealNumber(),
+      version: version
+    });
+    ref.currentComparableKey = fingerprint;
+    return ref;
   }
 
   function applyVmRuntimeState(vmPayload){
@@ -20162,6 +20252,8 @@
     const paymentState = String(current.currentPaymentState || '').trim().toLowerCase();
     const paymentMethod = String(workflow.paymentMethod || current.currentPaymentMethod || '').trim();
     const invoiceNumber = String(current.latestInvoiceNumber || '').trim();
+    const parsedInvoiceRef = parseSummaryPortalDocumentReference_(invoiceNumber);
+    const invoiceLabel = parsedInvoiceRef ? parsedInvoiceRef.displayLabel : (invoiceNumber ? ('Invoice ' + invoiceNumber) : '');
     const updatedAt = String(current.lastOrderUpdatedAt || '').trim();
 
     if (isLocked) {
@@ -20169,14 +20261,14 @@
         return {
           badge: 'Awaiting P.O.',
           text: 'The invoice is locked and ready. Email it if needed, then upload the final purchase order to complete submission.',
-          meta: invoiceNumber ? ('Invoice ' + invoiceNumber + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
+          meta: invoiceLabel ? (invoiceLabel + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
         };
       }
       if (lifecycleStage === PORTAL_LIFECYCLE_STAGES.manual_pending_locked) {
         return {
           badge: 'Awaiting Payment',
           text: 'This invoice is locked while we wait for your ' + (paymentMethod || 'manual') + ' payment.',
-          meta: invoiceNumber ? ('Invoice ' + invoiceNumber + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
+          meta: invoiceLabel ? (invoiceLabel + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
         };
       }
       if (paymentState === 'failed') {
@@ -20208,7 +20300,7 @@
         return {
           badge: 'Awaiting Payment',
           text: 'This portal is locked while we wait for your ' + (paymentMethod || 'manual') + ' payment.',
-          meta: invoiceNumber ? ('Invoice ' + invoiceNumber + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
+          meta: invoiceLabel ? (invoiceLabel + (updatedAt ? ' • Updated ' + updatedAt : '')) : (updatedAt ? ('Updated ' + updatedAt) : '')
         };
       }
       if (workflow.isPaymentPending === true) {
@@ -20222,7 +20314,7 @@
         return {
           badge: 'Awaiting P.O.',
           text: 'This portal is locked while we wait for your purchase order paperwork.',
-          meta: invoiceNumber ? ('Invoice ' + invoiceNumber) : ''
+          meta: invoiceLabel || ''
         };
       }
       if (workflow.isProductionAuthorized === true || workflow.productionCurrent === true || workflow.productionComplete === true) {
@@ -24060,6 +24152,7 @@
       printJobs: clonePlainObject(normalized.printJobs),
       quantities: clonePlainObject(normalized.quantities),
       messageLog: normalizeMessageLog(normalized.messageLog),
+      documentReferences: clonePlainObject(normalized.documentReferences || {}),
       purchaseOrderDraft: normalized.purchaseOrderDraft
         ? clonePlainObject(normalized.purchaseOrderDraft)
         : null
@@ -28298,16 +28391,7 @@
   }
 
   function buildSummaryExportFileName_(){
-    const dealNumber = String(getDealNumber() || '').trim();
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const isLockedInvoice = String(CURRENT_STATE_SUMMARY.portalLockState || '').trim().toLowerCase() === 'locked';
-    const prefix = dealNumber
-      ? ('Red Threads Project-' + dealNumber + '-' + (isLockedInvoice ? 'Invoice-' : 'Summary-'))
-      : ('Red Threads Project-' + (isLockedInvoice ? 'Invoice-' : 'Summary-'));
-    return prefix + yyyy + '-' + mm + '-' + dd + '.pdf';
+    return getSummaryDocumentReference_(getSummaryDocumentMode_()).fileName;
   }
 
   function getAccountDocumentWorkflowByType_(documentType, summary){
@@ -35244,15 +35328,7 @@
   }
 
   function buildOrderFlowPurchaseOrderFileName_(){
-    const dealNumber = String(getDealNumber() || '').trim();
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const prefix = dealNumber
-      ? ('Red Threads Project-' + dealNumber + '-Invoice-')
-      : 'Red Threads Project-Invoice-';
-    return prefix + yyyy + '-' + mm + '-' + dd + '.pdf';
+    return getSummaryDocumentReference_(SUMMARY_DOCUMENT_MODES.po_draft_invoice).fileName;
   }
 
   function resetOrderFlowPoViewerState_(options){
@@ -36658,6 +36734,10 @@
       const resp = await callServer(sendEmail ? 'sendAchPaymentLinkToAp' : 'prepareAchPaymentLinkToAp', payload);
       syncOrderFlowLifecycleFromResponse_(resp, { expectedPortalState: clickedPortalState });
       const link = String(resp && resp.apPaymentLink || resp && resp.paymentLinks && resp.paymentLinks.achApUrl || '').trim();
+      const respInvoiceRef = parseSummaryPortalDocumentReference_(resp && resp.invoice && resp.invoice.invoiceNumber);
+      const respInvoiceLabel = respInvoiceRef
+        ? respInvoiceRef.displayLabel
+        : (resp && resp.invoice && resp.invoice.invoiceNumber ? ('Invoice ' + resp.invoice.invoiceNumber) : '');
       if (!resp || resp.ok !== true) {
         if (link) {
           const copied = await copyTextToClipboard_(link).catch(() => false);
@@ -36667,7 +36747,7 @@
             'ACH payment link prepared',
             'The AP payment link was prepared, but the email could not be sent. The Red Threads portal payment link is available to copy.',
             [
-              resp && resp.invoice && resp.invoice.invoiceNumber ? ('Invoice: ' + resp.invoice.invoiceNumber) : '',
+              respInvoiceLabel ? ('Invoice: ' + respInvoiceLabel) : '',
               'AP bank details will be order-only and will not be saved to Dashboard Payment Methods.'
             ].filter(Boolean).join('\n'),
             {
@@ -36697,7 +36777,7 @@
           ? 'The order is locked as awaiting ACH payment. Accounts Payable received a Red Threads portal payment link; no Stripe Checkout URL was emailed.'
           : 'The order is locked as awaiting ACH payment. The copied link opens the Red Threads portal for Accounts Payable.',
         [
-          resp.invoice && resp.invoice.invoiceNumber ? ('Invoice: ' + resp.invoice.invoiceNumber) : '',
+          respInvoiceLabel ? ('Invoice: ' + respInvoiceLabel) : '',
           sendEmail && resp.apEmailRedacted ? ('Sent to: ' + resp.apEmailRedacted) : '',
           'AP bank details will be order-only and will not be saved to Dashboard Payment Methods.'
         ].filter(Boolean).join('\n'),
@@ -38266,7 +38346,8 @@
     setSummaryShareBusyAction_('email');
     SUMMARY_SHARE_STATUS = { tone: '', message: '' };
     try {
-      const result = await buildSummaryExportPdf_();
+      const documentReference = getSummaryDocumentReference_(getSummaryDocumentMode_());
+      const result = await buildSummaryExportPdf_({ fileName: documentReference.fileName });
       const base64Data = await readBlobAsBase64_(result.blob);
       if (!base64Data) throw new Error('Unable to package the Summary PDF for email.');
       const resp = await callServer('sendSummaryEstimatePdfEmail', {
@@ -38275,6 +38356,9 @@
         mimeType: 'application/pdf',
         base64Data: base64Data,
         documentKind: isLockedInvoice ? 'invoice' : 'summary',
+        documentRef: documentReference.documentRef,
+        documentVersion: documentReference.version,
+        documentFingerprint: documentReference.currentComparableKey || '',
         token: CURRENT_TOKEN || INITIAL_TOKEN || '',
         dealNumber: getDealNumber(),
         projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || ''
@@ -38306,12 +38390,7 @@
   }
 
   function buildEmailReviewSuiteInvoiceFileName_(){
-    const dealNumber = String(getDealNumber() || 'EmailReview').trim() || 'EmailReview';
-    const now = new Date();
-    const yyyy = String(now.getFullYear());
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    return 'Red Threads Project-' + dealNumber + '-Invoice-' + yyyy + '-' + mm + '-' + dd + '.pdf';
+    return getSummaryDocumentReference_(SUMMARY_DOCUMENT_MODES.locked_invoice).fileName;
   }
 
   async function buildEmailReviewSuitePortalRenderedArtifact_(){
@@ -38537,6 +38616,7 @@
     nextState.fulfillmentMethod = fulfillment.fulfillmentMethod;
     nextState.shippingChargeCents = fulfillment.shippingChargeCents;
     nextState.shippingModeLabel = fulfillment.shippingModeLabel;
+    nextState.documentReferences = clonePlainObject(currentState.documentReferences || nextState.documentReferences || {});
     const shippingDetails = normalizeOrderFlowShippingDetails_(
       ORDER_FLOW_PO_SHIPPING_DETAILS
       || currentState.shippingDetails
@@ -41766,8 +41846,13 @@
       ? (poNumber ? ('PO #' + poNumber + ' placed: ' + displayDate) : ('PO placed: ' + displayDate))
       : '';
     const readyByLabel = String(safeRollup.readyDateLabel || '--').trim() || '--';
+    const documentReference = getSummaryDocumentReference_(opts.mode);
     return {
       logoUrl: 'https://logos.redthreads.work/CALC_PORTAL/LONG_HEADER_LOGO.png',
+      documentReference: documentReference,
+      documentRef: documentReference.documentRef,
+      documentDisplayLabel: documentReference.displayLabel,
+      documentVersion: documentReference.version,
       savedDate: displayDate,
       dateLabel: productionComplete ? 'Completed:' : (isLockedPoInvoice ? 'PO Placed:' : 'Date:'),
       poPlacementLabel: poPlacementLabel,
@@ -43243,7 +43328,7 @@
         + (isPoPaymentDueHeader ? ' isPoPaymentDueInvoice' : '')
         + (isPoPaidCardHeader ? ' isPoPaidCardInvoice' : '')
     );
-    docIdBlock.appendChild(createEl('div', 'summaryEstimateHeroDocId', modeLabel + ' # ' + data.header.dealNumber));
+    docIdBlock.appendChild(createEl('div', 'summaryEstimateHeroDocId', data.header.documentDisplayLabel || (modeLabel + ' # ' + data.header.dealNumber)));
     if (String(data && data.header && data.header.poNumber || '').trim() && !poPlacementLabel) {
       docIdBlock.appendChild(createEl('div', 'summaryEstimateHeroDocMeta', 'P.O. #: ' + data.header.poNumber));
     }
