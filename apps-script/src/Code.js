@@ -8949,6 +8949,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const purchaserName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.personName);
   const note = trimString_(opts.note).slice(0, 1200);
   const paymentLink = trimString_(opts.apPaymentLink);
+  const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
   const invoiceReference = getCurrentInvoiceReferenceForOrder_(opts.lifecycleOrderInfo || summary || ctx, summary, {
     documentKind: PORTAL_DOCUMENT_KINDS.invoice
   });
@@ -8965,8 +8966,19 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     cfg: opts.cfg,
     ss: opts.ss,
     infra: opts.infra,
-    token: trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token)
+    token: token,
+    projectDetailsCta: false
   });
+  const topCtaUrl = paymentLink || (token ? buildLifecycleEmailInvoiceUrl_(token) : '');
+  const projectAccessLabel = dealNumber
+    ? ('Click to access Project #' + dealNumber + ' and make a payment.')
+    : 'Click to access this project and make a payment.';
+  const paymentIntro = 'A secure Red Threads ACH payment page is ready for this invoice.';
+  const paymentInstruction = 'Click the button below to access the project and make a payment. Payment is required before production can begin. You will receive a copy of the final invoice upon completion.';
+  const bankDetailsCopy = 'Bank details are not stored anywhere by Red Threads and will be used to complete this order only.';
+  const purchaserNoteLabel = purchaserName
+    ? ('Note from the purchaser (' + purchaserName + ')')
+    : 'Note from the purchaser';
   const reference = [
     invoiceNumber ? ('Invoice: ' + invoiceNumber) : '',
     dealNumber ? ('Project #: ' + dealNumber) : '',
@@ -8980,25 +8992,34 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     return trimString_(block && block.html);
   }).filter(Boolean).join('\n');
   const bodyLines = [
+    note ? (purchaserNoteLabel + ':\n' + note) : '',
+    note ? '' : '',
     greeting,
     '',
-    'A secure Red Threads ACH payment page is ready for this invoice.',
+    paymentIntro,
+    paymentInstruction,
+    topCtaUrl ? (projectAccessLabel + ' ' + topCtaUrl) : '',
     '',
     lifecycleText || reference.join('\n'),
     '',
-    'Open secure ACH payment page:',
-    paymentLink,
-    '',
-    'You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.',
+    bankDetailsCopy,
     'The invoice is attached.',
-    note ? ('\nNote from ' + (purchaserName || 'the purchaser') + ':\n' + note) : '',
     '',
     footer
   ].filter(Boolean);
+  const topCtaHtml = topCtaUrl
+    ? ('  <p style="margin:14px 0 18px;"><a href="' + escapeHtml_(topCtaUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">' + escapeHtml_(projectAccessLabel) + '</a></p>')
+    : '';
+  const purchaserNoteHtml = note
+    ? ('  <div style="margin:0 0 18px;padding:14px 16px;border-left:4px solid #be123c;background:#170b12;"><strong>' + escapeHtml_(purchaserNoteLabel) + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
+    : '';
   const htmlBody = [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#f8fafc;">',
+    purchaserNoteHtml,
     '  <p style="margin:0 0 14px;">' + escapeHtml_(greeting) + '</p>',
-    '  <p style="margin:0 0 14px;">A secure Red Threads ACH payment page is ready for this invoice.</p>',
+    '  <p style="margin:0 0 10px;">' + escapeHtml_(paymentIntro) + '</p>',
+    '  <p style="margin:0 0 10px;color:#cbd5e1;">' + escapeHtml_(paymentInstruction) + '</p>',
+    topCtaHtml,
     lifecycleHtml || [
       '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #1e293b;border-radius:14px;background:#0f172a;">',
       invoiceNumber ? ('    <div><strong>Invoice:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
@@ -9007,14 +9028,8 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
       '    <div><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</div>',
       '  </div>'
     ].filter(Boolean).join('\n'),
-    paymentLink
-      ? ('  <p style="margin:0 0 16px;"><a href="' + escapeHtml_(paymentLink) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">Open secure ACH payment page</a></p>')
-      : '',
-    '  <p style="margin:0 0 14px;color:#94a3b8;">You will complete ACH bank payment through Stripe. Bank details entered through this Accounts Payable link are used for this order only and are not saved to the purchaser dashboard.</p>',
+    '  <p style="margin:0 0 14px;color:#94a3b8;">' + escapeHtml_(bankDetailsCopy) + '</p>',
     '  <p style="margin:0 0 14px;color:#94a3b8;"><strong>Attachment:</strong> The invoice is attached.</p>',
-    note
-      ? ('  <div style="margin:0 0 16px;padding:14px 16px;border-left:4px solid #be123c;background:#170b12;"><strong>Note from ' + escapeHtml_(purchaserName || 'the purchaser') + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
-      : '',
     '  <p style="margin:0;color:#94a3b8;">' + escapeHtml_(footer) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -22095,7 +22110,7 @@ function getApAchLifecycleNextStepText_(milestone, recipientClass, fallback) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
     return isTeamAlert
       ? 'No AP payment action is required; continue with the production workflow.'
-      : 'No payment action is needed. The updated invoice/receipt is attached.';
+      : 'No payment action is needed.';
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
     return isTeamAlert
@@ -23999,6 +24014,15 @@ function buildPortalNativeEmailBadgeHtml_(label) {
   }) + '">' + escapeHtml_(clean) + '</span>';
 }
 
+function stripPortalNativeEmailHeaderActionRequiredLabel_(value) {
+  let clean = trimString_(value);
+  if (!clean) return '';
+  clean = clean.replace(/\s+—\s+(?:Action required|Action needed)\s+—\s+/i, ' — ');
+  clean = clean.replace(/^(?:Action required|Action needed)\s*[—-]\s*/i, '');
+  clean = clean.replace(/\s+—\s+(?:Action required|Action needed)$/i, '');
+  return trimString_(clean);
+}
+
 function buildPortalNativeEmailReviewBannerHtml_(label) {
   const clean = trimString_(label);
   if (!clean) return '';
@@ -24021,7 +24045,7 @@ function buildPortalNativeEmailShellHtml_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
   const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal - Notification';
-  const heading = trimString_(opts.heading) || 'Red Threads portal update';
+  const heading = stripPortalNativeEmailHeaderActionRequiredLabel_(opts.heading) || 'Red Threads portal update';
   const subheading = trimString_(opts.subheading);
   const headingColor = theme.text;
   const subheadingColor = theme.textMuted;
@@ -24158,6 +24182,16 @@ function normalizeLifecycleEmailProgressStageLabel_(key, label) {
   return trimString_(label);
 }
 
+function isLifecycleEmailPaymentStep_(step) {
+  const item = (step && typeof step === 'object') ? step : {};
+  const key = trimString_(item.key).toLowerCase();
+  const label = trimString_(item.label).toLowerCase();
+  return key === 'payment' ||
+    key === 'pay' ||
+    label.indexOf('payment') >= 0 ||
+    label.indexOf('pay') >= 0;
+}
+
 function resolveLifecycleEmailStepCompletedDate_(step, context) {
   const item = (step && typeof step === 'object') ? step : {};
   const ctx = (context && typeof context === 'object') ? context : {};
@@ -24206,6 +24240,9 @@ function resolveLifecycleEmailProgressStatusDisplay_(step, context) {
   } else if (state === 'current' && isLifecycleEmailProductionStep_(item)) {
     label = 'In Production';
     status = completedMonthDay ? ('Started ' + completedMonthDay) : 'Started';
+  } else if (state !== 'complete' && isLifecycleEmailPaymentStep_(item)) {
+    label = 'Complete Payment';
+    status = state === 'current' ? 'Current action' : 'Next';
   } else if (state === 'current') {
     status = 'Current action';
   }
@@ -24684,12 +24721,7 @@ function buildLifecycleEmailUpdateSubheading_(heading) {
     return index !== documentIndex;
   }).join(' — ');
   updateLabel = updateLabel.replace(/^Red Threads\s+/i, '').replace(/[.]+$/g, '').trim();
-  const actionRequired = /^(action needed|action required)\b/i.test(updateLabel) ||
-    /\b(needed|required|issue|failed|could not|verify|retry|attention)\b/i.test(updateLabel);
   updateLabel = updateLabel.replace(/^(action needed|action required)\s*[—-]?\s*/i, '').trim();
-  if (actionRequired && updateLabel) {
-    updateLabel = 'Action required — ' + updateLabel;
-  }
   return updateLabel || documentLabel || clean;
 }
 
@@ -24717,6 +24749,7 @@ function isLifecycleEmailNoActionText_(value) {
   const clean = trimString_(value).toLowerCase();
   if (!clean) return false;
   return /^no\s+(?:team\s+)?action\s+(?:is\s+)?(?:needed|required)\b/.test(clean) ||
+    /^no\s+(?:ap\s+)?payment\s+action\s+(?:is\s+)?(?:needed|required)\b/.test(clean) ||
     /^no\s+action\s+(?:needed|required)\b/.test(clean);
 }
 
@@ -24785,7 +24818,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (!intro && !statusCopy && !nextStep && !attachmentSentence && !productionTimingLine && !trimString_(cta && cta.url)) return '';
   const titleColor = /^action required$/i.test(title)
     ? theme.currentAqua
-    : (/^no action required$/i.test(title) ? theme.brandRedMid : theme.brandRedMid);
+    : (/^no action required$/i.test(title) ? theme.successGreen : theme.brandRedMid);
   const paragraphs = [];
   if (intro) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>');
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
@@ -24857,7 +24890,7 @@ function buildLifecycleEmailShell_(options) {
   const textParts = [
     intro,
     statusCopy,
-    nextStep ? ((noActionNextStep ? 'No action required: ' : 'Next step: ') + nextStep) : '',
+    nextStep && !noActionNextStep ? ('Next step: ' + nextStep) : '',
     actionAttachmentSentence ? actionAttachmentSentence : (attachmentNote ? ('Attachment: ' + attachmentNote) : ''),
     productionTimingActionLine
   ];
@@ -24916,12 +24949,15 @@ function buildLifecycleEmailShell_(options) {
     }
     return trimString_(item.html);
   }).filter(Boolean).join('\n');
+  const nonOrderNextStepIsNoAction = !hasOrderContext && isLifecycleEmailNoActionText_(nextStep);
+  const nonOrderNextStepColor = nonOrderNextStepIsNoAction ? theme.successGreen : theme.currentAqua;
+  const nonOrderNextStepLabel = nonOrderNextStepIsNoAction ? 'No action required:' : 'Next step:';
   const htmlInnerParts = [
     '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
     hasOrderContext ? actionCardHtml : primaryCtaHtml,
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
-    !hasOrderContext && nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.currentAqua + ';background:' + theme.panelAltBg + ';color:' + theme.currentAqua + ';font-weight:900;border-radius:12px;"><strong style="color:' + theme.currentAqua + ';">Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
+    !hasOrderContext && nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + nonOrderNextStepColor + ';background:' + theme.panelAltBg + ';color:' + nonOrderNextStepColor + ';font-weight:900;border-radius:12px;"><strong style="color:' + nonOrderNextStepColor + ';">' + escapeHtml_(nonOrderNextStepLabel) + '</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
     progressHtml,
     detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
   ];
@@ -25076,7 +25112,7 @@ function formatLifecycleEmailNextActionText_(workflowContext, options) {
         retry_payment: 'Return to your Red Threads invoice to retry payment or contact Red Threads for help.',
         wait_for_ap_payment: 'No action is needed while Accounts Payable completes payment.',
         wait_for_ap_checkout: 'No action is needed while Accounts Payable completes Checkout.',
-        wait_for_payment: 'Watch for Stripe bank verification or payment confirmation.',
+        wait_for_payment: 'Watch for Stripe bank verification and complete if necessary.',
         enter_quantities: 'Enter quantities and sizes in the portal.',
         approve_artwork: 'Review and approve artwork in the portal.',
         place_order: 'Return to the portal when you are ready to place the order.',
@@ -25289,7 +25325,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
           : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish.',
         statusCopy: isTeamAlert
           ? 'Monitor the portal payment state before production begins.'
-          : 'Stripe may send a secure bank-verification email. You can also open your Red Threads invoice and use Verify with Stripe if that action is available. Red Threads does not collect microdeposit values.',
+          : 'Stripe may send you a secure bank-verification email for a one-time ACH payment setup with Red Threads. Red Threads does not collect any banking or microdeposit values.',
         attachmentNote: 'Your invoice is attached.'
       });
     }
@@ -25368,11 +25404,11 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment received', invoiceNumber, 'Team alert: AP ACH payment received')
         : formatLifecycleEmailInvoiceSubject_('AP ACH payment received', invoiceNumber, 'AP ACH payment received for a Red Threads invoice'),
-      intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'ACH payment has been received for this Red Threads invoice.',
+      intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'ACH payment has been received for this Red Threads project.',
       statusCopy: isTeamAlert
         ? 'Continue with the production workflow according to the current portal status.'
-        : 'The order is authorized for production when reflected by the current portal status.',
-      attachmentNote: 'The updated receipt is attached.'
+        : 'This project has been authorized for production.',
+      attachmentNote: isTeamAlert ? 'The updated receipt is attached.' : 'Your invoice is attached.'
     });
   }
   return buildLifecycleEmailCopyModel_({
