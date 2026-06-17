@@ -23800,7 +23800,7 @@ function buildPortalNativeEmailShellHtml_(options) {
   const theme = getPortalNativeEmailTheme_();
   const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal';
   const heading = trimString_(opts.heading) || 'Red Threads portal update';
-  const badge = buildPortalNativeEmailBadgeHtml_(opts.badgeLabel);
+  const badge = opts.showBadge === true ? buildPortalNativeEmailBadgeHtml_(opts.badgeLabel) : '';
   const bodyHtml = trimString_(opts.bodyHtml);
   const maxWidth = trimString_(opts.maxWidth) || '680px';
   const headingRow = [
@@ -23809,7 +23809,7 @@ function buildPortalNativeEmailShellHtml_(options) {
     '<td style="padding:0 12px 0 0;vertical-align:top;">',
     '<div style="' + buildPortalNativeEmailStyle_({
       margin: '0 0 8px',
-      color: theme.currentAquaSoft,
+      color: theme.brandRedMid,
       'font-size': '12px',
       'font-weight': '900',
       'letter-spacing': '.16em',
@@ -23883,6 +23883,100 @@ function getLifecycleEmailCurrentStepLabel_(steps) {
   return trimString_(current && current.label) || 'Portal Current';
 }
 
+function formatLifecycleEmailProgressDateLabel_(value) {
+  if (!trimString_(value) && !(value instanceof Date)) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone() || 'America/Detroit', 'M/d/yy');
+}
+
+function normalizeLifecycleEmailProgressStageLabel_(key, label) {
+  const normalized = trimString_(key).toLowerCase();
+  if (normalized === 'qty_sizes' || normalized === 'quantity' || normalized === 'quantities' || normalized === 'sizes') {
+    return 'Add Quantity Sizes';
+  }
+  if (normalized === 'artwork' || normalized === 'art') return 'Approve Artwork';
+  if (normalized === 'order' || normalized === 'place_order' || normalized === 'po_order') return 'Place Order';
+  if (normalized === 'payment' || normalized === 'pay') return 'Make Payment';
+  if (normalized === 'production' || normalized === 'print' || normalized === 'printing') return 'Production Begins';
+  return trimString_(label);
+}
+
+function resolveLifecycleEmailStepCompletedDate_(step, context) {
+  const item = (step && typeof step === 'object') ? step : {};
+  const ctx = (context && typeof context === 'object') ? context : {};
+  const workflow = (ctx.workflowContext && typeof ctx.workflowContext === 'object') ? ctx.workflowContext : {};
+  const summary = (ctx.orderSummary && typeof ctx.orderSummary === 'object') ? ctx.orderSummary : {};
+  const timeline = (ctx.timeline && typeof ctx.timeline === 'object') ? ctx.timeline : {};
+  const key = trimString_(item.key).toLowerCase();
+  const direct = item.completedAt || item.completedDate || item.date || item.dateValue;
+  if (direct) return direct;
+  if (key === 'artwork') {
+    return workflow.artworkApprovedAt || workflow.artworkApprovalAt || workflow.artworkApprovalCompleteAt || '';
+  }
+  if (key === 'place_order' || key === 'order') {
+    return workflow.orderPlacedAt || summary.lockedAt || summary.poSubmittedAt || timeline.orderPlacedDateValue || '';
+  }
+  if (key === 'payment') {
+    return workflow.paymentReceivedAt || summary.paymentReceivedManuallyAt || summary.paidAt || timeline.paidDateValue || '';
+  }
+  if (key === 'production' || key === 'print') {
+    return workflow.productionStartAt || summary.authorizedToProduceAt || timeline.printStartDateValue || workflow.productionCompletionAt || timeline.completionDateValue || '';
+  }
+  return '';
+}
+
+function resolveLifecycleEmailStepStatusLabel_(step, context) {
+  const item = (step && typeof step === 'object') ? step : {};
+  const state = trimString_(item.state).toLowerCase();
+  if (state === 'complete') {
+    return formatLifecycleEmailProgressDateLabel_(resolveLifecycleEmailStepCompletedDate_(item, context)) || 'Done';
+  }
+  if (state === 'current') return 'Current';
+  return 'Next';
+}
+
+function getLifecycleEmailProjectNumberLabel_(emailContext) {
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  if (trimString_(ctx.dealNumber)) return trimString_(ctx.dealNumber);
+  const fields = Array.isArray(ctx.referenceFields) ? ctx.referenceFields : [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = (fields[i] && typeof fields[i] === 'object') ? fields[i] : {};
+    const label = trimString_(field.label).toLowerCase();
+    if ((label === 'project #' || label === 'project number' || label === 'deal number') && trimString_(field.value)) {
+      return trimString_(field.value);
+    }
+  }
+  const summary = (ctx.orderSummary && typeof ctx.orderSummary === 'object') ? ctx.orderSummary : {};
+  return trimString_(summary.dealNumber || summary.projectNumber || summary.dealnumber);
+}
+
+function buildLifecycleEmailProjectDetailsCta_(projectNumber, url) {
+  const cleanUrl = trimString_(url);
+  if (!cleanUrl) return '';
+  const theme = getPortalNativeEmailTheme_();
+  const cleanProject = trimString_(projectNumber);
+  const label = cleanProject
+    ? ('Click to view Project #' + cleanProject + ' in the portal')
+    : 'Click to view this project in the portal';
+  return [
+    '<div style="text-align:center;margin:14px 0 0;">',
+    '<a href="' + escapeHtml_(cleanUrl) + '" style="' + buildPortalNativeEmailStyle_({
+      display: 'inline-block',
+      padding: '9px 14px',
+      'border-radius': '999px',
+      background: theme.brandRed,
+      color: '#ffffff',
+      'font-size': '12px',
+      'line-height': '1.2',
+      'font-weight': '900',
+      'text-decoration': 'none',
+      border: '1px solid ' + theme.brandRedMid
+    }) + '">' + escapeHtml_(label) + '</a>',
+    '</div>'
+  ].join('');
+}
+
 function buildLifecycleEmailReferenceBlock_(fields) {
   const theme = getPortalNativeEmailTheme_();
   const rows = (Array.isArray(fields) ? fields : []).map(function(field) {
@@ -23905,6 +23999,8 @@ function buildLifecycleEmailReferenceBlock_(fields) {
       '</tr>';
   }).join('');
   return {
+    kind: 'reference',
+    fields: rows,
     text: buildLifecycleEmailTextBlock_('Reference', text.split('\n')),
     html: [
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:12px;background:' + theme.panelBg + ';border-collapse:separate;">',
@@ -23938,26 +24034,30 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
   const normalizedSteps = steps.map(function(step) {
     const item = (step && typeof step === 'object') ? step : {};
     const state = trimString_(item.state).toLowerCase();
+    const key = trimString_(item.key);
+    const label = normalizeLifecycleEmailProgressStageLabel_(key, item.label);
     return {
-      key: trimString_(item.key),
-      label: trimString_(item.label),
-      state: state === 'complete' || state === 'current' || state === 'future' ? state : 'future'
+      key: key,
+      label: label,
+      state: state === 'complete' || state === 'current' || state === 'future' ? state : 'future',
+      completedAt: item.completedAt || item.completedDate || item.date || item.dateValue || ''
     };
   }).filter(function(step) {
     return step.label;
   });
   if (!normalizedSteps.length) return { text: '', html: '' };
-  const stateLabel = {
-    complete: 'Complete',
-    current: 'Current',
-    future: 'Next'
+  const progressContext = {
+    workflowContext: ctx,
+    orderSummary: orderSummary,
+    timeline: opts.timeline
   };
   const text = normalizedSteps.map(function(step) {
-    return step.label + ': ' + (stateLabel[step.state] || step.state);
+    return step.label + ': ' + resolveLifecycleEmailStepStatusLabel_(step, progressContext);
   }).join('\n');
   const htmlCells = normalizedSteps.map(function(step) {
-    const color = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? theme.currentInk : theme.futureText);
-    const statusColor = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? theme.currentInk : theme.futureText);
+    const statusLabel = resolveLifecycleEmailStepStatusLabel_(step, progressContext);
+    const color = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? '#ffffff' : theme.futureText);
+    const statusColor = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? '#ffffff' : theme.futureText);
     const background = step.state === 'complete'
       ? theme.successGreen
       : (step.state === 'current' ? theme.currentAqua : theme.futureBg);
@@ -23965,17 +24065,19 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
       ? theme.successGreenSoft
       : (step.state === 'current' ? theme.currentAquaSoft : theme.panelBorder);
     return '<td style="padding:0 4px 8px 0;vertical-align:top;width:20%;">' +
-      '<div style="border:1px solid ' + border + ';background:' + background + ';border-radius:8px;padding:10px 8px;min-height:56px;">' +
-      '<div style="font-size:13px;line-height:1.25;font-weight:800;color:' + color + ';">' + escapeHtml_(step.label) + '</div>' +
-      '<div style="margin-top:4px;font-size:12px;line-height:1.25;font-weight:800;color:' + statusColor + ';">' + escapeHtml_(stateLabel[step.state] || step.state) + '</div>' +
+      '<div style="border:1px solid ' + border + ';background:' + background + ';border-radius:10px;padding:10px 8px;min-height:58px;">' +
+      '<div style="font-size:12px;line-height:1.22;font-weight:900;color:' + color + ';">' + escapeHtml_(step.label) + '</div>' +
+      '<div style="margin-top:5px;font-size:11px;line-height:1.2;font-weight:900;color:' + statusColor + ';">' + escapeHtml_(statusLabel) + '</div>' +
       '</div>' +
       '</td>';
   }).join('');
   return {
-    text: buildLifecycleEmailTextBlock_('Progress', text.split('\n')),
+    kind: 'progress',
+    steps: normalizedSteps,
+    text: buildLifecycleEmailTextBlock_('Current Order Stage', text.split('\n')),
     html: [
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">',
-      '<tr><td style="padding:0 0 8px;font-size:12px;text-transform:uppercase;color:' + theme.currentAquaSoft + ';font-weight:800;letter-spacing:.08em;">Order Progress</td></tr>',
+      '<tr><td style="padding:0 0 8px;font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;letter-spacing:.08em;">Current Order Stage</td></tr>',
       '<tr><td>',
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>',
       htmlCells,
@@ -23998,6 +24100,8 @@ function buildLifecycleEmailHistoryBlock_(historyLines) {
     return '<li style="margin:0 0 6px;color:' + theme.textMuted + ';">' + escapeHtml_(line) + '</li>';
   }).join('');
   return {
+    kind: 'history',
+    lines: lines,
     text: buildLifecycleEmailTextBlock_('History', lines),
     html: [
       '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid ' + theme.panelBorder + ';border-radius:12px;background:' + theme.panelBg + ';">',
@@ -24006,6 +24110,88 @@ function buildLifecycleEmailHistoryBlock_(historyLines) {
       '</div>'
     ].join('')
   };
+}
+
+function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const fields = opts.reference === false ? [] : (Array.isArray(ctx.referenceFields) ? ctx.referenceFields : []);
+  const rows = fields.map(function(field) {
+    const item = (field && typeof field === 'object') ? field : {};
+    return {
+      label: trimString_(item.label),
+      value: trimString_(item.value)
+    };
+  }).filter(function(field) {
+    return field.label && field.value;
+  });
+  const lines = opts.history === false ? [] : uniqueTrimmedStrings_(ctx.historyLines);
+  if (!rows.length && !lines.length) return { text: '', html: '' };
+  const projectNumber = getLifecycleEmailProjectNumberLabel_(ctx);
+  const title = projectNumber ? ('Project #' + projectNumber + ' Details') : 'Project Details';
+  const textLines = [];
+  rows.forEach(function(field) {
+    textLines.push(field.label + ': ' + field.value);
+  });
+  lines.forEach(function(line) {
+    textLines.push(line);
+  });
+  return {
+    kind: 'project_details',
+    title: title,
+    projectNumber: projectNumber,
+    fields: rows,
+    lines: lines,
+    ctaUrl: trimString_(ctx.ctaUrl),
+    ctaLabel: trimString_(ctx.ctaLabel),
+    text: buildLifecycleEmailTextBlock_(title, textLines),
+    html: buildLifecycleEmailProjectDetailsHtml_({
+      title: title,
+      projectNumber: projectNumber,
+      fields: rows,
+      lines: lines,
+      ctaUrl: trimString_(ctx.ctaUrl)
+    })
+  };
+}
+
+function buildLifecycleEmailProjectDetailsHtml_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const theme = getPortalNativeEmailTheme_();
+  const fields = Array.isArray(opts.fields) ? opts.fields : [];
+  const lines = uniqueTrimmedStrings_(opts.lines);
+  const attachmentNote = trimString_(opts.attachmentNote);
+  const fieldRows = fields.map(function(field) {
+    const item = (field && typeof field === 'object') ? field : {};
+    const label = trimString_(item.label);
+    const value = trimString_(item.value);
+    if (!label || !value) return '';
+    return '<tr>' +
+      '<td style="padding:6px 12px 6px 0;color:' + theme.textSoft + ';font-size:13px;font-weight:800;white-space:nowrap;vertical-align:top;">' + escapeHtml_(label) + '</td>' +
+      '<td style="padding:6px 0;color:' + theme.text + ';font-size:13px;vertical-align:top;">' + escapeHtml_(value) + '</td>' +
+      '</tr>';
+  }).filter(Boolean).join('');
+  const historyHtml = lines.length
+    ? ('<div style="margin:12px 0 0;padding-top:12px;border-top:1px solid ' + theme.panelBorderSoft + ';">' +
+      lines.map(function(line) {
+        return '<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;">' + escapeHtml_(line) + '</div>';
+      }).join('') +
+      '</div>')
+    : '';
+  const attachmentHtml = attachmentNote
+    ? ('<div style="margin:12px 0 0;padding-top:12px;border-top:1px solid ' + theme.panelBorderSoft + ';color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Attachment:</strong> ' + escapeHtml_(attachmentNote) + '</div>')
+    : '';
+  return [
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:14px;background:' + theme.panelBg + ';border-collapse:separate;">',
+    '<tr><td style="padding:14px 16px;">',
+    '<div style="font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;margin:0 0 8px;letter-spacing:.08em;">' + escapeHtml_(trimString_(opts.title) || 'Project Details') + '</div>',
+    fieldRows ? ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' + fieldRows + '</table>') : '',
+    historyHtml,
+    attachmentHtml,
+    buildLifecycleEmailProjectDetailsCta_(opts.projectNumber, opts.ctaUrl),
+    '</td></tr>',
+    '</table>'
+  ].filter(Boolean).join('');
 }
 
 function isPortalLifecycleClientDocumentDecisionMilestone_(milestone) {
@@ -24064,13 +24250,18 @@ function buildLifecycleEmailSectionBlocks_(emailContext, options) {
     opts.sectionPolicy
   );
   const blocks = [];
-  if (policy.reference) blocks.push(buildLifecycleEmailReferenceBlock_(ctx.referenceFields));
   if (policy.progress) {
     blocks.push(buildLifecycleEmailProgressBlock_(ctx.workflowContext, ctx.orderSummary, {
-      steps: ctx.steps
+      steps: ctx.steps,
+      timeline: ctx.timeline
     }));
   }
-  if (policy.history) blocks.push(buildLifecycleEmailHistoryBlock_(ctx.historyLines));
+  if (policy.reference || policy.history) {
+    blocks.push(buildLifecycleEmailProjectDetailsBlock_(ctx, {
+      reference: policy.reference,
+      history: policy.history
+    }));
+  }
   return blocks;
 }
 
@@ -24129,6 +24320,9 @@ function buildLifecycleEmailCtaBlock_(label, url) {
   const cleanLabel = trimString_(label) || 'Open Red Threads portal';
   if (!cleanUrl) return { text: '', html: '' };
   return {
+    kind: 'cta',
+    label: cleanLabel,
+    url: cleanUrl,
     text: cleanLabel + ': ' + cleanUrl,
     html: '<p style="margin:0 0 18px;"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(cleanLabel) + '</a></p>'
   };
@@ -24143,6 +24337,8 @@ function buildLifecycleEmailAttachmentNoteBlock_(note) {
   const clean = trimString_(note);
   if (!clean) return { text: '', html: '' };
   return {
+    kind: 'attachment_note',
+    note: clean,
     text: 'Attachment: ' + clean,
     html: '<p style="margin:0 0 18px;color:' + theme.textMuted + ';"><strong style="color:' + theme.text + ';">Attachment:</strong> ' + escapeHtml_(clean) + '</p>'
   };
@@ -24151,21 +24347,44 @@ function buildLifecycleEmailAttachmentNoteBlock_(note) {
 function buildLifecycleEmailFooter_() {
   const theme = getPortalNativeEmailTheme_();
   return {
+    kind: 'footer',
     text: buildStandardNoReplyFooterCopy_(),
     html: '<p style="margin:0;color:' + theme.textSoft + ';font-size:13px;line-height:1.6;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>'
   };
+}
+
+function shouldSuppressDuplicateLifecycleIntro_(heading, intro) {
+  const cleanHeading = trimString_(heading).replace(/[.!?]+$/g, '').toLowerCase();
+  const cleanIntro = trimString_(intro).replace(/[.!?]+$/g, '').toLowerCase();
+  return !!cleanHeading && !!cleanIntro && cleanHeading === cleanIntro;
 }
 
 function buildLifecycleEmailShell_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
   const heading = trimString_(opts.heading) || 'Red Threads portal update';
-  const badgeLabel = trimString_(opts.badgeLabel) || 'Portal Current';
-  const intro = trimString_(opts.intro);
+  const intro = shouldSuppressDuplicateLifecycleIntro_(heading, opts.intro) ? '' : trimString_(opts.intro);
   const statusCopy = trimString_(opts.statusCopy);
   const nextStep = trimString_(opts.nextStep);
   const attachmentNote = trimString_(opts.attachmentNote);
   const blocks = Array.isArray(opts.blocks) ? opts.blocks : [];
+  const ctaBlocks = [];
+  const footerBlocks = [];
+  const progressBlocks = [];
+  const detailsBlocks = [];
+  const genericBlocks = [];
+  blocks.forEach(function(block) {
+    const item = (block && typeof block === 'object') ? block : {};
+    const kind = trimString_(item.kind).toLowerCase();
+    if (kind === 'cta') ctaBlocks.push(item);
+    else if (kind === 'footer') footerBlocks.push(item);
+    else if (kind === 'progress') progressBlocks.push(item);
+    else if (kind === 'project_details' || kind === 'reference' || kind === 'history') detailsBlocks.push(item);
+    else genericBlocks.push(item);
+  });
+  const primaryCta = ctaBlocks.filter(function(block) {
+    return trimString_(block && block.url);
+  })[0] || null;
   const textParts = [
     intro,
     statusCopy,
@@ -24176,14 +24395,49 @@ function buildLifecycleEmailShell_(options) {
     const item = (block && typeof block === 'object') ? block : {};
     if (trimString_(item.text)) textParts.push(trimString_(item.text));
   });
+  const primaryCtaHtml = primaryCta
+    ? ('<div style="margin:0 0 18px;"><a href="' + escapeHtml_(primaryCta.url) + '" style="' + buildPortalNativeEmailStyle_({
+      display: 'inline-block',
+      padding: '12px 18px',
+      'border-radius': '999px',
+      background: theme.brandRed,
+      color: '#ffffff',
+      'font-weight': '900',
+      'text-decoration': 'none',
+      border: '1px solid ' + theme.brandRedMid
+    }) + '">' + escapeHtml_(primaryCta.label || 'Open Red Threads portal') + '</a></div>')
+    : '';
+  const progressHtml = progressBlocks.map(function(block) {
+    return trimString_(block && block.html);
+  }).filter(Boolean).join('\n');
+  const detailsHtml = detailsBlocks.map(function(block) {
+    const item = (block && typeof block === 'object') ? block : {};
+    if (item.kind === 'project_details') {
+      return buildLifecycleEmailProjectDetailsHtml_({
+        title: item.title,
+        projectNumber: item.projectNumber,
+        fields: item.fields,
+        lines: item.lines,
+        attachmentNote: attachmentNote,
+        ctaUrl: trimString_(item.ctaUrl || (primaryCta && primaryCta.url))
+      });
+    }
+    return trimString_(item.html);
+  }).filter(Boolean).join('\n');
   const htmlInnerParts = [
     '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
+    primaryCtaHtml,
     intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
     nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.currentAqua + ';background:' + theme.panelAltBg + ';color:' + theme.textMuted + ';border-radius:12px;"><strong style="color:' + theme.text + ';">Next step:</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
-    buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
+    progressHtml,
+    detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
   ];
-  blocks.forEach(function(block) {
+  genericBlocks.forEach(function(block) {
+    const item = (block && typeof block === 'object') ? block : {};
+    if (trimString_(item.html)) htmlInnerParts.push(trimString_(item.html));
+  });
+  footerBlocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
     if (trimString_(item.html)) htmlInnerParts.push(trimString_(item.html));
   });
@@ -24192,7 +24446,6 @@ function buildLifecycleEmailShell_(options) {
     body: [heading].concat(textParts).filter(Boolean).join('\n\n'),
     htmlBody: buildPortalNativeEmailShellHtml_({
       heading: heading,
-      badgeLabel: badgeLabel,
       bodyHtml: htmlInnerParts.filter(Boolean).join('\n')
     })
   };
@@ -27533,11 +27786,7 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
   const code = '000000';
   const resetUrl = buildPasswordResetReturnUrl_('00000000-0000-4000-8000-000000000000');
   const content = buildPasswordResetEmailContent_(code, resetUrl);
-  const htmlBody = content.htmlBody.replace(
-    '<div style="margin:0 0 8px;color:#55dfff;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase">Red Threads Portal</div>',
-    buildPortalNativeEmailReviewBannerHtml_('Password reset client') +
-      '<div style="margin:0 0 8px;color:#55dfff;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase">Red Threads Portal</div>'
-  );
+  const htmlBody = buildPortalNativeEmailReviewBannerHtml_('Password reset client') + content.htmlBody;
   const result = sendNotificationEmail_({
     to: recipient,
     subject: '[EMAIL REVIEW] Password reset client - ' + content.subject,
