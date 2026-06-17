@@ -73,6 +73,7 @@ const NOTIFICATION_SENDER_NAME = 'Red Threads';
 const NOTIFICATION_FROM_ALIAS = 'noreply@redthreads.com';
 const NOTIFICATION_REPLY_NOTICE = 'This is an automated Red Threads notification. Please do not reply to this email. If you would like to contact the Red Threads team, please do so through your portal link.';
 const DOCUMENT_REVIEW_EMAIL = 'hello@redthreads.com';
+const EMAIL_REVIEW_TEAM_RECIPIENT = 'larryfinkerbean@gmail.com';
 const MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_SUMMARY_EXPORT_PDF_BYTES = 20 * 1024 * 1024;
 const MAX_TEAM_ARTWORK_OVERRIDE_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -26128,7 +26129,7 @@ function buildEmailReviewRecipients_(payload) {
   return {
     client: assertEmailReviewRecipient_(p.clientEmail || 'josiah@redthreads.com', 'clientEmail'),
     ap: assertEmailReviewRecipient_(p.apEmail || p.clientEmail || 'josiah@redthreads.com', 'apEmail'),
-    team: assertEmailReviewRecipient_(p.teamEmail || DOCUMENT_REVIEW_EMAIL, 'teamEmail')
+    team: assertEmailReviewTeamRecipient_(p.teamEmail || EMAIL_REVIEW_TEAM_RECIPIENT, 'teamEmail')
   };
 }
 
@@ -26138,6 +26139,12 @@ function assertEmailReviewRecipient_(email, label) {
     throw new Error(trimString_(label) + ' must be a redthreads.com email.');
   }
   return normalized;
+}
+
+function assertEmailReviewTeamRecipient_(email, label) {
+  const normalized = normalizeEmail_(email);
+  if (normalized === EMAIL_REVIEW_TEAM_RECIPIENT) return normalized;
+  return assertEmailReviewRecipient_(normalized, label);
 }
 
 function resetEmailReviewFixtures_(ss, cfg) {
