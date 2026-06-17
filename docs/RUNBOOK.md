@@ -133,6 +133,37 @@ If any `clasp push`, `clasp version`, or `clasp deploy` command fails:
 - Log the blocker in `OST_PROJECT_LOG.md` and `docs/CURRENT_BUILD_STATE.md`.
 - Push GitHub only after the blocker is logged, so GitHub reflects the true live deployment state.
 
+## Owner Email Review Suite Trigger
+
+Use this when the deployed owner email review suite should be sent without opening the portal browser.
+
+One-time setup:
+
+- Set Apps Script Script Property `EMAIL_REVIEW_TRIGGER_SECRET` to a strong owner-only value.
+- Set the same value locally as `RT_EMAIL_REVIEW_TRIGGER_SECRET` in ignored `.env` or in the shell.
+
+Commands:
+
+```bash
+npm run email-review:suite -- --dry-run
+npm run email-review:suite
+```
+
+Useful options:
+
+```bash
+npm run email-review:suite -- --no-reset
+npm run email-review:suite -- --team=larryfinkerbean@gmail.com --client=josiah@redthreads.com --ap=josiah@redthreads.com
+```
+
+Behavior:
+
+- The command calls the protected `send_email_review_suite_headless` web action.
+- It reuses the latest validated portal-rendered invoice artifact from fixture/order rows.
+- It never generates fallback invoice PDFs.
+- It returns only redacted labels, recipient classes, attachment counts, and sent/skipped/failed counts.
+- If no validated portal-rendered artifact exists, use the unlocked Team Mode browser path to refresh the artifact first.
+
 ## Final Response Requirements
 
 For mainline docs/tooling updates, report branch, files changed, commit SHA, push status, validation results, confirmation that no runtime files changed, and confirmation that no clasp deploy ran.

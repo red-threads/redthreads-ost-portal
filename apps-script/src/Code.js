@@ -40,7 +40,8 @@ const CONFIG_KEYS = {
   TAX_EXEMPT_DRIVE_FOLDER_ID: 'TAX_EXEMPT_DRIVE_FOLDER_ID',
   STRIPE_PRICE_CURRENCY: 'STRIPE_PRICE_CURRENCY',
   STRIPE_MODE: 'STRIPE_MODE',
-  STRIPE_RETURN_URL: 'STRIPE_RETURN_URL'
+  STRIPE_RETURN_URL: 'STRIPE_RETURN_URL',
+  EMAIL_REVIEW_TRIGGER_SECRET: 'EMAIL_REVIEW_TRIGGER_SECRET'
 };
 
 const DEFAULT_TEAM_MODE_PASSWORD = '';
@@ -1642,6 +1643,9 @@ function doPost(e) {
     }
     if (action === 'send_email_review_suite') {
       return jsonOutput_(sendEmailReviewSuite(payload));
+    }
+    if (action === 'send_email_review_suite_headless') {
+      return jsonOutput_(sendEmailReviewSuiteHeadless(payload));
     }
     if (action === 'audit_email_review_artifacts') {
       return jsonOutput_(auditEmailReviewArtifacts(payload));
@@ -15055,6 +15059,7 @@ function getConfig_() {
     props.getProperty(CONFIG_KEYS.STRIPE_ACH_DEFAULT_PENDING_PRODUCTION_APPROVED),
     DEFAULT_STRIPE_ACH_DEFAULT_PENDING_PRODUCTION_APPROVED
   );
+  const emailReviewTriggerSecret = String(props.getProperty(CONFIG_KEYS.EMAIL_REVIEW_TRIGGER_SECRET) || '').trim();
   const termsDocumentUrl = String(props.getProperty(CONFIG_KEYS.TERMS_DOCUMENT_URL) || DEFAULT_TERMS_DOCUMENT_URL).trim();
   const creditTermsFormFileId = String(props.getProperty(CONFIG_KEYS.CREDIT_TERMS_FORM_FILE_ID) || DEFAULT_CREDIT_TERMS_FORM_FILE_ID).trim();
   const taxExemptFormFileId = String(props.getProperty(CONFIG_KEYS.TAX_EXEMPT_FORM_FILE_ID) || DEFAULT_TAX_EXEMPT_FORM_FILE_ID).trim();
@@ -15082,6 +15087,7 @@ function getConfig_() {
     stripeAchSaveForFuture: stripeAchSaveForFuture,
     stripeAchRequireCustomer: stripeAchRequireCustomer,
     stripeAchDefaultPendingProductionApproved: stripeAchDefaultPendingProductionApproved,
+    emailReviewTriggerSecret: emailReviewTriggerSecret,
     termsDocumentUrl: termsDocumentUrl,
     creditTermsFormFileId: creditTermsFormFileId,
     taxExemptFormFileId: taxExemptFormFileId,
@@ -26779,6 +26785,18 @@ function auditEmailReviewArtifacts(payload) {
   }
 }
 
+function sendEmailReviewSuiteHeadless(payload) {
+  try {
+    return sendEmailReviewSuiteHeadless_(payload);
+  } catch (err) {
+    return {
+      ok: false,
+      headless: true,
+      error: normalizeEmailReviewError_(err)
+    };
+  }
+}
+
 function sendEmailReviewSuite_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   const cfg = getConfig_();
@@ -26797,12 +26815,76 @@ function sendEmailReviewSuite_(payload) {
     };
   }
   const ss = SpreadsheetApp.openById(cfg.sheetId);
-  const resetSummary = p.resetFixtures === false ? null : resetEmailReviewFixtures_(ss, cfg);
-  const artifactRefreshSummary = refreshEmailReviewOrderArtifactPointers_(ss, cfg, reviewInvoiceArtifact);
+  return runEmailReviewSuiteWithLock_(function() {
+    return runEmailReviewSuiteCore_(ss, cfg, p, reviewInvoiceArtifact, {
+      headless: false,
+      dryRun: false
+    });
+  });
+}
+
+function sendEmailReviewSuiteHeadless_(payload) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const cfg = getConfig_();
+  const auth = validateEmailReviewTriggerSecret_(p.triggerSecret, cfg);
+  if (auth.ok !== true) {
+    return {
+      ok: false,
+      review: true,
+      headless: true,
+      error: auth.error
+    };
+  }
+  return runEmailReviewSuiteWithLock_(function() {
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const reviewInvoiceArtifact = resolveEmailReviewHeadlessPortalRenderedArtifact_(ss, cfg);
+    if (!reviewInvoiceArtifact) {
+      return {
+        ok: false,
+        review: true,
+        headless: true,
+        error: 'email_review_portal_rendered_artifact_missing'
+      };
+    }
+    return runEmailReviewSuiteCore_(ss, cfg, p, reviewInvoiceArtifact, {
+      headless: true,
+      dryRun: parseConfigBoolean_(p.dryRun, false)
+    });
+  });
+}
+
+function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, options) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const dryRun = opts.dryRun === true;
+  const recipients = buildEmailReviewRecipients_(p);
+  const resetSummary = p.resetFixtures === false
+    ? null
+    : (dryRun ? dryRunEmailReviewFixtureReset_(ss, cfg) : resetEmailReviewFixtures_(ss, cfg));
+  const artifactRefreshSummary = dryRun
+    ? { ok: true, dryRun: true, skipped: true, reason: 'dry_run' }
+    : refreshEmailReviewOrderArtifactPointers_(ss, cfg, reviewInvoiceArtifact);
   const infra = ensurePortalInfrastructure_(ss, cfg);
   const fixture = buildEmailReviewFixtureContext_(ss, cfg, infra);
   fixture.reviewInvoiceArtifact = reviewInvoiceArtifact;
   const results = [];
+
+  if (dryRun) {
+    return {
+      ok: true,
+      review: true,
+      headless: opts.headless === true,
+      dryRun: true,
+      portalRenderedInvoiceArtifact: true,
+      resetFixtures: !!resetSummary,
+      resetSummary: resetSummary,
+      artifactRefreshSummary: artifactRefreshSummary,
+      sentCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      results: []
+    };
+  }
 
   sendEmailReviewStandardAchExamples_(results, fixture, recipients);
   sendEmailReviewApAchExamples_(results, fixture, recipients);
@@ -26817,6 +26899,7 @@ function sendEmailReviewSuite_(payload) {
   return {
     ok: failedCount === 0,
     review: true,
+    headless: opts.headless === true,
     portalRenderedInvoiceArtifact: true,
     resetFixtures: !!resetSummary,
     resetSummary: resetSummary,
@@ -26826,6 +26909,34 @@ function sendEmailReviewSuite_(payload) {
     failedCount: failedCount,
     results: results
   };
+}
+
+function runEmailReviewSuiteWithLock_(runner) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return {
+      ok: false,
+      review: true,
+      error: 'email_review_suite_already_running'
+    };
+  }
+  try {
+    return runner();
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (_) {}
+  }
+}
+
+function validateEmailReviewTriggerSecret_(value, cfg) {
+  const expected = trimString_(cfg && cfg.emailReviewTriggerSecret);
+  const supplied = trimString_(value);
+  if (!expected) return { ok: false, error: 'email_review_trigger_secret_not_configured' };
+  if (!supplied) return { ok: false, error: 'email_review_trigger_secret_required' };
+  return supplied === expected
+    ? { ok: true }
+    : { ok: false, error: 'email_review_trigger_secret_invalid' };
 }
 
 function storeEmailReviewPortalRenderedInvoiceArtifact_(payload, cfg) {
@@ -26850,6 +26961,70 @@ function storeEmailReviewPortalRenderedInvoiceArtifact_(payload, cfg) {
     fileName: trimString_(stored.fileName),
     marker: PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER
   };
+}
+
+function resolveEmailReviewHeadlessPortalRenderedArtifact_(ss, cfg) {
+  const sheetNames = uniqueTrimmedStrings_([
+    'FIXTURE_PORTAL_ORDERS',
+    cfg && cfg.portalOrdersSheetName
+  ]);
+  for (let i = 0; i < sheetNames.length; i++) {
+    const artifact = findLatestEmailReviewPortalRenderedArtifactInSheet_(ss, sheetNames[i]);
+    if (artifact) return artifact;
+  }
+  return null;
+}
+
+function findLatestEmailReviewPortalRenderedArtifactInSheet_(ss, sheetName) {
+  const sheet = ss && ss.getSheetByName(trimString_(sheetName));
+  if (!sheet) return null;
+  const rows = listSheetRowInfos_(sheet);
+  let best = null;
+  let bestTime = -1;
+  rows.forEach(function(rowInfo) {
+    const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+    const summary = buildPortalOrderSummary_(row);
+    const source = {
+      invoicePdfUrl: trimString_(summary.invoicePdfUrl),
+      invoiceFileId: trimString_(summary.invoiceFileId),
+      fileName: trimString_(summary.invoiceFileName || summary.fileName)
+    };
+    if (!trimString_(source.invoicePdfUrl || source.invoiceFileId)) return;
+    const result = buildLifecycleEmailAttachmentSafe_(source, '', {
+      requirePortalRenderedInvoice: true
+    });
+    if (!result || result.ok !== true) return;
+    const stamp = parseEmailReviewArtifactTimestamp_(row);
+    if (!best || stamp >= bestTime) {
+      bestTime = stamp;
+      best = {
+        invoicePdfUrl: source.invoicePdfUrl,
+        invoiceFileId: source.invoiceFileId,
+        fileName: trimString_(result.fileName || source.fileName),
+        marker: PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER,
+        sourceSheet: trimString_(sheetName)
+      };
+    }
+  });
+  return best;
+}
+
+function parseEmailReviewArtifactTimestamp_(row) {
+  const source = (row && typeof row === 'object') ? row : {};
+  const candidates = [
+    source.lastupdatedat,
+    source.updatedat,
+    source.createdat,
+    source.lockedat,
+    source.paidat
+  ];
+  for (let i = 0; i < candidates.length; i++) {
+    const raw = trimString_(candidates[i]);
+    if (!raw) continue;
+    const date = new Date(raw);
+    if (!Number.isNaN(date.getTime())) return date.getTime();
+  }
+  return 0;
 }
 
 function refreshEmailReviewOrderArtifactPointers_(ss, cfg, artifact) {
@@ -26940,6 +27115,48 @@ function resetEmailReviewFixtures_(ss, cfg) {
   return {
     ok: true,
     operations: operations
+  };
+}
+
+function dryRunEmailReviewFixtureReset_(ss, cfg) {
+  const operations = [];
+  operations.push(checkEmailReviewFixtureSheet_(ss, 'FIXTURE_EXPORT', cfg.exportLogSheetName));
+  operations.push(checkEmailReviewFixtureSheet_(ss, 'FIXTURE_PORTAL_ORDERS', cfg.portalOrdersSheetName));
+  operations.push(checkEmailReviewFixtureSheet_(ss, 'FIXTURE_STRIPE_EVENTS', PORTAL_STRIPE_EVENTS_SHEET_NAME, {
+    columnCount: PORTAL_STRIPE_EVENTS_HEADERS.length
+  }));
+  const queueSheet = ss && ss.getSheetByName(PORTAL_EMAIL_QUEUE_SHEET_NAME);
+  operations.push({
+    source: PORTAL_EMAIL_QUEUE_SHEET_NAME,
+    target: PORTAL_EMAIL_QUEUE_SHEET_NAME,
+    dryRun: true,
+    rowsCleared: queueSheet ? Math.max(0, queueSheet.getMaxRows() - 1) : 0,
+    columns: queueSheet ? Math.max(queueSheet.getLastColumn(), PORTAL_EMAIL_QUEUE_HEADERS.length) : 0
+  });
+  return {
+    ok: operations.every(function(op) { return op && op.ok !== false; }),
+    dryRun: true,
+    operations: operations
+  };
+}
+
+function checkEmailReviewFixtureSheet_(ss, sourceName, targetName, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const source = ss.getSheetByName(sourceName);
+  const target = ss.getSheetByName(targetName);
+  if (!source) throw new Error('Fixture source sheet missing: ' + sourceName);
+  if (!target) throw new Error('Fixture target sheet missing: ' + targetName);
+  const sourceCols = Math.max(1, Math.min(
+    Math.max(1, parseInt(String(opts.columnCount || source.getLastColumn()), 10) || source.getLastColumn()),
+    source.getLastColumn()
+  ));
+  assertEmailReviewFixtureHeadersMatch_(source, target, sourceCols);
+  return {
+    source: sourceName,
+    target: targetName,
+    dryRun: true,
+    rows: Math.max(1, source.getLastRow()),
+    columns: sourceCols
   };
 }
 
