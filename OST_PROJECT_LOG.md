@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-17 - Production Start Canonicalization
+
+- Mode: Produce final code, local implementation only.
+- Branch/commit/PR: `main`, uncommitted local changes.
+- Goal: retire account-level ACH pending-production approval, keep ACH pending out of production until ACH payment clears, and add explicit Team Mode `Initiate Production` for locked unpaid orders.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/ACH_SMOKE_TEST_PLAN.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `npm run validate:runtime`, `git diff --check`, and `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate` all passed.
+- Decisions: `ORDER_STATES.in_production` already exists and is used as the explicit Team-initiated production state; legacy `achPendingProductionApproved*` fields remain historical/inert and are not used for new lifecycle truth.
+- Current-state updates: ACH pending is payment-current/production-future unless payment clears or Team Mode deliberately initiates production; payment truth is not changed by Team initiation.
+- Follow-ups: run the focused production-start smoke matrix after owner-approved ship: ACH pending, ACH paid, card paid, manual received, PO submitted, and Team Initiate Production before payment.
+
 ## 2026-05-27 - Build Alignment Reset
 
 - Mode: Produce final code.
@@ -1504,3 +1515,13 @@ Append-only project memory for decisions, session summaries, validation results,
 - Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-repo.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `npm run validate:runtime`, `git diff --check`, and `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate` passed.
 - Deployment: `clasp push --force` pushed the tracked runtime files; `clasp version "Fix email review attachment selection"` created version `929`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` was deployed at `@929 - Fix email review attachment selection`. No new deployment ID was created.
 - Smoke/review: direct Apps Script `/exec` returned HTTP 200; public `https://www.redthreads.com/portal` returned HTTP 200 and still referenced the stable deployment ID; protected rendered marker counts for `client_secret`, `clientSecret`, and `hosted_verification_url` were zero. `RT_EMAIL_REVIEW_TRIGGER_SECRET=3333 npm run email-review:suite -- --dry-run` returned `ok:true`. The real headless owner review suite sent 46 emails, skipped the expected submitted-tax-copy fixture item, reported 0 failures, and reported 30 order-context attachment fallbacks with reason `artifact_project_mismatch`. This proves the runtime no longer hides the mismatch, but the current fixture order artifact pointers still need per-project browser-rendered refresh before inbox review PDFs visually match their linked live portal invoices.
+
+## 2026-06-17 - Portal Email Action Styling Correction On Version 930
+
+- Mode: Full ship runtime correction plus owner inbox-review execution.
+- Goal: fix the shared email styling regression where order-context headers containing `Action required` rendered in bright aqua, while keeping the action-card `Action required` label itself highlighted in aqua for client-facing required-action messages.
+- Implementation: `Code.js` now keeps Portal Native email shell headings in the normal white treatment and subheadings in muted text regardless of whether the text contains `Action required`. The existing shared action-card title logic continues to render `Action required` in the bright portal aqua. The change applies through the centralized Portal Native email shell rather than a fixture-specific patch.
+- Preservation: CTA routes, attachment requirements, portal-rendered artifact validation, email review suite behavior, no-reply transport, queue/idempotency behavior, recipient routing, token lookup, pricing authority, Stripe config/live mode, Sheet headers, Apps Script config, and deployment ID were preserved.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `npm run validate:runtime`, `git diff --check`, and `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate` passed. Targeted static checks confirmed `headingColor` now uses the normal text color, `subheadingColor` uses muted text, and action-card title color still uses bright aqua for `Action required`.
+- Deployment: `clasp status` succeeded; `clasp push --force` pushed the four tracked Apps Script runtime files; `clasp version "Refine portal email action styling"` created version `930`; stable deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw` was deployed at `@930 - Refine portal email action styling`. No new deployment ID was created.
+- Smoke/review: direct Apps Script `/exec` returned HTTP 200, showed revision `64`, and had no targeted `client_secret`, `clientSecret`, or `hosted_verification_url` markers. Public `https://www.redthreads.com/portal` returned HTTP 200, still referenced the stable deployment ID, and had no targeted secret markers. `RT_EMAIL_REVIEW_TRIGGER_SECRET=3333 npm run email-review:suite -- --dry-run` returned `ok:true`. The real headless owner review suite sent 46 emails, skipped the expected submitted-tax-copy fixture item, reported 0 failures, and reported 30 attachment fallbacks due to the current fixture artifact project mismatch state.

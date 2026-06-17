@@ -17503,7 +17503,7 @@
         <button class="accountDocActionBtn" id="teamReopenPoBtn" type="button">Reopen PO Submission</button>
         <button class="accountDocActionBtn" id="teamResendLinkBtn" type="button">Resend Invoice / PO Link</button>
         <button class="accountDocActionBtn" id="teamLockProjectBtn" type="button">Lock Project Without Ordering</button>
-        <button class="accountDocActionBtn" id="teamAchPendingProductionBtn" type="button">Allow ACH Pending Production</button>
+        <button class="accountDocActionBtn" id="teamAchPendingProductionBtn" type="button">Initiate Production</button>
         <button class="accountDocActionBtn" id="teamMarkJobsCompletedBtn" type="button">Mark Jobs as Completed</button>
       </div>
       <div class="termsReviewDecisionSub" id="teamAccountAdminPanelTitle" hidden style="margin-top:18px;"></div>
@@ -19768,6 +19768,42 @@
     });
     ref.currentComparableKey = fingerprint;
     return ref;
+  }
+
+  function getNextSummaryEstimateEmailDocumentReference_(){
+    const refs = PORTAL_STATE && PORTAL_STATE.documentReferences && typeof PORTAL_STATE.documentReferences === 'object'
+      ? PORTAL_STATE.documentReferences
+      : {};
+    const existing = refs.estimate && typeof refs.estimate === 'object' ? refs.estimate : {};
+    const parsedEstimate = parseSummaryPortalDocumentReference_(existing.documentRef);
+    const hasExistingReference = !!parsedEstimate || !!String(existing.documentRef || existing.version || '').trim();
+    const existingVersion = parsedEstimate
+      ? parsedEstimate.version
+      : Math.max(1, parseInt(String(existing.version || 1), 10) || 1);
+    const nextVersion = hasExistingReference ? existingVersion + 1 : 1;
+    const ref = buildSummaryPortalDocumentReference_('estimate', {
+      projectNumber: getDealNumber(),
+      version: nextVersion
+    });
+    ref.currentComparableKey = getSummaryCommercialDocumentFingerprint_();
+    return ref;
+  }
+
+  function writeSummaryEstimateDocumentReferenceForRender_(documentReference){
+    const ref = (documentReference && typeof documentReference === 'object')
+      ? clonePlainObject(documentReference)
+      : {};
+    if (!PORTAL_STATE || typeof PORTAL_STATE !== 'object') PORTAL_STATE = {};
+    PORTAL_STATE.documentReferences = clonePlainObject(PORTAL_STATE.documentReferences || {});
+    PORTAL_STATE.documentReferences.estimate = {
+      projectNumber: String(ref.projectNumber || getDealNumber()).trim(),
+      documentKind: 'estimate',
+      version: Math.max(1, parseInt(String(ref.version || 1), 10) || 1),
+      documentRef: String(ref.documentRef || '').trim(),
+      displayLabel: String(ref.displayLabel || '').trim(),
+      fileName: String(ref.fileName || '').trim(),
+      currentComparableKey: String(ref.currentComparableKey || '').trim()
+    };
   }
 
   function applyVmRuntimeState(vmPayload){
@@ -30596,21 +30632,12 @@
     renderTeamAccountAdminModal_();
   }
 
-  function openTeamAchPendingProductionApprovalPanel_(){
-    const account = normalizeAccountSummary(ACCOUNT_SUMMARY);
-    const nextApproved = account.achPendingProductionApproved !== true;
+  function openTeamInitiateProductionPanel_(){
     openTeamAccountAdminConfirmPanel_(
-      'ach_pending_production_approval',
-      nextApproved ? 'Allow ACH Pending Production' : 'Disable ACH Pending Production',
-      nextApproved
-        ? 'This account will be allowed to enter production while ACH payment is still processing. Clients cannot enable this themselves.'
-        : 'This account will return to the default policy: ACH orders begin production only after Stripe confirms payment success.',
-      {
-        approved: nextApproved,
-        notes: nextApproved
-          ? 'Approved from Team Controls.'
-          : 'Disabled from Team Controls.'
-      }
+      'initiate_production',
+      'Initiate Production',
+      'This deliberately moves the current locked order into production before payment is received. Payment status will not change.',
+      { notes: 'Production initiated from Team Controls.' }
     );
   }
 
@@ -30628,7 +30655,7 @@
       [teamReopenPoBtn, 'reopen_po', busy === 'reopen_po', 'Reopen PO Submission', 'Reopening…'],
       [teamResendLinkBtn, 'resend_link', busy === 'resend_link', 'Resend Invoice / PO Link', 'Sending…'],
       [teamLockProjectBtn, 'lock_project', busy === 'lock_project', 'Lock Project Without Ordering', 'Locking…'],
-      [teamAchPendingProductionBtn, 'ach_pending_production_approval', busy === 'ach_pending_production_approval', 'Allow ACH Pending Production', 'Saving…'],
+      [teamAchPendingProductionBtn, 'initiate_production', busy === 'initiate_production', 'Initiate Production', 'Saving…'],
       [teamMarkJobsCompletedBtn, 'mark_jobs_completed', busy === 'mark_jobs_completed', 'Mark Jobs as Completed', 'Saving…']
     ];
     controls.forEach(entry => {
@@ -30677,7 +30704,7 @@
       reopen_po: workflow.canReopenPo === true,
       resend_link: workflow.canResendLink === true,
       lock_project: workflow.canLockWithoutOrdering === true,
-      ach_pending_production_approval: true,
+      initiate_production: workflow.canInitiateProduction === true,
       mark_jobs_completed: workflow.canManageJobCompletion === true
     };
     const canonicalLabels = {
@@ -30690,9 +30717,7 @@
       reopen_po: 'Reopen PO Submission',
       resend_link: workflow.isPoFlow === true ? 'Resend PO Return Link' : 'Resend Invoice Link',
       lock_project: 'Lock Project Without Ordering',
-      ach_pending_production_approval: normalizeAccountSummary(ACCOUNT_SUMMARY).achPendingProductionApproved
-        ? 'Disable ACH Pending Production'
-        : 'Allow ACH Pending Production',
+      initiate_production: 'Initiate Production',
       mark_jobs_completed: workflow.hasAnyActualJobCompletion === true
         ? 'Manage Job Completion Dates'
         : 'Mark Jobs as Completed'
@@ -30740,7 +30765,7 @@
       reopen_po: 'adminReopenPoSubmission',
       resend_link: 'adminResendLockedOrderLink',
       lock_project: 'adminLockProjectWithoutOrdering',
-      ach_pending_production_approval: 'adminSetAchPendingProductionApproval',
+      initiate_production: 'adminInitiateProduction',
       mark_jobs_completed: 'adminMarkJobsCompleted'
     };
     const methodName = methodMap[actionName];
@@ -36963,14 +36988,11 @@
       const achTitle = orderFlowAchBtn.querySelector('.orderFlowChoiceTitle');
       const achFoot = orderFlowAchBtn.querySelector('.orderFlowChoiceFoot');
       const achBody = orderFlowAchBtn.querySelector('.orderFlowChoiceBody');
-      const achAccount = getOrderFlowAchAccountSummaryForUi_();
       if (achTitle) achTitle.textContent = 'ACH Bank Payment';
       if (achFoot) {
-        achFoot.textContent = achAccount.achPendingProductionApproved
-          ? 'Production approved while payment processes'
-          : 'Production begins after payment clears';
-        achFoot.classList.toggle('is-green', achAccount.achPendingProductionApproved === true);
-        achFoot.classList.toggle('is-red', achAccount.achPendingProductionApproved !== true);
+        achFoot.textContent = 'Production begins after payment clears';
+        achFoot.classList.toggle('is-green', false);
+        achFoot.classList.toggle('is-red', true);
       }
       if (achBody) {
         achBody.textContent = 'Pay securely from a US bank account through Stripe. Stripe may ask you to confirm or connect a bank before payment is initiated.';
@@ -38411,8 +38433,20 @@
     }
     setSummaryShareBusyAction_('email');
     SUMMARY_SHARE_STATUS = { tone: '', message: '' };
+    const previousEstimateReference = !isLockedInvoice && PORTAL_STATE && PORTAL_STATE.documentReferences && PORTAL_STATE.documentReferences.estimate
+      ? clonePlainObject(PORTAL_STATE.documentReferences.estimate)
+      : null;
+    let estimateReferenceApplied = false;
     try {
-      const documentReference = getSummaryDocumentReference_(getSummaryDocumentMode_());
+      const documentReference = isLockedInvoice
+        ? getSummaryDocumentReference_(getSummaryDocumentMode_())
+        : getNextSummaryEstimateEmailDocumentReference_();
+      if (!isLockedInvoice) {
+        writeSummaryEstimateDocumentReferenceForRender_(documentReference);
+        estimateReferenceApplied = true;
+        renderSummaryView();
+        await settleSummaryExportLayout_();
+      }
       const result = await buildSummaryExportPdf_({ fileName: documentReference.fileName });
       const base64Data = await readBlobAsBase64_(result.blob);
       if (!base64Data) throw new Error('Unable to package the Summary PDF for email.');
@@ -38443,6 +38477,12 @@
         rerenderSummaryEstimateControls_();
       }, 1400);
     } catch (err) {
+      if (estimateReferenceApplied) {
+        PORTAL_STATE.documentReferences = clonePlainObject(PORTAL_STATE.documentReferences || {});
+        if (previousEstimateReference) PORTAL_STATE.documentReferences.estimate = previousEstimateReference;
+        else delete PORTAL_STATE.documentReferences.estimate;
+        renderSummaryView();
+      }
       console.error('Summary PDF email failed.', err);
       setSummaryShareStatus_(
         'error',
@@ -41229,7 +41269,7 @@
         title: isMicrodepositPending ? 'Microdeposit verification pending' : 'Bank verification pending',
         body: isMicrodepositPending
           ? 'Stripe is waiting for bank verification to finish ACH payment. Use Stripe email or Manage ACH Banks where available; Red Threads does not collect microdeposit values.'
-          : 'Stripe needs bank verification before ACH payment can finish. Production will not begin until ACH is verified and payment is confirmed unless Red Threads approves production while ACH is pending.',
+          : 'Stripe needs bank verification before ACH payment can finish. Production will not begin until ACH is verified and payment is confirmed unless Red Threads explicitly initiates production.',
         suppressNormalPaymentControls: true,
         showVerify: hasVerificationLinkage,
         verificationUnavailable: !hasVerificationLinkage,
@@ -45184,7 +45224,7 @@
     if (teamReopenPoBtn) teamReopenPoBtn.addEventListener('click', () => openTeamAccountAdminConfirmPanel_('reopen_po', 'Reopen PO Submission', 'This keeps the project locked but reopens the invoice-tab purchase-order upload step so the client can resubmit PO details.'));
     if (teamResendLinkBtn) teamResendLinkBtn.addEventListener('click', openTeamAccountAdminEmailPanel_);
     if (teamLockProjectBtn) teamLockProjectBtn.addEventListener('click', () => openTeamAccountAdminConfirmPanel_('lock_project', 'Lock Project Without Ordering', 'This will temporarily freeze the project without treating it like a placed order. You can unlock it later from this same menu.'));
-    if (teamAchPendingProductionBtn) teamAchPendingProductionBtn.addEventListener('click', openTeamAchPendingProductionApprovalPanel_);
+    if (teamAchPendingProductionBtn) teamAchPendingProductionBtn.addEventListener('click', openTeamInitiateProductionPanel_);
     if (teamMarkJobsCompletedBtn) teamMarkJobsCompletedBtn.addEventListener('click', openTeamAccountAdminJobsPanel_);
     if (teamAccountAdminPanelCancelBtn) teamAccountAdminPanelCancelBtn.addEventListener('click', resetTeamAccountAdminPanels_);
     if (teamAccountAdminPanelConfirmBtn) teamAccountAdminPanelConfirmBtn.addEventListener('click', submitTeamAccountAdminConfirmPanel_);

@@ -1753,6 +1753,9 @@ function doPost(e) {
     if (action === 'admin_mark_jobs_completed') {
       return jsonOutput_(adminMarkJobsCompleted(payload));
     }
+    if (action === 'admin_initiate_production') {
+      return jsonOutput_(adminInitiateProduction(payload));
+    }
     if (action === 'admin_set_ach_pending_production_approval') {
       return jsonOutput_(adminSetAchPendingProductionApproval(payload));
     }
@@ -3906,10 +3909,7 @@ function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latest
       ? workflowContext.isPoSubmitted === true
       : (
           !!trimString_(latest.poSubmittedAt || row.posubmittedat) ||
-          productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized ||
-          orderState === ORDER_STATES.ready_for_production ||
-          orderState === ORDER_STATES.in_production ||
-          orderState === ORDER_STATES.closed
+          !!trimString_(latest.poNumber || row.ponumber)
         )
   );
   const poInitiated = variant === 'purchase_order' && (
@@ -3963,11 +3963,12 @@ function deriveDashboardProjectStepFlags_(rowInfo, snapshot, portalState, latest
       ));
   const productionBegun = workflowContext
     ? workflowContext.isProductionAuthorized === true
-    : (!!authorizedToProduceAt
-        || productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized
-        || orderState === ORDER_STATES.ready_for_production
-        || orderState === ORDER_STATES.in_production
-        || orderState === ORDER_STATES.closed);
+    : isPortalProductionStartTriggerActive_({
+        isPaymentReceived: paymentReceived === true,
+        isPoSubmitted: poSubmitted === true,
+        orderState: orderState,
+        hasAnyCompletionSignal: orderState === ORDER_STATES.closed
+      });
   const isLocked = workflowContext ? workflowContext.isLocked === true : portalLockState === PORTAL_LOCK_STATES.locked;
   const shouldTreatAsPlaced = workflowContext
     ? orderPlaced
@@ -4361,7 +4362,7 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
   let statusKey = 'processing';
   let tone = 'current';
   let subtext = 'No action required: ACH payment is processing with Stripe.';
-  let helper = 'ACH payment was submitted and is awaiting bank confirmation. ACH confirmation can take several business days. Production begins after payment confirmation unless Red Threads has approved production while ACH is pending.';
+  let helper = 'ACH payment was submitted and is awaiting bank confirmation. ACH confirmation can take several business days. Production begins after payment confirmation.';
   let paymentHover = helper;
   let productionHover = 'Production begins after ACH payment is confirmed.';
 
@@ -4411,24 +4412,24 @@ function buildAchProgressPaymentCopyMeta_(workflowContext) {
   } else if (pendingWithProductionApproved) {
     statusKey = 'pending_production_approved';
     tone = 'current';
-    subtext = 'No action required: ACH is pending and production has been approved.';
-    helper = 'ACH payment is still pending with Stripe. Red Threads has approved production while payment settles. Payment is not yet confirmed.';
+    subtext = 'No action required: ACH is pending and production was initiated by Red Threads.';
+    helper = 'ACH payment is still pending with Stripe. Red Threads has explicitly initiated production. Payment is not yet confirmed.';
     paymentHover = 'ACH payment processing. Payment is not marked paid until Stripe confirms success.';
-    productionHover = 'Production has been approved while ACH payment settles.';
+    productionHover = 'Production was explicitly initiated by Red Threads while ACH payment settles.';
   } else if (isMicrodepositPending) {
     statusKey = 'microdeposit_pending';
     tone = 'blocked';
     subtext = 'Action needed: verify your bank with Stripe to finish ACH payment.';
-    helper = 'Stripe is waiting for microdeposit verification. Use Manage ACH Banks and choose Verify with Stripe for the pending account. Production will not begin until ACH is verified and payment is confirmed, unless Red Threads approves production while ACH is pending.';
+    helper = 'Stripe is waiting for microdeposit verification. Use Manage ACH Banks and choose Verify with Stripe for the pending account. Production will not begin until ACH is verified and payment is confirmed.';
     paymentHover = helper;
-    productionHover = 'Production will not begin until ACH is verified and payment is confirmed, unless Red Threads approves production while ACH is pending.';
+    productionHover = 'Production will not begin until ACH is verified and payment is confirmed.';
   } else if (isBankVerificationPending) {
     statusKey = 'bank_verification_pending';
     tone = 'blocked';
     subtext = 'Action needed: bank verification is pending with Stripe.';
     helper = 'Stripe needs bank verification before ACH payment can finish. Open the project or Manage ACH Banks to continue verification.';
     paymentHover = helper;
-    productionHover = 'Production begins after bank verification and ACH payment confirmation, unless Red Threads approves production while ACH is pending.';
+    productionHover = 'Production begins after bank verification and ACH payment confirmation.';
   } else if (isCheckoutStarted) {
     statusKey = 'checkout_started';
     tone = 'current';
@@ -5081,9 +5082,7 @@ function deriveDashboardTimelineMeta_(options) {
   const paymentDate = normalizeDashboardCalendarDate_(
     trimString_(workflowContext.paymentReceivedAt) ||
     latestOrderSummary.paidAt ||
-    row.paidat ||
-    latestOrderSummary.authorizedToProduceAt ||
-    row.authorizedtoproduceat
+    row.paidat
   );
   const paymentMethod = trimString_(
     latestOrderSummary.paymentMethodSelected ||
@@ -5093,9 +5092,7 @@ function deriveDashboardTimelineMeta_(options) {
   const poSubmittedDate = normalizeDashboardCalendarDate_(
     trimString_(workflowContext.poSubmittedAt) ||
     latestOrderSummary.poSubmittedAt ||
-    row.posubmittedat ||
-    latestOrderSummary.authorizedToProduceAt ||
-    row.authorizedtoproduceat
+    row.posubmittedat
   );
   const paymentPath = trimString_(
     workflowContext.paymentPath ||
@@ -5120,9 +5117,15 @@ function deriveDashboardTimelineMeta_(options) {
     latestOrderSummary.poNumber ||
     row.ponumber
   );
-  const printStart = variant === 'purchase_order'
+  const productionStartDate = normalizeDashboardProductionStartDate_(
+    trimString_(workflowContext.productionStartAt) ||
+    (trimString_(latestOrderSummary.orderState).toLowerCase() === ORDER_STATES.in_production
+      ? latestOrderSummary.authorizedToProduceAt
+      : '')
+  );
+  const printStart = productionStartDate || (variant === 'purchase_order'
     ? normalizeDashboardProductionStartDate_(poSubmittedDate)
-    : normalizeDashboardProductionStartDate_(paymentDate);
+    : normalizeDashboardProductionStartDate_(paymentDate));
   try {
     completionMeta = deriveDashboardReadyMeta_(printJobs, portalState, latestOrderInfo, {
       flags: flags,
@@ -5194,7 +5197,9 @@ function deriveDashboardReadyMeta_(printJobs, portalState, latestOrderInfo, opti
   const latestOrderSummary = latestOrderRow ? buildPortalOrderSummary_(latestOrderRow) : {};
   const referenceDateOverride = normalizeDashboardCalendarDate_(opts.referenceDate);
   const referenceDateValue = trimString_(
-    latestOrderSummary.authorizedToProduceAt ||
+    (trimString_(latestOrderSummary.orderState).toLowerCase() === ORDER_STATES.in_production
+      ? latestOrderSummary.authorizedToProduceAt
+      : '') ||
     latestOrderSummary.paidAt ||
     latestOrderSummary.poSubmittedAt ||
     latestOrderSummary.lockedAt
@@ -8150,15 +8155,12 @@ function isSupersedableOrderRowForPaymentPathSwitch_(orderInfo) {
   }
   const orderState = trimString_(summary.orderState).toLowerCase();
   const paymentState = trimString_(summary.paymentState).toLowerCase();
-  const productionState = trimString_(summary.productionAuthorizationState).toLowerCase();
   if (trimString_(summary.paidAt)) return false;
-  if (trimString_(summary.authorizedToProduceAt)) return false;
   if (trimString_(summary.poSubmittedAt)) return false;
+  if (trimString_(summary.poNumber)) return false;
   if (paymentState === PAYMENT_STATES.paid || paymentState === PAYMENT_STATES.manual_received) return false;
-  if (productionState === PRODUCTION_AUTHORIZATION_STATES.authorized) return false;
   if (
-    orderState === ORDER_STATES.ready_for_production
-    || orderState === ORDER_STATES.in_production
+    orderState === ORDER_STATES.in_production
     || orderState === ORDER_STATES.closed
   ) {
     return false;
@@ -11574,14 +11576,17 @@ function isOrderPastEditableReopenPoint_(summary) {
   const safeSummary = (summary && typeof summary === 'object') ? summary : {};
   const orderState = trimString_(safeSummary.orderState).toLowerCase();
   const paymentState = trimString_(safeSummary.paymentState).toLowerCase();
-  const productionState = trimString_(safeSummary.productionAuthorizationState).toLowerCase();
-  return !!trimString_(safeSummary.paidAt)
+  const paymentReceived = !!trimString_(safeSummary.paidAt)
     || paymentState === PAYMENT_STATES.paid
-    || paymentState === PAYMENT_STATES.manual_received
-    || productionState === PRODUCTION_AUTHORIZATION_STATES.authorized
-    || orderState === ORDER_STATES.ready_for_production
-    || orderState === ORDER_STATES.in_production
-    || orderState === ORDER_STATES.closed;
+    || paymentState === PAYMENT_STATES.manual_received;
+  const poSubmitted = !!trimString_(safeSummary.poSubmittedAt)
+    || !!trimString_(safeSummary.poNumber);
+  return isPortalProductionStartTriggerActive_({
+    isPaymentReceived: paymentReceived,
+    isPoSubmitted: poSubmitted,
+    orderState: orderState,
+    hasAnyCompletionSignal: orderState === ORDER_STATES.closed
+  });
 }
 
 function buildUnlockedRevisionDraft_(draft) {
@@ -12131,120 +12136,63 @@ function adminMarkJobsCompleted(payload) {
   }
 }
 
-function isActiveAchPendingProductionApprovalOrder_(orderSummary, workflowContext) {
-  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
-  const workflow = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
-  if (trimString_(summary.paymentMethodSelected).toLowerCase() !== PAYMENT_METHODS.ach) return false;
-  const paymentState = trimString_(summary.paymentState).toLowerCase();
-  const orderState = trimString_(summary.orderState).toLowerCase();
-  const portalLockState = trimString_(summary.portalLockState).toLowerCase();
-  const productionAuthorizationState = trimString_(summary.productionAuthorizationState).toLowerCase();
-  const lifecycleState = trimString_(workflow.lifecycleState).toLowerCase();
-  const verificationStatus = trimString_(summary.achVerificationStatus).toLowerCase();
-  const failureCode = trimString_(summary.achFailureCode).toLowerCase();
-  const failureMessage = trimString_(summary.achFailureMessage).toLowerCase();
-  const latestEventType = trimString_(summary.stripeLatestEventType).toLowerCase();
-  const achDetailState = deriveAchLifecycleState_({
-    latest: summary,
-    paymentState: paymentState,
-    orderState: orderState
-  });
-  const invalidSignals = [
-    verificationStatus,
-    failureCode,
-    failureMessage,
-    latestEventType,
-    lifecycleState
-  ].join(' ');
-  if (trimString_(summary.paidAt) || paymentState === PAYMENT_STATES.paid) return false;
-  if (trimString_(summary.authorizedToProduceAt) || productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized) return false;
-  if (productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.canceled) return false;
-  if (portalLockState && portalLockState !== PORTAL_LOCK_STATES.locked) return false;
-  if (paymentState !== PAYMENT_STATES.pending) return false;
-  if (orderState !== ORDER_STATES.awaiting_payment_confirmation) return false;
-  if (/(fail|failed|failure|dispute|mandate|invalid|blocked|expired|action|cancel|reset)/i.test(invalidSignals)) return false;
-  return [
-    ACH_DETAIL_STATES.bank_verification_pending,
-    ACH_DETAIL_STATES.microdeposit_pending,
-    ACH_DETAIL_STATES.processing
-  ].indexOf(achDetailState) >= 0;
-}
-
 function adminSetAchPendingProductionApproval_(payload) {
-  const ctx = buildTeamOrderAdminContext_(payload);
-  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'ach_pending_production_approval');
-  if (!ctx.accountInfo || !ctx.accountInfo.rowInfo) throw new Error('Account not found.');
-  const p = (payload && typeof payload === 'object') ? payload : {};
-  const approved = p.approved === true || boolFromCell_(p.approved);
-  const now = nowIso_();
-  setRowValuesByHeaderMap_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row, ctx.accountInfo.rowInfo.colMap, {
-    achPendingProductionApproved: approved,
-    achPendingProductionApprovedAt: approved ? now : '',
-    achPendingProductionApprovedBy: approved ? ctx.actorName : '',
-    achPendingProductionApprovalNotes: trimString_(p.notes || p.approvalNotes),
-    updatedAt: now
-  });
-  const refreshedAccountRow = buildRowInfoFromSheet_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row);
-  ctx.accountInfo = {
-    rowInfo: refreshedAccountRow,
-    summary: buildPortalAccountSummary_(refreshedAccountRow.rowObjNormalized, ctx.cfg)
-  };
-
-  let updatedSummary = ctx.latestOrderSummary;
-  let productionAuthorizedOrderInfo = null;
-  if (approved && ctx.latestOrderInfo && ctx.latestOrderSummary) {
-    if (isActiveAchPendingProductionApprovalOrder_(ctx.latestOrderSummary, ctx.workflowContext)) {
-      const updatedOrder = updatePortalOrderState_({
-        cfg: ctx.cfg,
-        ss: ctx.ss,
-        infra: ctx.infra,
-        orderRowInfo: ctx.latestOrderInfo,
-        orderState: ORDER_STATES.ready_for_production,
-        productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized,
-        authorizedToProduceAt: now,
-        achPendingProductionApprovedAtOrder: now,
-        notes: 'Team approved production to begin while ACH payment is pending.'
-      });
-      productionAuthorizedOrderInfo = updatedOrder;
-      updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
-      writeCurrentOrderPointersToExportLog_({
-        cfg: ctx.cfg,
-        ss: ctx.ss,
-        infra: ctx.infra,
-        rowInfo: ctx.rowInfo,
-        orderSummary: updatedSummary,
-        accountSummary: ctx.accountInfo.summary
-      });
-    }
-  }
-  const auditedRow = appendTeamAuditMessageToPortalRow_(
-    ctx.infra.exportSheet,
-    ctx.rowInfo,
-    'ACH pending-production approval was ' + (approved ? 'enabled' : 'disabled') + ' by ' + ctx.actorName + ' on ' + now + '.',
-    ctx.workflowContext && ctx.workflowContext.isLocked === true,
-    { token: ctx.token, actorName: ctx.actorName }
-  );
-  if (approved && productionAuthorizedOrderInfo) {
-    queuePortalLifecycleClientAndTeamEmailsSafely_({
-      ctx: ctx,
-      token: ctx.token,
-      rowInfo: auditedRow,
-      orderInfo: productionAuthorizedOrderInfo
-    }, PORTAL_LIFECYCLE_EMAIL_MILESTONES.production_authorized, {
-      eventType: 'admin_set_ach_pending_production_approval',
-      meta: {
-        eventKey: 'production_authorized_' + trimString_(updatedSummary && updatedSummary.orderId)
-      }
-    });
-  }
-  return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, approved
-    ? 'ACH pending-production approval enabled.'
-    : 'ACH pending-production approval disabled.');
+  throw new Error('ACH pending production approval has been retired. Use Initiate Production for a specific locked order.');
 }
 
 function adminSetAchPendingProductionApproval(payload) {
   try {
     return adminSetAchPendingProductionApproval_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function adminInitiateProduction_(payload) {
+  const ctx = buildTeamOrderAdminContext_(payload);
+  if (!ctx.latestOrderInfo || !ctx.latestOrderSummary) throw new Error('Order not found.');
+  assertTeamWorkflowActionAllowed_(ctx.workflowContext, 'initiate_production');
+  const now = nowIso_();
+  const currentDraft = getLatestOrderDraftForAdmin_(ctx.latestOrderInfo);
+  const updatedDraft = writeTeamWorkflowMetaIntoDraft_(currentDraft, {
+    productionInitiatedAt: now,
+    productionInitiatedBy: ctx.actorName
+  });
+  const updatedOrder = updatePortalOrderState_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    orderRowInfo: ctx.latestOrderInfo,
+    portalLockState: PORTAL_LOCK_STATES.locked,
+    orderState: ORDER_STATES.in_production,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    authorizedToProduceAt: trimString_(ctx.latestOrderInfo.rowObjNormalized.authorizedtoproduceat) || now,
+    lockedAt: trimString_(ctx.latestOrderInfo.rowObjNormalized.lockedat) || now,
+    orderDraft: updatedDraft,
+    notes: 'Team initiated production before payment completion.'
+  });
+  const updatedSummary = buildPortalOrderSummary_(updatedOrder.rowObjNormalized);
+  const refreshedRow = writeCurrentOrderPointersToExportLog_({
+    cfg: ctx.cfg,
+    ss: ctx.ss,
+    infra: ctx.infra,
+    rowInfo: ctx.rowInfo,
+    orderSummary: updatedSummary,
+    accountSummary: ctx.accountInfo.summary
+  });
+  const auditedRow = appendTeamAuditMessageToPortalRow_(
+    ctx.infra.exportSheet,
+    refreshedRow,
+    'Production was initiated by ' + ctx.actorName + ' on ' + now + '. Payment status was not changed.',
+    true,
+    { token: ctx.token, actorName: ctx.actorName }
+  );
+  return buildTeamOrderAdminResponse_(ctx, updatedSummary, auditedRow, 'Production initiated successfully.');
+}
+
+function adminInitiateProduction(payload) {
+  try {
+    return adminInitiateProduction_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -12965,24 +12913,14 @@ function updateExportPointersForWebhookOrder_(cfg, ss, infra, orderInfo, orderSu
 }
 
 function buildAchPendingProductionPolicyUpdates_(accountSummary, orderInfo, now) {
-  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
-  const orderRow = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
-  const existingAuthorized = trimString_(orderRow.productionauthorizationstate).toLowerCase() === PRODUCTION_AUTHORIZATION_STATES.authorized ||
-    !!trimString_(orderRow.authorizedtoproduceat);
-  const existingState = trimString_(orderRow.orderstate);
-  const preserveAuthorizedState = existingAuthorized && [
-    ORDER_STATES.ready_for_production,
-    ORDER_STATES.in_production,
-    ORDER_STATES.closed
-  ].indexOf(existingState) >= 0;
-  const approved = existingAuthorized || account.achPendingProductionApproved === true;
+  /* Legacy account/order ACH pending-production approval fields are now inert.
+     ACH pending must remain payment-confirmation pending until Stripe reports a
+     paid/success signal, or Team Mode explicitly initiates production. */
   return {
-    orderState: approved ? (preserveAuthorizedState ? existingState : ORDER_STATES.ready_for_production) : ORDER_STATES.awaiting_payment_confirmation,
-    productionAuthorizationState: approved ? PRODUCTION_AUTHORIZATION_STATES.authorized : PRODUCTION_AUTHORIZATION_STATES.not_authorized,
-    authorizedToProduceAt: approved ? (trimString_(orderRow.authorizedtoproduceat) || trimString_(now)) : '',
-    achPendingProductionApprovedAtOrder: approved
-      ? (trimString_(orderRow.achpendingproductionapprovedatorder) || trimString_(account.achPendingProductionApprovedAt) || trimString_(now))
-      : ''
+    orderState: ORDER_STATES.awaiting_payment_confirmation,
+    productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    authorizedToProduceAt: '',
+    achPendingProductionApprovedAtOrder: ''
   };
 }
 
@@ -13452,8 +13390,9 @@ function handleCheckoutAsyncPaymentFailed_(sessionObj, options) {
       reason: 'non_ach_async_payment_failed'
     };
   }
-  const existingAuthorized = trimString_(orderInfo.rowObjNormalized.productionauthorizationstate).toLowerCase() === PRODUCTION_AUTHORIZATION_STATES.authorized ||
-    !!trimString_(orderInfo.rowObjNormalized.authorizedtoproduceat);
+  const existingOrderState = trimString_(orderInfo.rowObjNormalized.orderstate).toLowerCase();
+  const existingAuthorized = existingOrderState === ORDER_STATES.in_production ||
+    existingOrderState === ORDER_STATES.closed;
   const failure = extractFailureFromStripeObject_(sessionObj);
   let accountInfo = getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra });
   accountInfo = markOrderAchPaymentMethodUnusableIfNeeded_(accountInfo, orderInfo, achSummary, failure, {
@@ -13538,8 +13477,9 @@ function handlePaymentIntentFailed_(paymentIntentObj, options) {
     achSummary: achSummary
   });
   const isAch = achEvidence.isAchPayment === true;
-  const existingAuthorized = trimString_(orderInfo.rowObjNormalized.productionauthorizationstate).toLowerCase() === PRODUCTION_AUTHORIZATION_STATES.authorized ||
-    !!trimString_(orderInfo.rowObjNormalized.authorizedtoproduceat);
+  const existingOrderState = trimString_(orderInfo.rowObjNormalized.orderstate).toLowerCase();
+  const existingAuthorized = existingOrderState === ORDER_STATES.in_production ||
+    existingOrderState === ORDER_STATES.closed;
   const failure = extractFailureFromStripeObject_(paymentIntentObj);
   if (isAch) {
     const accountInfo = getPortalAccountInfoForOrder_(orderInfo, { cfg: cfg, ss: ss, infra: infra });
@@ -18076,7 +18016,9 @@ function readTeamWorkflowMetaFromDraft_(draft) {
     : {};
   return {
     workflowMode: normalizeTeamWorkflowMode_(raw.workflowMode),
-    completedJobsByJobId: normalizeTeamJobCompletionMap_(raw.completedJobsByJobId)
+    completedJobsByJobId: normalizeTeamJobCompletionMap_(raw.completedJobsByJobId),
+    productionInitiatedAt: trimString_(raw.productionInitiatedAt),
+    productionInitiatedBy: trimString_(raw.productionInitiatedBy)
   };
 }
 
@@ -18090,9 +18032,17 @@ function writeTeamWorkflowMetaIntoDraft_(draft, meta) {
   const completedJobsByJobId = Object.prototype.hasOwnProperty.call(nextMeta, 'completedJobsByJobId')
     ? normalizeTeamJobCompletionMap_(nextMeta.completedJobsByJobId)
     : current.completedJobsByJobId;
+  const productionInitiatedAt = Object.prototype.hasOwnProperty.call(nextMeta, 'productionInitiatedAt')
+    ? trimString_(nextMeta.productionInitiatedAt)
+    : current.productionInitiatedAt;
+  const productionInitiatedBy = Object.prototype.hasOwnProperty.call(nextMeta, 'productionInitiatedBy')
+    ? trimString_(nextMeta.productionInitiatedBy)
+    : current.productionInitiatedBy;
   safeDraft.teamModeMeta = {
     workflowMode: workflowMode,
-    completedJobsByJobId: completedJobsByJobId
+    completedJobsByJobId: completedJobsByJobId,
+    productionInitiatedAt: productionInitiatedAt,
+    productionInitiatedBy: productionInitiatedBy
   };
   return safeDraft;
 }
@@ -18800,6 +18750,15 @@ function deriveAchLifecycleState_(context) {
   return ACH_DETAIL_STATES.not_started;
 }
 
+function isPortalProductionStartTriggerActive_(context) {
+  const ctx = (context && typeof context === 'object') ? context : {};
+  const orderState = trimString_(ctx.orderState).toLowerCase();
+  return ctx.isPaymentReceived === true
+    || ctx.isPoSubmitted === true
+    || orderState === ORDER_STATES.in_production
+    || ctx.hasAnyCompletionSignal === true;
+}
+
 function derivePortalLifecycle_(context) {
   /* Canonical lifecycle source — do not bypass. New lifecycle states, booleans,
      and next-action semantics should be derived here first. */
@@ -18908,17 +18867,22 @@ function derivePortalLifecycle_(context) {
   const isPaymentReceived = !!paidAt
     || paymentState === PAYMENT_STATES.paid
     || paymentState === PAYMENT_STATES.manual_received;
-  const isProductionAuthorized = !!authorizedToProduceAt
-    || productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized
-    || orderState === ORDER_STATES.ready_for_production
-    || orderState === ORDER_STATES.in_production
-    || orderState === ORDER_STATES.closed;
+  const isPoSubmitted = isPoFlow && (
+    !!poSubmittedAt ||
+    !!poNumber
+  );
+  const hasProductionStartTriggerSeed = isPortalProductionStartTriggerActive_({
+    isPaymentReceived: isPaymentReceived,
+    isPoSubmitted: isPoSubmitted,
+    orderState: orderState,
+    hasAnyCompletionSignal: false
+  });
   const productionStartAt = derivePortalProductionStartAt_({
     paymentPath: paymentPath,
     poSubmittedAt: poSubmittedAt,
     paymentReceivedManuallyAt: paymentReceivedManuallyAt,
     paidAt: paidAt,
-    authorizedToProduceAt: authorizedToProduceAt,
+    authorizedToProduceAt: hasProductionStartTriggerSeed ? authorizedToProduceAt : '',
     lockedAt: lockedAt
   });
   const productionTargetMeta = derivePortalProductionTargetMeta_(selectedJobs, productionStartAt);
@@ -18941,14 +18905,16 @@ function derivePortalLifecycle_(context) {
       : (productionCompletionSource === 'order_closed'
         ? (buildPortalLifecycleIsoDateString_(lastOrderUpdatedAt) || trimString_(productionTargetMeta.iso))
         : ''));
+  const productionStartTriggerActive = isPortalProductionStartTriggerActive_({
+    isPaymentReceived: isPaymentReceived,
+    isPoSubmitted: isPoSubmitted,
+    orderState: orderState,
+    hasAnyCompletionSignal: hasAnyCompletionSignal
+  });
+  const isProductionAuthorized = productionStartTriggerActive || productionComplete;
   const hasProductionCompletion = productionComplete
     || orderState === ORDER_STATES.in_production
     || hasAnyCompletionSignal;
-  const isPoSubmitted = isPoFlow && (
-    !!poSubmittedAt ||
-    !!poNumber ||
-    isProductionAuthorized
-  );
   const isAwaitingPoSubmission = isPoFlow
     && !isPoSubmitted
     && (
@@ -19138,6 +19104,13 @@ function derivePortalLifecycle_(context) {
     || lifecycleState === PORTAL_LIFECYCLE_STATES.estimate_ready_to_order;
   const canManageJobCompletion = hasSelectedJobs
     && (isProductionAuthorized || productionCurrent || productionComplete || hasAnyActualJobCompletion);
+  const canInitiateProduction = hasSelectedJobs
+    && hasLockedInvoice
+    && isLocked
+    && !productionCurrent
+    && !productionComplete
+    && !isTeamHold
+    && !isCheckoutReset;
   const blockingReasons = buildPortalLifecycleBlockingReasons_({
     lifecycleState: lifecycleState,
     hasPlacedOrder: hasPlacedOrder,
@@ -19164,6 +19137,7 @@ function derivePortalLifecycle_(context) {
     paymentDue: paymentDue,
     canMarkManualPayment: canMarkManualPayment,
     canMarkPoPayment: canMarkPoPayment,
+    canInitiateProduction: canInitiateProduction,
     canManageJobCompletion: canManageJobCompletion,
     productionComplete: productionComplete,
     achDetailState: achDetailState
@@ -19289,7 +19263,8 @@ function derivePortalLifecycle_(context) {
     canMarkPoPayment: canMarkPoPayment,
     canResendLink: canResendLink,
     canLockWithoutOrdering: canLockWithoutOrdering,
-    canManageJobCompletion: canManageJobCompletion
+    canManageJobCompletion: canManageJobCompletion,
+    canInitiateProduction: canInitiateProduction
   };
 }
 
@@ -19411,6 +19386,7 @@ function derivePortalLifecycleNextTeamAction_(context) {
   if (state === PORTAL_LIFECYCLE_STATES.ach_payment_failed || state === PORTAL_LIFECYCLE_STATES.ach_payment_disputed) return 'review_payment_issue';
   if (ctx.canMarkManualPayment === true) return 'mark_manual_payment_received';
   if (ctx.canMarkPoPayment === true) return 'mark_po_payment_received';
+  if (ctx.canInitiateProduction === true) return 'initiate_production';
   if (ctx.canManageJobCompletion === true && ctx.productionComplete !== true) return 'mark_production_complete';
   if (ctx.paymentDue === true) return 'monitor_payment';
   return 'none';
@@ -19505,13 +19481,13 @@ function buildTeamWorkflowActionMeta_(workflowContext) {
       visible: ctx.canLockWithoutOrdering === true,
       label: 'Lock Project Without Ordering'
     },
+    initiate_production: {
+      visible: ctx.canInitiateProduction === true,
+      label: 'Initiate Production'
+    },
     mark_jobs_completed: {
       visible: ctx.canManageJobCompletion === true,
       label: ctx.hasAnyActualJobCompletion ? 'Manage Job Completion Dates' : 'Mark Jobs as Completed'
-    },
-    ach_pending_production_approval: {
-      visible: true,
-      label: 'Allow ACH Pending Production'
     }
   };
 }
@@ -20057,7 +20033,8 @@ function buildPortalLifecycleHydratedContext_(workflowContext) {
     canMarkPoPayment: context.canMarkPoPayment === true,
     canResendLink: context.canResendLink === true,
     canLockWithoutOrdering: context.canLockWithoutOrdering === true,
-    canManageJobCompletion: context.canManageJobCompletion === true
+    canManageJobCompletion: context.canManageJobCompletion === true,
+    canInitiateProduction: context.canInitiateProduction === true
   };
 }
 
@@ -20093,8 +20070,9 @@ function assertTeamWorkflowActionAllowed_(workflowContext, actionName) {
     reopen_po: 'PO submission can only be reopened on an unpaid submitted PO order.',
     resend_link: 'A resend link is not available for the current project state.',
     lock_project: 'Only editable pre-order projects can be locked without ordering.',
+    initiate_production: 'Production can only be initiated by Team Mode on locked orders with selected jobs.',
     mark_jobs_completed: 'Job completion dates are only available once the order has entered production or already has completion data.',
-    ach_pending_production_approval: 'Only an authorized team user can change ACH pending-production approval.'
+    ach_pending_production_approval: 'ACH pending production approval has been retired. Use Initiate Production for a specific locked order.'
   };
   throw new Error(messages[actionKey] || 'That team action is not available for the current project state.');
 }
@@ -20213,6 +20191,25 @@ function buildPortalDocumentFileName_(documentReference) {
     return 'Red Threads - Project ' + projectNumber + ' - Estimate v' + padded + '.pdf';
   }
   return 'Red Threads - Project ' + projectNumber + ' - Invoice v' + padded + '.pdf';
+}
+
+function buildPortalEstimateEmailSubject_(documentReference) {
+  const ref = buildPortalDocumentReference_(documentReference);
+  const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
+  const version = Math.max(1, parseInt(String(ref.version || 1), 10) || 1);
+  if (projectNumber && projectNumber !== 'Project') {
+    return 'Red Threads Portal Project ' + projectNumber + ' Estimate-V' + version;
+  }
+  return 'Red Threads Portal ' + ref.displayLabel;
+}
+
+function buildPortalEstimateEmailHeading_(documentReference) {
+  const ref = buildPortalDocumentReference_(documentReference);
+  const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
+  if (projectNumber && projectNumber !== 'Project') {
+    return 'Project ' + projectNumber + ' - Estimate Attached';
+  }
+  return 'Estimate Attached';
 }
 
 function resolvePortalDocumentVersion_(source, options) {
@@ -22888,19 +22885,82 @@ function getPortalLifecycleEmailCta_(milestone, recipientClass, ctx, meta) {
       url: buildTeamSnapshotPortalUrl_(token)
     };
   }
+  if (isPortalLifecycleAccountDocumentMilestone_(normalized)) {
+    const accountDocUrl = buildPortalLifecycleAccountDocumentClientUrl_(ctx, meta, normalized);
+    if (!accountDocUrl) return { label: '', url: '' };
+    return {
+      label: getPortalLifecycleAccountDocumentCtaLabel_(normalized, meta),
+      url: accountDocUrl
+    };
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_ready_to_order) {
     return { label: 'Open project and place order', url: buildExternalPortalUrl_(token) };
-  }
-  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
-    return { label: 'Update credit terms document', url: buildDashboardCreditTermsResubmitUrl_(token) };
-  }
-  if (documentType === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
-    return { label: 'Open Red Threads portal', url: buildExternalPortalUrl_(token) };
   }
   return {
     label: isPortalLifecycleAccountDocumentMilestone_(normalized) ? 'Open Red Threads portal' : 'View project status',
     url: buildPortalSummaryUrl_(token)
   };
+}
+
+function getAccountDocumentEmailLabels_(meta) {
+  const source = (meta && typeof meta === 'object') ? meta : {};
+  const type = trimString_(source.documentType).toLowerCase();
+  if (type === ACCOUNT_DOCUMENT_TYPES.credit_terms) {
+    return {
+      title: 'Credit terms',
+      noun: 'credit terms',
+      submission: 'credit terms application',
+      dashboardParam: 'credit_terms'
+    };
+  }
+  if (type === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
+    return {
+      title: 'Tax exemption',
+      noun: 'tax exemption',
+      submission: 'tax exemption form',
+      dashboardParam: 'tax_exempt'
+    };
+  }
+  const label = trimString_(source.documentLabel) || 'Account document';
+  return {
+    title: label,
+    noun: label.charAt(0).toLowerCase() + label.slice(1),
+    submission: label,
+    dashboardParam: ''
+  };
+}
+
+function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  const labels = getAccountDocumentEmailLabels_(meta);
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
+    return 'Update ' + labels.noun;
+  }
+  return 'Open account dashboard';
+}
+
+function buildPortalLifecycleAccountDocumentClientUrl_(ctx, meta, milestone) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const accountSummary = context.accountInfo && context.accountInfo.summary ? context.accountInfo.summary : {};
+  if (!hasPortalAccountDashboardIdentity_(accountSummary)) return '';
+  const dashboardUrl = buildExternalPortalDashboardUrl_(accountSummary, {
+    cfg: context.cfg
+  });
+  if (!dashboardUrl) return '';
+  const labels = getAccountDocumentEmailLabels_(meta);
+  const params = {};
+  if (labels.dashboardParam) params.accountDoc = labels.dashboardParam;
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
+    params.accountDocAction = 'resubmit';
+  }
+  return Object.keys(params).length ? appendQueryParamsToUrl_(dashboardUrl, params) : dashboardUrl;
 }
 
 function buildPortalLifecycleEmailDetailBlock_(lines) {
@@ -22923,7 +22983,8 @@ function buildPortalLifecycleEmailDetailBlock_(lines) {
 function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   const isTeam = getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team';
-  const documentLabel = trimString_(meta && meta.documentLabel) || 'Account document';
+  const labels = getAccountDocumentEmailLabels_(meta);
+  const documentLabel = trimString_(meta && meta.documentLabel) || labels.title;
   const reason = trimString_(meta && meta.reason);
   const paymentTermsLabel = trimString_(meta && meta.paymentTermsLabel);
   const details = [];
@@ -22931,41 +22992,73 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   if (reason) details.push('Reason: ' + reason);
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted) {
+    const clientIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
+      ? 'Red Threads received your credit terms application.'
+      : 'Red Threads received your tax exemption form.';
     return {
-      subject: isTeam ? ('Team review required — ' + documentLabel) : (documentLabel + ' submitted'),
-      intro: isTeam ? 'A client submitted an account document for review.' : 'Your account document was submitted for Red Threads review.',
+      subject: isTeam ? ('Team review required — ' + documentLabel) : (labels.title + ' submitted'),
+      heading: isTeam ? ('Review ' + labels.submission) : clientIntro.replace(/[.]+$/g, ''),
+      intro: isTeam ? ('A client submitted a ' + labels.submission + ' for review.') : clientIntro,
       statusCopy: isTeam ? 'Review the submitted document in Team Mode.' : 'Red Threads will review the document and update the portal.',
       details: details
     };
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
+    const approvedIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
+      ? 'Red Threads approved the credit terms associated with your account.'
+      : 'Red Threads approved the tax exemption associated with your account.';
     return {
-      subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (documentLabel + ' approved'),
-      intro: isTeam ? 'An account document was approved.' : 'Your account document has been approved.',
+      subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (labels.title + ' approved'),
+      heading: isTeam ? (labels.title + ' approved') : approvedIntro.replace(/[.]+$/g, ''),
+      intro: isTeam ? ('Red Threads approved the ' + labels.noun + ' associated with this account.') : approvedIntro,
       statusCopy: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
-        ? 'Purchase-order submission is available according to the approved terms.'
-        : 'The approved tax exemption status is now reflected in the portal.',
+        ? (isTeam
+          ? 'The account can use purchase-order submission according to the approved terms.'
+          : 'Your account can use purchase-order submission according to the approved terms.')
+        : (isTeam
+          ? 'The approved tax exemption status is now associated with the account.'
+          : 'The approved tax exemption status is now associated with your account.'),
       details: details
     };
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
+    const deniedIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied
+      ? 'Red Threads reviewed the credit terms associated with your account.'
+      : 'Red Threads reviewed the tax exemption associated with your account.';
     return {
-      subject: isTeam ? ('Team alert: ' + documentLabel + ' needs attention') : 'Update on your Red Threads document submission',
-      intro: isTeam ? 'An account document review decision was recorded.' : 'Red Threads reviewed your account document submission.',
+      subject: isTeam ? ('Team alert: ' + documentLabel + ' needs attention') : (labels.title + ' needs attention'),
+      heading: isTeam ? (labels.title + ' needs attention') : deniedIntro.replace(/[.]+$/g, ''),
+      intro: isTeam ? ('Red Threads reviewed the ' + labels.noun + ' associated with this account.') : deniedIntro,
       statusCopy: trimString_(meta && meta.hardDenied) === 'true'
-        ? 'The submission was not approved. Review the portal for the current status.'
-        : 'A correction is needed before approval. Review the portal for the next step.',
+        ? (isTeam
+          ? 'The submission was not approved. Review the account status in Team Mode.'
+          : 'The submission was not approved. Review your account dashboard for the current status.')
+        : (isTeam
+          ? 'A correction is needed before approval. Review the account status in Team Mode.'
+          : 'A correction is needed before approval. Review your account dashboard for the next step.'),
+      nextStep: isTeam
+        ? ('Review the ' + labels.noun + ' workflow in Team Mode.')
+        : ('Upload an updated ' + labels.submission + ' from your account dashboard.'),
       details: details
     };
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
+    const resetIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset
+      ? 'Red Threads reset the credit terms associated with your account.'
+      : 'Red Threads reset the tax exemption associated with your account.';
     return {
-      subject: isTeam ? ('Team alert: ' + documentLabel + ' reset') : (documentLabel + ' reset'),
-      intro: isTeam ? 'An account document workflow was reset.' : 'Red Threads reset an account document workflow.',
-      statusCopy: 'Return to the portal if a new submission is required.',
+      subject: isTeam ? ('Team alert: ' + documentLabel + ' reset') : (labels.title + ' reset'),
+      heading: isTeam ? (labels.title + ' reset') : resetIntro.replace(/[.]+$/g, ''),
+      intro: isTeam ? ('Red Threads reset the ' + labels.noun + ' associated with this account.') : resetIntro,
+      statusCopy: isTeam
+        ? 'If a new submission is required, it can be updated from the account dashboard.'
+        : 'If a new submission is required, update it from your account dashboard.',
+      nextStep: isTeam
+        ? ('Review the ' + labels.noun + ' workflow in Team Mode.')
+        : ('Upload a new ' + labels.submission + ' from your account dashboard.'),
       details: details
     };
   }
@@ -22986,6 +23079,9 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   let intro = '';
   let statusCopy = '';
   let details = [];
+  let heading = '';
+  let nextStep = '';
+  const accountDocumentMilestone = isPortalLifecycleAccountDocumentMilestone_(normalized);
 
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_approved) {
     subjectParts.push(isTeam ? 'Team alert: artwork approved' : 'Artwork approved');
@@ -23042,8 +23138,10 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   } else if (isPortalLifecycleAccountDocumentMilestone_(normalized)) {
     const docCopy = buildAccountDocumentEmailCopy_(normalized, recipientClass, meta);
     subjectParts.push(docCopy && docCopy.subject ? docCopy.subject : (isTeam ? 'Team alert: account document update' : 'Account document update'));
+    heading = docCopy && docCopy.heading ? docCopy.heading : '';
     intro = docCopy && docCopy.intro ? docCopy.intro : 'An account document update was recorded.';
     statusCopy = docCopy && docCopy.statusCopy ? docCopy.statusCopy : 'Review the portal for the current status.';
+    nextStep = docCopy && docCopy.nextStep ? docCopy.nextStep : '';
     details = docCopy && Array.isArray(docCopy.details) ? docCopy.details : details;
   } else {
     subjectParts.push(isTeam ? 'Team alert: Red Threads portal update' : 'Red Threads portal update');
@@ -23051,12 +23149,14 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     statusCopy = 'Review the current project status below.';
   }
 
-  if (projectName) subjectParts.push(projectName);
-  if (invoiceNumber) subjectParts.push(invoiceNumber);
+  if (!accountDocumentMilestone && projectName) subjectParts.push(projectName);
+  if (!accountDocumentMilestone && invoiceNumber) subjectParts.push(invoiceNumber);
   return {
     subject: subjectParts.filter(Boolean).join(' - '),
+    heading: heading,
     intro: intro,
     statusCopy: statusCopy,
+    nextStep: nextStep,
     details: details
   };
 }
@@ -23102,7 +23202,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
-    nextStep: emailContext.nextStepText,
+    nextStep: copy.nextStep || emailContext.nextStepText,
     blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
@@ -23711,13 +23811,49 @@ function buildLifecycleEmailDateLabel_(value) {
   return label || '';
 }
 
+function isLifecycleEmailProductionActive_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const orderState = trimString_(ctx.orderState || summary.orderState).toLowerCase();
+  const paymentState = trimString_(ctx.paymentState || summary.paymentState).toLowerCase();
+  const productionComplete = ctx.productionComplete === true
+    || orderState === ORDER_STATES.closed;
+  if (
+    ctx.productionCurrent === true ||
+    ctx.isProductionAuthorized === true ||
+    ctx.productionAuthorized === true ||
+    productionComplete
+  ) {
+    return true;
+  }
+  return isPortalProductionStartTriggerActive_({
+    isPaymentReceived: ctx.isPaymentReceived === true
+      || ctx.paymentReceived === true
+      || !!trimString_(ctx.paymentReceivedAt || summary.paymentReceivedManuallyAt || summary.paidAt)
+      || paymentState === PAYMENT_STATES.paid
+      || paymentState === PAYMENT_STATES.manual_received,
+    isPoSubmitted: ctx.isPoSubmitted === true
+      || ctx.poSubmitted === true
+      || !!trimString_(ctx.poSubmittedAt || summary.poSubmittedAt || ctx.poNumber || summary.poNumber),
+    orderState: orderState,
+    hasAnyCompletionSignal: productionComplete
+  });
+}
+
+function resolveLifecycleEmailProductionStartAt_(workflowContext, orderSummary) {
+  if (!isLifecycleEmailProductionActive_(workflowContext, orderSummary)) return '';
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  return trimString_(ctx.productionStartAt || summary.authorizedToProduceAt);
+}
+
 function buildLifecycleEmailFallbackTimeline_(workflowContext, orderSummary) {
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   return {
     orderPlacedDateLabel: buildLifecycleEmailDateLabel_(ctx.orderPlacedAt || summary.lockedAt || summary.createdAt),
     paidDateLabel: buildLifecycleEmailDateLabel_(ctx.paymentReceivedAt || summary.paidAt),
-    printStartDateLabel: buildLifecycleEmailDateLabel_(ctx.productionStartAt || summary.authorizedToProduceAt),
+    printStartDateLabel: buildLifecycleEmailDateLabel_(resolveLifecycleEmailProductionStartAt_(ctx, summary)),
     completionDateLabel: buildLifecycleEmailDateLabel_(ctx.productionCompletionAt),
     poSubmittedDateLabel: buildLifecycleEmailDateLabel_(ctx.poSubmittedAt || summary.poSubmittedAt),
     paymentMethodLabel: 'ACH',
@@ -23828,12 +23964,8 @@ function buildPortalNativeEmailShellHtml_(options) {
   const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal - Notification';
   const heading = trimString_(opts.heading) || 'Red Threads portal update';
   const subheading = trimString_(opts.subheading);
-  const headingColor = /(?:^|\s+—\s+)action required\b/i.test(heading)
-    ? theme.currentAqua
-    : theme.text;
-  const subheadingColor = /^action required\b/i.test(subheading)
-    ? theme.currentAqua
-    : theme.textMuted;
+  const headingColor = theme.text;
+  const subheadingColor = theme.textMuted;
   const badge = opts.showBadge === true ? buildPortalNativeEmailBadgeHtml_(opts.badgeLabel) : '';
   const bodyHtml = trimString_(opts.bodyHtml);
   const maxWidth = trimString_(opts.maxWidth) || '680px';
@@ -23986,7 +24118,8 @@ function resolveLifecycleEmailStepCompletedDate_(step, context) {
     return workflow.paymentReceivedAt || summary.paymentReceivedManuallyAt || summary.paidAt || timeline.paidDateValue || '';
   }
   if (key === 'production' || key === 'print') {
-    return workflow.productionStartAt || summary.authorizedToProduceAt || timeline.printStartDateValue || workflow.productionCompletionAt || timeline.completionDateValue || '';
+    if (!isLifecycleEmailProductionActive_(workflow, summary)) return '';
+    return resolveLifecycleEmailProductionStartAt_(workflow, summary) || timeline.printStartDateValue || workflow.productionCompletionAt || timeline.completionDateValue || '';
   }
   return '';
 }
@@ -24042,9 +24175,17 @@ function getLifecycleEmailProjectNumberLabel_(emailContext) {
   return trimString_(summary.dealNumber || summary.projectNumber || summary.dealnumber);
 }
 
-function buildLifecycleEmailProjectDetailsCta_(projectNumber, url) {
+function buildLifecycleEmailTeamPasswordHintHtml_(password) {
+  const clean = trimString_(password);
+  if (!clean) return '';
+  const theme = getPortalNativeEmailTheme_();
+  return '<div style="margin:8px 0 0;color:' + theme.currentAqua + ';font-size:12px;line-height:1.35;font-weight:900;text-align:center;">Team Mode password: ' + escapeHtml_(clean) + '</div>';
+}
+
+function buildLifecycleEmailProjectDetailsCta_(projectNumber, url, options) {
   const cleanUrl = trimString_(url);
   if (!cleanUrl) return '';
+  const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
   const cleanProject = trimString_(projectNumber);
   const label = cleanProject
@@ -24064,6 +24205,7 @@ function buildLifecycleEmailProjectDetailsCta_(projectNumber, url) {
       'text-decoration': 'none',
       border: '1px solid ' + theme.brandRedMid
     }) + '">' + escapeHtml_(label) + '</a>',
+    buildLifecycleEmailTeamPasswordHintHtml_(opts.teamModePassword),
     '</div>'
   ].join('');
 }
@@ -24238,21 +24380,26 @@ function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
   lines.forEach(function(line) {
     textLines.push(line);
   });
+  if (trimString_(ctx.teamModePassword) && trimString_(ctx.ctaUrl) && opts.projectDetailsCta !== false) {
+    textLines.push('Team Mode password: ' + trimString_(ctx.teamModePassword));
+  }
   return {
     kind: 'project_details',
     title: title,
     projectNumber: projectNumber,
     fields: rows,
     lines: lines,
-    ctaUrl: trimString_(ctx.ctaUrl),
+    ctaUrl: opts.projectDetailsCta === false ? '' : trimString_(ctx.ctaUrl),
     ctaLabel: trimString_(ctx.ctaLabel),
+    teamModePassword: trimString_(ctx.teamModePassword),
     text: buildLifecycleEmailTextBlock_(title, textLines),
     html: buildLifecycleEmailProjectDetailsHtml_({
       title: title,
       projectNumber: projectNumber,
       fields: rows,
       lines: lines,
-      ctaUrl: trimString_(ctx.ctaUrl)
+      ctaUrl: opts.projectDetailsCta === false ? '' : trimString_(ctx.ctaUrl),
+      teamModePassword: trimString_(ctx.teamModePassword)
     })
   };
 }
@@ -24290,7 +24437,9 @@ function buildLifecycleEmailProjectDetailsHtml_(options) {
     fieldRows ? ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' + fieldRows + '</table>') : '',
     historyHtml,
     attachmentHtml,
-    buildLifecycleEmailProjectDetailsCta_(opts.projectNumber, opts.ctaUrl),
+    buildLifecycleEmailProjectDetailsCta_(opts.projectNumber, opts.ctaUrl, {
+      teamModePassword: opts.teamModePassword
+    }),
     '</td></tr>',
     '</table>'
   ].filter(Boolean).join('');
@@ -24316,8 +24465,7 @@ function resolveLifecycleEmailSectionPolicy_(family, milestone, recipientClass, 
     history: opts.history === false ? false : true
   };
   if (type === 'portal_lifecycle' &&
-      recipient === 'client' &&
-      isPortalLifecycleClientDocumentDecisionMilestone_(milestone)) {
+      isPortalLifecycleAccountDocumentMilestone_(milestone)) {
     policy.reference = false;
     policy.progress = false;
     policy.history = false;
@@ -24361,7 +24509,9 @@ function buildLifecycleEmailSectionBlocks_(emailContext, options) {
   if (policy.reference || policy.history) {
     blocks.push(buildLifecycleEmailProjectDetailsBlock_(ctx, {
       reference: policy.reference,
-      history: policy.history
+      history: policy.history,
+      projectDetailsCta: opts.projectDetailsCta,
+      recipientClass: opts.recipientClass
     }));
   }
   return blocks;
@@ -24574,6 +24724,9 @@ function buildLifecycleEmailActionCardHtml_(options) {
   const cta = (opts.primaryCta && typeof opts.primaryCta === 'object') ? opts.primaryCta : null;
   const suppressNextAction = isLifecycleEmailNoActionText_(nextStep) && title === 'No action required';
   if (!intro && !statusCopy && !nextStep && !attachmentSentence && !productionTimingLine && !trimString_(cta && cta.url)) return '';
+  const titleColor = /^action required$/i.test(title)
+    ? theme.currentAqua
+    : (/^no action required$/i.test(title) ? theme.brandRedMid : theme.brandRedMid);
   const paragraphs = [];
   if (intro) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>');
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
@@ -24597,7 +24750,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
   return [
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:14px;background:' + theme.panelBg + ';border-collapse:separate;">',
     '<tr><td style="padding:14px 16px;">',
-    '<div style="font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;margin:0 0 8px;letter-spacing:.08em;">' + escapeHtml_(title) + '</div>',
+    '<div style="font-size:12px;text-transform:uppercase;color:' + titleColor + ';font-weight:900;margin:0 0 8px;letter-spacing:.08em;">' + escapeHtml_(title) + '</div>',
     paragraphs.join(''),
     ctaHtml,
     '</td></tr>',
@@ -24698,7 +24851,8 @@ function buildLifecycleEmailShell_(options) {
         fields: item.fields,
         lines: detailLines,
         attachmentNote: actionAttachmentSentence ? '' : attachmentNote,
-        ctaUrl: trimString_(item.ctaUrl || (primaryCta && primaryCta.url))
+        ctaUrl: trimString_(item.ctaUrl || (primaryCta && primaryCta.url)),
+        teamModePassword: trimString_(item.teamModePassword)
       });
     }
     return trimString_(item.html);
@@ -24778,9 +24932,8 @@ function resolveLifecycleEmailProductionTimingLines_(workflowContext, orderSumma
     : (Array.isArray(summary.selectedJobs) ? summary.selectedJobs : []);
   if (!selectedJobs.length) return [];
   const lines = [];
-  const productionStartAt = ctx.productionStartAt || summary.authorizedToProduceAt;
-  const productionActive = !!trimString_(productionStartAt) ||
-    /authorized|started|in_progress|complete/i.test(trimString_(summary.productionAuthorizationState));
+  const productionStartAt = resolveLifecycleEmailProductionStartAt_(ctx, summary);
+  const productionActive = isLifecycleEmailProductionActive_(ctx, summary);
   if (productionActive) {
     const target = derivePortalProductionTargetMeta_(selectedJobs, productionStartAt);
     if (target && trimString_(target.dateLabel)) {
@@ -24796,10 +24949,7 @@ function resolveLifecycleEmailProductionTimingLines_(workflowContext, orderSumma
 function getLifecycleEmailProductionTimingActionLine_(workflowContext, orderSummary) {
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
-  const productionStartAt = ctx.productionStartAt || summary.authorizedToProduceAt;
-  const productionActive = !!trimString_(productionStartAt) ||
-    /authorized|started|in_progress|complete/i.test(trimString_(summary.productionAuthorizationState));
-  if (!productionActive) return '';
+  if (!isLifecycleEmailProductionActive_(ctx, summary)) return '';
   return trimString_(resolveLifecycleEmailProductionTimingLines_(ctx, summary)[0]);
 }
 
@@ -24843,7 +24993,7 @@ function buildLifecycleEmailHistoryLines_(workflowContext, orderSummary, jobType
   ].indexOf(milestone) < 0) {
     addLine(getLifecycleEmailPaymentReceivedHistoryLabel_(summary, milestone, 'Payment received'), ctx.paymentReceivedAt || summary.paidAt);
   }
-  addLine('Production authorized', ctx.productionStartAt || summary.authorizedToProduceAt);
+  addLine('Production authorized', resolveLifecycleEmailProductionStartAt_(ctx, summary));
   addLine('Production complete', ctx.productionCompletionAt);
   Array.prototype.push.apply(lines, resolveLifecycleEmailProductionTimingLines_(ctx, summary));
   return uniqueTrimmedStrings_(lines);
@@ -24991,6 +25141,9 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
       ? buildLifecycleEmailTeamUrl_(token)
       : buildLifecycleEmailInvoiceUrl_(token)
   );
+  const teamModePassword = recipientClass === 'team'
+    ? trimString_(opts.teamModePassword || (cfg && cfg.teamModePassword))
+    : '';
   return {
     orderSummary: summary,
     workflowContext: workflowContext,
@@ -25009,6 +25162,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     paymentDate: paymentDate,
     ctaUrl: ctaUrl,
     ctaLabel: ctaLabel,
+    teamModePassword: teamModePassword,
     referenceFields: [
       { label: 'Project', value: projectName },
       { label: 'Project #', value: dealNumber },
@@ -25091,7 +25245,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         ? 'The ACH payment is pending bank confirmation. ACH payments can take several business days to confirm.'
         : (usedConnectedBank
           ? 'Your ACH payment was submitted with a connected bank and is pending bank confirmation. ACH payments can take several business days to confirm.'
-          : 'Your ACH payment was submitted and is pending bank confirmation. ACH payments can take several business days to confirm. Production begins after payment is confirmed unless Red Threads has separately approved production while payment is pending.'),
+          : 'Your ACH payment was submitted and is pending bank confirmation. ACH payments can take several business days to confirm. Production begins after payment is confirmed unless Red Threads explicitly initiates production.'),
       attachmentNote: 'Your invoice is attached.'
     });
   }
@@ -27024,7 +27178,9 @@ function sendSummaryEstimatePdfEmail(payload) {
   if (doesPdfBlobContainLegacyInvoiceMarker_(blob)) {
     throw new Error(LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.non_portal_rendered_invoice);
   }
-  const subject = 'Red Threads ' + documentReference.displayLabel;
+  const subject = documentKind === PORTAL_DOCUMENT_KINDS.estimate
+    ? buildPortalEstimateEmailSubject_(documentReference)
+    : ('Red Threads ' + documentReference.displayLabel);
   let lifecycleSections = { blocks: [] };
   if (token) {
     try {
@@ -27107,11 +27263,13 @@ function sendSummaryEstimatePdfEmail(payload) {
     subject: subject,
     body: body,
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: buildLifecycleEmailDocumentHeading_(
-        documentReference.displayLabel,
-        'document attached',
-        documentKind === PORTAL_DOCUMENT_KINDS.invoice ? 'Invoice document attached.' : 'Estimate document attached.'
-      ),
+      heading: documentKind === PORTAL_DOCUMENT_KINDS.estimate
+        ? buildPortalEstimateEmailHeading_(documentReference)
+        : buildLifecycleEmailDocumentHeading_(
+          documentReference.displayLabel,
+          'document attached',
+          'Invoice document attached.'
+        ),
       badgeLabel: 'Document Ready',
       bodyHtml: htmlBody
     }),
@@ -30257,6 +30415,21 @@ function formatChatMessageDigestTimestamp_(value) {
   }
 }
 
+function getChatDigestProjectNumberLabel_(projectName, lifecycleSections) {
+  const ctx = lifecycleSections && lifecycleSections.emailContext ? lifecycleSections.emailContext : null;
+  const fromContext = getLifecycleEmailProjectNumberLabel_(ctx);
+  if (fromContext) return fromContext;
+  const match = trimString_(projectName).match(/\b([0-9]{3,})\b/);
+  return match ? trimString_(match[1]) : '';
+}
+
+function buildChatDigestClientCtaLabel_(projectNumber) {
+  const cleanProject = trimString_(projectNumber);
+  return cleanProject
+    ? ('Open Project ' + cleanProject + ' Portal To Reply')
+    : 'Open Project Portal To Reply';
+}
+
 function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
@@ -30273,7 +30446,6 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const portalUrl = isTeamDigest
     ? buildTeamSnapshotPortalUrl_(token)
     : buildExternalPortalUrl_(token);
-  const ctaLabel = isTeamDigest ? 'Open Team Snapshot' : 'Open Your Portal Messages';
   const subjectPrefix = isTeamDigest
     ? 'New client portal messages'
     : 'New Red Threads portal messages';
@@ -30285,9 +30457,12 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         token: token,
         cfg: opts.cfg,
         ss: opts.ss,
-        infra: opts.infra
+        infra: opts.infra,
+        projectDetailsCta: false
       })
     : { blocks: [] };
+  const projectNumber = getChatDigestProjectNumberLabel_(projectName, lifecycleSections);
+  const ctaLabel = isTeamDigest ? 'Open Team Snapshot' : buildChatDigestClientCtaLabel_(projectNumber);
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
@@ -30326,12 +30501,11 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         'Hi ' + firstName + ',',
         '',
         'You have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.',
-        lifecycleText || (projectName ? ('Project: ' + projectName) : ''),
-        '',
         'Messages:',
         plainMessageLines.join('\n').trim(),
         '',
-        portalUrl ? ('Open your portal: ' + portalUrl) : '',
+        portalUrl ? (ctaLabel + ': ' + portalUrl) : '',
+        lifecycleText || (projectName ? ('Project: ' + projectName) : ''),
         '',
         buildStandardNoReplyFooterCopy_(),
         '',
@@ -30347,6 +30521,18 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
       '      </tr>'
     ].join('\n');
   }).join('\n');
+  const messagesHtmlBlock = [
+    '    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 20px;border:1px solid #1e293b;border-radius:12px;overflow:hidden;">',
+    '      <tr><td style="padding:12px 16px;background:#0f172a;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;font-weight:800;">Messages</td></tr>',
+    htmlMessages,
+    '    </table>'
+  ].join('\n');
+  const ctaHtml = portalUrl
+    ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:13px 20px;border-radius:999px;background:#f43f5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;">' + escapeHtml_(ctaLabel) + '</a></p>')
+    : '';
+  const clientMessageAndReplyHtml = !isTeamDigest
+    ? [messagesHtmlBlock, ctaHtml].filter(Boolean).join('\n')
+    : '';
   const showProjectSummaryCard = isTeamDigest
     ? !!(projectName || clientEmail)
     : !!(projectName && !lifecycleHtml);
@@ -30361,18 +30547,13 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     showProjectSummaryCard
       ? ('    <div style="margin:0 0 18px;padding:16px 18px;border-radius:12px;background:#0f172a;border:1px solid #1e293b;font-size:14px;line-height:1.8;color:#cbd5e1;">'
         + (projectName ? ('<div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '')
-        + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
-        + '</div>')
-      : '',
-    lifecycleHtml,
-    '    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 20px;border:1px solid #1e293b;border-radius:12px;overflow:hidden;">',
-    '      <tr><td style="padding:12px 16px;background:#0f172a;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;font-weight:800;">Messages</td></tr>',
-    htmlMessages,
-    '    </table>',
-    portalUrl
-      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:13px 20px;border-radius:999px;background:#f43f5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;">' + escapeHtml_(ctaLabel) + '</a></p>')
-      : '',
-    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+	        + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
+	        + '</div>')
+	      : '',
+	    isTeamDigest ? lifecycleHtml : clientMessageAndReplyHtml,
+	    isTeamDigest ? messagesHtmlBlock : lifecycleHtml,
+	    isTeamDigest ? ctaHtml : '',
+	    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -30939,16 +31120,16 @@ function derivePortalDisplayOrderStatus_(stateInput, fallbackStatus) {
     state.currentproductionauthorizationstate
   ).toLowerCase();
   const paidAt = trimString_(state.paidAt || state.paidat);
-  const authorizedToProduceAt = trimString_(state.authorizedToProduceAt || state.authorizedtoproduceat);
+  const poSubmittedAt = trimString_(state.poSubmittedAt || state.posubmittedat);
+  const poNumber = trimString_(state.poNumber || state.ponumber);
   const fallback = trimString_(fallbackStatus || state.status).toLowerCase();
 
   const isOperationallyAccepted =
     !!paidAt ||
-    !!authorizedToProduceAt ||
     paymentState === PAYMENT_STATES.paid ||
     paymentState === PAYMENT_STATES.manual_received ||
-    productionAuthorizationState === PRODUCTION_AUTHORIZATION_STATES.authorized ||
-    orderState === ORDER_STATES.ready_for_production ||
+    !!poSubmittedAt ||
+    !!poNumber ||
     orderState === ORDER_STATES.in_production ||
     orderState === ORDER_STATES.closed;
 
