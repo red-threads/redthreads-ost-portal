@@ -10033,7 +10033,7 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
       ].join('')
     : '';
   const htmlBody = buildPortalNativeEmailShellHtml_({
-    eyebrow: 'Red Threads Portal Notification',
+    eyebrow: 'Red Threads Portal - Notification',
     heading: definition.label,
     maxWidth: '640px',
     bodyHtml: [
@@ -23825,7 +23825,7 @@ function buildPortalNativeEmailReviewBannerHtml_(label) {
 function buildPortalNativeEmailShellHtml_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
-  const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal';
+  const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal - Notification';
   const heading = trimString_(opts.heading) || 'Red Threads portal update';
   const subheading = trimString_(opts.subheading);
   const badge = opts.showBadge === true ? buildPortalNativeEmailBadgeHtml_(opts.badgeLabel) : '';
@@ -23940,6 +23940,13 @@ function formatLifecycleEmailProgressDateLabel_(value) {
   return Utilities.formatDate(date, Session.getScriptTimeZone() || 'America/Detroit', 'M/d/yy');
 }
 
+function formatLifecycleEmailProgressMonthDayLabel_(value) {
+  if (!trimString_(value) && !(value instanceof Date)) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone() || 'America/Detroit', 'M/d');
+}
+
 function normalizeLifecycleEmailProgressStageLabel_(key, label) {
   const normalized = trimString_(key).toLowerCase();
   const raw = trimString_(label).toLowerCase();
@@ -23978,14 +23985,40 @@ function resolveLifecycleEmailStepCompletedDate_(step, context) {
   return '';
 }
 
-function resolveLifecycleEmailStepStatusLabel_(step, context) {
+function isLifecycleEmailProductionStep_(step) {
+  const item = (step && typeof step === 'object') ? step : {};
+  const key = trimString_(item.key).toLowerCase();
+  const label = trimString_(item.label).toLowerCase();
+  return key === 'production' ||
+    key === 'print' ||
+    key === 'printing' ||
+    label.indexOf('production') >= 0 ||
+    label.indexOf('print') >= 0;
+}
+
+function resolveLifecycleEmailProgressStatusDisplay_(step, context) {
   const item = (step && typeof step === 'object') ? step : {};
   const state = trimString_(item.state).toLowerCase();
+  const completedDate = resolveLifecycleEmailStepCompletedDate_(item, context);
+  const completedMonthDay = formatLifecycleEmailProgressMonthDayLabel_(completedDate);
+  let label = trimString_(item.label);
+  let status = 'Next';
   if (state === 'complete') {
-    return formatLifecycleEmailProgressDateLabel_(resolveLifecycleEmailStepCompletedDate_(item, context)) || 'Completed';
+    status = completedMonthDay ? ('Completed ' + completedMonthDay) : 'Completed';
+  } else if (state === 'current' && isLifecycleEmailProductionStep_(item)) {
+    label = 'In Production';
+    status = completedMonthDay ? ('Started ' + completedMonthDay) : 'Started';
+  } else if (state === 'current') {
+    status = 'Current action';
   }
-  if (state === 'current') return 'Current action';
-  return 'Next';
+  return {
+    label: label,
+    status: status
+  };
+}
+
+function resolveLifecycleEmailStepStatusLabel_(step, context) {
+  return resolveLifecycleEmailProgressStatusDisplay_(step, context).status;
 }
 
 function getLifecycleEmailProjectNumberLabel_(emailContext) {
@@ -24104,10 +24137,11 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
     timeline: opts.timeline
   };
   const text = normalizedSteps.map(function(step) {
-    return step.label + ': ' + resolveLifecycleEmailStepStatusLabel_(step, progressContext);
+    const display = resolveLifecycleEmailProgressStatusDisplay_(step, progressContext);
+    return display.label + ': ' + display.status;
   }).join('\n');
   const htmlCells = normalizedSteps.map(function(step) {
-    const statusLabel = resolveLifecycleEmailStepStatusLabel_(step, progressContext);
+    const display = resolveLifecycleEmailProgressStatusDisplay_(step, progressContext);
     const labelColor = step.state === 'future' ? theme.futureText : theme.text;
     const statusColor = step.state === 'complete'
       ? theme.successGreen
@@ -24117,13 +24151,14 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
       : (step.state === 'current' ? theme.currentAqua : theme.futureBg);
     return '<td style="padding:0 4px 8px 0;vertical-align:top;width:20%;">' +
       '<div style="height:7px;background:' + barColor + ';border-radius:999px;margin:0 0 8px;"></div>' +
-      '<div style="font-size:12px;line-height:1.25;font-weight:900;color:' + labelColor + ';">' + escapeHtml_(step.label) + '</div>' +
-      '<div style="margin-top:3px;font-size:11px;line-height:1.25;font-weight:900;color:' + statusColor + ';">' + escapeHtml_(statusLabel) + '</div>' +
+      '<div style="font-size:12px;line-height:1.25;font-weight:900;color:' + labelColor + ';">' + escapeHtml_(display.label) + '</div>' +
+      '<div style="margin-top:3px;font-size:11px;line-height:1.25;font-weight:900;color:' + statusColor + ';">' + escapeHtml_(display.status) + '</div>' +
       '</td>';
   }).join('');
   return {
     kind: 'progress',
     steps: normalizedSteps,
+    productionTimingActionLine: getLifecycleEmailProductionTimingActionLine_(ctx, orderSummary),
     text: buildLifecycleEmailTextBlock_('CURRENT ORDER PROGRESS', text.split('\n')),
     html: [
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">',
@@ -24460,20 +24495,81 @@ function buildLifecycleEmailHeaderDisplay_(heading, blocks) {
   };
 }
 
+function isLifecycleEmailNoActionText_(value) {
+  const clean = trimString_(value).toLowerCase();
+  if (!clean) return false;
+  return /^no\s+(?:team\s+)?action\s+(?:is\s+)?(?:needed|required)\b/.test(clean) ||
+    /^no\s+action\s+(?:needed|required)\b/.test(clean);
+}
+
+function isLifecycleEmailActionRequiredText_(value) {
+  const clean = trimString_(value).toLowerCase();
+  if (!clean) return false;
+  return /\b(action required|action needed|required|needed|issue|failed|could not|verify|verification|retry|attention|upload|submit|pay|contact|review|mark)\b/.test(clean) ||
+    /\b(send|make|complete)\s+payment\b/.test(clean);
+}
+
+function resolveLifecycleEmailActionCardTitle_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const nextStep = trimString_(opts.nextStep);
+  const subheading = trimString_(opts.subheading);
+  const intro = trimString_(opts.intro);
+  const statusCopy = trimString_(opts.statusCopy);
+  if (isLifecycleEmailNoActionText_(nextStep)) return 'No action required';
+  if (/action required/i.test(subheading) ||
+      isLifecycleEmailActionRequiredText_(nextStep) ||
+      isLifecycleEmailActionRequiredText_(intro) ||
+      isLifecycleEmailActionRequiredText_(statusCopy)) {
+    return 'Action required';
+  }
+  return 'Current action';
+}
+
+function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, subheading) {
+  const note = trimString_(attachmentNote);
+  if (!note) return '';
+  const haystack = [note, heading, subheading].map(function(value) {
+    return trimString_(value).toLowerCase();
+  }).join(' ');
+  if (/\bestimate\b/.test(haystack)) return 'The estimate for your order is attached to this email.';
+  if (/\breceipt\b/.test(haystack)) return 'The receipt for your order is attached to this email.';
+  if (/\binvoice\b/.test(haystack)) return 'The invoice for your order is attached to this email.';
+  return note;
+}
+
+function shouldSuppressLifecycleEmailActionCta_(cta) {
+  const label = trimString_(cta && cta.label).toLowerCase();
+  return label === 'view red threads receipt';
+}
+
+function shouldOmitLifecycleProjectDetailLineForActionCard_(line, productionTimingActionLine) {
+  const clean = trimString_(line);
+  const promoted = trimString_(productionTimingActionLine);
+  if (!clean || !promoted) return false;
+  return clean === promoted ||
+    /^estimated production completion:/i.test(clean) ||
+    /^estimated turnaround:/i.test(clean);
+}
+
 function buildLifecycleEmailActionCardHtml_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
   const intro = trimString_(opts.intro);
   const statusCopy = trimString_(opts.statusCopy);
   const nextStep = trimString_(opts.nextStep);
+  const attachmentSentence = trimString_(opts.attachmentSentence);
+  const productionTimingLine = trimString_(opts.productionTimingLine);
   const title = trimString_(opts.title) || 'Current action';
   const cta = (opts.primaryCta && typeof opts.primaryCta === 'object') ? opts.primaryCta : null;
-  if (!intro && !statusCopy && !nextStep && !trimString_(cta && cta.url)) return '';
+  const suppressNextAction = isLifecycleEmailNoActionText_(nextStep) && title === 'No action required';
+  if (!intro && !statusCopy && !nextStep && !attachmentSentence && !productionTimingLine && !trimString_(cta && cta.url)) return '';
   const paragraphs = [];
   if (intro) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>');
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
-  if (nextStep) paragraphs.push('<p style="margin:0;color:' + theme.textMuted + ';"><strong style="color:' + theme.text + ';">Next action:</strong> ' + escapeHtml_(nextStep) + '</p>');
-  const ctaHtml = trimString_(cta && cta.url)
+  if (attachmentSentence) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(attachmentSentence) + '</p>');
+  if (nextStep && !suppressNextAction) paragraphs.push('<p style="margin:0;color:' + theme.textMuted + ';"><strong style="color:' + theme.text + ';">Next action:</strong> ' + escapeHtml_(nextStep) + '</p>');
+  if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
+  const ctaHtml = trimString_(cta && cta.url) && !shouldSuppressLifecycleEmailActionCta_(cta)
     ? ('<div style="margin:14px 0 0;"><a href="' + escapeHtml_(cta.url) + '" style="' + buildPortalNativeEmailStyle_({
       display: 'inline-block',
       padding: '10px 15px',
@@ -24530,11 +24626,17 @@ function buildLifecycleEmailShell_(options) {
   const headerDisplay = hasOrderContext
     ? buildLifecycleEmailHeaderDisplay_(heading, detailsBlocks)
     : { heading: heading, subheading: '' };
+  const noActionNextStep = isLifecycleEmailNoActionText_(nextStep);
+  const actionAttachmentSentence = buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, headerDisplay.subheading);
+  const productionTimingActionLine = trimString_((progressBlocks.filter(function(block) {
+    return trimString_(block && block.productionTimingActionLine);
+  })[0] || {}).productionTimingActionLine);
   const textParts = [
     intro,
     statusCopy,
-    nextStep ? ('Next step: ' + nextStep) : '',
-    attachmentNote ? ('Attachment: ' + attachmentNote) : ''
+    nextStep ? ((noActionNextStep ? 'No action required: ' : 'Next step: ') + nextStep) : '',
+    actionAttachmentSentence ? actionAttachmentSentence : (attachmentNote ? ('Attachment: ' + attachmentNote) : ''),
+    productionTimingActionLine
   ];
   blocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
@@ -24554,10 +24656,17 @@ function buildLifecycleEmailShell_(options) {
     : '';
   const actionCardHtml = hasOrderContext
     ? buildLifecycleEmailActionCardHtml_({
-      title: /action required/i.test(headerDisplay.subheading) ? 'Action required' : 'Current action',
+      title: resolveLifecycleEmailActionCardTitle_({
+        subheading: headerDisplay.subheading,
+        intro: intro,
+        statusCopy: statusCopy,
+        nextStep: nextStep
+      }),
       intro: intro,
       statusCopy: statusCopy,
       nextStep: nextStep,
+      attachmentSentence: actionAttachmentSentence,
+      productionTimingLine: productionTimingActionLine,
       primaryCta: primaryCta
     })
     : '';
@@ -24567,12 +24676,17 @@ function buildLifecycleEmailShell_(options) {
   const detailsHtml = detailsBlocks.map(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
     if (item.kind === 'project_details') {
+      const detailLines = productionTimingActionLine
+        ? (Array.isArray(item.lines) ? item.lines : []).filter(function(line) {
+          return !shouldOmitLifecycleProjectDetailLineForActionCard_(line, productionTimingActionLine);
+        })
+        : item.lines;
       return buildLifecycleEmailProjectDetailsHtml_({
         title: item.title,
         projectNumber: item.projectNumber,
         fields: item.fields,
-        lines: item.lines,
-        attachmentNote: attachmentNote,
+        lines: detailLines,
+        attachmentNote: actionAttachmentSentence ? '' : attachmentNote,
         ctaUrl: trimString_(item.ctaUrl || (primaryCta && primaryCta.url))
       });
     }
@@ -24666,6 +24780,16 @@ function resolveLifecycleEmailProductionTimingLines_(workflowContext, orderSumma
   const turnaround = resolveLifecycleEmailLongestTurnaroundLabel_(selectedJobs);
   if (turnaround) lines.push('Estimated turnaround: ' + turnaround);
   return lines;
+}
+
+function getLifecycleEmailProductionTimingActionLine_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const productionStartAt = ctx.productionStartAt || summary.authorizedToProduceAt;
+  const productionActive = !!trimString_(productionStartAt) ||
+    /authorized|started|in_progress|complete/i.test(trimString_(summary.productionAuthorizationState));
+  if (!productionActive) return '';
+  return trimString_(resolveLifecycleEmailProductionTimingLines_(ctx, summary)[0]);
 }
 
 function buildLifecycleEmailHistoryLines_(workflowContext, orderSummary, jobType, options) {
