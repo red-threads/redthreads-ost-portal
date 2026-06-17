@@ -9006,7 +9006,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
       : 'Red Threads ACH payment page',
     body: bodyLines.join('\n'),
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: 'Secure ACH payment page ready.',
+      heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'ACH payment page ready', 'Secure ACH payment page ready.'),
       badgeLabel: 'Payment Ready',
       bodyHtml: htmlBody
     })
@@ -20535,7 +20535,7 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   return {
     body: lines.join('\n'),
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: 'Order confirmation.',
+      heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'Order confirmation', 'Order confirmation.'),
       badgeLabel: 'Invoice Ready',
       bodyHtml: html
     }),
@@ -20961,7 +20961,7 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     subject: subject,
     body: body,
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: 'Purchase order needed.',
+      heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'Purchase order needed', 'Purchase order needed.'),
       badgeLabel: 'PO Step',
       bodyHtml: htmlBody
     })
@@ -23867,15 +23867,29 @@ function buildPortalNativeEmailShellHtml_(options) {
 }
 
 function deriveLifecycleEmailHeadingFromSubject_(subject) {
-  const clean = trimString_(subject);
+  let clean = trimString_(subject);
   if (!clean) return '';
   function finalize(value) {
     const normalized = trimString_(value).replace(/[.]+$/, '');
     if (!normalized) return '';
     return normalized.charAt(0).toUpperCase() + normalized.slice(1) + '.';
   }
-  const redThreadsInvoiceMatch = clean.match(/^Red Threads invoice\s+[^—-]+[—-]\s*(.+)$/i);
-  if (redThreadsInvoiceMatch && redThreadsInvoiceMatch[1]) return finalize(redThreadsInvoiceMatch[1]);
+  function isDocumentLabel(value) {
+    return /^(?:Receipt for\s+)?(?:Invoice|Estimate)\s+[A-Za-z0-9_-]+-v\d+$/i.test(trimString_(value));
+  }
+  clean = clean.replace(/^\[EMAIL REVIEW\]\s+.+?\s+-\s+/i, '');
+  clean = clean.replace(/^Red Threads\s+/i, '');
+  const dashParts = clean.split(/\s+—\s+/).map(function(part) {
+    return trimString_(part);
+  }).filter(Boolean);
+  const documentIndex = dashParts.findIndex(isDocumentLabel);
+  if (documentIndex >= 0) {
+    const documentLabel = dashParts[documentIndex];
+    const updateLabel = dashParts.filter(function(_, index) {
+      return index !== documentIndex;
+    }).join(' — ');
+    return finalize(documentLabel + (updateLabel ? (' — ' + updateLabel) : ''));
+  }
   const invoiceSuffix = clean.replace(/\s+—\s+Red Threads invoice\s+.+$/i, '');
   if (invoiceSuffix && invoiceSuffix !== clean) return finalize(invoiceSuffix);
   const orderSuffix = clean.replace(/\s+for (your|a) Red Threads (order|invoice).*$/i, '');
@@ -23898,13 +23912,15 @@ function formatLifecycleEmailProgressDateLabel_(value) {
 
 function normalizeLifecycleEmailProgressStageLabel_(key, label) {
   const normalized = trimString_(key).toLowerCase();
+  const raw = trimString_(label).toLowerCase();
   if (normalized === 'qty_sizes' || normalized === 'quantity' || normalized === 'quantities' || normalized === 'sizes') {
     return 'Add Quantity Sizes';
   }
-  if (normalized === 'artwork' || normalized === 'art') return 'Approve Artwork';
-  if (normalized === 'order' || normalized === 'place_order' || normalized === 'po_order') return 'Place Order';
-  if (normalized === 'payment' || normalized === 'pay') return 'Make Payment';
-  if (normalized === 'production' || normalized === 'print' || normalized === 'printing') return 'Production Begins';
+  if (raw.indexOf('qty') >= 0 || raw.indexOf('size') >= 0) return 'Add Quantity Sizes';
+  if (normalized === 'artwork' || normalized === 'art' || raw.indexOf('art') >= 0) return 'Approve Artwork';
+  if (normalized === 'order' || normalized === 'place_order' || normalized === 'po_order' || raw.indexOf('order') >= 0) return 'Place Order';
+  if (normalized === 'payment' || normalized === 'pay' || raw.indexOf('pay') >= 0) return 'Make Payment';
+  if (normalized === 'production' || normalized === 'print' || normalized === 'printing' || raw.indexOf('production') >= 0 || raw.indexOf('print') >= 0) return 'Production Begins';
   return trimString_(label);
 }
 
@@ -24062,28 +24078,26 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
   }).join('\n');
   const htmlCells = normalizedSteps.map(function(step) {
     const statusLabel = resolveLifecycleEmailStepStatusLabel_(step, progressContext);
-    const color = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? '#ffffff' : theme.futureText);
-    const statusColor = step.state === 'complete' ? theme.successInk : (step.state === 'current' ? '#ffffff' : theme.futureText);
-    const background = step.state === 'complete'
+    const labelColor = step.state === 'future' ? theme.futureText : theme.text;
+    const statusColor = step.state === 'complete'
+      ? theme.successGreen
+      : (step.state === 'current' ? theme.currentAqua : theme.futureText);
+    const barColor = step.state === 'complete'
       ? theme.successGreen
       : (step.state === 'current' ? theme.currentAqua : theme.futureBg);
-    const border = step.state === 'complete'
-      ? theme.successGreenSoft
-      : (step.state === 'current' ? theme.currentAquaSoft : theme.panelBorder);
     return '<td style="padding:0 4px 8px 0;vertical-align:top;width:20%;">' +
-      '<div style="border:1px solid ' + border + ';background:' + background + ';border-radius:10px;padding:10px 8px;min-height:58px;">' +
-      '<div style="font-size:12px;line-height:1.22;font-weight:900;color:' + color + ';">' + escapeHtml_(step.label) + '</div>' +
-      '<div style="margin-top:5px;font-size:11px;line-height:1.2;font-weight:900;color:' + statusColor + ';">' + escapeHtml_(statusLabel) + '</div>' +
-      '</div>' +
+      '<div style="height:7px;background:' + barColor + ';border-radius:999px;margin:0 0 8px;"></div>' +
+      '<div style="font-size:12px;line-height:1.25;font-weight:900;color:' + labelColor + ';">' + escapeHtml_(step.label) + '</div>' +
+      '<div style="margin-top:3px;font-size:11px;line-height:1.25;font-weight:900;color:' + statusColor + ';">' + escapeHtml_(statusLabel) + '</div>' +
       '</td>';
   }).join('');
   return {
     kind: 'progress',
     steps: normalizedSteps,
-    text: buildLifecycleEmailTextBlock_('Current Order Stage', text.split('\n')),
+    text: buildLifecycleEmailTextBlock_('CURRENT ORDER STAGE', text.split('\n')),
     html: [
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">',
-      '<tr><td style="padding:0 0 8px;font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;letter-spacing:.08em;">Current Order Stage</td></tr>',
+      '<tr><td style="padding:0 0 10px;font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;letter-spacing:.08em;">CURRENT ORDER STAGE</td></tr>',
       '<tr><td>',
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>',
       htmlCells,
@@ -24698,6 +24712,15 @@ function formatLifecycleEmailInvoiceSubject_(prefix, invoiceNumber, fallback) {
   const cleanInvoice = buildClientFacingDocumentLabel_(invoiceNumber);
   if (cleanPrefix && cleanInvoice) return cleanPrefix + ' — ' + cleanInvoice;
   if (cleanPrefix) return cleanPrefix;
+  return trimString_(fallback);
+}
+
+function buildLifecycleEmailDocumentHeading_(documentReference, updateLabel, fallback) {
+  const cleanDocument = buildClientFacingDocumentLabel_(documentReference);
+  const cleanUpdate = trimString_(updateLabel).replace(/[.]+$/, '');
+  if (cleanDocument && cleanUpdate) return cleanDocument + ' — ' + cleanUpdate + '.';
+  if (cleanDocument) return cleanDocument + '.';
+  if (cleanUpdate) return cleanUpdate.charAt(0).toUpperCase() + cleanUpdate.slice(1) + '.';
   return trimString_(fallback);
 }
 
@@ -26751,7 +26774,11 @@ function sendSummaryEstimatePdfEmail(payload) {
     subject: subject,
     body: body,
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: documentKind === PORTAL_DOCUMENT_KINDS.invoice ? 'Invoice document attached.' : 'Estimate document attached.',
+      heading: buildLifecycleEmailDocumentHeading_(
+        documentReference.displayLabel,
+        'document attached',
+        documentKind === PORTAL_DOCUMENT_KINDS.invoice ? 'Invoice document attached.' : 'Estimate document attached.'
+      ),
       badgeLabel: 'Document Ready',
       bodyHtml: htmlBody
     }),
