@@ -22225,8 +22225,10 @@
   const DASHBOARD_ACCOUNT_ID_PARAM = String(VM_REQUEST_ROUTE_META.accountId || URL_QUERY_PARAMS.get('accountId') || '').trim();
   const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
   const PASSWORD_RESET_RETURN_BRIDGE_TOKEN = getPasswordResetReturnBridgeTokenFromQuery_();
-  const ACCOUNT_DOC_DEEPLINK_TYPE = String(URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();
-  const ACCOUNT_DOC_DEEPLINK_ACTION = PASSWORD_RESET_RETURN_BRIDGE_TOKEN ? '' : String(URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
+  const ACCOUNT_DOC_DEEPLINK_TYPE = String(VM_REQUEST_ROUTE_META.accountDoc || URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();
+  const ACCOUNT_DOC_DEEPLINK_ACTION = PASSWORD_RESET_RETURN_BRIDGE_TOKEN
+    ? ''
+    : String(VM_REQUEST_ROUTE_META.accountDocAction || URL_QUERY_PARAMS.get('accountDocAction') || '').trim().toLowerCase();
   const SUMMARY_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('summary') === '1' || VM_REQUEST_ROUTE_META.summary === '1';
   const SETUP_RETURN_RESULT = normalizeSetupReturnResultValue_(VM_REQUEST_ROUTE_META.setupResult || URL_QUERY_PARAMS.get('setupResult'));
   const PAY_NOW_METHOD = String(VM_REQUEST_ROUTE_META.payNow || URL_QUERY_PARAMS.get('payNow') || '').trim().toLowerCase();
@@ -24653,10 +24655,18 @@
     const type = String(ACCOUNT_DOC_DEEPLINK_TYPE || '').trim().toLowerCase();
     const action = String(ACCOUNT_DOC_DEEPLINK_ACTION || '').trim().toLowerCase();
     clearDashboardBootstrapQueryParams_();
-    if (type !== 'credit_terms') return false;
+    if (type !== 'credit_terms' && type !== 'tax_exempt') return false;
     try {
       const requestPayload = await ensureDashboardAccountDocumentContextReady_();
       if (!requestPayload) return false;
+      if (type === 'tax_exempt') {
+        if (action === 'resubmit' || action === 'upload') {
+          await openTaxExemptWorkspace_({ context: 'dashboard', autoOpenUpload: true });
+          return true;
+        }
+        await requestDashboardTaxExemptSubmission();
+        return true;
+      }
       if (action === 'resubmit' || action === 'upload') {
         await openCreditTermsWorkspace_({ context: 'dashboard', autoOpenUpload: true });
         return true;
@@ -24664,7 +24674,7 @@
       await requestDashboardTermsEnrollment();
       return true;
     } catch (err) {
-      showDashboardWorkflowError_(String((err && err.message) || err || 'Unable to open the credit terms workflow.'));
+      showDashboardWorkflowError_(String((err && err.message) || err || 'Unable to open the account document workflow.'));
       return false;
     }
   }
@@ -29002,15 +29012,33 @@
     return text;
   }
 
+  const CREDIT_TERMS_PAGE_IMAGE_LOAD_TIMEOUT_MS = 10000;
+
   function loadCreditTermsPageImageCandidate_(src){
     const candidate = String(src || '').trim();
     if (!candidate) return Promise.reject(new Error('Missing credit terms image candidate.'));
     return new Promise((resolve, reject) => {
       const img = new Image();
+      let settled = false;
+      let timer = 0;
+      const finish = (ok, value) => {
+        if (settled) return;
+        settled = true;
+        if (timer) {
+          window.clearTimeout(timer);
+          timer = 0;
+        }
+        img.onload = null;
+        img.onerror = null;
+        ok ? resolve(value) : reject(value);
+      };
       img.referrerPolicy = 'no-referrer';
-      img.onload = () => resolve(candidate);
-      img.onerror = () => reject(new Error('Credit terms image candidate failed.'));
+      img.onload = () => finish(true, candidate);
+      img.onerror = () => finish(false, new Error('Credit terms image candidate failed.'));
       img.src = candidate;
+      timer = window.setTimeout(() => {
+        finish(false, new Error('Credit terms image candidate timed out.'));
+      }, CREDIT_TERMS_PAGE_IMAGE_LOAD_TIMEOUT_MS);
     });
   }
 
@@ -29065,16 +29093,25 @@
     if (!candidates.length) return Promise.resolve(false);
     let idx = 0;
     let settled = false;
+    let loadTimer = 0;
+    let loadSeq = 0;
     return new Promise(resolve => {
+      const clearLoadTimer = () => {
+        if (!loadTimer) return;
+        window.clearTimeout(loadTimer);
+        loadTimer = 0;
+      };
       const finish = ok => {
         if (settled) return;
+        clearLoadTimer();
         settled = true;
+        img.onload = null;
+        img.onerror = null;
         resolve(!!ok);
       };
       const loadNext = () => {
+        clearLoadTimer();
         if (idx >= candidates.length) {
-          img.onload = null;
-          img.onerror = null;
           finish(false);
           return;
         }
@@ -29083,14 +29120,21 @@
           loadNext();
           return;
         }
-        img.onerror = () => loadNext();
+        const seq = ++loadSeq;
+        img.onerror = () => {
+          if (settled || seq !== loadSeq) return;
+          loadNext();
+        };
         img.onload = () => {
-          img.onload = null;
-          img.onerror = null;
+          if (settled || seq !== loadSeq) return;
           if (typeof onFirstReady === 'function') onFirstReady(img);
           finish(true);
         };
         img.src = nextSrc;
+        loadTimer = window.setTimeout(() => {
+          if (settled || seq !== loadSeq) return;
+          loadNext();
+        }, CREDIT_TERMS_PAGE_IMAGE_LOAD_TIMEOUT_MS);
       };
       loadNext();
     });
@@ -33639,6 +33683,10 @@
     showAccountDocumentLoader_();
     try {
       await ensureTaxFormImageAssetsLoaded_();
+      if (opts.autoOpenUpload === true) {
+        TAX_DOC_EMAIL_PANEL_OPEN = false;
+        TAX_DOC_UPLOAD_PANEL_OPEN = true;
+      }
       renderTaxFormWorkspace_();
       taxDocBackdrop.hidden = false;
       if (TAX_DOC_HIDE_TIMER) {
@@ -33648,7 +33696,9 @@
       requestAnimationFrame(() => {
         taxDocBackdrop.classList.add('open');
         syncOverlayScrollLock();
-        if (taxDocStartHeaderBtn && !taxDocStartHeaderBtn.hidden) {
+        if (opts.autoOpenUpload === true && taxDocUploadChooseBtn) {
+          taxDocUploadChooseBtn.focus();
+        } else if (taxDocStartHeaderBtn && !taxDocStartHeaderBtn.hidden) {
           taxDocStartHeaderBtn.focus();
         } else if (taxDocClose) {
           taxDocClose.focus();

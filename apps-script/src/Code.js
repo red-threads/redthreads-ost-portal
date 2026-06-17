@@ -745,6 +745,8 @@ function buildPortalRequestRouteMeta_(e) {
   const params = (e && e.parameter && typeof e.parameter === 'object') ? e.parameter : {};
   const resetToken = normalizeResetReturnToken_(params.resetToken)
     || normalizeResetReturnBridgeToken_(params.accountDocAction);
+  const accountDoc = normalizeAccountDocumentType_(params.accountDoc);
+  const accountDocAction = normalizePortalAccountDocumentRouteAction_(params.accountDocAction);
   const rawCheckoutResult = String(params.checkoutResult || '').trim().toLowerCase();
   const checkoutResult = (rawCheckoutResult === 'success' || rawCheckoutResult === 'cancel')
     ? rawCheckoutResult
@@ -765,9 +767,18 @@ function buildPortalRequestRouteMeta_(e) {
     paymentOrigin: String(params.paymentOrigin || '').trim(),
     mode: normalizeMode_(params.mode) === 'team' ? 'team' : '',
     teamReview: trimString_(params.teamReview),
+    accountDoc: accountDoc,
+    accountDocAction: accountDocAction,
     reset: (String(params.reset || '').trim() === '1' || resetToken) ? '1' : '',
     resetToken: resetToken
   };
+}
+
+function normalizePortalAccountDocumentRouteAction_(value) {
+  const clean = trimString_(value).toLowerCase();
+  if (!clean || normalizeResetReturnBridgeToken_(clean)) return '';
+  if (clean === 'resubmit' || clean === 'upload' || clean === 'view' || clean === 'review') return clean;
+  return '';
 }
 
 function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
@@ -793,6 +804,8 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     paymentOrigin: String(meta.paymentOrigin || '').trim(),
     mode: normalizeMode_(meta.mode) === 'team' ? 'team' : '',
     teamReview: trimString_(meta.teamReview),
+    accountDoc: normalizeAccountDocumentType_(meta.accountDoc),
+    accountDocAction: normalizePortalAccountDocumentRouteAction_(meta.accountDocAction),
     reset: String(meta.reset || '').trim() === '1' ? '1' : '',
     resetToken: normalizeResetReturnToken_(meta.resetToken)
   };
@@ -9964,21 +9977,51 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
   });
   assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_document);
   const taxBlankEmailFooter = buildStandardNoReplyFooterCopy_();
+  const token = resolveAccountDocumentPortalToken_(ctx);
+  const uploadUrl = token ? buildDashboardAccountDocumentResubmitUrl_(token, definition.type) : '';
+  const uploadInstruction = uploadUrl
+    ? 'Complete and sign the PDF, then click the button below to open your dashboard directly to the sales tax exemption upload step.'
+    : 'Complete and sign the PDF, then log into your Red Threads portal dashboard and choose Tax Exemption to upload the completed form.';
+  const reviewNote = 'The Red Threads team will review the completed form and notify you when the review is complete.';
   const body = [
-    'The blank PDF is attached for your department to review and complete. Please log back into your portal and upload the finished document. Red Threads will review the complete document and notify you upon successful review.',
+    'The blank Michigan sales tax exemption PDF is attached.',
+    uploadInstruction,
+    uploadUrl ? ('Upload sales tax exemption form: ' + uploadUrl) : '',
+    reviewNote,
     '',
     taxBlankEmailFooter
-  ].join('\n');
-  const htmlBody = [
-    '<div style="margin:0;padding:24px 0;background:#000000;">',
-    '  <div style="max-width:640px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads</div>',
-    '    <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">' + escapeHtml_(definition.label) + '</h1>',
-    '    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#cbd5e1;">The blank PDF is attached for your department to review and complete. Please log back into your portal and upload the finished document. Red Threads will review the complete document and notify you upon successful review.</p>',
-    '    <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(taxBlankEmailFooter) + '</p>',
-    '  </div>',
-    '</div>'
-  ].join('\n');
+  ].filter(Boolean).join('\n');
+  const theme = getPortalNativeEmailTheme_();
+  const ctaHtml = uploadUrl
+    ? [
+        '<div style="text-align:center;margin:22px 0;">',
+        '<a href="' + escapeHtml_(uploadUrl) + '" style="' + buildPortalNativeEmailStyle_({
+          display: 'inline-block',
+          padding: '12px 18px',
+          'border-radius': '999px',
+          background: theme.brandRed,
+          color: '#ffffff',
+          'font-size': '14px',
+          'line-height': '1.2',
+          'font-weight': '900',
+          'text-decoration': 'none',
+          border: '1px solid ' + theme.brandRedMid
+        }) + '">Upload sales tax exemption form</a>',
+        '</div>'
+      ].join('')
+    : '';
+  const htmlBody = buildPortalNativeEmailShellHtml_({
+    eyebrow: 'Red Threads Portal - Notification',
+    heading: definition.label,
+    maxWidth: '640px',
+    bodyHtml: [
+      '<p style="margin:0 0 12px;font-size:16px;line-height:1.7;color:' + theme.text + ';">The blank Michigan sales tax exemption PDF is attached.</p>',
+      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(uploadInstruction) + '</p>',
+      ctaHtml,
+      '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(reviewNote) + '</p>',
+      '<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:' + theme.textSoft + ';">' + escapeHtml_(taxBlankEmailFooter) + '</p>'
+    ].filter(Boolean).join('\n')
+  });
   return {
     toList: emailList,
     subject: definition.blankEmailSubject,
@@ -16998,9 +17041,16 @@ function buildLifecycleEmailTeamReviewUrl_(token, reviewType) {
 }
 
 function buildDashboardCreditTermsResubmitUrl_(token) {
-  return appendQueryParamsToUrl_(buildExternalPortalUrl_(token), {
+  return buildDashboardAccountDocumentResubmitUrl_(token, ACCOUNT_DOCUMENT_TYPES.credit_terms);
+}
+
+function buildDashboardAccountDocumentResubmitUrl_(token, documentType) {
+  const tokenValue = trimString_(token);
+  const type = normalizeAccountDocumentType_(documentType);
+  if (!tokenValue || !type) return '';
+  return appendQueryParamsToUrl_(buildExternalPortalUrl_(tokenValue), {
     dashboard: '1',
-    accountDoc: 'credit_terms',
+    accountDoc: type,
     accountDocAction: 'resubmit'
   });
 }
@@ -20196,20 +20246,29 @@ function buildPortalDocumentFileName_(documentReference) {
 function buildPortalEstimateEmailSubject_(documentReference) {
   const ref = buildPortalDocumentReference_(documentReference);
   const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
-  const version = Math.max(1, parseInt(String(ref.version || 1), 10) || 1);
   if (projectNumber && projectNumber !== 'Project') {
-    return 'Red Threads Portal Project ' + projectNumber + ' Estimate-V' + version;
+    return 'Red Threads - Project ' + projectNumber + ' Estimate Copy';
   }
-  return 'Red Threads Portal ' + ref.displayLabel;
+  return 'Red Threads - Estimate Copy';
 }
 
 function buildPortalEstimateEmailHeading_(documentReference) {
   const ref = buildPortalDocumentReference_(documentReference);
   const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
   if (projectNumber && projectNumber !== 'Project') {
-    return 'Project ' + projectNumber + ' - Estimate Attached';
+    return 'Project ' + projectNumber + ' Estimate Copy';
   }
-  return 'Estimate Attached';
+  return 'Estimate Copy';
+}
+
+function buildPortalEstimateEmailAttachmentSentence_(documentReference) {
+  const ref = buildPortalDocumentReference_(documentReference);
+  const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
+  const version = Math.max(1, parseInt(String(ref.version || 1), 10) || 1);
+  const label = projectNumber && projectNumber !== 'Project'
+    ? ('Project ' + projectNumber + ' Estimate-V' + version)
+    : ('Estimate-V' + version);
+  return label + ' is attached to this email.';
 }
 
 function resolvePortalDocumentVersion_(source, options) {
@@ -27238,7 +27297,9 @@ function sendSummaryEstimatePdfEmail(payload) {
     return trimString_(block && block.html);
   }).filter(Boolean).join('\n');
   const body = [
-    documentReference.displayLabel + ' is attached.',
+    documentKind === PORTAL_DOCUMENT_KINDS.estimate
+      ? buildPortalEstimateEmailAttachmentSentence_(documentReference)
+      : (documentReference.displayLabel + ' is attached.'),
     '',
     lifecycleText || [
       dealNumber ? ('Project #: ' + dealNumber) : '',
@@ -27249,7 +27310,9 @@ function sendSummaryEstimatePdfEmail(payload) {
   ].filter(Boolean).join('\n');
   const htmlBody = [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#f8fafc;">',
-    '  <p style="margin:0 0 14px;">' + escapeHtml_(documentReference.displayLabel + ' is attached.') + '</p>',
+    '  <p style="margin:0 0 14px;">' + escapeHtml_(documentKind === PORTAL_DOCUMENT_KINDS.estimate
+      ? buildPortalEstimateEmailAttachmentSentence_(documentReference)
+      : (documentReference.displayLabel + ' is attached.')) + '</p>',
     lifecycleHtml || [
       dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
       projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : ''
@@ -30424,10 +30487,7 @@ function getChatDigestProjectNumberLabel_(projectName, lifecycleSections) {
 }
 
 function buildChatDigestClientCtaLabel_(projectNumber) {
-  const cleanProject = trimString_(projectNumber);
-  return cleanProject
-    ? ('Open Project ' + cleanProject + ' Portal To Reply')
-    : 'Open Project Portal To Reply';
+  return 'Reply to this message in your portal';
 }
 
 function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
@@ -30527,8 +30587,9 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     htmlMessages,
     '    </table>'
   ].join('\n');
+  const theme = getPortalNativeEmailTheme_();
   const ctaHtml = portalUrl
-    ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:13px 20px;border-radius:999px;background:#f43f5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;">' + escapeHtml_(ctaLabel) + '</a></p>')
+    ? ('    <div style="margin:14px 0 0;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a></div>')
     : '';
   const clientMessageAndReplyHtml = !isTeamDigest
     ? [messagesHtmlBlock, ctaHtml].filter(Boolean).join('\n')
@@ -30536,7 +30597,28 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const showProjectSummaryCard = isTeamDigest
     ? !!(projectName || clientEmail)
     : !!(projectName && !lifecycleHtml);
-  const htmlBody = [
+  const clientHeaderLabel = projectNumber
+    ? ('Project # ' + projectNumber + ' — New portal message' + (messageCount === 1 ? '' : 's'))
+    : 'You have new portal messages';
+  const clientMessagePanelHtml = [
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:14px;background:' + theme.panelBg + ';border-collapse:separate;">',
+    '<tr><td style="padding:14px 16px;">',
+    '<p style="margin:0 0 12px;color:' + theme.text + ';">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>',
+    clientMessageAndReplyHtml,
+    '</td></tr>',
+    '</table>'
+  ].filter(Boolean).join('\n');
+  const clientHtmlBody = buildPortalNativeEmailShellHtml_({
+    heading: clientHeaderLabel,
+    bodyHtml: [
+      '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
+      clientMessagePanelHtml,
+      lifecycleHtml,
+      '<p style="margin:0;color:' + theme.textSoft + ';font-size:13px;line-height:1.6;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+      '</div>'
+    ].filter(Boolean).join('\n')
+  });
+  const teamHtmlBody = [
     '<div style="margin:0;padding:24px 0;background:#000000;">',
     '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
     '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads Portal Messages</div>',
@@ -30557,6 +30639,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
+  const htmlBody = isTeamDigest ? teamHtmlBody : clientHtmlBody;
   return {
     subject: subject,
     body: body,
