@@ -23571,6 +23571,9 @@ function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
     return 'Resubmit Credit Terms Document';
   }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied) {
+    return 'Resubmit Sales Tax Exemption Form';
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
@@ -23668,13 +23671,17 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
     const deniedIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied
       ? 'The credit terms associated with your Red Threads account was not approved.'
-      : 'Red Threads reviewed the tax exemption associated with your account.';
+      : (!isTeam
+        ? 'The tax exemption associated with your Red Threads account was not approved.'
+        : 'Red Threads reviewed the tax exemption associated with your account.');
     const creditTermsClientDenied = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied;
+    const taxExemptClientDenied = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied;
+    const accountDocumentClientDenied = creditTermsClientDenied || taxExemptClientDenied;
     return {
       subject: isTeam ? ('Team alert: ' + documentLabel + ' needs attention') : (labels.title + ' needs attention'),
       heading: isTeam ? (labels.title + ' needs attention') : deniedIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? ('Red Threads reviewed the ' + labels.noun + ' associated with this account.') : deniedIntro,
-      statusCopy: creditTermsClientDenied
+      statusCopy: accountDocumentClientDenied
         ? ''
         : trimString_(meta && meta.hardDenied) === 'true'
         ? (isTeam
@@ -23683,7 +23690,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         : (isTeam
           ? 'A correction is needed before approval. Review the account status in Team Mode.'
           : 'A correction is needed before approval. Review your account dashboard for the next step.'),
-      nextStep: creditTermsClientDenied ? '' : isTeam
+      nextStep: accountDocumentClientDenied ? '' : isTeam
         ? ('Review the ' + labels.noun + ' workflow in Team Mode.')
         : ('Upload an updated ' + labels.submission + ' from your account dashboard.'),
       details: details
