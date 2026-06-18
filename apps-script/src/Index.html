@@ -22225,6 +22225,7 @@
   const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1' || VM_REQUEST_ROUTE_META.dashboard === '1';
   const DASHBOARD_ACCOUNT_ID_PARAM = String(VM_REQUEST_ROUTE_META.accountId || URL_QUERY_PARAMS.get('accountId') || '').trim();
   const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
+  const DASHBOARD_ROUTE_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.token || URL_QUERY_PARAMS.get('t') || URL_QUERY_PARAMS.get('token') || '').trim();
   const PASSWORD_RESET_RETURN_BRIDGE_TOKEN = getPasswordResetReturnBridgeTokenFromQuery_();
   const ACCOUNT_DOC_DEEPLINK_TYPE = String(VM_REQUEST_ROUTE_META.accountDoc || URL_QUERY_PARAMS.get('accountDoc') || '').trim().toLowerCase();
   const ACCOUNT_DOC_DEEPLINK_ACTION = PASSWORD_RESET_RETURN_BRIDGE_TOKEN
@@ -22957,6 +22958,10 @@
     if (hasDashboardTokenContext_()) {
       return { token: String(DASHBOARD_CONTEXT_TOKEN || '').trim() };
     }
+    const routeToken = String(DASHBOARD_ROUTE_TOKEN_PARAM || '').trim();
+    if ((DASHBOARD_DEEPLINK_REQUEST || ACCOUNT_DOC_DEEPLINK_TYPE) && routeToken) {
+      return { token: routeToken };
+    }
     const sid = String(AUTH_SESSION_ID || readStoredSessionId() || '').trim();
     if (sid) return { sessionId: sid };
     const fallbackToken = String(CURRENT_TOKEN || '').trim();
@@ -22970,6 +22975,10 @@
     if (req.token) return 'token:' + String(req.token).trim();
     if (req.sessionId) return 'session:' + String(req.sessionId).trim();
     return '';
+  }
+
+  function getDashboardRouteTokenForBoot_(){
+    return String(CURRENT_TOKEN || DASHBOARD_ROUTE_TOKEN_PARAM || INITIAL_TOKEN || (VM && VM.token) || '').trim();
   }
 
   async function ensureDashboardAccountDocumentContextReady_(){
@@ -46272,6 +46281,7 @@
     initPortalParentBridge();
     ensureGlobalOverlayMounts_();
     ensureAuthShellBindings();
+    const dashboardRouteToken = getDashboardRouteTokenForBoot_();
     if (!HAS_PORTAL_TOKEN) {
       if (DASHBOARD_DEEPLINK_REQUEST && hasDashboardAccountContextFromUrl_()) {
         const accountCtx = getDashboardAccountContextFromUrl_();
@@ -46287,6 +46297,32 @@
             setupReturnResult: setupReturnResult
           });
           if (!dashboardResp) return;
+        } finally {
+          rtHideLoader();
+        }
+        scheduleTaxFormImagePreload_();
+        return;
+      }
+      if ((DASHBOARD_DEEPLINK_REQUEST || ACCOUNT_DOC_DEEPLINK_TYPE) && dashboardRouteToken) {
+        rtShowLoader('Loading dashboard', 'Preparing your account view.');
+        try {
+          ensureAuthShellBindings();
+          applyAuthShellRuntimeState();
+          setDashboardTokenContext_(dashboardRouteToken);
+          const setupReturnResult = SETUP_RETURN_RESULT;
+          await reconcileCheckoutReturnOnBoot_();
+          const dashboardResp = await loadDashboardForDeepLink_({
+            requestPayload: { token: dashboardRouteToken },
+            setupReturnResult: setupReturnResult
+          });
+          if (!dashboardResp) return;
+        } catch (err) {
+          setView(VIEW_LOGIN, { focus: false, preserveMessage: true });
+          setAuthMessage(String((err && err.message) || err || 'Unable to open this dashboard link.'), true, {
+            view: VIEW_LOGIN,
+            preserve: true
+          });
+          notifyPortalReady({ reason: 'dashboard-load-failed' });
         } finally {
           rtHideLoader();
         }
@@ -46312,6 +46348,7 @@
     }
 
     if (DASHBOARD_DEEPLINK_REQUEST || ACCOUNT_DOC_DEEPLINK_TYPE) {
+      const activeDashboardToken = getDashboardRouteTokenForBoot_();
       rtShowLoader('Loading dashboard', 'Preparing your account view.');
       try {
         ensureAuthShellBindings();
@@ -46320,15 +46357,22 @@
           const accountCtx = getDashboardAccountContextFromUrl_();
           setDashboardAccountContext_(accountCtx.accountId, accountCtx.accountAccessToken);
         } else {
-          setDashboardTokenContext_(CURRENT_TOKEN);
+          setDashboardTokenContext_(activeDashboardToken);
         }
         const setupReturnResult = SETUP_RETURN_RESULT;
         await reconcileCheckoutReturnOnBoot_();
         const dashboardResp = await loadDashboardForDeepLink_({
-          requestPayload: getDashboardContextRequestPayload_() || { token: CURRENT_TOKEN },
+          requestPayload: getDashboardContextRequestPayload_() || (activeDashboardToken ? { token: activeDashboardToken } : null),
           setupReturnResult: setupReturnResult
         });
         if (!dashboardResp) return;
+      } catch (err) {
+        setView(VIEW_LOGIN, { focus: false, preserveMessage: true });
+        setAuthMessage(String((err && err.message) || err || 'Unable to open this dashboard link.'), true, {
+          view: VIEW_LOGIN,
+          preserve: true
+        });
+        notifyPortalReady({ reason: 'dashboard-load-failed' });
       } finally {
         rtHideLoader();
       }

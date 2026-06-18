@@ -743,6 +743,7 @@ function doGet(e) {
 
 function buildPortalRequestRouteMeta_(e) {
   const params = (e && e.parameter && typeof e.parameter === 'object') ? e.parameter : {};
+  const routeToken = trimString_(params.t || params.token);
   const resetToken = normalizeResetReturnToken_(params.resetToken)
     || normalizeResetReturnBridgeToken_(params.accountDocAction);
   const accountDoc = normalizeAccountDocumentType_(params.accountDoc);
@@ -762,6 +763,7 @@ function buildPortalRequestRouteMeta_(e) {
     dashboard: String(params.dashboard || '').trim() === '1' ? '1' : '',
     summary: String(params.summary || '').trim() === '1' ? '1' : '',
     payNow: trimString_(params.payNow),
+    token: routeToken,
     accountId: String(params.accountId || '').trim(),
     accountAccessToken: String(params.accountAccessToken || params.dashboardAccessToken || '').trim(),
     paymentOrigin: String(params.paymentOrigin || '').trim(),
@@ -799,6 +801,7 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     dashboard: String(meta.dashboard || '').trim() === '1' ? '1' : '',
     summary: String(meta.summary || '').trim() === '1' ? '1' : '',
     payNow: trimString_(meta.payNow),
+    token: trimString_(meta.token),
     accountId: String(meta.accountId || '').trim(),
     accountAccessToken: String(meta.accountAccessToken || '').trim(),
     paymentOrigin: String(meta.paymentOrigin || '').trim(),
@@ -8956,6 +8959,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const invoiceNumber = invoiceReference.displayLabel;
   const projectName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.projectName);
   const dealNumber = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.dealNumber);
+  const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, dealNumber);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const greeting = apName ? ('Hi ' + apName + ',') : 'Hello,';
   const footer = buildStandardNoReplyFooterCopy_();
@@ -8982,8 +8986,8 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const reference = [
     invoiceNumber ? ('Invoice: ' + invoiceNumber) : '',
     dealNumber ? ('Project #: ' + dealNumber) : '',
-    projectName ? ('Project: ' + projectName) : '',
-    'Amount due: ' + amountDue
+    projectNameDisplay ? ('Project name: ' + projectNameDisplay) : '',
+    'Project total: ' + amountDue
   ].filter(Boolean);
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
@@ -9024,8 +9028,8 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
       '  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #1e293b;border-radius:14px;background:#0f172a;">',
       invoiceNumber ? ('    <div><strong>Invoice:</strong> ' + escapeHtml_(invoiceNumber) + '</div>') : '',
       dealNumber ? ('    <div><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</div>') : '',
-      projectName ? ('    <div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '',
-      '    <div><strong>Amount due:</strong> ' + escapeHtml_(amountDue) + '</div>',
+      projectNameDisplay ? ('    <div><strong>Project name:</strong> ' + escapeHtml_(projectNameDisplay) + '</div>') : '',
+      '    <div><strong>Project total:</strong> ' + escapeHtml_(amountDue) + '</div>',
       '  </div>'
     ].filter(Boolean).join('\n'),
     '  <p style="margin:0 0 14px;color:#94a3b8;">' + escapeHtml_(bankDetailsCopy) + '</p>',
@@ -20333,7 +20337,7 @@ function buildPortalEstimateEmailSubject_(documentReference) {
   const ref = buildPortalDocumentReference_(documentReference);
   const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
   if (projectNumber && projectNumber !== 'Project') {
-    return 'Red Threads - Project ' + projectNumber + ' Estimate Copy';
+    return 'Red Threads - Project ' + projectNumber + ' - Estimate Copy';
   }
   return 'Red Threads - Estimate Copy';
 }
@@ -20342,7 +20346,7 @@ function buildPortalEstimateEmailHeading_(documentReference) {
   const ref = buildPortalDocumentReference_(documentReference);
   const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
   if (projectNumber && projectNumber !== 'Project') {
-    return 'Project ' + projectNumber + ' Estimate Copy';
+    return 'Project ' + projectNumber + ' - Estimate Copy';
   }
   return 'Estimate Copy';
 }
@@ -20661,6 +20665,8 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   });
   const invoiceNumber = invoiceReference.displayLabel;
   const projectName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.projectName);
+  const dealNumber = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.dealNumber);
+  const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, dealNumber);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const intro = trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.';
   const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_(ctx, summary, {
@@ -20718,7 +20724,6 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
       : 'Choose a payment option or send payment using the instructions on your invoice.',
     attachmentNote: 'Your invoice is attached.',
     blocks: lifecycleSections.blocks.concat([
-      buildLifecycleEmailCtaBlock_('View your order summary', links.summaryUrl),
       paymentReceived ? null : paymentOptionsBlock,
       buildLifecycleEmailFooter_()
     ].filter(Boolean))
@@ -20726,8 +20731,8 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   if (!lifecycleText) {
     const fallback = [
       invoiceNumber ? ('Invoice: ' + invoiceNumber) : '',
-      projectName ? ('Project: ' + projectName) : '',
-      'Amount due: ' + amountDue
+      projectNameDisplay ? ('Project name: ' + projectNameDisplay) : '',
+      'Project total: ' + amountDue
     ].filter(Boolean).join('\n');
     if (fallback) shell.body += '\n\n' + fallback;
   }
@@ -24373,6 +24378,18 @@ function getLifecycleEmailProjectNumberLabel_(emailContext) {
   return trimString_(summary.dealNumber || summary.projectNumber || summary.dealnumber);
 }
 
+function formatLifecycleEmailProjectNameValue_(projectName, dealNumber) {
+  const cleanName = trimString_(projectName);
+  const cleanProject = trimString_(dealNumber);
+  if (!cleanName || !cleanProject) return cleanName;
+  const escapedProject = cleanProject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const stripped = trimString_(cleanName.replace(
+    new RegExp('^\\s*(?:project\\s*)?#?\\s*' + escapedProject + '(?:\\s*[-:|\\u2013\\u2014]\\s*|\\s+)', 'i'),
+    ''
+  ));
+  return stripped || cleanName;
+}
+
 function buildLifecycleEmailTeamPasswordHintHtml_(password) {
   const clean = trimString_(password);
   if (!clean) return '';
@@ -24508,7 +24525,7 @@ function buildLifecycleEmailProgressSnapshot_(workflowContext, orderSummary, opt
     text: buildLifecycleEmailTextBlock_('CURRENT ORDER PROGRESS', text.split('\n')),
     html: [
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">',
-      '<tr><td style="padding:0 0 10px;font-size:12px;text-transform:uppercase;color:' + theme.currentAqua + ';font-weight:900;letter-spacing:.08em;">CURRENT ORDER PROGRESS</td></tr>',
+      '<tr><td style="padding:0 0 10px;font-size:12px;text-transform:uppercase;color:#ffffff;font-weight:900;letter-spacing:.08em;">CURRENT ORDER PROGRESS</td></tr>',
       '<tr><td>',
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>',
       htmlCells,
@@ -25328,6 +25345,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
   const amount = isReceipt
     ? (roundMoney_(summary.amountChargedTotal) > 0 ? summary.amountChargedTotal : summary.amountGrandTotal)
     : summary.amountGrandTotal;
+  const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, dealNumber);
   const paymentDate = trimString_(summary.paidAt) ? buildLifecycleEmailDateLabel_(summary.paidAt) : '';
   const paymentMethodLabel = trimString_(opts.paymentMethodLabel) ||
     getPaymentLifecycleMethodLabel_(summary.paymentMethodSelected || PAYMENT_METHODS.ach);
@@ -25361,10 +25379,10 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     ctaLabel: ctaLabel,
     teamModePassword: teamModePassword,
     referenceFields: [
-      { label: 'Project', value: projectName },
+      { label: 'Project name', value: projectNameDisplay },
       { label: 'Project #', value: dealNumber },
       { label: 'Invoice', value: invoiceNumber },
-      { label: isReceipt ? 'Amount paid' : 'Amount due', value: formatUsdAmount_(amount) },
+      { label: 'Project total', value: formatUsdAmount_(amount) },
       { label: 'Payment method', value: paymentMethodLabel },
       { label: 'Payment date', value: isReceipt ? paymentDate : '' }
     ],
@@ -27442,27 +27460,45 @@ function sendSummaryEstimatePdfEmail(payload) {
   const lifecycleHtml = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.html);
   }).filter(Boolean).join('\n');
-  const body = [
-    documentKind === PORTAL_DOCUMENT_KINDS.estimate
-      ? buildPortalEstimateEmailAttachmentSentence_(documentReference)
-      : (documentReference.displayLabel + ' is attached.'),
-    '',
-    lifecycleText || [
+  const isEstimateDocument = documentKind === PORTAL_DOCUMENT_KINDS.estimate;
+  const attachmentSentence = isEstimateDocument
+    ? buildPortalEstimateEmailAttachmentSentence_(documentReference)
+    : (documentReference.displayLabel + ' is attached.');
+  const fallbackDetailText = isEstimateDocument
+    ? ''
+    : [
       dealNumber ? ('Project #: ' + dealNumber) : '',
       projectName ? ('Project Name: ' + projectName) : ''
-    ].filter(Boolean).join('\n'),
+    ].filter(Boolean).join('\n');
+  const estimateIntroText = isEstimateDocument
+    ? [
+      projectName ? ('Project Name: ' + projectName) : '',
+      attachmentSentence
+    ].filter(Boolean).join('\n')
+    : attachmentSentence;
+  const fallbackDetailHtml = isEstimateDocument
+    ? ''
+    : [
+      dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
+      projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : ''
+    ].filter(Boolean).join('\n');
+  const estimateIntroHtml = isEstimateDocument
+    ? [
+      projectName ? ('  <p style="margin:0 0 6px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
+      '  <p style="margin:0 0 16px;">' + escapeHtml_(attachmentSentence) + '</p>'
+    ].filter(Boolean).join('\n')
+    : '  <p style="margin:0 0 14px;">' + escapeHtml_(attachmentSentence) + '</p>';
+  const body = [
+    estimateIntroText,
+    '',
+    lifecycleText || fallbackDetailText,
     '',
     NOTIFICATION_REPLY_NOTICE
   ].filter(Boolean).join('\n');
   const htmlBody = [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.65;color:#f8fafc;">',
-    '  <p style="margin:0 0 14px;">' + escapeHtml_(documentKind === PORTAL_DOCUMENT_KINDS.estimate
-      ? buildPortalEstimateEmailAttachmentSentence_(documentReference)
-      : (documentReference.displayLabel + ' is attached.')) + '</p>',
-    lifecycleHtml || [
-      dealNumber ? ('  <p style="margin:0 0 6px;"><strong>Project #:</strong> ' + escapeHtml_(dealNumber) + '</p>') : '',
-      projectName ? ('  <p style="margin:0 0 16px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : ''
-    ].filter(Boolean).join('\n'),
+    estimateIntroHtml,
+    lifecycleHtml || fallbackDetailHtml,
     '  <p style="margin:0;color:#94a3b8;">' + escapeHtml_(NOTIFICATION_REPLY_NOTICE) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
@@ -27472,7 +27508,7 @@ function sendSummaryEstimatePdfEmail(payload) {
     subject: subject,
     body: body,
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: documentKind === PORTAL_DOCUMENT_KINDS.estimate
+      heading: isEstimateDocument
         ? buildPortalEstimateEmailHeading_(documentReference)
         : buildLifecycleEmailDocumentHeading_(
           documentReference.displayLabel,
