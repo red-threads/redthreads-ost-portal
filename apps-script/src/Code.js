@@ -23565,6 +23565,9 @@ function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
     return 'Complete New Credit Terms Application';
   }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
+    return 'Complete Sales Tax Exemption Form';
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
     return 'Resubmit Credit Terms Document';
   }
@@ -23655,7 +23658,9 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         : (isTeam
           ? 'The approved tax exemption status is now associated with the account.'
           : 'The approved tax exemption status is now associated with your account.'),
-      nextStep: 'No action is required.',
+      nextStep: !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
+        ? ''
+        : 'No action is required.',
       details: details
     };
   }
@@ -23695,10 +23700,14 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       intro: isTeam ? ('Red Threads reset the ' + labels.noun + ' associated with this account.') : resetIntro,
       statusCopy: isTeam
         ? 'If a new submission is required, it can be updated from the account dashboard.'
-        : 'If a new submission is required, update it from your account dashboard.',
+        : (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset
+          ? 'If you would like Sales Tax Exemption added to your account, please resubmit the sales tax exemption form in your account dashboard.'
+          : 'If a new submission is required, update it from your account dashboard.'),
       nextStep: isTeam
         ? ('Review the ' + labels.noun + ' workflow in Team Mode.')
-        : ('Upload a new ' + labels.submission + ' from your account dashboard.'),
+        : (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset
+          ? ''
+          : ('Upload a new ' + labels.submission + ' from your account dashboard.')),
       details: details
     };
   }
@@ -23723,6 +23732,7 @@ function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
 
 function resolveAccountDocumentLifecycleNextStep_(copy, milestone, recipientClass) {
   const source = (copy && typeof copy === 'object') ? copy : {};
+  if (Object.prototype.hasOwnProperty.call(source, 'nextStep')) return trimString_(source.nextStep);
   const explicitStep = trimString_(source.nextStep);
   if (explicitStep) return explicitStep;
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
@@ -23805,11 +23815,13 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
       : 'The current completion status is shown below.';
   } else if (isPortalLifecycleAccountDocumentMilestone_(normalized)) {
     const docCopy = buildAccountDocumentEmailCopy_(normalized, recipientClass, meta);
+    const hasDocStatusCopy = docCopy && typeof docCopy === 'object' && Object.prototype.hasOwnProperty.call(docCopy, 'statusCopy');
+    const hasDocNextStep = docCopy && typeof docCopy === 'object' && Object.prototype.hasOwnProperty.call(docCopy, 'nextStep');
     subjectParts.push(docCopy && docCopy.subject ? docCopy.subject : (isTeam ? 'Team alert: account document update' : 'Account document update'));
     heading = docCopy && docCopy.heading ? docCopy.heading : '';
     intro = docCopy && docCopy.intro ? docCopy.intro : 'An account document update was recorded.';
-    statusCopy = docCopy && docCopy.statusCopy ? docCopy.statusCopy : 'Review the portal for the current status.';
-    nextStep = docCopy && docCopy.nextStep ? docCopy.nextStep : '';
+    statusCopy = hasDocStatusCopy ? trimString_(docCopy.statusCopy) : 'Review the portal for the current status.';
+    nextStep = hasDocNextStep ? trimString_(docCopy.nextStep) : '';
     details = docCopy && Array.isArray(docCopy.details) ? docCopy.details : details;
   } else {
     subjectParts.push(isTeam ? 'Team alert: Red Threads portal update' : 'Red Threads portal update');
