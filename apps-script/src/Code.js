@@ -650,7 +650,7 @@ function doGet(e) {
       (e && e.parameter && (e.parameter.t || e.parameter.token))
         ? String(e.parameter.t || e.parameter.token).trim()
         : '';
-    const routeMeta = buildPortalRequestRouteMeta_(e);
+    const routeMeta = hydratePasswordResetRouteMeta_(buildPortalRequestRouteMeta_(e));
     markPortalLoadTiming_(timing, 'request_received', {
       routeType: token ? 'token' : 'auth_shell',
       hasToken: !!token,
@@ -893,6 +893,35 @@ function buildPortalRequestRouteMeta_(e) {
   };
 }
 
+function hydratePasswordResetRouteMeta_(routeMeta) {
+  const meta = Object.assign({}, (routeMeta && typeof routeMeta === 'object') ? routeMeta : {});
+  const resetRequested = String(meta.reset || '').trim() === '1' || !!normalizeResetReturnToken_(meta.resetToken);
+  if (!resetRequested) {
+    meta.resetStatus = '';
+    meta.resetEmail = '';
+    return meta;
+  }
+
+  const cleanToken = normalizeResetReturnToken_(meta.resetToken);
+  meta.reset = '1';
+  meta.resetToken = cleanToken;
+  meta.resetStatus = cleanToken ? 'expired' : 'missing';
+  meta.resetEmail = '';
+  if (!cleanToken) return meta;
+
+  try {
+    const resolved = resolveResetReturnToken_(cleanToken);
+    if (resolved && resolved.ok === true) {
+      const email = normalizeEmail_(resolved.email);
+      if (email) {
+        meta.resetStatus = 'resolved';
+        meta.resetEmail = email;
+      }
+    }
+  } catch (_) {}
+  return meta;
+}
+
 function normalizePortalAccountDocumentRouteAction_(value) {
   const clean = trimString_(value).toLowerCase();
   if (!clean || normalizeResetReturnBridgeToken_(clean)) return '';
@@ -927,9 +956,16 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     accountDoc: normalizeAccountDocumentType_(meta.accountDoc),
     accountDocAction: normalizePortalAccountDocumentRouteAction_(meta.accountDocAction),
     reset: String(meta.reset || '').trim() === '1' ? '1' : '',
-    resetToken: normalizeResetReturnToken_(meta.resetToken)
+    resetToken: normalizeResetReturnToken_(meta.resetToken),
+    resetStatus: normalizePasswordResetRouteStatus_(meta.resetStatus),
+    resetEmail: normalizeEmail_(meta.resetEmail)
   };
   return payload;
+}
+
+function normalizePasswordResetRouteStatus_(value) {
+  const clean = trimString_(value).toLowerCase();
+  return (clean === 'resolved' || clean === 'expired' || clean === 'missing') ? clean : '';
 }
 
 function createIndexTemplate_(vm) {
@@ -15173,9 +15209,17 @@ function authResetPassword(payload) {
     const email = normalizeEmail_(p.email);
     const code = String(p.code || '').trim();
     const newPassword = String(p.newPassword || '');
+    const resetToken = normalizeResetReturnToken_(p.resetToken || p.token);
 
     if (!email || !code || !newPassword) {
       return { ok: false, error: 'Email, code, and new password are required.' };
+    }
+    if (resetToken) {
+      const resolved = resolveResetReturnToken_(resetToken);
+      const resolvedEmail = normalizeEmail_(resolved && resolved.email);
+      if (!resolved || resolved.ok !== true || resolvedEmail !== email) {
+        return { ok: false, error: 'This reset link expired. Enter your email to request a new code.' };
+      }
     }
 
     const cfg = getConfig_();

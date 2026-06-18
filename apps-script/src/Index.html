@@ -1732,6 +1732,13 @@
       border-color:var(--rt-inputBorder);
       color:var(--rt-text);
     }
+    #resetConfirmView .authInput.isLocked,
+    #resetConfirmView .authInput[readonly]{
+      background:rgba(15,23,42,.82);
+      border-color:rgba(148,163,184,.42);
+      color:var(--rt-text);
+      cursor:default;
+    }
     #loginView .authInput::placeholder,
     #resetRequestView .authInput::placeholder,
     #resetConfirmView .authInput::placeholder{
@@ -16875,7 +16882,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 67">67</div>
+  <div class="devRevisionBadge" aria-label="Development revision 68">68</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20967,11 +20974,10 @@
     card.className = 'dashboardAccountCard dashboardAchReadinessCard isInteractive ' + summary.stateClass;
     card.setAttribute('role', 'button');
     card.setAttribute('tabindex', '0');
-    card.setAttribute('aria-label', 'Manage reusable ACH payment accounts. Order checkout and Accounts Payable banks are order-only and do not appear here.');
+    card.setAttribute('aria-label', 'Manage ACH payment accounts.');
     card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH payment accounts'));
     const wrap = createEl('div', 'dashboardAccountCardValueWrap');
     wrap.appendChild(createEl('span', 'dashboardAccountCardValue', 'Manage accounts'));
-    wrap.appendChild(createEl('span', 'dashboardAchReadinessBody', 'Manage reusable ACH banks for future checkout readiness. Order checkout and Accounts Payable banks are order-only.'));
     card.appendChild(wrap);
     card.addEventListener('click', openDashboardAchManageModal_);
     card.addEventListener('keydown', evt => {
@@ -21708,6 +21714,9 @@
   const authResetPassword = document.getElementById('authResetPassword');
   const authResetBtn = document.getElementById('authResetBtn');
   const authResetBackBtn = document.getElementById('authResetBackBtn');
+  let AUTH_RESET_EMAIL_LOCKED = false;
+  let AUTH_RESET_LOCKED_EMAIL = '';
+  let AUTH_RESET_LOCKED_TOKEN = '';
   const authLogoutBtn = document.getElementById('authLogoutBtn');
   const authProjectsTitle = document.getElementById('authProjectsTitle');
   const authProjectsBody = document.getElementById('authProjectsBody');
@@ -22240,6 +22249,8 @@
   const PAYMENT_ORIGIN_PARAM = PAYMENT_ORIGIN_PARAM_RAW || (SUMMARY_DEEPLINK_REQUEST && PAY_NOW_METHOD === 'ach' ? 'ap' : '');
   const PASSWORD_RESET_RETURN_REQUEST = URL_QUERY_PARAMS.get('reset') === '1' || VM_REQUEST_ROUTE_META.reset === '1' || !!PASSWORD_RESET_RETURN_BRIDGE_TOKEN;
   const PASSWORD_RESET_RETURN_TOKEN = String(VM_REQUEST_ROUTE_META.resetToken || URL_QUERY_PARAMS.get('resetToken') || PASSWORD_RESET_RETURN_BRIDGE_TOKEN || '').trim();
+  const PASSWORD_RESET_RETURN_STATUS = String(VM_REQUEST_ROUTE_META.resetStatus || '').trim().toLowerCase();
+  const PASSWORD_RESET_RETURN_EMAIL = String(VM_REQUEST_ROUTE_META.resetEmail || '').trim();
   const PO_RESUME_REQUEST = URL_QUERY_PARAMS.get('resumePo') === '1';
   const PO_RESUME_STAGE = String(URL_QUERY_PARAMS.get('poStage') || '').trim().toLowerCase();
   let HAS_PORTAL_TOKEN = false;
@@ -27441,6 +27452,50 @@
     openTaxExemptWorkspace_({ context: 'dashboard' });
   }
 
+  function setPasswordResetEmailLock_(email, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const cleanEmail = String(email || '').trim();
+    const shouldLock = opts.lock === true && !!cleanEmail;
+    AUTH_RESET_EMAIL_LOCKED = shouldLock;
+    AUTH_RESET_LOCKED_EMAIL = shouldLock ? cleanEmail : '';
+    AUTH_RESET_LOCKED_TOKEN = shouldLock ? String(opts.resetToken || '').trim() : '';
+    if (!authResetEmail) return;
+    authResetEmail.value = cleanEmail;
+    authResetEmail.readOnly = shouldLock;
+    authResetEmail.classList.toggle('isLocked', shouldLock);
+    if (shouldLock) {
+      authResetEmail.setAttribute('readonly', 'readonly');
+      authResetEmail.setAttribute('aria-readonly', 'true');
+      authResetEmail.setAttribute('tabindex', '-1');
+    } else {
+      authResetEmail.removeAttribute('readonly');
+      authResetEmail.removeAttribute('aria-readonly');
+      authResetEmail.removeAttribute('tabindex');
+    }
+  }
+
+  function clearPasswordResetEmailLock_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const currentEmail = AUTH_RESET_LOCKED_EMAIL || String((authResetEmail && authResetEmail.value) || '').trim();
+    AUTH_RESET_EMAIL_LOCKED = false;
+    AUTH_RESET_LOCKED_EMAIL = '';
+    AUTH_RESET_LOCKED_TOKEN = '';
+    if (!authResetEmail) return currentEmail;
+    authResetEmail.readOnly = false;
+    authResetEmail.classList.remove('isLocked');
+    authResetEmail.removeAttribute('readonly');
+    authResetEmail.removeAttribute('aria-readonly');
+    authResetEmail.removeAttribute('tabindex');
+    if (opts.clearValue !== false) authResetEmail.value = '';
+    return currentEmail;
+  }
+
+  function getPasswordResetSubmitEmail_(){
+    return AUTH_RESET_EMAIL_LOCKED
+      ? AUTH_RESET_LOCKED_EMAIL
+      : String((authResetEmail && authResetEmail.value) || '').trim();
+  }
+
   function ensureAuthShellBindings(){
     if (AUTH_SHELL_BOUND) return;
     AUTH_SHELL_BOUND = true;
@@ -27563,6 +27618,7 @@
 
     if (authForgotBtn) {
       authForgotBtn.addEventListener('click', () => {
+        clearPasswordResetEmailLock_();
         if (authForgotEmail && authLoginEmail) authForgotEmail.value = String(authLoginEmail.value || '').trim();
         setView(VIEW_RESET_REQUEST);
         setAuthMessage('', false, { view: VIEW_RESET_REQUEST });
@@ -27571,6 +27627,7 @@
 
     if (authForgotBackBtn) {
       authForgotBackBtn.addEventListener('click', () => {
+        clearPasswordResetEmailLock_();
         setView(VIEW_LOGIN);
         setAuthMessage('', false, { view: VIEW_LOGIN });
       });
@@ -27590,7 +27647,7 @@
           if (!resp || resp.ok !== true) {
             throw new Error(String((resp && resp.error) || 'Unable to send code.'));
           }
-          if (authResetEmail) authResetEmail.value = email;
+          setPasswordResetEmailLock_(email, { lock: true });
           if (authResetCode) authResetCode.value = '';
           if (authResetPassword) authResetPassword.value = '';
           setView(VIEW_RESET_CONFIRM, { preserveMessage: true });
@@ -27605,6 +27662,8 @@
 
     if (authResetBackBtn) {
       authResetBackBtn.addEventListener('click', () => {
+        const email = clearPasswordResetEmailLock_();
+        if (authForgotEmail) authForgotEmail.value = email;
         setView(VIEW_RESET_REQUEST);
         setAuthMessage('', false, { view: VIEW_RESET_REQUEST });
       });
@@ -27612,7 +27671,7 @@
 
     if (authResetBtn) {
       authResetBtn.addEventListener('click', async () => {
-        const email = String((authResetEmail && authResetEmail.value) || '').trim();
+        const email = getPasswordResetSubmitEmail_();
         const code = String((authResetCode && authResetCode.value) || '').trim();
         const newPassword = String((authResetPassword && authResetPassword.value) || '');
         if (!email || !code || !newPassword) {
@@ -27622,14 +27681,17 @@
         setButtonBusy(authResetBtn, true, 'Saving...', 'Set password');
         setAuthMessage('', false, { view: VIEW_RESET_CONFIRM });
         try {
-          const resp = await callServer('authResetPassword', {
+          const payload = {
             email: email,
             code: code,
             newPassword: newPassword
-          });
+          };
+          if (AUTH_RESET_EMAIL_LOCKED && AUTH_RESET_LOCKED_TOKEN) payload.resetToken = AUTH_RESET_LOCKED_TOKEN;
+          const resp = await callServer('authResetPassword', payload);
           if (!resp || resp.ok !== true) {
             throw new Error(String((resp && resp.error) || 'Unable to reset password.'));
           }
+          clearPasswordResetEmailLock_();
           setView(VIEW_LOGIN, { preserveMessage: true });
           if (authLoginEmail) authLoginEmail.value = email;
           if (authLoginPassword) authLoginPassword.value = '';
@@ -27655,6 +27717,8 @@
         setView(VIEW_LOGIN);
         setAuthMessage('', false, { view: VIEW_LOGIN });
       } else if (resetConfirmView && !resetConfirmView.hidden) {
+        const email = clearPasswordResetEmailLock_();
+        if (authForgotEmail) authForgotEmail.value = email;
         setView(VIEW_RESET_REQUEST);
         setAuthMessage('', false, { view: VIEW_RESET_REQUEST });
       }
@@ -27662,8 +27726,8 @@
   }
 
   function showExpiredPasswordResetReturn_(){
+    clearPasswordResetEmailLock_();
     if (authForgotEmail) authForgotEmail.value = '';
-    if (authResetEmail) authResetEmail.value = '';
     if (authResetCode) authResetCode.value = '';
     if (authResetPassword) authResetPassword.value = '';
     setView(VIEW_RESET_REQUEST, { preserveMessage: true });
@@ -27677,15 +27741,28 @@
     if (!PASSWORD_RESET_RETURN_REQUEST) return false;
     if (authResetCode) authResetCode.value = '';
     if (authResetPassword) authResetPassword.value = '';
-    setView(VIEW_RESET_CONFIRM, { focus: false, preserveMessage: true });
-    setAuthMessage('Opening password reset. One moment...', false, {
-      view: VIEW_RESET_CONFIRM,
-      preserve: true
-    });
     if (!PASSWORD_RESET_RETURN_TOKEN) {
       showExpiredPasswordResetReturn_();
       return true;
     }
+    if (PASSWORD_RESET_RETURN_STATUS === 'resolved' && PASSWORD_RESET_RETURN_EMAIL) {
+      setPasswordResetEmailLock_(PASSWORD_RESET_RETURN_EMAIL, {
+        lock: true,
+        resetToken: PASSWORD_RESET_RETURN_TOKEN
+      });
+      if (authForgotEmail) authForgotEmail.value = PASSWORD_RESET_RETURN_EMAIL;
+      setView(VIEW_RESET_CONFIRM);
+      return true;
+    }
+    if (PASSWORD_RESET_RETURN_STATUS === 'expired' || PASSWORD_RESET_RETURN_STATUS === 'missing') {
+      showExpiredPasswordResetReturn_();
+      return true;
+    }
+    setView(VIEW_RESET_CONFIRM, { focus: false, preserveMessage: true });
+    setAuthMessage('Preparing password reset...', false, {
+      view: VIEW_RESET_CONFIRM,
+      preserve: true
+    });
     callServer('authResolveResetReturnToken', {
       resetToken: PASSWORD_RESET_RETURN_TOKEN
     }).then(resp => {
@@ -27694,15 +27771,14 @@
         return;
       }
       const email = String(resp.email || '').trim();
-      if (authResetEmail) authResetEmail.value = email;
+      setPasswordResetEmailLock_(email, {
+        lock: true,
+        resetToken: PASSWORD_RESET_RETURN_TOKEN
+      });
       if (authForgotEmail) authForgotEmail.value = email;
       if (authResetCode) authResetCode.value = '';
       if (authResetPassword) authResetPassword.value = '';
-      setView(VIEW_RESET_CONFIRM, { preserveMessage: true });
-      setAuthMessage('Enter the reset code from your email and choose a new password.', false, {
-        view: VIEW_RESET_CONFIRM,
-        preserve: true
-      });
+      setView(VIEW_RESET_CONFIRM);
     }).catch(() => {
       showExpiredPasswordResetReturn_();
     });
