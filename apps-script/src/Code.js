@@ -23558,7 +23558,8 @@ function getAccountDocumentEmailLabels_(meta) {
 function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   const labels = getAccountDocumentEmailLabels_(meta);
-  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved) {
     return 'Open Red Threads Portal Account Dashboard';
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
@@ -23701,8 +23702,16 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
 function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   if (getPortalLifecycleEmailRecipientClass_(recipientClass) !== 'client') return '';
-  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) return 'next_step_first';
-  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) return 'no_action_first';
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved) {
+    return 'no_action_first';
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
+    return 'next_step_first';
+  }
   return '';
 }
 
@@ -25591,12 +25600,12 @@ function buildLifecycleEmailShell_(options) {
     hasOrderContext ? actionCardHtml : (nonOrderNextStepFirst ? nonOrderNextStepHtml : primaryCtaHtml),
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
-    !hasOrderContext && nonOrderNoActionFirst ? accountDetailsHtml : '',
+    !hasOrderContext && nonOrderNextStepFirst ? accountDetailsHtml : '',
     !hasOrderContext && nonOrderNextStepFirst ? nonOrderPrimaryCtaHtml : '',
     !hasOrderContext && !nonOrderNextStepFirst ? nonOrderNextStepHtml : '',
     progressHtml,
     detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html,
-    !hasOrderContext && !nonOrderNoActionFirst ? accountDetailsHtml : ''
+    !hasOrderContext && !nonOrderNextStepFirst ? accountDetailsHtml : ''
   ];
   genericBlocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
