@@ -25424,6 +25424,7 @@ function buildLifecycleEmailHeaderDisplay_(heading, blocks) {
 function isLifecycleEmailNoActionText_(value) {
   const clean = trimString_(value).toLowerCase();
   if (!clean) return false;
+  if (clean === 'you can now toggle sales tax on and off your orders.') return true;
   return /^no\s+(?:team\s+)?action\s+(?:is\s+)?(?:needed|required)\b/.test(clean) ||
     /^no\s+(?:ap\s+)?payment\s+action\s+(?:is\s+)?(?:needed|required)\b/.test(clean) ||
     /^no\s+action\s+(?:needed|required)\b/.test(clean);
@@ -25456,7 +25457,7 @@ function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, s
   const note = trimString_(attachmentNote);
   if (!note) return '';
   if (note === 'The invoice/receipt for your order is attached to this email.' ||
-      note === 'Your invoice/receipt is attached to this email updated in the portal.' ||
+      note === 'Your invoice/receipt is attached to this email and available in your portal.' ||
       note === 'The invoice/receipt for your order is attached to this email, and payment is still required.') {
     return note;
   }
@@ -26212,7 +26213,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       : formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received for your Red Threads order'),
     intro: isTeamAlert ? 'Purchase order payment has been recorded as received.' : 'Your purchase order payment has been received.',
     statusCopy: isTeamAlert ? 'The order payment is recorded as received.' : '',
-    attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'Your invoice/receipt is attached to this email updated in the portal.'
+    attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'Your invoice/receipt is attached to this email and available in your portal.'
   });
 }
 
@@ -29075,7 +29076,17 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'blank tax document source client': 'validated_email_omitted',
   'explicit locked-order resend client': 'validated_email_omitted',
   'summary/invoice explicit send client': 'validated_email_omitted',
-  'credit terms reset client': 'validated_email_omitted'
+  'credit terms reset client': 'validated_email_omitted',
+  'credit terms denied client': 'validated_email_omitted',
+  'credit terms approved client': 'validated_email_omitted',
+  'tax exempt reset client': 'validated_email_omitted',
+  'tax exempt denied client': 'validated_email_omitted',
+  'tax exempt approved client': 'validated_email_omitted',
+  'po submitted client': 'validated_email_omitted',
+  'po payment received client': 'validated_email_omitted',
+  'manual payment received client': 'validated_email_omitted',
+  'manual payment pending client': 'validated_email_omitted',
+  'card failed client': 'validated_email_omitted'
 };
 
 function getEmailReviewSuiteOmissionReason_(label) {
