@@ -22691,7 +22691,7 @@ function getApAchLifecycleCtaLabel_(milestone, recipientClass) {
   if (trimString_(recipientClass) === 'team') return 'View project in portal';
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) return 'Open AP ACH payment';
   if (isApAchLifecycleReceiptMilestone_(normalized)) return 'View Red Threads receipt';
-  if (isApAchLifecycleFailureMilestone_(normalized)) return 'Return to AP payment link';
+  if (isApAchLifecycleFailureMilestone_(normalized)) return 'Return to Portal/Project and retry payment';
   return 'View AP payment status';
 }
 
@@ -22728,7 +22728,7 @@ function getApAchLifecycleNextStepText_(milestone, recipientClass, fallback) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
     return isTeamAlert
       ? 'Review the AP ACH payment issue before production continues.'
-      : 'Return to the AP payment link or contact Red Threads so payment can be resolved.';
+      : 'Click the button below to return to the Portal/Project and retry payment, or contact Red Threads for help.';
   }
   return trimString_(fallback);
 }
@@ -26212,12 +26212,12 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
       ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment issue', invoiceNumber, 'Team alert: AP ACH payment issue')
-      : formatLifecycleEmailInvoiceSubject_('Action needed — AP ACH payment issue', invoiceNumber, 'Action needed — AP ACH payment issue for a Red Threads invoice'),
-    intro: isTeamAlert ? 'An AP ACH payment needs review.' : 'The AP ACH payment could not be completed.',
+      : formatLifecycleEmailInvoiceSubject_('ACH Payment Issue, Order Paused', invoiceNumber, 'ACH Payment Issue, Order Paused for a Red Threads project'),
+    intro: isTeamAlert ? 'An AP ACH payment needs review.' : 'The ACH payment made by Accounts Payable could not be completed by our payment processor, Stripe.',
     statusCopy: isTeamAlert
       ? 'Review the portal payment state before production continues.'
-      : 'Payment must be resolved before production can continue. Return to the AP payment page or contact Red Threads for help.',
-    attachmentNote: 'An invoice/status PDF may be attached when available.'
+      : 'The invoice for the order is attached to this email for your reference. Payment must be received before Red Threads can begin production.',
+    attachmentNote: isTeamAlert ? 'An invoice/status PDF may be attached when available.' : ''
   });
 }
 
@@ -26231,10 +26231,10 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment received', invoiceNumber, 'Team alert: card payment received')
-        : formatLifecycleEmailInvoiceSubject_('Card payment received', invoiceNumber, 'Card payment received for your Red Threads order'),
-      intro: isTeamAlert ? 'A card payment has been received.' : 'Your card payment has been received.',
-      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : 'Your order is authorized for production when reflected by the current portal status.',
-      attachmentNote: 'Your updated receipt is attached.'
+        : formatLifecycleEmailInvoiceSubject_('Payment Received, Order Started', invoiceNumber, 'Payment Received, Order Started for your Red Threads order'),
+      intro: isTeamAlert ? 'A card payment has been received.' : 'Your credit card payment has been received, and your order will begin production. The invoice/receipt for your order is attached to this email.',
+      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : '',
+      attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : ''
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
@@ -29156,8 +29156,10 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'tax exempt approved client': 'validated_email_omitted',
   'po submitted client': 'validated_email_omitted',
   'po payment received client': 'validated_email_omitted',
+  'po invoice prepared client': 'validated_email_omitted',
   'manual payment received client': 'validated_email_omitted',
   'manual payment pending client': 'validated_email_omitted',
+  'card paid client': 'validated_email_omitted',
   'card failed client': 'validated_email_omitted',
   'standard ach pending client': 'validated_email_omitted',
   'standard ach verification client': 'validated_email_omitted',
