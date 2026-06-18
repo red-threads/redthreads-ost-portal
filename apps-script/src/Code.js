@@ -21100,7 +21100,11 @@ function formatUsdAmount_(value) {
 function buildCheckPaymentInstructionsText_(orderSummary) {
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   return [
-    'If paying by check, mail the check for ' + formatUsdAmount_(summary.amountGrandTotal) + ' to:',
+    'Paying by check/cash',
+    'Make the check out to: Red Threads LLC',
+    'In the exact amount of: ' + formatUsdAmount_(summary.amountGrandTotal),
+    '',
+    'Mail/deliver the payment to:',
     'Red Threads',
     '505 South Saginaw Road',
     'Midland, Michigan 48640'
@@ -21111,8 +21115,8 @@ function buildCheckPaymentInstructionsHtml_(orderSummary) {
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   return [
     '<div style="margin:16px 0 0;padding:14px 16px;border-radius:14px;border:1px solid #1e293b;background:#111827;color:#cbd5e1;">',
-    '  <div style="font-weight:800;margin-bottom:6px;">Paying by check</div>',
-    '  <div style="font-size:14px;line-height:1.7;">Mail the check for <strong>' + escapeHtml_(formatUsdAmount_(summary.amountGrandTotal)) + '</strong> to:<br>Red Threads<br>505 South Saginaw Road<br>Midland, Michigan 48640</div>',
+    '  <div style="font-weight:800;margin-bottom:6px;">Paying by check/cash</div>',
+    '  <div style="font-size:14px;line-height:1.7;">Make the check out to: <strong>Red Threads LLC</strong><br>In the exact amount of: <strong>' + escapeHtml_(formatUsdAmount_(summary.amountGrandTotal)) + '</strong><br><br>Mail/deliver the payment to:<br>Red Threads<br>505 South Saginaw Road<br>Midland, Michigan 48640</div>',
     '</div>'
   ].join('\n');
 }
@@ -24341,17 +24345,11 @@ function buildPaymentLifecycleInstructionsBlock_(milestone, orderSummary) {
   const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   const method = trimString_(summary.paymentMethodSelected).toLowerCase();
-  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending && method === PAYMENT_METHODS.check) {
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending &&
+      (method === PAYMENT_METHODS.check || method === PAYMENT_METHODS.cash)) {
     return {
       text: buildLifecycleEmailTextBlock_('Payment instructions', [buildCheckPaymentInstructionsText_(summary)]),
       html: buildCheckPaymentInstructionsHtml_(summary)
-    };
-  }
-  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending && method === PAYMENT_METHODS.cash) {
-    const text = 'Coordinate cash payment directly with Red Threads. Production begins after the team records payment received.';
-    return {
-      text: buildLifecycleEmailTextBlock_('Payment instructions', [text]),
-      html: '<div style="margin:16px 0 18px;padding:14px 16px;border:1px solid #1e293b;border-radius:12px;background:#0f172a;color:#cbd5e1;"><strong>Payment instructions</strong><br>' + escapeHtml_(text) + '</div>'
     };
   }
   return { text: '', html: '' };
@@ -25430,7 +25428,8 @@ function resolveLifecycleEmailActionCardTitle_(options) {
 function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, subheading) {
   const note = trimString_(attachmentNote);
   if (!note) return '';
-  if (note === 'Your invoice/receipt is attached to this email updated in the portal.' ||
+  if (note === 'The invoice/receipt for your order is attached to this email.' ||
+      note === 'Your invoice/receipt is attached to this email updated in the portal.' ||
       note === 'The invoice/receipt for your order is attached to this email, and payment is still required.') {
     return note;
   }
@@ -25479,7 +25478,9 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
   if (attachmentSentence) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(attachmentSentence) + '</p>');
   if (nextStep && !suppressNextAction) {
-    const nextStepHtml = escapeHtml_(nextStep).replace(/portal link/g, '<span style="color:' + theme.brandRedMid + ';">portal link</span>');
+    const nextStepHtml = escapeHtml_(nextStep)
+      .replace(/portal link/g, '<span style="color:' + theme.brandRedMid + ';">portal link</span>')
+      .replace(/Red Threads Portal/g, '<span style="color:' + theme.brandRedMid + ';">Red Threads Portal</span>');
     paragraphs.push('<p style="margin:0;color:' + theme.currentAqua + ';font-weight:900;"><strong style="color:' + theme.currentAqua + ';">Next action:</strong> ' + nextStepHtml + '</p>');
   }
   if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
@@ -25814,7 +25815,7 @@ function formatLifecycleEmailNextActionText_(workflowContext, options) {
         place_order: 'Return to the portal when you are ready to place the order.',
         complete_checkout: 'Return to the portal to complete Checkout.',
         submit_purchase_order: 'Return to the portal to submit your purchase order.',
-        send_manual_payment: 'Send payment using the instructions on your invoice.',
+        send_manual_payment: 'Make a payment for your order. Check/cash payment instructions are below. You can pay online via Credit Card or ACH in your Red Threads Portal at anytime.',
         pay_invoice: 'Return to the portal to pay the invoice.',
         wait_for_production: 'No action is needed while production continues.',
         none: 'No action is needed right now.'
@@ -26150,10 +26151,11 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment pending', invoiceNumber, 'Team alert: manual payment pending')
-        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — payment pending') : 'Red Threads order placed — payment pending'),
+        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — Order Placed, Payment Required to Begin Production') : 'Red Threads order placed — payment required to begin production'),
+      heading: isTeamAlert ? '' : 'Order Placed, Payment Required to Begin Production',
       intro: isTeamAlert ? (methodLabel + ' payment order was placed.') : 'Your Red Threads order has been placed.',
       statusCopy: isTeamAlert ? 'Production is waiting for the team to record payment as received.' : 'Production begins after Red Threads records payment as received unless otherwise approved.',
-      attachmentNote: 'Your invoice is attached.'
+      attachmentNote: isTeamAlert ? 'Your invoice is attached.' : 'The invoice/receipt for your order is attached to this email.'
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
