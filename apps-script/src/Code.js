@@ -31259,6 +31259,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
       : trimString_(message.authorName || deriveSenderNameForNotification_(row, 'client', opts) || 'Client');
     return {
       senderName: senderName,
+      isTeamMessage: trimString_(message.sender).toLowerCase() === 'team',
       timestamp: formatChatMessageDigestTimestamp_(message.ts),
       text: trimString_(message.text)
     };
@@ -31285,7 +31286,6 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         'Hi ' + firstName + ',',
         '',
         'You have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.',
-        'Messages:',
         plainMessageLines.join('\n').trim(),
         '',
         portalUrl ? (ctaLabel + ': ' + portalUrl) : '',
@@ -31295,12 +31295,15 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         '',
         '- Red Threads Team'
       ].filter(Boolean).join('\n');
+  const theme = getPortalNativeEmailTheme_();
   const htmlMessages = messageRows.map(function(messageRow) {
+    const metaColor = messageRow.isTeamMessage ? theme.brandRedMid : '#94a3b8';
+    const textColor = messageRow.isTeamMessage ? theme.brandRedMid : '#cbd5e1';
     return [
       '      <tr>',
       '        <td style="padding:14px 16px;border-top:1px solid #1e293b;">',
-      '          <div style="font-size:13px;line-height:1.5;color:#94a3b8;"><strong style="color:#f8fafc;">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:#94a3b8;">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
-      '          <div style="margin-top:8px;font-size:15px;line-height:1.65;color:#cbd5e1;white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
+      '          <div style="font-size:13px;line-height:1.5;color:' + metaColor + ';"><strong style="color:' + metaColor + ';">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:' + metaColor + ';">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
+      '          <div style="margin-top:8px;font-size:15px;line-height:1.65;color:' + textColor + ';white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
       '        </td>',
       '      </tr>'
     ].join('\n');
@@ -31311,12 +31314,22 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     htmlMessages,
     '    </table>'
   ].join('\n');
-  const theme = getPortalNativeEmailTheme_();
   const ctaHtml = portalUrl
     ? ('    <div style="margin:14px 0 0;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a></div>')
     : '';
+  const clientHtmlMessagesBlock = messageRows.map(function(messageRow, index) {
+    const metaColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.textSoft;
+    const textColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.textMuted;
+    const separator = index > 0 ? ('padding-top:12px;border-top:1px solid ' + theme.panelBorderSoft + ';') : '';
+    return [
+      '<div style="margin:0 0 14px;' + separator + '">',
+      '  <div style="font-size:13px;line-height:1.5;color:' + metaColor + ';"><strong style="color:' + metaColor + ';">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:' + metaColor + ';">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
+      '  <div style="margin-top:8px;font-size:15px;line-height:1.65;color:' + textColor + ';white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
+      '</div>'
+    ].join('\n');
+  }).join('\n');
   const clientMessageAndReplyHtml = !isTeamDigest
-    ? [messagesHtmlBlock, ctaHtml].filter(Boolean).join('\n')
+    ? [clientHtmlMessagesBlock, ctaHtml].filter(Boolean).join('\n')
     : '';
   const showProjectSummaryCard = isTeamDigest
     ? !!(projectName || clientEmail)

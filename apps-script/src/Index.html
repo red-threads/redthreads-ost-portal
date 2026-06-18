@@ -1044,6 +1044,56 @@
       color:#67e8f9;
       font-weight:800;
     }
+    .authProjectsLoadingRow td{
+      padding:16px 18px;
+      text-align:center;
+    }
+    .authProjectsLoadingCard{
+      position:relative;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      min-height:38px;
+      min-width:min(100%, 360px);
+      padding:10px 16px;
+      border-radius:16px;
+      border:1px solid rgba(115,255,208,.18);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)),
+        rgba(15,23,42,.92);
+      color:#dffef5;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      overflow:hidden;
+      isolation:isolate;
+    }
+    .authProjectsLoadingCard::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      transform:translateX(-100%);
+      background:linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(115,255,208,.2) 45%, rgba(255,255,255,.06) 60%, rgba(255,255,255,0) 100%);
+      animation:dashboardStatusSheen 1.25s linear infinite;
+      z-index:0;
+    }
+    .authProjectsLoadingSpinner{
+      position:relative;
+      z-index:1;
+      width:14px;
+      height:14px;
+      border-radius:999px;
+      border:2px solid rgba(115,255,208,.22);
+      border-top-color:#73ffd0;
+      animation:rtSpin .75s linear infinite;
+      flex:0 0 auto;
+    }
+    .authProjectsLoadingText{
+      position:relative;
+      z-index:1;
+    }
     .authProjectsStatusSkeleton{
       position:relative;
       width:100%;
@@ -16882,7 +16932,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 68">68</div>
+  <div class="devRevisionBadge" aria-label="Development revision 69">69</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -22422,9 +22472,12 @@
   const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT = new Map();
   const DASHBOARD_PEEK_IMAGE_PREWARM_CACHE = new Map();
   const DASHBOARD_HOME_RESPONSE_CACHE = new Map();
+  const DASHBOARD_HOME_BACKGROUND_INFLIGHT = new Map();
   let DASHBOARD_PROJECT_PAYLOAD_PREFETCH_SEQ = 0;
   let DASHBOARD_HOME_RESPONSE_CACHE_SEQ = 0;
+  let DASHBOARD_HOME_BACKGROUND_SEQ = 0;
   let DASHBOARD_HOME_FRESH_RETURN_REQUIRED = false;
+  let DASHBOARD_PROJECTS_LOADING_VISIBLE = false;
   let DASHBOARD_PROJECT_PEEK_REQUEST_SEQ = 0;
   let DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN = '';
   let DASHBOARD_PROJECT_PEEK_ACTIVE_TRIGGER = null;
@@ -23061,10 +23114,45 @@
   }
 
   function clearDashboardProjectRows(){
+    DASHBOARD_PROJECTS_LOADING_VISIBLE = false;
     if (authProjectsBody) authProjectsBody.innerHTML = '';
     if (authProjectsEmpty) authProjectsEmpty.hidden = true;
     closeDashboardProjectPeek();
     updateDashboardProjectsTitle([]);
+  }
+
+  function hasDashboardProjectRows_(){
+    return !!(authProjectsBody && authProjectsBody.querySelector('tr[data-project-token]'));
+  }
+
+  function hideDashboardProjectsLoadingPlaceholder_(){
+    DASHBOARD_PROJECTS_LOADING_VISIBLE = false;
+    if (!authProjectsBody) return;
+    const rows = authProjectsBody.querySelectorAll('tr[data-dashboard-projects-loading="1"]');
+    rows.forEach(row => row.remove());
+  }
+
+  function showDashboardProjectsLoadingPlaceholder_(message){
+    if (!authProjectsBody) return;
+    if (hasDashboardProjectRows_()) {
+      hideDashboardProjectsLoadingPlaceholder_();
+      return;
+    }
+    const text = String(message || 'Your projects are loading into view...').trim();
+    authProjectsBody.innerHTML = '';
+    const tr = createEl('tr', 'authProjectsLoadingRow');
+    tr.dataset.dashboardProjectsLoading = '1';
+    const td = createEl('td', '');
+    td.colSpan = 4;
+    const card = createEl('div', 'authProjectsLoadingCard');
+    card.appendChild(createEl('span', 'authProjectsLoadingSpinner', ''));
+    card.appendChild(createEl('span', 'authProjectsLoadingText', text));
+    td.appendChild(card);
+    tr.appendChild(td);
+    authProjectsBody.appendChild(tr);
+    if (authProjectsEmpty) authProjectsEmpty.hidden = true;
+    updateDashboardProjectsTitle([]);
+    DASHBOARD_PROJECTS_LOADING_VISIBLE = true;
   }
 
   function resetDashboardHomeTransientState_(){
@@ -23083,7 +23171,9 @@
 
   function clearDashboardHomeResponseCache_(){
     DASHBOARD_HOME_RESPONSE_CACHE_SEQ += 1;
+    DASHBOARD_HOME_BACKGROUND_SEQ += 1;
     DASHBOARD_HOME_RESPONSE_CACHE.clear();
+    DASHBOARD_HOME_BACKGROUND_INFLIGHT.clear();
   }
 
   function requireFreshDashboardHomeReturn_(reason){
@@ -24941,18 +25031,88 @@
     return resp;
   }
 
-  function loadDashboardHomeInBackground_(requestPayload){
+  function startDashboardHomeBackgroundLoad_(requestPayload, reason, options){
     const payload = (requestPayload && typeof requestPayload === 'object')
       ? Object.assign({}, requestPayload)
       : (getDashboardContextRequestPayload_() || null);
-    if (!payload) return;
-    window.setTimeout(() => {
-      loadProjectsForHome({
-        requestPayload: payload,
-        suppressLoadingMessage: true,
-        awaitPaint: true
-      }).catch(() => {});
-    }, 0);
+    const requestKey = getDashboardContextKey_(payload);
+    if (!requestKey) return Promise.resolve(null);
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (opts.showPlaceholder === true && !hasDashboardProjectRows_()) {
+      showDashboardProjectsLoadingPlaceholder_();
+    }
+    const cacheBypassReason = getDashboardHomeReturnCacheBypassReason_();
+    if (!cacheBypassReason) {
+      const cachedResp = getDashboardHomeCacheEntry_(payload);
+      if (cachedResp && cachedResp.ok === true) {
+        hideDashboardProjectsLoadingPlaceholder_();
+        applyDashboardHomeData(cachedResp);
+        return Promise.resolve(cachedResp);
+      }
+    }
+    const existing = DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(requestKey);
+    if (existing) return existing;
+    const backgroundSeq = DASHBOARD_HOME_BACKGROUND_SEQ;
+    const requestReason = String(reason || 'dashboard_background').trim();
+    debugLog('dashboardHomeBackgroundLoadStart', {
+      reason: requestReason,
+      requestKey: requestKey,
+      cacheBypassReason: cacheBypassReason
+    });
+    const pending = fetchDashboardHomeDataForRequest_(payload)
+      .then(resp => {
+        const currentRequestKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
+        if (!resp || resp.ok !== true) {
+          if (!hasDashboardProjectRows_()) hideDashboardProjectsLoadingPlaceholder_();
+          return resp || null;
+        }
+        if (backgroundSeq !== DASHBOARD_HOME_BACKGROUND_SEQ || currentRequestKey !== requestKey) {
+          debugLog('dashboardHomeBackgroundLoadStale', {
+            reason: requestReason,
+            requestKey: requestKey,
+            currentRequestKey: currentRequestKey
+          });
+          return null;
+        }
+        hideDashboardProjectsLoadingPlaceholder_();
+        applyDashboardHomeData(resp);
+        return resp;
+      })
+      .catch(err => {
+        const msg = String((err && err.message) || err || 'Unable to load projects.');
+        debugLog('dashboardHomeBackgroundLoadFailed', {
+          reason: requestReason,
+          requestKey: requestKey,
+          message: msg
+        });
+        if (!hasDashboardProjectRows_()) {
+          hideDashboardProjectsLoadingPlaceholder_();
+          setAuthMessage(msg, true, { view: VIEW_DASHBOARD, timeoutMs: 0 });
+        }
+        return null;
+      })
+      .finally(() => {
+        if (DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(requestKey) === pending) {
+          DASHBOARD_HOME_BACKGROUND_INFLIGHT.delete(requestKey);
+        }
+      });
+    DASHBOARD_HOME_BACKGROUND_INFLIGHT.set(requestKey, pending);
+    return pending;
+  }
+
+  function loadDashboardHomeInBackground_(requestPayload){
+    return startDashboardHomeBackgroundLoad_(requestPayload, 'dashboard_background', {
+      showPlaceholder: false
+    });
+  }
+
+  function ensureDashboardProjectsHydratingAfterAccountDocumentClose_(reason){
+    if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
+    const payload = getDashboardContextRequestPayload_();
+    if (!payload || hasDashboardProjectRows_()) return;
+    startDashboardHomeBackgroundLoad_(payload, reason || 'account_document_close', {
+      showPlaceholder: true
+    }).catch(() => {});
   }
 
   async function loadDashboardForDeepLink_(options){
@@ -24970,11 +25130,14 @@
         return null;
       }
       syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+      const dashboardHomePayload = getDashboardContextRequestPayload_() || requestPayload;
+      startDashboardHomeBackgroundLoad_(dashboardHomePayload, 'account_document_deeplink', {
+        showPlaceholder: false
+      }).catch(() => {});
       await new Promise(resolve => requestAnimationFrame(resolve));
       showSetupReturnDashboardMessage_(opts.setupReturnResult);
       await consumeDashboardBootstrapIntent_();
       notifyPortalReady({ reason: 'account-document-upload-ready' });
-      loadDashboardHomeInBackground_(getDashboardContextRequestPayload_() || requestPayload);
       return bootResp;
     }
     const dashboardHomeResp = await loadProjectsForHome({
@@ -27178,6 +27341,7 @@
 
   function renderProjectRows(projects){
     if (!authProjectsBody || !authProjectsEmpty) return;
+    DASHBOARD_PROJECTS_LOADING_VISIBLE = false;
     authProjectsBody.innerHTML = '';
     const list = Array.isArray(projects) ? projects : [];
     updateDashboardProjectsTitle(list);
@@ -30317,13 +30481,20 @@
       closeTermsTeamReviewAndReturn_(options);
       return;
     }
+    const shouldHydrateDashboard = ACCOUNT_DOC_MODAL_CONTEXT === 'dashboard' && CURRENT_VIEW === VIEW_DASHBOARD;
     if (!termsReviewBackdrop) {
       resetTermsClientWorkspaceState_();
+      if (shouldHydrateDashboard) {
+        ensureDashboardProjectsHydratingAfterAccountDocumentClose_('credit_terms_close');
+      }
       return;
     }
     const opts = (options && typeof options === 'object') ? options : {};
     termsReviewBackdrop.classList.remove('open');
     syncOverlayScrollLock();
+    if (shouldHydrateDashboard) {
+      ensureDashboardProjectsHydratingAfterAccountDocumentClose_('credit_terms_close');
+    }
     const finalize = () => {
       termsReviewBackdrop.hidden = true;
       resetTermsClientWorkspaceState_();
@@ -34532,6 +34703,7 @@
   function closeTaxExemptWorkspace(options){
     if (!taxDocBackdrop) return;
     const opts = (options && typeof options === 'object') ? options : {};
+    const shouldHydrateDashboard = TAX_DOC_MODAL_CONTEXT === 'dashboard' && CURRENT_VIEW === VIEW_DASHBOARD;
     closeTaxSignatureModal_();
     closeTaxDocEmailPanel_();
     closeTaxTeamDecisionModal_();
@@ -34543,6 +34715,9 @@
     if (TAX_DOC_HIDE_TIMER) {
       clearTimeout(TAX_DOC_HIDE_TIMER);
       TAX_DOC_HIDE_TIMER = 0;
+    }
+    if (shouldHydrateDashboard) {
+      ensureDashboardProjectsHydratingAfterAccountDocumentClose_('tax_exempt_close');
     }
     if (opts.immediate === true) {
       taxDocBackdrop.hidden = true;
