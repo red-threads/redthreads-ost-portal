@@ -21589,9 +21589,9 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
   ].join(' ');
   const shell = buildLifecycleEmailShell_({
     heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'Purchase order needed', 'Purchase order needed.'),
-    intro: 'Your Red Threads invoice is attached.',
+    intro: 'The invoice for your Red Threads order is attached to this email.',
     nextStep: poNextStep,
-    attachmentNote: 'Your invoice is attached.',
+    attachmentNote: '',
     blocks: lifecycleSections.blocks.concat([
       buildLifecycleEmailCtaBlock_('Return to the purchase-order upload step', resumeUrl),
       buildLifecycleEmailFooter_()
@@ -23565,6 +23565,9 @@ function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
     return 'Complete New Credit Terms Application';
   }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
+    return 'Resubmit Credit Terms Document';
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
@@ -23659,20 +23662,23 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
     const deniedIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied
-      ? 'Red Threads reviewed the credit terms associated with your account.'
+      ? 'The credit terms associated with your Red Threads account was not approved.'
       : 'Red Threads reviewed the tax exemption associated with your account.';
+    const creditTermsClientDenied = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied;
     return {
       subject: isTeam ? ('Team alert: ' + documentLabel + ' needs attention') : (labels.title + ' needs attention'),
       heading: isTeam ? (labels.title + ' needs attention') : deniedIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? ('Red Threads reviewed the ' + labels.noun + ' associated with this account.') : deniedIntro,
-      statusCopy: trimString_(meta && meta.hardDenied) === 'true'
+      statusCopy: creditTermsClientDenied
+        ? ''
+        : trimString_(meta && meta.hardDenied) === 'true'
         ? (isTeam
           ? 'The submission was not approved. Review the account status in Team Mode.'
           : 'The submission was not approved. Review your account dashboard for the current status.')
         : (isTeam
           ? 'A correction is needed before approval. Review the account status in Team Mode.'
           : 'A correction is needed before approval. Review your account dashboard for the next step.'),
-      nextStep: isTeam
+      nextStep: creditTermsClientDenied ? '' : isTeam
         ? ('Review the ' + labels.noun + ' workflow in Team Mode.')
         : ('Upload an updated ' + labels.submission + ' from your account dashboard.'),
       details: details
@@ -25429,7 +25435,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
   if (attachmentSentence) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(attachmentSentence) + '</p>');
   if (nextStep && !suppressNextAction) {
-    const nextStepHtml = escapeHtml_(nextStep).replace(/portal link below/g, '<span style="color:' + theme.brandRedMid + ';">portal link below</span>');
+    const nextStepHtml = escapeHtml_(nextStep).replace(/portal link/g, '<span style="color:' + theme.brandRedMid + ';">portal link</span>');
     paragraphs.push('<p style="margin:0;color:' + theme.currentAqua + ';font-weight:900;"><strong style="color:' + theme.currentAqua + ';">Next action:</strong> ' + nextStepHtml + '</p>');
   }
   if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
@@ -28993,7 +28999,9 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'blank credit terms source client': 'validated_email_omitted',
   'chat digest team to client': 'validated_email_omitted',
   'blank tax document source client': 'validated_email_omitted',
-  'explicit locked-order resend client': 'validated_email_omitted'
+  'explicit locked-order resend client': 'validated_email_omitted',
+  'summary/invoice explicit send client': 'validated_email_omitted',
+  'credit terms reset client': 'validated_email_omitted'
 };
 
 function getEmailReviewSuiteOmissionReason_(label) {
@@ -29427,51 +29435,53 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
     htmlBody: lockedContent.htmlBody
   }, attachments);
 
-  try {
-    const sourceAttachment = attachments[0];
-    if (sourceAttachment && typeof sourceAttachment.getBytes === 'function') {
-      const estimateRow = findEmailReviewEstimateRow_(fixture);
-      const estimateProjectNumber = resolveEmailReviewEstimateProjectNumber_(fixture, summary);
-      const estimateReference = buildPortalDocumentReference_({
-        projectNumber: estimateProjectNumber,
-        documentKind: PORTAL_DOCUMENT_KINDS.estimate,
-        version: 1
-      });
-      const summaryResult = sendSummaryEstimatePdfEmail({
-        recipients: [recipients.client],
-        base64Data: Utilities.base64Encode(sourceAttachment.getBytes()),
-        mimeType: MimeType.PDF,
-        fileName: estimateReference.fileName,
-        documentKind: 'summary',
-        documentRef: estimateReference.documentRef,
-        documentVersion: 1,
-        token: '',
-        dealNumber: estimateProjectNumber,
-        projectName: getEmailReviewEstimateProjectName_(estimateRow, summary),
-        clientName: getEmailReviewEstimateClientName_(estimateRow, summary)
-      });
+  if (!omitEmailReviewSuiteItemIfNeeded_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client')) {
+    try {
+      const sourceAttachment = attachments[0];
+      if (sourceAttachment && typeof sourceAttachment.getBytes === 'function') {
+        const estimateRow = findEmailReviewEstimateRow_(fixture);
+        const estimateProjectNumber = resolveEmailReviewEstimateProjectNumber_(fixture, summary);
+        const estimateReference = buildPortalDocumentReference_({
+          projectNumber: estimateProjectNumber,
+          documentKind: PORTAL_DOCUMENT_KINDS.estimate,
+          version: 1
+        });
+        const summaryResult = sendSummaryEstimatePdfEmail({
+          recipients: [recipients.client],
+          base64Data: Utilities.base64Encode(sourceAttachment.getBytes()),
+          mimeType: MimeType.PDF,
+          fileName: estimateReference.fileName,
+          documentKind: 'summary',
+          documentRef: estimateReference.documentRef,
+          documentVersion: 1,
+          token: '',
+          dealNumber: estimateProjectNumber,
+          projectName: getEmailReviewEstimateProjectName_(estimateRow, summary),
+          clientName: getEmailReviewEstimateClientName_(estimateRow, summary)
+        });
+        results.push({
+          ok: summaryResult && summaryResult.ok === true,
+          sent: summaryResult && summaryResult.ok === true,
+          label: 'Summary/invoice explicit send client',
+          family: 'summary_pdf',
+          recipientClass: 'client',
+          attachmentCount: 1,
+          transport: trimString_(summaryResult && summaryResult.transport),
+          noReply: summaryResult && summaryResult.noReply === true
+        });
+      } else {
+        skipEmailReviewResult_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client', 'fixture_missing');
+      }
+    } catch (err) {
       results.push({
-        ok: summaryResult && summaryResult.ok === true,
-        sent: summaryResult && summaryResult.ok === true,
+        ok: false,
         label: 'Summary/invoice explicit send client',
         family: 'summary_pdf',
         recipientClass: 'client',
-        attachmentCount: 1,
-        transport: trimString_(summaryResult && summaryResult.transport),
-        noReply: summaryResult && summaryResult.noReply === true
+        attachmentCount: 0,
+        error: normalizeEmailReviewError_(err)
       });
-    } else {
-      skipEmailReviewResult_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client', 'fixture_missing');
     }
-  } catch (err) {
-    results.push({
-      ok: false,
-      label: 'Summary/invoice explicit send client',
-      family: 'summary_pdf',
-      recipientClass: 'client',
-      attachmentCount: 0,
-      error: normalizeEmailReviewError_(err)
-    });
   }
 
   sendEmailReviewAccountDocumentSource_(results, fixture, recipients, ACCOUNT_DOCUMENT_TYPES.tax_exempt, 'Blank tax document source client');
