@@ -9359,11 +9359,53 @@ function redactEmailForDisplay_(email) {
   return visibleLocal + '@' + domain;
 }
 
+function resolveAchApPaymentLinkPurchaserName_(ctx, orderSummary, options) {
+  const context = (ctx && typeof ctx === 'object') ? ctx : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const draft = (context.orderDraft && typeof context.orderDraft === 'object') ? context.orderDraft : {};
+  const orderInfo = opts.lifecycleOrderInfo || opts.orderInfo || null;
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const rowDraft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
+  const accountInfo = opts.accountInfo || context.accountInfo || null;
+  let orderAccountSummary = null;
+  if (orderInfo && opts.cfg && opts.ss) {
+    const resolvedAccount = getPortalAccountInfoForOrder_(orderInfo, {
+      cfg: opts.cfg,
+      ss: opts.ss,
+      infra: opts.infra
+    });
+    orderAccountSummary = resolvedAccount && resolvedAccount.summary ? resolvedAccount.summary : null;
+  }
+  const accountSummary = orderAccountSummary || ((opts.accountSummary && typeof opts.accountSummary === 'object')
+    ? opts.accountSummary
+    : (accountInfo && accountInfo.summary ? accountInfo.summary : null));
+  return trimString_(
+    draft.personName ||
+    draft.primaryContactName ||
+    draft.billingContactName ||
+    rowDraft.personName ||
+    rowDraft.primaryContactName ||
+    rowDraft.billingContactName ||
+    (accountSummary && (accountSummary.primaryContactName || accountSummary.billingContactName)) ||
+    summary.personName ||
+    summary.primaryContactName ||
+    summary.billingContactName ||
+    row.personname ||
+    row.personName ||
+    row.primarycontactname ||
+    row.primaryContactName ||
+    row.billingcontactname ||
+    row.billingContactName ||
+    (context.identity && context.identity.personName)
+  );
+}
+
 function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   const opts = (options && typeof options === 'object') ? options : {};
   const apName = trimString_(opts.apName);
-  const purchaserName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.personName);
+  const purchaserName = resolveAchApPaymentLinkPurchaserName_(ctx, summary, opts);
   const purchaserFirstName = trimString_(purchaserName.split(/\s+/)[0]);
   const note = trimString_(opts.note).slice(0, 1200);
   const paymentLink = trimString_(opts.apPaymentLink);
@@ -9432,7 +9474,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     footer
   ].filter(Boolean);
   const topCtaHtml = topCtaUrl
-    ? ('  <p style="margin:14px 0 18px;"><a href="' + escapeHtml_(topCtaUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">' + escapeHtml_(projectAccessLabel) + '</a></p>')
+    ? ('  <p style="margin:14px 0 18px;text-align:center;"><a href="' + escapeHtml_(topCtaUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#be123c;color:#ffffff;text-decoration:none;font-weight:800;">' + escapeHtml_(projectAccessLabel) + '</a></p>')
     : '';
   const purchaserNoteHtml = note
     ? ('  <div style="margin:0 0 18px;padding:14px 16px;border-left:4px solid #be123c;background:#170b12;"><strong>' + escapeHtml_(purchaserNoteLabel) + ':</strong><br>' + escapeHtml_(note).replace(/\n/g, '<br>') + '</div>')
@@ -9484,7 +9526,9 @@ function sendAchApPaymentLinkEmail_(ctx, orderSummary, options) {
   const content = buildAchApPaymentLinkEmailContent_(ctx, orderSummary, Object.assign({}, opts, {
     cfg: ctx && ctx.cfg,
     ss: ctx && ctx.ss,
-    infra: ctx && ctx.infra
+    infra: ctx && ctx.infra,
+    accountInfo: ctx && ctx.accountInfo,
+    accountSummary: ctx && ctx.accountInfo && ctx.accountInfo.summary
   }));
   const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('ap_payment_link', '', {});
   const attachmentResult = resolveLifecycleEmailAttachment_(orderSummary, attachmentPolicy, {
@@ -18475,6 +18519,7 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
   const amountGrandTotal = roundMoney_(amountSubtotal + amountShipping + amountRush + amountTax);
   const fulfillment = computeFulfillmentContextForOrderDraft_(portalState, amountGrandTotal);
   const orgContext = deriveOrgContextFromRow_(row);
+  const accountIdentity = buildAccountIdentityFromPortalAccountSummary_(accountSummary);
   const currency = trimString_(options.currency || (snapshot && snapshot.meta && snapshot.meta.currency) || getConfig_().stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY).toUpperCase();
 
   return {
@@ -18483,6 +18528,8 @@ function buildOrderDraftFromSnapshotAndPortalState_(opts) {
     dealNumber: trimString_(row.dealnumber || (snapshot && snapshot.meta && snapshot.meta.dealNumber)),
     projectName: deriveProjectNameForNotification_(row, snapshot, {}),
     personEmail: normalizeEmail_(orgContext.personEmail),
+    personName: trimString_(accountIdentity.personName || orgContext.personName),
+    billingContactName: trimString_(accountIdentity.billingContactName || orgContext.personName),
     orgId: trimString_(options.orgId || (accountSummary && accountSummary.orgId) || orgContext.orgId),
     orgName: trimString_(options.orgName || (accountSummary && accountSummary.orgName) || orgContext.orgName),
     accountId: trimString_(accountSummary && accountSummary.accountId),
@@ -22671,7 +22718,7 @@ function getApAchLifecycleNextStepText_(milestone, recipientClass, fallback) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
     return isTeamAlert
       ? 'Monitor ACH verification and bank confirmation before production begins.'
-      : 'Watch for any Stripe bank-verification email. No Red Threads portal action is needed unless Stripe asks for verification.';
+      : 'Watch for any Stripe bank-verification emails and verify if needed. No action is required in the Red Threads portal at this time.';
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
     return isTeamAlert
@@ -22684,6 +22731,12 @@ function getApAchLifecycleNextStepText_(milestone, recipientClass, fallback) {
       : 'Return to the AP payment link or contact Red Threads so payment can be resolved.';
   }
   return trimString_(fallback);
+}
+
+function shouldRenderApAchLifecycleCta_(milestone, recipientClass) {
+  const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
+  if (trimString_(recipientClass) === 'team') return true;
+  return normalized !== AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted;
 }
 
 function buildApAchLifecycleEmailHistoryLines_(milestone, workflowContext, orderSummary) {
@@ -22741,6 +22794,9 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
       history: false
     }
   });
+  const ctaBlock = shouldRenderApAchLifecycleCta_(normalized, recipientClass)
+    ? buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, ctaUrl)
+    : null;
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
@@ -22750,9 +22806,9 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     attachmentNote: copy.attachmentNote,
     blocks: sectionBlocks.concat([
       buildLifecycleEmailHistoryBlock_(buildApAchLifecycleEmailHistoryLines_(normalized, emailContext.workflowContext, emailContext.orderSummary)),
-      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, ctaUrl),
+      ctaBlock,
       buildLifecycleEmailFooter_()
-    ])
+    ].filter(Boolean))
   });
   return {
     subject: copy.subject,
@@ -25978,6 +26034,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     : '';
   return {
     orderSummary: summary,
+    accountSummary: accountSummary,
     workflowContext: workflowContext,
     flags: flags,
     variant: variant,
@@ -26114,6 +26171,10 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const isTeamAlert = opts.isTeamAlert === true;
   const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
+  const accountSummary = (emailContext && emailContext.accountSummary && typeof emailContext.accountSummary === 'object')
+    ? emailContext.accountSummary
+    : {};
+  const projectOwnerName = trimString_(accountSummary.primaryContactName || accountSummary.billingContactName) || 'The project owner';
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
@@ -26128,24 +26189,24 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment pending', invoiceNumber, 'Team alert: AP ACH payment pending')
-        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — AP ACH payment pending') : 'AP ACH payment pending for a Red Threads invoice'),
-      intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for this order.' : 'Accounts Payable has submitted ACH payment for this Red Threads invoice.',
+        : formatLifecycleEmailInvoiceSubject_('ACH Payment Pending', invoiceNumber, 'ACH Payment Pending for a Red Threads project'),
+      intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for this order.' : 'Accounts Payable has submitted ACH payment for this Red Threads project, and the payment is pending bank confirmation. The invoice for the order is attached to this email. ACH payments can take several business days to confirm. Order production will not begin until payment is received. ' + projectOwnerName + ' will be updated when payment is received and the production begins.',
       statusCopy: isTeamAlert
         ? 'The payment is pending bank confirmation. ACH payments can take several business days to confirm.'
-        : 'The payment is pending bank confirmation. ACH payments can take several business days to confirm. The purchaser/client will be updated when payment is confirmed.',
-      attachmentNote: 'The invoice/status document is attached.'
+        : '',
+      attachmentNote: isTeamAlert ? 'The invoice/status document is attached.' : ''
     });
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment received', invoiceNumber, 'Team alert: AP ACH payment received')
-        : formatLifecycleEmailInvoiceSubject_('AP ACH payment received', invoiceNumber, 'AP ACH payment received for a Red Threads invoice'),
-      intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'ACH payment has been received for this Red Threads project.',
+        : formatLifecycleEmailInvoiceSubject_('Payment Received, Order Started', invoiceNumber, 'Payment Received, Order Started for a Red Threads project'),
+      intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'Accounts Payable completed an ACH payment for this Red Threads project, and your order has been authorized for production. The invoice/receipt for the order is attached to this email.',
       statusCopy: isTeamAlert
         ? 'Continue with the production workflow according to the current portal status.'
-        : 'This project has been authorized for production.',
-      attachmentNote: isTeamAlert ? 'The updated receipt is attached.' : 'Your invoice is attached.'
+        : '',
+      attachmentNote: isTeamAlert ? 'The updated receipt is attached.' : ''
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -29300,7 +29361,9 @@ function sendEmailReviewApAchExamples_(results, fixture, recipients) {
       lifecycleOrderInfo: apBase,
       cfg: fixture.cfg,
       ss: fixture.ss,
-      infra: fixture.infra
+      infra: fixture.infra,
+      accountInfo: fixture.accountContext && fixture.accountContext.accountInfo,
+      accountSummary: fixture.accountContext && fixture.accountContext.accountInfo && fixture.accountContext.accountInfo.summary
     }),
     apLinkAttachments);
 
