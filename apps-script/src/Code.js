@@ -29148,35 +29148,7 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
-const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
-  'password reset client': 'validated_email_omitted',
-  'blank credit terms source client': 'validated_email_omitted',
-  'chat digest team to client': 'validated_email_omitted',
-  'blank tax document source client': 'validated_email_omitted',
-  'explicit locked-order resend client': 'validated_email_omitted',
-  'summary/invoice explicit send client': 'validated_email_omitted',
-  'credit terms reset client': 'validated_email_omitted',
-  'credit terms denied client': 'validated_email_omitted',
-  'credit terms approved client': 'validated_email_omitted',
-  'tax exempt reset client': 'validated_email_omitted',
-  'tax exempt denied client': 'validated_email_omitted',
-  'tax exempt approved client': 'validated_email_omitted',
-  'po submitted client': 'validated_email_omitted',
-  'po payment received client': 'validated_email_omitted',
-  'po invoice prepared client': 'validated_email_omitted',
-  'manual payment received client': 'validated_email_omitted',
-  'manual payment pending client': 'validated_email_omitted',
-  'card paid client': 'validated_email_omitted',
-  'card failed client': 'validated_email_omitted',
-  'standard ach pending client': 'validated_email_omitted',
-  'standard ach verification client': 'validated_email_omitted',
-  'standard ach receipt client': 'validated_email_omitted',
-  'standard ach failed client': 'validated_email_omitted',
-  'ap payment link sent': 'validated_email_omitted',
-  'ap ach pending ap': 'validated_email_omitted',
-  'ap ach receipt ap': 'validated_email_omitted',
-  'ap ach failed ap': 'validated_email_omitted'
-};
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
 
 function getEmailReviewSuiteOmissionReason_(label) {
   const key = trimString_(label).toLowerCase();
