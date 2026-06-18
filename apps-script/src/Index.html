@@ -582,7 +582,11 @@
       width:100%;
       border-collapse:collapse;
       min-width:800px;
+      table-layout:fixed;
     }
+    .authProjectsColThumb{width:58px}
+    .authProjectsColStatus{width:388px}
+    .authProjectsColAction{width:126px}
     .authProjectsTable th,
     .authProjectsTable td{
       padding:8px 10px;
@@ -666,8 +670,8 @@
       min-width:58px;
     }
     .authProjectsDetailsCell{
-      width:222px;
-      min-width:222px;
+      width:auto;
+      min-width:0;
     }
     .authProjectsDetails{
       display:flex;
@@ -697,6 +701,19 @@
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
+    }
+    .authProjectsDetailsLine.isProjectNameLine{
+      align-items:flex-start;
+    }
+    .authProjectsDetailsValue.isProjectName{
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      white-space:normal;
+      overflow:hidden;
+      text-overflow:clip;
+      overflow-wrap:anywhere;
+      line-height:1.25;
     }
     .authProjectsPreviewCell{
       display:flex;
@@ -16932,7 +16949,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 69">69</div>
+  <div class="devRevisionBadge" aria-label="Development revision 70">70</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17053,6 +17070,12 @@
       </div>
       <div class="authProjectsWrap">
         <table class="authProjectsTable">
+          <colgroup>
+            <col class="authProjectsColThumb">
+            <col class="authProjectsColDetails">
+            <col class="authProjectsColStatus">
+            <col class="authProjectsColAction">
+          </colgroup>
           <thead>
             <tr>
               <th class="authProjectsHeaderProjectGroup" colspan="2">Project Details</th>
@@ -27389,9 +27412,12 @@
       numberLine.appendChild(createEl('span', 'authProjectsDetailsValue', String(project && project.dealNumber || '--').trim() || '--'));
       detailsWrap.appendChild(numberLine);
 
-      const titleLine = createEl('div', 'authProjectsDetailsLine');
+      const titleLine = createEl('div', 'authProjectsDetailsLine isProjectNameLine');
+      const projectTitle = formatDashboardProjectTitle_(project);
       titleLine.appendChild(createEl('span', 'authProjectsDetailsLabel', 'Name:'));
-      titleLine.appendChild(createEl('span', 'authProjectsDetailsValue', formatDashboardProjectTitle_(project)));
+      const projectTitleValue = createEl('span', 'authProjectsDetailsValue isProjectName', projectTitle);
+      projectTitleValue.title = projectTitle;
+      titleLine.appendChild(projectTitleValue);
       detailsWrap.appendChild(titleLine);
 
       const startedLine = createEl('div', 'authProjectsDetailsLine');

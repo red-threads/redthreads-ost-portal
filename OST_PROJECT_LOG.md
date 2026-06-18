@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-18 - Dashboard Project Name Wrapping
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, Apps Script version `940`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: keep dashboard Order Progress/Open Project columns fixed while long project names wrap to two lines, and ship the existing ACH pending email-copy/review-suite omission edits.
+- Files changed: `apps-script/src/Index.html`, `apps-script/src/Code.js`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/send-email-review-suite.mjs`, `npm run validate:runtime`, `git diff --check`, and `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate` passed before deploy.
+- Decisions: dashboard project rows now use fixed table geometry and a project-name-only two-line clamp; password reset review emails are omitted from the owner review suite as validated.
+- Current-state updates: deployed version `940`; direct Apps Script `/exec` and public `/portal` returned HTTP 200, public wrapper still targets the stable deployment, direct runtime showed revision `70`, and targeted secret-marker checks found no `client_secret`, `clientSecret`, or `hosted_verification_url`.
+- Follow-ups: review the dashboard visually against a real long-name project if further column width tuning is desired; email review suite reported 45 sent, 2 skipped, 0 failed, with the expected fixture artifact fallbacks.
+
 ## 2026-06-17 - Production Start Canonicalization
 
 - Mode: Produce final code, local implementation only.

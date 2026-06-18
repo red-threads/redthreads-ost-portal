@@ -25688,7 +25688,7 @@ function formatLifecycleEmailNextActionText_(workflowContext, options) {
         retry_payment: 'Return to your Red Threads invoice to retry payment or contact Red Threads for help.',
         wait_for_ap_payment: 'No action is needed while Accounts Payable completes payment.',
         wait_for_ap_checkout: 'No action is needed while Accounts Payable completes Checkout.',
-        wait_for_payment: 'Watch for Stripe bank verification and complete if necessary.',
+        wait_for_payment: 'Watch for Stripe bank verification email and complete if necessary.',
         enter_quantities: 'Enter quantities and sizes in the portal.',
         approve_artwork: 'Review and approve artwork in the portal.',
         place_order: 'Return to the portal when you are ready to place the order.',
@@ -28885,8 +28885,25 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
+  'password reset client': 'validated_email_omitted'
+};
+
+function getEmailReviewSuiteOmissionReason_(label) {
+  const key = trimString_(label).toLowerCase();
+  return trimString_(EMAIL_REVIEW_SUITE_OMITTED_LABELS_[key]);
+}
+
+function omitEmailReviewSuiteItemIfNeeded_(results, label, family, recipientClass) {
+  const reason = getEmailReviewSuiteOmissionReason_(label);
+  if (!reason) return false;
+  skipEmailReviewResult_(results, label, family, recipientClass, reason);
+  return true;
+}
+
 function sendEmailReviewContent_(results, label, family, recipientClass, recipients, content, attachments, options) {
   const opts = (options && typeof options === 'object') ? options : {};
+  if (omitEmailReviewSuiteItemIfNeeded_(results, label, family, recipientClass)) return;
   const toList = normalizeEmailRecipients_(recipients);
   const attachmentMeta = opts.attachmentMeta || (attachments && attachments.emailReviewAttachmentMeta) || null;
   try {
@@ -29353,27 +29370,30 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
   sendEmailReviewAccountDocumentSource_(results, fixture, recipients, ACCOUNT_DOCUMENT_TYPES.credit_terms, 'Blank credit terms source client');
   skipEmailReviewResult_(results, 'Submitted tax-form copy client', 'submitted_tax_copy', 'client', 'fixture_missing_submission_artifact');
 
-  const passwordResult = authSendResetCode({
-    email: recipients.client
-  });
-  if (passwordResult && passwordResult.ok === true) {
-    results.push({
-      ok: true,
-      sent: true,
-      label: 'Password reset client',
-      family: 'password_reset',
-      recipientClass: 'client',
-      attachmentCount: 0,
-      transport: 'mailapp_noreply',
-      noReply: true
+  if (!omitEmailReviewSuiteItemIfNeeded_(results, 'Password reset client', 'password_reset', 'client')) {
+    const passwordResult = authSendResetCode({
+      email: recipients.client
     });
-  } else {
-    sendEmailReviewPasswordResetFallback_(results, recipients.client);
+    if (passwordResult && passwordResult.ok === true) {
+      results.push({
+        ok: true,
+        sent: true,
+        label: 'Password reset client',
+        family: 'password_reset',
+        recipientClass: 'client',
+        attachmentCount: 0,
+        transport: 'mailapp_noreply',
+        noReply: true
+      });
+    } else {
+      sendEmailReviewPasswordResetFallback_(results, recipients.client);
+    }
   }
 }
 
 function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, documentType, label) {
   try {
+    if (omitEmailReviewSuiteItemIfNeeded_(results, label, 'account_document_source', 'client')) return;
     const definition = getAccountDocumentDefinition_(documentType, fixture.cfg);
     if (!definition) {
       skipEmailReviewResult_(results, label, 'account_document_source', 'client', 'fixture_missing');
@@ -29406,6 +29426,7 @@ function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, doc
 }
 
 function sendEmailReviewPasswordResetFallback_(results, recipient) {
+  if (omitEmailReviewSuiteItemIfNeeded_(results, 'Password reset client', 'password_reset', 'client')) return;
   const code = '000000';
   const resetUrl = buildPasswordResetReturnUrl_('00000000-0000-4000-8000-000000000000');
   const content = buildPasswordResetEmailContent_(code, resetUrl);
