@@ -24357,6 +24357,21 @@ function buildPaymentLifecycleInstructionsBlock_(milestone, orderSummary) {
   return { text: '', html: '' };
 }
 
+function resolvePaymentLifecycleEmailNextStepText_(milestone, fallbackNextStepText, options) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const isTeamAlert = opts.isTeamAlert === true;
+  if (!isTeamAlert && normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
+    return 'Return to the portal/project to pay for the order within your approved terms. Late fees will automatically be applied.';
+  }
+  if (isPaymentLifecycleReceiptMilestone_(normalized)) {
+    return isTeamAlert
+      ? 'Continue with the production workflow according to the current portal status.'
+      : 'No action is needed while production continues.';
+  }
+  return trimString_(fallbackNextStepText);
+}
+
 function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, options) {
   const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
   const opts = (options && typeof options === 'object') ? options : {};
@@ -24382,9 +24397,9 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     isTeamAlert: isTeamAlert,
     methodLabel: methodLabel
   });
-  const nextStepText = !isTeamAlert && normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted
-    ? 'Return to the portal/project to pay for the order within your approved terms. Late fees will automatically be applied.'
-    : emailContext.nextStepText;
+  const nextStepText = resolvePaymentLifecycleEmailNextStepText_(normalized, emailContext.nextStepText, {
+    isTeamAlert: isTeamAlert
+  });
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
     family: 'payment_lifecycle',
     milestone: normalized,
@@ -26146,9 +26161,9 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment received', invoiceNumber, 'Team alert: manual payment received')
         : formatLifecycleEmailInvoiceSubject_('Payment received', invoiceNumber, 'Payment received for your Red Threads order'),
-      intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received.',
-      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : 'Your order is authorized for production when reflected by the current portal status.',
-      attachmentNote: 'Your updated receipt is attached.'
+      intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received and your order is authorized for production.',
+      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : '',
+      attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'The invoice for your order is attached to this email.'
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
