@@ -24384,7 +24384,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
       paymentBlocked: true,
       nextStepText: recipientClass === 'team'
         ? 'Review the failed payment in Team Mode.'
-        : 'Open your Red Threads invoice to retry payment or review next steps.'
+        : 'Open your Red Threads project/portal below and retry payment.'
     });
   }
   const summary = emailContext.orderSummary || {};
@@ -25222,6 +25222,33 @@ function applyPaymentBlockedLifecycleEmailContext_(emailContext, options) {
   const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
   const opts = (options && typeof options === 'object') ? options : {};
   if (opts.paymentBlocked !== true) return ctx;
+  if (opts.productionAuthorized !== true) {
+    const workflowContext = (ctx.workflowContext && typeof ctx.workflowContext === 'object') ? ctx.workflowContext : {};
+    ctx.workflowContext = Object.assign({}, workflowContext, {
+      productionCurrent: false,
+      isProductionAuthorized: false,
+      productionAuthorized: false,
+      productionComplete: false,
+      productionStartAt: '',
+      productionCompletionAt: ''
+    });
+    if (ctx.timeline && typeof ctx.timeline === 'object') {
+      ctx.timeline = Object.assign({}, ctx.timeline, {
+        printStartDateLabel: '',
+        printStartDateValue: '',
+        completionDateLabel: '',
+        completionDateValue: ''
+      });
+    }
+    if (Array.isArray(ctx.historyLines)) {
+      ctx.historyLines = ctx.historyLines.filter(function(line) {
+        const clean = trimString_(line);
+        return !/^Production authorized:/i.test(clean) &&
+          !/^Estimated production completion:/i.test(clean) &&
+          !/^Estimated turnaround:/i.test(clean);
+      });
+    }
+  }
   const steps = Array.isArray(ctx.steps) ? ctx.steps : [];
   ctx.steps = steps.map(function(step) {
     const item = (step && typeof step === 'object') ? step : {};
@@ -26141,9 +26168,10 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment issue', invoiceNumber, 'Team alert: card payment issue')
-        : formatLifecycleEmailInvoiceSubject_('Action needed — card payment issue', invoiceNumber, 'Action needed — card payment issue for your Red Threads order'),
-      intro: isTeamAlert ? 'A card payment could not be completed.' : 'Your card payment could not be completed.',
-      statusCopy: isTeamAlert ? 'Review the portal payment state or wait for the client to retry payment.' : 'Open your Red Threads invoice to retry payment or contact Red Threads for help.',
+        : formatLifecycleEmailInvoiceSubject_('Action needed — Credit card payment issue', invoiceNumber, 'Action needed — Credit card payment issue for your Red Threads order'),
+      heading: isTeamAlert ? '' : 'Credit card payment issue',
+      intro: isTeamAlert ? 'A card payment could not be completed.' : 'Your credit card payment could not be completed.',
+      statusCopy: isTeamAlert ? 'Review the portal payment state or wait for the client to retry payment.' : 'Open your Red Threads portal/project to retry payment or contact Red Threads for help.',
       attachmentNote: 'An invoice/status PDF may be attached when available.'
     });
   }
