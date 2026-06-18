@@ -21584,9 +21584,8 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
   const poNextStep = [
-    'Email this invoice to your purchasing or accounts payable team so they can issue the company purchase order.',
-    'Use the return link to reopen the portal directly in the purchase-order upload step.',
-    'Upload the approved purchase order, enter the PO number and approver name, and submit to complete the order.'
+    'Forward this invoice to your Purchasing or Accounts Payable team so they can issue a company Purchase Order.',
+    'Use the portal link below to reopen your project and complete the Purchase Order submission process to place your Red Threads order.'
   ].join(' ');
   const shell = buildLifecycleEmailShell_({
     heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'Purchase order needed', 'Purchase order needed.'),
@@ -23559,6 +23558,9 @@ function getAccountDocumentEmailLabels_(meta) {
 function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   const labels = getAccountDocumentEmailLabels_(meta);
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
+    return 'Open Red Threads Portal Account Dashboard';
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
     return 'Complete New Credit Terms Application';
   }
@@ -23599,6 +23601,7 @@ function buildPortalLifecycleEmailDetailBlock_(lines) {
     return '<div style="margin:0 0 6px;color:#cbd5e1;">' + escapeHtml_(line) + '</div>';
   }).join('');
   return {
+    kind: 'account_details',
     text: buildLifecycleEmailTextBlock_('Details', cleanLines),
     html: [
       '<div style="margin:0 0 18px;padding:14px 16px;border:1px solid #1e293b;border-radius:12px;background:#0f172a;">',
@@ -23695,10 +23698,12 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   return null;
 }
 
-function shouldUseAccountDocumentNextStepFirstLayout_(milestone, recipientClass) {
+function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
-  if (getPortalLifecycleEmailRecipientClass_(recipientClass) !== 'client') return false;
-  return normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset;
+  if (getPortalLifecycleEmailRecipientClass_(recipientClass) !== 'client') return '';
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) return 'next_step_first';
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) return 'no_action_first';
+  return '';
 }
 
 function resolveAccountDocumentLifecycleNextStep_(copy, milestone, recipientClass) {
@@ -23855,7 +23860,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     intro: copy.intro,
     statusCopy: copy.statusCopy,
     nextStep: resolvedNextStep,
-    nonOrderLayout: shouldUseAccountDocumentNextStepFirstLayout_(normalized, recipientClass) ? 'next_step_first' : '',
+    nonOrderLayout: getAccountDocumentLifecycleNonOrderLayout_(normalized, recipientClass),
     blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
@@ -25414,7 +25419,10 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (intro) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>');
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
   if (attachmentSentence) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(attachmentSentence) + '</p>');
-  if (nextStep && !suppressNextAction) paragraphs.push('<p style="margin:0;color:' + theme.currentAqua + ';font-weight:900;"><strong style="color:' + theme.currentAqua + ';">Next action:</strong> ' + escapeHtml_(nextStep) + '</p>');
+  if (nextStep && !suppressNextAction) {
+    const nextStepHtml = escapeHtml_(nextStep).replace(/portal link below/g, '<span style="color:' + theme.brandRedMid + ';">portal link below</span>');
+    paragraphs.push('<p style="margin:0;color:' + theme.currentAqua + ';font-weight:900;"><strong style="color:' + theme.currentAqua + ';">Next action:</strong> ' + nextStepHtml + '</p>');
+  }
   if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
   const ctaHtml = trimString_(cta && cta.url) && !shouldSuppressLifecycleEmailActionCta_(cta)
     ? ('<div style="margin:14px 0 0;"><a href="' + escapeHtml_(cta.url) + '" style="' + buildPortalNativeEmailStyle_({
@@ -25454,6 +25462,7 @@ function buildLifecycleEmailShell_(options) {
   const footerBlocks = [];
   const progressBlocks = [];
   const detailsBlocks = [];
+  const accountDetailsBlocks = [];
   const genericBlocks = [];
   blocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
@@ -25462,6 +25471,7 @@ function buildLifecycleEmailShell_(options) {
     else if (kind === 'footer') footerBlocks.push(item);
     else if (kind === 'progress') progressBlocks.push(item);
     else if (kind === 'project_details' || kind === 'reference' || kind === 'history') detailsBlocks.push(item);
+    else if (kind === 'account_details') accountDetailsBlocks.push(item);
     else genericBlocks.push(item);
   });
   const primaryCta = ctaBlocks.filter(function(block) {
@@ -25479,9 +25489,10 @@ function buildLifecycleEmailShell_(options) {
     return trimString_(block && block.productionTimingActionLine);
   })[0] || {}).productionTimingActionLine);
   const nonOrderLayout = trimString_(opts.nonOrderLayout).toLowerCase();
-  const nonOrderNextStepFirst = !hasOrderContext && nonOrderLayout === 'next_step_first';
+  const nonOrderNoActionFirst = !hasOrderContext && nonOrderLayout === 'no_action_first';
+  const nonOrderNextStepFirst = !hasOrderContext && (nonOrderLayout === 'next_step_first' || nonOrderNoActionFirst);
   const textNextStep = nextStep
-    ? ((noActionNextStep ? 'No action required: ' : 'Next step: ') + nextStep)
+    ? (nonOrderNoActionFirst ? nextStep : ((noActionNextStep ? 'No action required: ' : 'Next step: ') + nextStep))
     : '';
   const textParts = nonOrderNextStepFirst
     ? [
@@ -25553,6 +25564,10 @@ function buildLifecycleEmailShell_(options) {
     }
     return trimString_(item.html);
   }).filter(Boolean).join('\n');
+  const accountDetailsHtml = accountDetailsBlocks.map(function(block) {
+    const item = (block && typeof block === 'object') ? block : {};
+    return trimString_(item.html);
+  }).filter(Boolean).join('\n');
   const nonOrderNextStepIsNoAction = !hasOrderContext && isLifecycleEmailNoActionText_(nextStep);
   const nonOrderNextStepColor = nonOrderNextStepIsNoAction ? theme.successGreen : theme.currentAqua;
   const nonOrderNextStepLabel = nonOrderNextStepIsNoAction ? 'No action required:' : 'Next step:';
@@ -25569,17 +25584,19 @@ function buildLifecycleEmailShell_(options) {
     }) + '">' + escapeHtml_(primaryCta.label || 'Open Red Threads portal') + '</a></div>')
     : '';
   const nonOrderNextStepHtml = !hasOrderContext && nextStep
-    ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + nonOrderNextStepColor + ';background:' + theme.panelAltBg + ';color:' + nonOrderNextStepColor + ';font-weight:900;border-radius:12px;"><strong style="color:' + nonOrderNextStepColor + ';">' + escapeHtml_(nonOrderNextStepLabel) + '</strong> ' + escapeHtml_(nextStep) + '</div>')
+    ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + nonOrderNextStepColor + ';background:' + theme.panelAltBg + ';color:' + nonOrderNextStepColor + ';font-weight:900;border-radius:12px;">' + (nonOrderNoActionFirst ? escapeHtml_(nextStep) : ('<strong style="color:' + nonOrderNextStepColor + ';">' + escapeHtml_(nonOrderNextStepLabel) + '</strong> ' + escapeHtml_(nextStep))) + '</div>')
     : '';
   const htmlInnerParts = [
     '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
     hasOrderContext ? actionCardHtml : (nonOrderNextStepFirst ? nonOrderNextStepHtml : primaryCtaHtml),
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
+    !hasOrderContext && nonOrderNoActionFirst ? accountDetailsHtml : '',
     !hasOrderContext && nonOrderNextStepFirst ? nonOrderPrimaryCtaHtml : '',
     !hasOrderContext && !nonOrderNextStepFirst ? nonOrderNextStepHtml : '',
     progressHtml,
-    detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
+    detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html,
+    !hasOrderContext && !nonOrderNoActionFirst ? accountDetailsHtml : ''
   ];
   genericBlocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
