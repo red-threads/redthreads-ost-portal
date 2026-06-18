@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-18 - Credit Terms Source Email Refinement
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, Apps Script version `941`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: update blank credit-terms source email instructions and omit the validated credit-terms source fixture from owner email review-suite sends.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/send-email-review-suite.mjs`, `npm run validate:runtime`, `git diff --check`, and `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate` passed before deploy.
+- Decisions: the old credit-terms review-note paragraph was removed because the replacement instruction already says the team will reach out after account review; the review-suite omission map now includes `Blank credit terms source client`.
+- Current-state updates: deployed version `941`; direct Apps Script `/exec` and public `/portal` returned HTTP 200, public wrapper still targets the stable deployment, direct runtime showed revision `71`, and targeted secret-marker checks found no `client_secret`, `clientSecret`, or `hosted_verification_url`.
+- Follow-ups: email review suite reported 44 sent, 3 skipped, 0 failed, with expected fixture artifact fallbacks.
+
 ## 2026-06-18 - Dashboard Project Name Wrapping
 
 - Mode: Full ship.

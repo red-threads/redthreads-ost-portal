@@ -10480,13 +10480,12 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
   const token = resolveAccountDocumentPortalToken_(ctx);
   const uploadUrl = token ? buildDashboardCreditTermsResubmitUrl_(token) : '';
   const uploadInstruction = uploadUrl
-    ? 'Complete and sign the PDF, then click the button below to open your dashboard directly to the credit terms upload step.'
-    : 'Complete and sign the PDF, then log into your Red Threads portal dashboard and choose Credit Terms to upload the completed file.';
+    ? 'Complete and sign the attached PDF, then click the button below to open your portal dashboard directly to the credit terms section. Upload your document in the portal, and our team will reach out after reviewing your account.'
+    : 'Complete and sign the attached PDF, then log into your Red Threads portal dashboard and choose Credit Terms to upload the completed file.';
   const body = [
     'The blank credit terms PDF is attached.',
     uploadInstruction,
     uploadUrl ? ('Upload credit terms file: ' + uploadUrl) : '',
-    'The Red Threads team will review the completed file and notify you if credit terms are approved.',
     '',
     creditTermsBlankEmailFooter
   ].filter(Boolean).join('\n');
@@ -10517,7 +10516,6 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
       '<p style="margin:0 0 12px;font-size:16px;line-height:1.7;color:' + theme.text + ';">The blank credit terms PDF is attached.</p>',
       '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(uploadInstruction) + '</p>',
       ctaHtml,
-      '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">The Red Threads team will review the completed file and notify you if credit terms are approved.</p>',
       '<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:' + theme.textSoft + ';">' + escapeHtml_(creditTermsBlankEmailFooter) + '</p>'
     ].filter(Boolean).join('\n')
   });
@@ -28886,7 +28884,8 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
 }
 
 const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
-  'password reset client': 'validated_email_omitted'
+  'password reset client': 'validated_email_omitted',
+  'blank credit terms source client': 'validated_email_omitted'
 };
 
 function getEmailReviewSuiteOmissionReason_(label) {
