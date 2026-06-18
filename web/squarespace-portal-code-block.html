@@ -345,6 +345,27 @@
     var mobileCopyStatus = document.getElementById("rtPortalMobileCopyStatus");
     var iframeParams = buildIframeParamsFromLocation();
     var shouldShowLoading = hasForwardedRouteParams(iframeParams);
+    var wrapperLoadStartedAt = Date.now();
+    var loadingHidden = false;
+
+    function logPortalWrapperTiming(phase, extra) {
+      var payload = {
+        phase: String(phase || ""),
+        elapsedMs: Date.now() - wrapperLoadStartedAt,
+        hasForwardedRouteParams: !!shouldShowLoading
+      };
+      if (extra && typeof extra === "object") {
+        Object.keys(extra).forEach(function (key) {
+          payload[key] = extra[key];
+        });
+      }
+      if (window.console && typeof window.console.info === "function") {
+        window.console.info("[RT-LOAD-TIMING-WRAPPER]", payload);
+        try {
+          window.console.info("[RT-LOAD-TIMING-WRAPPER-JSON] " + JSON.stringify(payload));
+        } catch (error) {}
+      }
+    }
 
     function isMobileBlocked() {
       return !!(window.matchMedia && window.matchMedia(MOBILE_BLOCK_QUERY).matches);
@@ -414,6 +435,11 @@
       iframe.dataset.rtPortalStarted = "1";
       iframeParams = buildIframeParamsFromLocation();
       shouldShowLoading = hasForwardedRouteParams(iframeParams);
+      wrapperLoadStartedAt = Date.now();
+      loadingHidden = false;
+      logPortalWrapperTiming("start", {
+        routeType: iframeParams.get("t") ? "token" : (iframeParams.get("dashboard") ? "dashboard" : "auth_shell")
+      });
 
       if (shouldShowLoading && loading) {
         if (loadingTitle && iframeParams.get("t")) {
@@ -424,24 +450,23 @@
       }
 
       if (shouldShowLoading) {
-        iframe.addEventListener("load", hideLoading, { once: true });
-        window.setTimeout(hideLoading, 16000);
+        iframe.addEventListener("load", function () { hideLoading("iframe-load"); }, { once: true });
+        window.setTimeout(function () { hideLoading("timeout"); }, 16000);
       }
 
       iframe.src = buildIframeUrl(iframeParams);
     }
 
-    function hideLoading() {
-      if (!loading || !shouldShowLoading) {
+    function hideLoading(reason) {
+      if (!loading || !shouldShowLoading || loadingHidden) {
         return;
       }
 
+      loadingHidden = true;
+      logPortalWrapperTiming("loading-hidden", {
+        reason: String(reason || "unknown")
+      });
       loading.classList.add("is-hidden");
-      window.setTimeout(function () {
-        if (loading && loading.parentNode) {
-          loading.parentNode.removeChild(loading);
-        }
-      }, 260);
     }
 
     function syncMobileBlock() {
@@ -514,6 +539,8 @@
     function reloadPortalFrameFromCurrentRoute() {
       iframeParams = buildIframeParamsFromLocation();
       shouldShowLoading = hasForwardedRouteParams(iframeParams);
+      wrapperLoadStartedAt = Date.now();
+      loadingHidden = false;
       syncMobileCopyLink();
       if (isMobileBlocked()) {
         showMobileBlock();
@@ -527,8 +554,8 @@
         if (loadingTitle) {
           loadingTitle.textContent = iframeParams.get("t") ? "Loading project..." : "Loading portal...";
         }
-        iframe.addEventListener("load", hideLoading, { once: true });
-        window.setTimeout(hideLoading, 16000);
+        iframe.addEventListener("load", function () { hideLoading("iframe-load"); }, { once: true });
+        window.setTimeout(function () { hideLoading("timeout"); }, 16000);
       }
       iframe.src = buildIframeUrl(iframeParams);
     }
@@ -541,6 +568,11 @@
 
       if (data.type === "RT_PORTAL_ROUTE_REPLACE") {
         replacePortalRoute(getPortalMessageParams(data), getPortalHistoryMode(data));
+        return;
+      }
+
+      if (data.type === "RT_PORTAL_READY") {
+        hideLoading("portal-ready");
         return;
       }
 

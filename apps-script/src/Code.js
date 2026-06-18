@@ -629,6 +629,11 @@ const AUTH_POLICY = {
   DEBUG_AUTH_TIMING: true,
   PROJECT_CACHE_TTL_SEC: 300
 };
+const PORTAL_LOAD_TIMING_MARK_LIMIT = 80;
+const DASHBOARD_PROJECT_CACHE_EPOCH_KEY = 'rt:projects:epoch:v1';
+const DASHBOARD_ACCOUNT_PROJECT_CACHE_PREFIX = 'rt:acctProjects:v1:';
+const PORTAL_EMAIL_QUEUE_TRAFFIC_NUDGE_CACHE_KEY = 'rt:emailQueueTrafficNudge:v1';
+const PORTAL_EMAIL_QUEUE_TRAFFIC_NUDGE_TTL_SEC = 60;
 const AUTH_RESET_RETURN_CACHE_PREFIX = 'auth_reset_return_';
 const PASSWORD_RESET_RETURN_BRIDGE_PREFIX = 'reset_';
 
@@ -639,55 +644,116 @@ const LOGIN_DENY_MESSAGE =
 /* ---------------- Web App Routing ---------------- */
 
 function doGet(e) {
+  const timing = createPortalLoadTimingTrace_('doGet');
   try {
     const token =
       (e && e.parameter && (e.parameter.t || e.parameter.token))
         ? String(e.parameter.t || e.parameter.token).trim()
         : '';
     const routeMeta = buildPortalRequestRouteMeta_(e);
+    markPortalLoadTiming_(timing, 'request_received', {
+      routeType: token ? 'token' : 'auth_shell',
+      hasToken: !!token,
+      mode: routeMeta.mode || ''
+    });
     if (!token) {
+      markPortalLoadTiming_(timing, 'auth_vm_start');
       const tpl = createIndexTemplate_(attachPortalRequestRouteMetaToVm_(buildAuthShellVm_(), routeMeta));
-      return tpl.evaluate()
+      markPortalLoadTiming_(timing, 'template_ready', {
+        routeType: 'auth_shell'
+      });
+      const output = tpl.evaluate()
         .setTitle('Red Threads Estimate Portal')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+      logPortalLoadTiming_(timing, {
+        routeType: 'auth_shell',
+        ok: true,
+        hasToken: false
+      });
+      return output;
     }
 
     const mode = routeMeta.checkoutResult
       ? 'client'
       : normalizeMode_((e && e.parameter && e.parameter.mode) || 'client');
 
+    markPortalLoadTiming_(timing, 'config_start', { routeType: 'token', mode: mode });
     const cfg = getConfig_();
     const ss = SpreadsheetApp.openById(cfg.sheetId);
+    markPortalLoadTiming_(timing, 'spreadsheet_open_end', { routeType: 'token', mode: mode });
     const infra = ensurePortalInfrastructure_(ss, cfg);
-    kickPortalEmailQueueProcessorSafely_({
-      cfg: cfg,
-      ss: ss,
-      infra: infra,
-      maxJobs: 2,
-      source: 'doGet'
+    markPortalLoadTiming_(timing, 'infra_ready', { routeType: 'token', mode: mode });
+    const queueNudge = nudgePortalEmailQueueProcessorFromTraffic_('doGet');
+    markPortalLoadTiming_(timing, 'queue_nudge_done', {
+      routeType: 'token',
+      mode: mode,
+      queueNudge: queueNudge && queueNudge.skipped === true ? trimString_(queueNudge.reason || 'skipped') : 'scheduled',
+      scheduled: queueNudge && queueNudge.ok === true && queueNudge.skipped !== true
     });
     const sheet = infra.exportSheet;
-    if (!sheet) return renderMessage_('Configuration error', 'EXPORT_LOG sheet not found.');
+    if (!sheet) {
+      logPortalLoadTiming_(timing, {
+        routeType: 'token',
+        mode: mode,
+        ok: false,
+        stage: 'missing_export_sheet'
+      });
+      return renderMessage_('Configuration error', 'EXPORT_LOG sheet not found.');
+    }
 
+    markPortalLoadTiming_(timing, 'token_lookup_start', { routeType: 'token', mode: mode });
     const rowInfo = findRowByToken_(sheet, token);
-    if (!rowInfo) return renderMessage_('Link not found', 'This link is invalid or no longer available.');
+    markPortalLoadTiming_(timing, 'token_lookup_end', {
+      routeType: 'token',
+      mode: mode,
+      ok: !!rowInfo
+    });
+    if (!rowInfo) {
+      logPortalLoadTiming_(timing, {
+        routeType: 'token',
+        mode: mode,
+        ok: false,
+        stage: 'link_not_found'
+      });
+      return renderMessage_('Link not found', 'This link is invalid or no longer available.');
+    }
 
     const row = rowInfo.rowObjNormalized;
     const status = String(row.status || '').toLowerCase();
 
     if (status === 'replaced') {
+      logPortalLoadTiming_(timing, {
+        routeType: 'token',
+        mode: mode,
+        ok: false,
+        stage: 'link_replaced'
+      });
       return renderMessage_('Link replaced', 'This estimate link has been replaced. Please use the most recent email link.');
     }
 
     const snapshotRaw = String(row.snapshotjson || '').trim();
     if (!snapshotRaw) {
+      logPortalLoadTiming_(timing, {
+        routeType: 'token',
+        mode: mode,
+        ok: false,
+        stage: 'missing_snapshot'
+      });
       return renderMessage_('Configuration error', 'Snapshot data is missing.');
     }
 
+    markPortalLoadTiming_(timing, 'snapshot_parse_start', { routeType: 'token', mode: mode });
     const snapshot = safeJsonParse_(snapshotRaw, null);
     if (!snapshot || typeof snapshot !== 'object') {
+      logPortalLoadTiming_(timing, {
+        routeType: 'token',
+        mode: mode,
+        ok: false,
+        stage: 'malformed_snapshot'
+      });
       return renderMessage_('Configuration error', 'Snapshot data is malformed.');
     }
+    markPortalLoadTiming_(timing, 'snapshot_parse_end', { routeType: 'token', mode: mode });
     const rawPrintJobs = Array.isArray(snapshot.printJobs)
       ? snapshot.printJobs
       : ((snapshot.printJobs && typeof snapshot.printJobs === 'object')
@@ -708,6 +774,12 @@ function doGet(e) {
 
     if (majorVersion_(contractVersion) !== 2) {
       if (mode === 'team') {
+        logPortalLoadTiming_(timing, {
+          routeType: 'token',
+          mode: mode,
+          ok: false,
+          stage: 'unsupported_contract_team'
+        });
         return renderTeamContractMessage_({
           token: token,
           status: status,
@@ -717,14 +789,42 @@ function doGet(e) {
           snapshotSnippet: snapshotRaw.slice(0, 500)
         });
       }
+      logPortalLoadTiming_(timing, {
+        routeType: 'token',
+        mode: mode,
+        ok: false,
+        stage: 'unsupported_contract'
+      });
       return renderMessage_(
         'Unsupported Estimate Link',
         'This portal link is on an unsupported contract version. Please request a fresh estimate link.'
       );
     }
 
-    const built = buildPortalVmForRow_(rowInfo, token, mode);
+    markPortalLoadTiming_(timing, 'vm_build_start', { routeType: 'token', mode: mode });
+    const built = buildPortalVmForRow_(rowInfo, token, mode, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      snapshot: snapshot,
+      snapshotRaw: snapshotRaw,
+      readOnlyAccount: true,
+      timing: timing
+    });
+    markPortalLoadTiming_(timing, 'vm_build_end', {
+      routeType: 'token',
+      mode: mode,
+      ok: !!(built && built.ok === true),
+      readOnlyAccount: true
+    });
     if (!built || built.ok !== true || !built.vm) {
+      logPortalLoadTiming_(timing, {
+        routeType: 'token',
+        mode: mode,
+        ok: false,
+        stage: 'vm_build_failed',
+        readOnlyAccount: true
+      });
       return renderMessage_(
         mode === 'team' ? 'Team Link Error' : 'Link Error',
         String((built && built.error) || 'Unable to load project.')
@@ -732,11 +832,28 @@ function doGet(e) {
     }
 
     const tpl = createIndexTemplate_(attachPortalRequestRouteMetaToVm_(built.vm, routeMeta));
+    markPortalLoadTiming_(timing, 'template_ready', {
+      routeType: 'token',
+      mode: mode,
+      payloadBytes: JSON.stringify(built.vm || {}).length,
+      printJobsCount: printJobIds.length
+    });
 
-    return tpl.evaluate()
+    const output = tpl.evaluate()
       .setTitle('Red Threads Estimate Portal')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    logPortalLoadTiming_(timing, {
+      routeType: 'token',
+      mode: mode,
+      ok: true,
+      hasToken: true,
+      readOnlyAccount: true,
+      payloadBytes: JSON.stringify(built.vm || {}).length,
+      printJobsCount: printJobIds.length
+    });
+    return output;
   } catch (err) {
+    logPortalLoadTiming_(timing, { ok: false, stage: 'error' });
     return renderMessage_('Runtime error', String((err && err.message) || err));
   }
 }
@@ -825,6 +942,22 @@ function createIndexTemplate_(vm) {
 
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(String(filename || '').trim()).getContent();
+}
+
+function getTaxForm3372Manifest() {
+  try {
+    const raw = include('TaxForm3372Manifest');
+    const match = String(raw || '').match(/<script[^>]*id=["']taxForm3372ManifestData["'][^>]*>([\s\S]*?)<\/script>/i);
+    const json = trimString_(match && match[1]);
+    if (!json) return { ok: false, error: 'Tax form manifest is unavailable.' };
+    const manifest = safeJsonParse_(json, null);
+    if (!manifest || typeof manifest !== 'object') {
+      return { ok: false, error: 'Tax form manifest is invalid.' };
+    }
+    return { ok: true, manifest: manifest };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 }
 
 function encodeVmPayload_(vm) {
@@ -2026,8 +2159,16 @@ function listProjectsForEmail_(exportSheet, email, options) {
       Array.isArray(parsedCached.projects) &&
       parsedCached.projects.every(isValidDashboardHomeProjectPayload_)
     ) {
+      if (opts.cacheMeta) {
+        opts.cacheMeta.cacheType = 'email';
+        opts.cacheMeta.cacheHit = true;
+      }
       return parsedCached.projects;
     }
+  }
+  if (opts.cacheMeta) {
+    opts.cacheMeta.cacheType = 'email';
+    opts.cacheMeta.cacheHit = false;
   }
 
   const lastCol = exportSheet.getLastColumn();
@@ -2150,6 +2291,28 @@ function listProjectsForAccount_(exportSheet, accountSummary, options) {
     return [];
   }
 
+  const cache = CacheService.getScriptCache();
+  const cacheKey = buildAccountProjectsCacheKey_(account);
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    const parsedCached = safeJsonParse_(cached, null);
+    if (
+      parsedCached &&
+      Array.isArray(parsedCached.projects) &&
+      parsedCached.projects.every(isValidDashboardHomeProjectPayload_)
+    ) {
+      if (opts.cacheMeta) {
+        opts.cacheMeta.cacheType = 'account';
+        opts.cacheMeta.cacheHit = true;
+      }
+      return parsedCached.projects;
+    }
+  }
+  if (opts.cacheMeta) {
+    opts.cacheMeta.cacheType = 'account';
+    opts.cacheMeta.cacheHit = false;
+  }
+
   const lastCol = exportSheet.getLastColumn();
   const header = exportSheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const colMap = buildColumnMap_(header);
@@ -2203,7 +2366,7 @@ function listProjectsForAccount_(exportSheet, accountSummary, options) {
     }
   );
 
-  return projectEntries.map(function(entry, index) {
+  const projects = projectEntries.map(function(entry, index) {
     const latestOrderInfo = latestOrderMapByToken[entry.token] || null;
     const latestOrderSummary = latestOrderInfo
       ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized)
@@ -2226,6 +2389,10 @@ function listProjectsForAccount_(exportSheet, accountSummary, options) {
         : null
     });
   });
+  try {
+    cache.put(cacheKey, JSON.stringify({ projects: projects }), AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+  } catch (_) {}
+  return projects;
 }
 
 function buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState) {
@@ -3508,6 +3675,7 @@ function buildDashboardHomeData_(options) {
   const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
   const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
   const exportSheet = infra.exportSheet;
+  const cacheMeta = (opts.cacheMeta && typeof opts.cacheMeta === 'object') ? opts.cacheMeta : null;
   if (!exportSheet) {
     return { ok: false, error: 'Auth configuration is incomplete.' };
   }
@@ -3529,7 +3697,8 @@ function buildDashboardHomeData_(options) {
       cfg: cfg,
       ss: ss,
       infra: infra,
-      accountSummary: accountSummary
+      accountSummary: accountSummary,
+      cacheMeta: cacheMeta
     });
     return {
       ok: true,
@@ -3592,7 +3761,8 @@ function buildDashboardHomeData_(options) {
     cfg: cfg,
     ss: ss,
     infra: infra,
-    accountSummary: accountSummary
+    accountSummary: accountSummary,
+    cacheMeta: cacheMeta
   });
   if (token) {
     const tokenRowInfo = findRowByToken_(exportSheet, token);
@@ -3613,10 +3783,37 @@ function buildDashboardHomeData_(options) {
 }
 
 function getDashboardHomeData(payload) {
+  const timing = createPortalLoadTimingTrace_('getDashboardHomeData');
+  const cacheMeta = {};
   try {
-    return buildDashboardHomeData_(payload);
+    markPortalLoadTiming_(timing, 'request_received', {
+      routeType: 'dashboard',
+      hasSession: !!(payload && payload.sessionId),
+      hasToken: !!(payload && payload.token)
+    });
+    const resp = buildDashboardHomeData_(Object.assign({}, (payload && typeof payload === 'object') ? payload : {}, {
+      cacheMeta: cacheMeta
+    }));
+    markPortalLoadTiming_(timing, 'response_ready', {
+      ok: !!(resp && resp.ok === true),
+      cacheType: cacheMeta.cacheType,
+      cacheHit: cacheMeta.cacheHit === true,
+      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
+    });
+    return attachPortalLoadTiming_(resp, timing, {
+      routeType: 'dashboard',
+      ok: !!(resp && resp.ok === true),
+      cacheType: cacheMeta.cacheType,
+      cacheHit: cacheMeta.cacheHit === true,
+      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
+    });
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    return attachPortalLoadTiming_({ ok: false, error: String((err && err.message) || err) }, timing, {
+      routeType: 'dashboard',
+      ok: false,
+      cacheType: cacheMeta.cacheType,
+      cacheHit: cacheMeta.cacheHit === true
+    });
   }
 }
 
@@ -5426,54 +5623,145 @@ function authListProjects(payload) {
  * - Parse snapshot only here.
  * - Optionally enforce session/email ownership when sessionId is provided.
  */
-function getSnapshotByToken(payload) {
+function getSnapshotByToken_(payload, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const timing = opts.timing || createPortalLoadTimingTrace_(opts.label || 'getSnapshotByToken');
   try {
     const p = (payload && typeof payload === 'object') ? payload : { token: payload };
     const sessionId = String(p.sessionId || '').trim();
     const token = String(p.token || '').trim();
-    if (!token) return { ok: false, error: 'Missing token.' };
+    markPortalLoadTiming_(timing, 'request_received', {
+      routeType: 'project_rpc',
+      source: trimString_(opts.label) || 'getSnapshotByToken',
+      hasToken: !!token,
+      hasSession: !!sessionId
+    });
+    if (!token) {
+      return attachPortalLoadTiming_({ ok: false, error: 'Missing token.' }, timing, {
+        routeType: 'project_rpc',
+        source: trimString_(opts.label) || 'getSnapshotByToken',
+        ok: false
+      });
+    }
 
+    markPortalLoadTiming_(timing, 'config_start', { routeType: 'project_rpc' });
     const cfg = getConfig_();
     const ss = SpreadsheetApp.openById(cfg.sheetId);
+    markPortalLoadTiming_(timing, 'spreadsheet_open_end', { routeType: 'project_rpc' });
     const infra = ensurePortalInfrastructure_(ss, cfg);
+    markPortalLoadTiming_(timing, 'infra_ready', { routeType: 'project_rpc' });
     const exportSheet = infra.exportSheet;
     const sessionsSheet = sessionId ? infra.sessionsSheet : null;
     if (!exportSheet) {
-      return { ok: false, error: 'Auth configuration is incomplete.' };
+      return attachPortalLoadTiming_({ ok: false, error: 'Auth configuration is incomplete.' }, timing, {
+        routeType: 'project_rpc',
+        source: trimString_(opts.label) || 'getSnapshotByToken',
+        ok: false
+      });
     }
 
     let sessionEmail = '';
     if (sessionId) {
-      if (!sessionsSheet) return { ok: false, error: 'Auth configuration is incomplete.' };
+      if (!sessionsSheet) {
+        return attachPortalLoadTiming_({ ok: false, error: 'Auth configuration is incomplete.' }, timing, {
+          routeType: 'project_rpc',
+          source: trimString_(opts.label) || 'getSnapshotByToken',
+          ok: false,
+          stage: 'missing_sessions_sheet'
+        });
+      }
+      markPortalLoadTiming_(timing, 'session_validate_start', { routeType: 'project_rpc' });
       const session = validateSession_(sessionsSheet, sessionId);
-      if (!session.ok) return session;
+      markPortalLoadTiming_(timing, 'session_validate_end', {
+        routeType: 'project_rpc',
+        ok: session && session.ok === true
+      });
+      if (!session.ok) {
+        return attachPortalLoadTiming_(session, timing, {
+          routeType: 'project_rpc',
+          source: trimString_(opts.label) || 'getSnapshotByToken',
+          ok: false
+        });
+      }
       sessionEmail = session.email;
     }
 
+    markPortalLoadTiming_(timing, 'token_lookup_start', { routeType: 'project_rpc' });
     const rowInfo = findRowByToken_(exportSheet, token);
-    if (!rowInfo) return { ok: false, error: 'Link not found.' };
+    markPortalLoadTiming_(timing, 'token_lookup_end', {
+      routeType: 'project_rpc',
+      ok: !!rowInfo
+    });
+    if (!rowInfo) {
+      return attachPortalLoadTiming_({ ok: false, error: 'Link not found.' }, timing, {
+        routeType: 'project_rpc',
+        source: trimString_(opts.label) || 'getSnapshotByToken',
+        ok: false
+      });
+    }
 
     if (sessionEmail) {
       const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
       if (!rowEmail || rowEmail !== sessionEmail) {
-        return { ok: false, error: 'Unauthorized project access.' };
+        return attachPortalLoadTiming_({ ok: false, error: 'Unauthorized project access.' }, timing, {
+          routeType: 'project_rpc',
+          source: trimString_(opts.label) || 'getSnapshotByToken',
+          ok: false
+        });
       }
     }
 
-    const built = buildPortalVmForRow_(rowInfo, token, 'client');
+    const snapshotRaw = String(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized.snapshotjson || '').trim();
+    markPortalLoadTiming_(timing, 'snapshot_parse_start', { routeType: 'project_rpc' });
+    const snapshot = safeJsonParse_(snapshotRaw, null);
+    markPortalLoadTiming_(timing, 'snapshot_parse_end', {
+      routeType: 'project_rpc',
+      ok: !!(snapshot && typeof snapshot === 'object')
+    });
+    const built = buildPortalVmForRow_(rowInfo, token, 'client', {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      snapshot: snapshot,
+      snapshotRaw: snapshotRaw,
+      readOnlyAccount: true,
+      timing: timing
+    });
     if (!built.ok) {
-      return { ok: false, error: built.error || 'Unable to load project.' };
+      return attachPortalLoadTiming_({ ok: false, error: built.error || 'Unable to load project.' }, timing, {
+        routeType: 'project_rpc',
+        source: trimString_(opts.label) || 'getSnapshotByToken',
+        ok: false,
+        readOnlyAccount: true
+      });
     }
 
-    return { ok: true, portalPayload: makeClientSafe_(built.vm) };
+    const portalPayload = makeClientSafe_(built.vm);
+    return attachPortalLoadTiming_({ ok: true, portalPayload: portalPayload }, timing, {
+      routeType: 'project_rpc',
+      source: trimString_(opts.label) || 'getSnapshotByToken',
+      ok: true,
+      hasToken: true,
+      hasSession: !!sessionId,
+      readOnlyAccount: true,
+      payloadBytes: JSON.stringify(portalPayload || {}).length
+    });
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    return attachPortalLoadTiming_({ ok: false, error: String((err && err.message) || err) }, timing, {
+      routeType: 'project_rpc',
+      source: trimString_(opts.label) || 'getSnapshotByToken',
+      ok: false
+    });
   }
+}
+
+function getSnapshotByToken(payload) {
+  return getSnapshotByToken_(payload, { label: 'getSnapshotByToken' });
 }
 
 // Backward-compatible alias for existing frontend callers.
 function authLoadProject(payload) {
-  return getSnapshotByToken(payload);
+  return getSnapshotByToken_(payload, { label: 'authLoadProject' });
 }
 
 function buildEphemeralAccountSummary_(identity, cfg) {
@@ -7206,6 +7494,95 @@ function attachCheckoutTiming_(response, timing, extra) {
   try {
     console.log(buildCheckoutTimingServerSummaryLine_(timingPayload));
   } catch (_) {}
+  return base;
+}
+
+function createPortalLoadTimingTrace_(label) {
+  const startedAt = Date.now();
+  return {
+    label: trimString_(label) || 'portal_load',
+    startedAt: startedAt,
+    lastAt: startedAt,
+    marks: [],
+    mark: function(name, extra) {
+      const now = Date.now();
+      const mark = Object.assign({
+        name: trimString_(name),
+        elapsedMs: now - startedAt,
+        deltaMs: now - this.lastAt
+      }, buildPortalLoadTimingExtra_(extra));
+      this.lastAt = now;
+      if (this.marks.length < PORTAL_LOAD_TIMING_MARK_LIMIT) this.marks.push(mark);
+      return mark;
+    }
+  };
+}
+
+function buildPortalLoadTimingExtra_(extra) {
+  const source = (extra && typeof extra === 'object') ? extra : {};
+  const out = {};
+  [
+    'routeType',
+    'mode',
+    'stage',
+    'cacheType',
+    'queueNudge',
+    'source',
+    'reason'
+  ].forEach(function(key) {
+    const value = trimString_(source[key]);
+    if (value) out[key] = value;
+  });
+  [
+    'ok',
+    'hasToken',
+    'hasSession',
+    'cacheHit',
+    'readOnlyAccount',
+    'embedded',
+    'scheduled'
+  ].forEach(function(key) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key] === true;
+  });
+  [
+    'payloadBytes',
+    'projectCount',
+    'printJobsCount'
+  ].forEach(function(key) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) return;
+    const n = Number(source[key]);
+    if (isFinite(n)) out[key] = Math.max(0, Math.round(n));
+  });
+  return out;
+}
+
+function markPortalLoadTiming_(timing, name, extra) {
+  if (!timing || typeof timing.mark !== 'function') return null;
+  return timing.mark(name, extra);
+}
+
+function buildPortalLoadTimingPayload_(timing, extra) {
+  if (!timing || !Array.isArray(timing.marks)) return null;
+  return Object.assign({
+    label: trimString_(timing.label) || 'portal_load',
+    totalMs: Date.now() - Number(timing.startedAt || Date.now()),
+    marks: timing.marks.slice(0, PORTAL_LOAD_TIMING_MARK_LIMIT)
+  }, buildPortalLoadTimingExtra_(extra));
+}
+
+function logPortalLoadTiming_(timing, extra) {
+  const payload = buildPortalLoadTimingPayload_(timing, extra);
+  if (!payload) return null;
+  try {
+    console.log('[RT-LOAD-TIMING-SERVER] ' + JSON.stringify(payload));
+  } catch (_) {}
+  return payload;
+}
+
+function attachPortalLoadTiming_(response, timing, extra) {
+  const base = (response && typeof response === 'object') ? Object.assign({}, response) : {};
+  const payload = logPortalLoadTiming_(timing, extra);
+  if (payload) base.portalLoadTiming = payload;
   return base;
 }
 
@@ -14860,7 +15237,8 @@ function buildAuthShellVm_() {
   };
 }
 
-function buildPortalVmForRow_(rowInfo, token, mode) {
+function buildPortalVmForRow_(rowInfo, token, mode, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
   let effectiveRowInfo = (rowInfo && typeof rowInfo === 'object') ? rowInfo : null;
   let row = effectiveRowInfo && effectiveRowInfo.rowObjNormalized ? effectiveRowInfo.rowObjNormalized : null;
   if (!row) return { ok: false, error: 'Link not found.' };
@@ -14870,10 +15248,16 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
     return { ok: false, error: 'This estimate link has been replaced.' };
   }
 
-  const snapshotRaw = String(row.snapshotjson || '').trim();
+  const snapshotRaw = String(
+    Object.prototype.hasOwnProperty.call(opts, 'snapshotRaw')
+      ? opts.snapshotRaw
+      : row.snapshotjson || ''
+  ).trim();
   if (!snapshotRaw) return { ok: false, error: 'Snapshot data is missing.' };
 
-  const snapshot = safeJsonParse_(snapshotRaw, null);
+  const snapshot = (opts.snapshot && typeof opts.snapshot === 'object')
+    ? opts.snapshot
+    : safeJsonParse_(snapshotRaw, null);
   if (!snapshot || typeof snapshot !== 'object') {
     return { ok: false, error: 'Snapshot data is malformed.' };
   }
@@ -14906,16 +15290,27 @@ function buildPortalVmForRow_(rowInfo, token, mode) {
   const portalState = safeJsonParse_(row.portalstatejson, null);
   const chatLog = normalizeChatLog_(safeJsonParse_(row.chatlogjson, []));
   const readOnly = isLockedPortalRow_(row, portalState);
-  const cfg = getConfig_();
-  const ss = SpreadsheetApp.openById(cfg.sheetId);
-  const infra = ensurePortalInfrastructure_(ss, cfg);
-  const accountInfo = createPortalAccountIfMissing_(Object.assign({}, deriveOrgContextFromRow_(row), {
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const readOnlyAccount = opts.readOnlyAccount === true;
+  const accountIdentity = deriveOrgContextFromRow_(row);
+  const accountInfo = readOnlyAccount
+    ? getPortalAccountByOrgOrEmail_(Object.assign({}, accountIdentity, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      readOnly: true
+    }))
+    : createPortalAccountIfMissing_(Object.assign({}, accountIdentity, {
     cfg: cfg,
     ss: ss,
     infra: infra
   }));
-  const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(deriveOrgContextFromRow_(row), cfg);
-  effectiveRowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, effectiveRowInfo, accountSummary) || effectiveRowInfo;
+  const accountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(accountIdentity, cfg);
+  if (!readOnlyAccount) {
+    effectiveRowInfo = maybeBackfillExportRowOrgContextFromAccount_(infra.exportSheet, effectiveRowInfo, accountSummary) || effectiveRowInfo;
+  }
   row = effectiveRowInfo && effectiveRowInfo.rowObjNormalized ? effectiveRowInfo.rowObjNormalized : row;
   const latestOrderInfo = getCurrentPortalOrderForRow_(effectiveRowInfo, {
     cfg: cfg,
@@ -16921,6 +17316,12 @@ function getPortalAccountByOrgOrEmail_(opts) {
   }
 
   if (!match) return null;
+  if (options.readOnly === true) {
+    return {
+      rowInfo: match,
+      summary: buildPortalAccountSummary_(match.rowObjNormalized, cfg)
+    };
+  }
   return maybeBackfillPortalAccountIdentity_({
     rowInfo: match,
     summary: buildPortalAccountSummary_(match.rowObjNormalized, cfg)
@@ -18358,6 +18759,17 @@ function buildLatestPortalOrderInfoMapByToken_(tokens, options) {
   const cfg = opts.cfg || getConfig_();
   const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
   const ordersSheet = opts.ordersSheet || getOrderSheet_(ss, cfg);
+  if (cleanTokens.length <= 8) {
+    return cleanTokens.reduce(function(map, token) {
+      const info = getLatestPortalOrderByToken_(token, {
+        cfg: cfg,
+        ss: ss,
+        ordersSheet: ordersSheet
+      });
+      if (info) map[token] = info;
+      return map;
+    }, {});
+  }
   const tokenSet = cleanTokens.reduce(function(map, token) {
     map[token] = true;
     return map;
@@ -18745,6 +19157,7 @@ function writeCurrentOrderPointersToExportLog_(opts) {
 
 function invalidateDashboardProjectsCacheForEmail_(email) {
   const normalizedEmail = normalizeEmail_(email);
+  bumpDashboardProjectsCacheEpoch_();
   if (!normalizedEmail) return;
   try {
     CacheService.getScriptCache().remove(buildProjectsCacheKey_(normalizedEmail));
@@ -25782,6 +26195,17 @@ function deletePortalEmailQueueProcessorTriggers_() {
   }
 }
 
+function hasPortalEmailQueueProcessorTrigger_() {
+  try {
+    return ScriptApp.getProjectTriggers().some(function(trigger) {
+      return trigger.getHandlerFunction && trigger.getHandlerFunction() === 'processPortalEmailQueue';
+    });
+  } catch (err) {
+    console.log('[RT-EMAIL-QUEUE-TRIGGER-CHECK] ' + String((err && err.message) || err));
+    return false;
+  }
+}
+
 function schedulePortalEmailQueueProcessor_(delayMs) {
   try {
     const rawDelayMs = Math.max(0, parseInt(String(delayMs || 0), 10) || 0);
@@ -25803,6 +26227,40 @@ function schedulePortalEmailQueueProcessor_(delayMs) {
       ok: false,
       error: String((err && err.message) || err)
     };
+  }
+}
+
+function nudgePortalEmailQueueProcessorFromTraffic_(source) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (cache.get(PORTAL_EMAIL_QUEUE_TRAFFIC_NUDGE_CACHE_KEY)) {
+      return { ok: true, skipped: true, reason: 'throttled' };
+    }
+    if (hasPortalEmailQueueProcessorTrigger_()) {
+      console.log('[RT-EMAIL-QUEUE-TRAFFIC-NUDGE] ' + JSON.stringify({
+        ok: true,
+        source: trimString_(source),
+        scheduled: false,
+        skipped: true,
+        reason: 'existing_trigger'
+      }));
+      return { ok: true, skipped: true, reason: 'existing_trigger' };
+    }
+    cache.put(PORTAL_EMAIL_QUEUE_TRAFFIC_NUDGE_CACHE_KEY, '1', PORTAL_EMAIL_QUEUE_TRAFFIC_NUDGE_TTL_SEC);
+    const scheduled = schedulePortalEmailQueueProcessor_(PORTAL_EMAIL_QUEUE_TRIGGER_DELAY_MS);
+    console.log('[RT-EMAIL-QUEUE-TRAFFIC-NUDGE] ' + JSON.stringify({
+      ok: scheduled && scheduled.ok === true,
+      source: trimString_(source),
+      scheduled: scheduled && scheduled.ok === true
+    }));
+    return Object.assign({ skipped: false }, scheduled || {});
+  } catch (err) {
+    console.log('[RT-EMAIL-QUEUE-TRAFFIC-NUDGE] ' + JSON.stringify({
+      ok: false,
+      source: trimString_(source),
+      error: String((err && err.message) || err)
+    }));
+    return { ok: false, error: String((err && err.message) || err) };
   }
 }
 
@@ -30925,8 +31383,49 @@ function normalizeEmail_(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function buildCacheDigestSegment_(value) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(value || '')
+  );
+  return Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '').slice(0, 32);
+}
+
+function getDashboardProjectsCacheEpoch_() {
+  try {
+    return trimString_(CacheService.getScriptCache().get(DASHBOARD_PROJECT_CACHE_EPOCH_KEY)) || '0';
+  } catch (_) {
+    return '0';
+  }
+}
+
+function bumpDashboardProjectsCacheEpoch_() {
+  try {
+    CacheService.getScriptCache().put(
+      DASHBOARD_PROJECT_CACHE_EPOCH_KEY,
+      String(Date.now()),
+      AUTH_POLICY.PROJECT_CACHE_TTL_SEC
+    );
+  } catch (_) {}
+}
+
 function buildProjectsCacheKey_(email) {
-  return 'rt:projects:v12:' + normalizeEmail_(email);
+  return 'rt:projects:v13:' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(normalizeEmail_(email));
+}
+
+function buildAccountProjectsCacheKey_(accountSummary) {
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const identity = {
+    accountId: trimString_(account.accountId),
+    orgId: trimString_(account.orgId),
+    orgName: trimString_(account.orgName).toLowerCase(),
+    primaryEmail: normalizeEmail_(account.primaryEmail),
+    billingContactEmail: normalizeEmail_(account.billingContactEmail),
+    updatedAt: trimString_(account.updatedAt),
+    termsStatus: trimString_(account.documentWorkflows && account.documentWorkflows.creditTerms && account.documentWorkflows.creditTerms.status),
+    taxExemptStatus: trimString_(account.documentWorkflows && account.documentWorkflows.taxExempt && account.documentWorkflows.taxExempt.status)
+  };
+  return DASHBOARD_ACCOUNT_PROJECT_CACHE_PREFIX + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(JSON.stringify(identity));
 }
 
 function parseIsoDateMs_(value) {

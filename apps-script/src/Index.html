@@ -16875,7 +16875,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 66">66</div>
+  <div class="devRevisionBadge" aria-label="Development revision 67">67</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17676,7 +17676,6 @@
       </div>
     </div>
   </div>
-  <?!= include('TaxForm3372Manifest'); ?>
   <div class="unsavedLeaveBackdrop" id="unsavedLeaveBackdrop" hidden>
     <div class="unsavedLeaveModal" id="unsavedLeaveModal" role="dialog" aria-modal="true" aria-labelledby="unsavedLeaveTitle">
       <div class="unsavedLeaveTitle" id="unsavedLeaveTitle">Warning; unsaved changes.</div>
@@ -21346,6 +21345,9 @@
 
   function clearConsumedCheckoutReturnParams(options){
     const opts = (options && typeof options === 'object') ? options : {};
+    if (opts.checkoutReturn === true || opts.checkoutCancel === true || opts.setupReturn === true) {
+      requireFreshDashboardHomeReturn_('checkout_return');
+    }
     CHECKOUT_RETURN_INTENT_CONSUMED = true;
     PARENT_CHECKOUT_RETURN_RESULT = '';
     PARENT_SETUP_RETURN_RESULT = '';
@@ -22405,7 +22407,13 @@
   let DASHBOARD_OPEN_ARMED_SOURCE = '';
   const DASHBOARD_PROJECT_PEEK_CACHE = new Map();
   const DASHBOARD_PROJECT_PEEK_INFLIGHT = new Map();
+  const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_CACHE = new Map();
+  const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT = new Map();
   const DASHBOARD_PEEK_IMAGE_PREWARM_CACHE = new Map();
+  const DASHBOARD_HOME_RESPONSE_CACHE = new Map();
+  let DASHBOARD_PROJECT_PAYLOAD_PREFETCH_SEQ = 0;
+  let DASHBOARD_HOME_RESPONSE_CACHE_SEQ = 0;
+  let DASHBOARD_HOME_FRESH_RETURN_REQUIRED = false;
   let DASHBOARD_PROJECT_PEEK_REQUEST_SEQ = 0;
   let DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN = '';
   let DASHBOARD_PROJECT_PEEK_ACTIVE_TRIGGER = null;
@@ -22415,8 +22423,12 @@
   let DASHBOARD_PROJECT_PEEK_PREFETCH_HANDLE_KIND = '';
   let DASHBOARD_PROJECT_PEEK_DOC_PREWARMED = false;
   const DASHBOARD_OPEN_ARM_WINDOW_MS = 1500;
+  const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_TTL_MS = 30000;
+  const DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS = 60000;
   let DASHBOARD_BOOTSTRAP_INTENT_CONSUMED = false;
   let SUMMARY_BOOTSTRAP_INTENT_CONSUMED = false;
+  let PORTAL_CLIENT_BOOT_TRACE = null;
+  let PORTAL_CLIENT_BOOT_TRACE_LOGGED = false;
   const RT_PORTAL_EVENT_READY = 'RT_PORTAL_READY';
   const RT_PORTAL_EVENT_PING = 'RT_PORTAL_PING';
   const RT_PORTAL_EVENT_LOAD_TOKEN = 'RT_PORTAL_LOAD_TOKEN';
@@ -23047,11 +23059,141 @@
   function resetDashboardHomeTransientState_(){
     DASHBOARD_PROJECT_PEEK_CACHE.clear();
     DASHBOARD_PROJECT_PEEK_INFLIGHT.clear();
+    clearDashboardProjectPayloadPrefetch_();
     clearDashboardProjectPeekPrefetch_();
     closeDashboardProjectPeek();
   }
 
+  function clearDashboardProjectPayloadPrefetch_(){
+    DASHBOARD_PROJECT_PAYLOAD_PREFETCH_SEQ += 1;
+    DASHBOARD_PROJECT_PAYLOAD_PREFETCH_CACHE.clear();
+    DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.clear();
+  }
+
+  function clearDashboardHomeResponseCache_(){
+    DASHBOARD_HOME_RESPONSE_CACHE_SEQ += 1;
+    DASHBOARD_HOME_RESPONSE_CACHE.clear();
+  }
+
+  function requireFreshDashboardHomeReturn_(reason){
+    DASHBOARD_HOME_FRESH_RETURN_REQUIRED = true;
+    clearDashboardHomeResponseCache_();
+    clearDashboardProjectPayloadPrefetch_();
+    debugLog('dashboardHomeFreshReturnRequired', { reason: String(reason || 'mutation') });
+  }
+
+  function clearFreshDashboardHomeReturnRequirement_(){
+    DASHBOARD_HOME_FRESH_RETURN_REQUIRED = false;
+  }
+
+  function getDashboardHomeReturnCacheBypassReason_(){
+    if (DASHBOARD_HOME_FRESH_RETURN_REQUIRED) return 'fresh_required';
+    if (CHECKOUT_RETURN_RECONCILE_IN_FLIGHT || hasCheckoutReturnIntent_()) return 'checkout_return';
+    if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT || ACCOUNT_DOC_GUIDED_IN_FLIGHT || ACCOUNT_DOC_EMAIL_IN_FLIGHT) return 'account_document_in_flight';
+    if (
+      ORDER_FLOW_REQUEST_IN_FLIGHT ||
+      ORDER_FLOW_PO_BUSY_ACTION ||
+      ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT ||
+      ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT ||
+      SUMMARY_PENDING_FLOW_CANCEL_BUSY
+    ) {
+      return 'order_flow_in_flight';
+    }
+    return '';
+  }
+
+  function getDashboardHomeCacheEntry_(requestPayload){
+    const requestKey = getDashboardContextKey_(requestPayload);
+    if (!requestKey) return null;
+    const entry = DASHBOARD_HOME_RESPONSE_CACHE.get(requestKey) || null;
+    if (!entry || !entry.data || Date.now() - Number(entry.storedAt || 0) > DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS) {
+      DASHBOARD_HOME_RESPONSE_CACHE.delete(requestKey);
+      return null;
+    }
+    return clonePlainObject(entry.data);
+  }
+
+  function rememberDashboardHomeResponse_(requestPayload, response, cacheSeq){
+    if (typeof cacheSeq === 'number' && cacheSeq !== DASHBOARD_HOME_RESPONSE_CACHE_SEQ) return false;
+    const requestKey = getDashboardContextKey_(requestPayload);
+    if (!requestKey || !response || response.ok !== true) return false;
+    DASHBOARD_HOME_RESPONSE_CACHE.set(requestKey, {
+      storedAt: Date.now(),
+      data: clonePlainObject(response)
+    });
+    return true;
+  }
+
+  function buildDashboardProjectPayloadPrefetchKey_(token, requireAuthSession, sessionId){
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) return '';
+    const contextKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
+    if (!contextKey) return '';
+    return [
+      contextKey,
+      requireAuthSession === true ? 'auth' : 'token',
+      requireAuthSession === true ? String(sessionId || AUTH_SESSION_ID || readStoredSessionId() || '').trim() : '',
+      cleanToken
+    ].join('::');
+  }
+
+  function getDashboardProjectPayloadPrefetchEntry_(key){
+    const cacheKey = String(key || '').trim();
+    if (!cacheKey) return null;
+    const entry = DASHBOARD_PROJECT_PAYLOAD_PREFETCH_CACHE.get(cacheKey) || null;
+    if (!entry || !entry.resp || Date.now() - Number(entry.storedAt || 0) > DASHBOARD_PROJECT_PAYLOAD_PREFETCH_TTL_MS) {
+      DASHBOARD_PROJECT_PAYLOAD_PREFETCH_CACHE.delete(cacheKey);
+      return null;
+    }
+    return entry.resp;
+  }
+
+  function rememberDashboardProjectPayloadPrefetch_(key, resp){
+    const cacheKey = String(key || '').trim();
+    if (!cacheKey || !resp || resp.ok !== true || !resp.portalPayload) return;
+    DASHBOARD_PROJECT_PAYLOAD_PREFETCH_CACHE.set(cacheKey, {
+      storedAt: Date.now(),
+      resp: resp
+    });
+  }
+
+  function prefetchDashboardProjectPayload_(token, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken || CURRENT_VIEW !== VIEW_DASHBOARD) return Promise.resolve(null);
+    const requireAuthSession = opts.requireAuthSession === true || !hasDashboardTokenContext_();
+    const requestSessionId = requireAuthSession ? String(AUTH_SESSION_ID || readStoredSessionId() || '').trim() : '';
+    if (requireAuthSession && !requestSessionId) return Promise.resolve(null);
+    const prefetchKey = buildDashboardProjectPayloadPrefetchKey_(cleanToken, requireAuthSession, requestSessionId);
+    if (!prefetchKey) return Promise.resolve(null);
+    const cached = getDashboardProjectPayloadPrefetchEntry_(prefetchKey);
+    if (cached) return Promise.resolve(cached);
+    if (DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.has(prefetchKey)) {
+      return DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.get(prefetchKey);
+    }
+    const prefetchSeq = DASHBOARD_PROJECT_PAYLOAD_PREFETCH_SEQ;
+    const methodName = requireAuthSession ? 'authLoadProject' : 'getSnapshotByToken';
+    const payload = requireAuthSession
+      ? { sessionId: requestSessionId, token: cleanToken }
+      : { token: cleanToken };
+    const request = callServer(methodName, payload)
+      .then(resp => {
+        if (prefetchSeq === DASHBOARD_PROJECT_PAYLOAD_PREFETCH_SEQ && resp && resp.ok === true && resp.portalPayload) {
+          rememberDashboardProjectPayloadPrefetch_(prefetchKey, resp);
+        }
+        return resp || null;
+      })
+      .catch(() => null)
+      .finally(() => {
+        DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.delete(prefetchKey);
+      });
+    DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.set(prefetchKey, request);
+    return request;
+  }
+
   function clearClientSessionArtifacts(){
+    clearDashboardProjectPayloadPrefetch_();
+    clearDashboardHomeResponseCache_();
     const localKeys = new Set(
       BASE_BOOT_CLEAR_KEYS.concat([
         AUTH_SESSION_STORAGE_KEY,
@@ -23222,6 +23364,7 @@
   function buildPortalReadyMessage_(options){
     const opts = (options && typeof options === 'object') ? options : {};
     return {
+      source: 'redthreads-portal',
       type: RT_PORTAL_EVENT_READY,
       payload: {
         ready: true,
@@ -23255,6 +23398,23 @@
   }
 
   function notifyPortalReady(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (PORTAL_CLIENT_BOOT_TRACE) {
+      markPortalClientLoadTiming_(PORTAL_CLIENT_BOOT_TRACE, 'portal_ready', {
+        reason: String(opts.reason || '').trim(),
+        routeType: HAS_PORTAL_TOKEN ? 'token' : (DASHBOARD_DEEPLINK_REQUEST ? 'dashboard' : 'auth_shell'),
+        hasToken: String(CURRENT_TOKEN || '').trim().length > 0,
+        hasSession: hasActiveAuthSession(),
+        embedded: isEmbeddedPortalContext_()
+      });
+      if (!PORTAL_CLIENT_BOOT_TRACE_LOGGED) {
+        PORTAL_CLIENT_BOOT_TRACE_LOGGED = true;
+        logPortalClientLoadTiming_(PORTAL_CLIENT_BOOT_TRACE, 'ready', {
+          reason: String(opts.reason || '').trim(),
+          routeType: HAS_PORTAL_TOKEN ? 'token' : (DASHBOARD_DEEPLINK_REQUEST ? 'dashboard' : 'auth_shell')
+        });
+      }
+    }
     postPortalMessageToTop_(buildPortalReadyMessage_(options));
   }
 
@@ -23941,6 +24101,13 @@
     DASHBOARD_OPEN_ARMED_BTN = btn;
     DASHBOARD_OPEN_ARMED_AT = Date.now();
     DASHBOARD_OPEN_ARMED_SOURCE = String(source || '');
+    const token = String(btn.dataset && btn.dataset.projectToken || '').trim();
+    if (token) {
+      prefetchDashboardProjectPayload_(token, {
+        requireAuthSession: !hasDashboardTokenContext_(),
+        source: DASHBOARD_OPEN_ARMED_SOURCE || 'armed-open'
+      }).catch(() => {});
+    }
   }
 
   function hasFreshDashboardProjectOpenArm(btn){
@@ -23999,6 +24166,84 @@
     if (!ov) return;
     ov.classList.remove('is-on');
     ov.setAttribute('aria-hidden', 'true');
+  }
+
+  function nowPortalLoadTimingMs_(){
+    try {
+      if (window.performance && typeof window.performance.now === 'function') {
+        return window.performance.now();
+      }
+    } catch (_) {}
+    return Date.now();
+  }
+
+  function createPortalClientLoadTimingTrace_(label){
+    const now = nowPortalLoadTimingMs_();
+    return {
+      label: String(label || 'portal_load'),
+      startedAt: now,
+      lastAt: now,
+      marks: []
+    };
+  }
+
+  function buildPortalClientTimingExtra_(extra){
+    const source = (extra && typeof extra === 'object') ? extra : {};
+    const out = {};
+    ['routeType', 'source', 'reason', 'stage', 'cacheType', 'serverLabel'].forEach(key => {
+      const value = String(source[key] == null ? '' : source[key]).trim();
+      if (value) out[key] = value;
+    });
+    ['ok', 'hasToken', 'hasSession', 'cacheHit', 'prefetchHit', 'prefetchInflight', 'embedded'].forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key] === true;
+    });
+    ['projectCount', 'payloadBytes', 'serverTotalMs'].forEach(key => {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) return;
+      const n = Number(source[key]);
+      if (isFinite(n)) out[key] = Math.max(0, Math.round(n));
+    });
+    return out;
+  }
+
+  function markPortalClientLoadTiming_(trace, name, extra){
+    if (!trace || !Array.isArray(trace.marks)) return null;
+    const now = nowPortalLoadTimingMs_();
+    const mark = Object.assign({
+      name: String(name || ''),
+      elapsedMs: Math.round(now - trace.startedAt),
+      deltaMs: Math.round(now - trace.lastAt)
+    }, buildPortalClientTimingExtra_(extra));
+    trace.lastAt = now;
+    if (trace.marks.length < 80) trace.marks.push(mark);
+    return mark;
+  }
+
+  function getServerPortalLoadTimingSummary_(resp){
+    const timing = resp && resp.portalLoadTiming && typeof resp.portalLoadTiming === 'object'
+      ? resp.portalLoadTiming
+      : null;
+    if (!timing) return null;
+    return {
+      serverLabel: String(timing.label || ''),
+      serverTotalMs: Number(timing.totalMs || 0) || 0,
+      cacheHit: timing.cacheHit === true,
+      cacheType: String(timing.cacheType || '')
+    };
+  }
+
+  function logPortalClientLoadTiming_(trace, phase, extra){
+    if (!trace) return null;
+    const payload = Object.assign({
+      phase: String(phase || ''),
+      label: String(trace.label || 'portal_load'),
+      elapsedMs: Math.round(nowPortalLoadTimingMs_() - trace.startedAt),
+      marks: Array.isArray(trace.marks) ? trace.marks.slice(0, 80) : []
+    }, buildPortalClientTimingExtra_(extra));
+    console.info('[RT-LOAD-TIMING-CLIENT]', payload);
+    try {
+      console.info('[RT-LOAD-TIMING-CLIENT-JSON] ' + JSON.stringify(payload));
+    } catch (_) {}
+    return payload;
   }
 
   function clearCheckoutLoaderForNavigationRestore_(reason, options){
@@ -24796,14 +25041,42 @@
     if (!requestKey) {
       throw new Error('Missing session.');
     }
+    const trace = createPortalClientLoadTimingTrace_('dashboard_home');
+    const homeCacheSeq = DASHBOARD_HOME_RESPONSE_CACHE_SEQ;
+    markPortalClientLoadTiming_(trace, 'request_start', {
+      routeType: 'dashboard',
+      hasToken: !!payload.token,
+      hasSession: !!payload.sessionId
+    });
     const resp = await callServer('getDashboardHomeData', payload);
+    const serverTiming = getServerPortalLoadTimingSummary_(resp);
+    markPortalClientLoadTiming_(trace, 'response_received', Object.assign({
+      routeType: 'dashboard',
+      ok: !!(resp && resp.ok === true),
+      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
+    }, serverTiming || {}));
     const currentRequestKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
     if (opts.skipContextCheck !== true && currentRequestKey !== requestKey) {
+      logPortalClientLoadTiming_(trace, 'stale_context', {
+        routeType: 'dashboard',
+        ok: false
+      });
       return null;
     }
     if (!resp || resp.ok !== true) {
+      logPortalClientLoadTiming_(trace, 'failed', {
+        routeType: 'dashboard',
+        ok: false
+      });
       throw new Error(String((resp && resp.error) || 'Unable to load projects.'));
     }
+    const dashboardHomeResponseAccepted = rememberDashboardHomeResponse_(payload, resp, homeCacheSeq);
+    if (dashboardHomeResponseAccepted) clearFreshDashboardHomeReturnRequirement_();
+    logPortalClientLoadTiming_(trace, 'complete', Object.assign({
+      routeType: 'dashboard',
+      ok: true,
+      projectCount: Array.isArray(resp.projects) ? resp.projects.length : 0
+    }, serverTiming || {}));
     return resp;
   }
 
@@ -25022,6 +25295,19 @@
     TEAM_MODE_UNLOCKED = false;
   }
 
+  function shouldRequireFreshDashboardHomeForPortalPayloadSource_(source){
+    const normalizedSource = String(source || '').trim().toLowerCase();
+    return [
+      'checkout-return-reconcile',
+      'dashboard-ach-verification',
+      'order-flow',
+      'post-payment-hydration',
+      'save-finalized',
+      'summary-ach-verification',
+      'team-account-admin'
+    ].indexOf(normalizedSource) !== -1;
+  }
+
   function applyPortalPayloadInPlace(portalPayload, options){
     // Canonical client payload applicator — lifecycle consumers should refresh
     // through this path rather than mutating summary/order state ad hoc.
@@ -25042,6 +25328,9 @@
     }
     if (shouldPreserveTeamMode) {
       payload.mode = 'team';
+    }
+    if (shouldRequireFreshDashboardHomeForPortalPayloadSource_(opts.source || opts.reason)) {
+      requireFreshDashboardHomeReturn_(String(opts.source || opts.reason || 'project_mutation'));
     }
     payload.__fromAuthShell = opts.fromAuthShell === true;
     applyVmRuntimeState(routePaidFinalizedPayloadToInvoice_(payload));
@@ -25096,6 +25385,7 @@
       ? String(opts.loadingSub == null ? '' : opts.loadingSub)
       : '';
     const methodName = requireAuthSession ? 'authLoadProject' : 'getSnapshotByToken';
+    const prefetchKey = buildDashboardProjectPayloadPrefetchKey_(cleanToken, requireAuthSession, requestSessionId);
 
     setButtonBusy(openBtn, true, 'Opening...', 'Open');
     if (CURRENT_VIEW !== VIEW_SNAPSHOT) {
@@ -25111,6 +25401,7 @@
     resetProjectViewState();
     const requestSeq = PROJECT_OPEN_REQUEST_SEQ;
     clearStoredPortalPayload();
+    const trace = createPortalClientLoadTimingTrace_('project_open');
     try {
       sessionStorage.setItem('selectedToken', cleanToken);
       sessionStorage.setItem('currentToken', cleanToken);
@@ -25122,12 +25413,37 @@
         token: shortToken(cleanToken),
         mode: requireAuthSession ? 'auth-in-place' : 'token-in-place'
       });
-      const resp = await callServer(
-        methodName,
-        requireAuthSession
-          ? { sessionId: requestSessionId, token: cleanToken }
-          : { token: cleanToken }
-      );
+      markPortalClientLoadTiming_(trace, 'request_start', {
+        routeType: 'project',
+        source: source,
+        hasToken: true,
+        hasSession: requireAuthSession
+      });
+      let prefetchHit = false;
+      let prefetchInflight = false;
+      let resp = prefetchKey ? getDashboardProjectPayloadPrefetchEntry_(prefetchKey) : null;
+      if (resp) {
+        prefetchHit = true;
+      } else if (prefetchKey && DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.has(prefetchKey)) {
+        prefetchInflight = true;
+        resp = await DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.get(prefetchKey);
+      } else {
+        resp = await callServer(
+          methodName,
+          requireAuthSession
+            ? { sessionId: requestSessionId, token: cleanToken }
+            : { token: cleanToken }
+        );
+        rememberDashboardProjectPayloadPrefetch_(prefetchKey, resp);
+      }
+      const serverTiming = getServerPortalLoadTimingSummary_(resp);
+      markPortalClientLoadTiming_(trace, 'response_received', Object.assign({
+        routeType: 'project',
+        source: source,
+        ok: !!(resp && resp.ok === true),
+        prefetchHit: prefetchHit,
+        prefetchInflight: prefetchInflight
+      }, serverTiming || {}));
       if (requestSeq !== PROJECT_OPEN_REQUEST_SEQ) return false;
       if (!resp || resp.ok !== true || !resp.portalPayload) {
         throw new Error(String((resp && resp.error) || 'Unable to load project.'));
@@ -25157,6 +25473,22 @@
         forceClientMode: forceClientProjectMode,
         explicitTeamMode: opts.explicitTeamMode === true
       });
+      markPortalClientLoadTiming_(trace, 'render_applied', {
+        routeType: 'project',
+        source: source,
+        ok: true,
+        payloadBytes: JSON.stringify(resp.portalPayload || {}).length,
+        prefetchHit: prefetchHit,
+        prefetchInflight: prefetchInflight
+      });
+      logPortalClientLoadTiming_(trace, 'complete', Object.assign({
+        routeType: 'project',
+        source: source,
+        ok: true,
+        payloadBytes: JSON.stringify(resp.portalPayload || {}).length,
+        prefetchHit: prefetchHit,
+        prefetchInflight: prefetchInflight
+      }, serverTiming || {}));
       rtDebugStep('OPEN:done', {
         source: source,
         token: shortToken(cleanToken),
@@ -25170,6 +25502,11 @@
         source: source,
         token: shortToken(cleanToken),
         message: message
+      });
+      logPortalClientLoadTiming_(trace, 'failed', {
+        routeType: 'project',
+        source: source,
+        ok: false
       });
       if (requireAuthSession && /session|unauthorized/i.test(message)) {
         writeStoredSessionId('');
@@ -26766,6 +27103,22 @@
     dashboardPeekOpenBtn.innerHTML = '';
     dashboardPeekOpenBtn.appendChild(createDashboardPeekSvgIcon_('open'));
     dashboardPeekOpenBtn.appendChild(createEl('span', '', 'Open Project'));
+    dashboardPeekOpenBtn.addEventListener('pointerenter', () => {
+      const token = String(dashboardPeekOpenBtn.dataset.projectToken || '').trim();
+      if (!token) return;
+      prefetchDashboardProjectPayload_(token, {
+        requireAuthSession: !hasDashboardTokenContext_(),
+        source: 'peek-pointerenter'
+      }).catch(() => {});
+    });
+    dashboardPeekOpenBtn.addEventListener('focus', () => {
+      const token = String(dashboardPeekOpenBtn.dataset.projectToken || '').trim();
+      if (!token) return;
+      prefetchDashboardProjectPayload_(token, {
+        requireAuthSession: !hasDashboardTokenContext_(),
+        source: 'peek-focus'
+      }).catch(() => {});
+    });
     dashboardPeekOpenBtn.addEventListener('click', event => {
       if (!isPlainLeftClick_(event)) return;
       if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -26881,11 +27234,24 @@
 
       const openCell = createEl('td', 'authProjectsActionCell');
       const openBtn = createEl('a', 'authProjectsOpenBtn');
+      openBtn.dataset.projectToken = projectToken;
       openBtn.appendChild(createDashboardPeekSvgIcon_('open'));
       openBtn.appendChild(createEl('span', '', 'Open Project'));
       const projectUrl = buildExternalPortalProjectUrl_(projectToken);
       if (projectUrl) openBtn.href = projectUrl;
       else openBtn.setAttribute('aria-disabled', 'true');
+      openBtn.addEventListener('pointerenter', () => {
+        prefetchDashboardProjectPayload_(projectToken, {
+          requireAuthSession: !hasDashboardTokenContext_(),
+          source: 'pointerenter'
+        }).catch(() => {});
+      });
+      openBtn.addEventListener('focus', () => {
+        prefetchDashboardProjectPayload_(projectToken, {
+          requireAuthSession: !hasDashboardTokenContext_(),
+          source: 'focus'
+        }).catch(() => {});
+      });
       openBtn.addEventListener('pointerdown', event => {
         if (!isPlainLeftClick_(event)) return;
         armDashboardProjectOpen(openBtn, 'pointer');
@@ -27147,6 +27513,7 @@
             : null;
           if (dashboardHomeData) {
             resetDashboardHomeTransientState_();
+            rememberDashboardHomeResponse_(getDashboardContextRequestPayload_(), dashboardHomeData);
             applyDashboardHomeData(dashboardHomeData);
             syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
             if (AUTH_SESSION_ID) {
@@ -27380,9 +27747,33 @@
     // Boot policy for base /exec: start on login unless a reset/setup return route was supplied.
   }
 
+  async function renderDashboardHomeFromProjectReturn_(dashboardHomeData, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    clearStoredPortalPayload();
+    teardownProjectView();
+    applyAuthShellRuntimeState();
+    resetSnapshotDirtyBaseline({ clear: true });
+    if (!isEmbeddedPortalContext_()) {
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (_) {}
+    }
+
+    resetDashboardHomeTransientState_();
+    applyDashboardHomeData(dashboardHomeData);
+    syncCurrentPortalDashboardRoute_({ historyMode: opts.historyMode || 'push' });
+    setView(VIEW_DASHBOARD, { focus: false });
+    if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    setAuthMessage('', false, { view: VIEW_DASHBOARD });
+    consumeDashboardBootstrapIntent_().catch(() => {});
+    notifyPortalReady({ reason: opts.readyReason || 'dashboard-ready' });
+  }
+
   async function goHomeFromPortal(){
     closeUnsavedLeaveModal({ immediate: true });
     rtShowLoader('Returning to dashboard…', 'Refreshing your project list.');
+    const trace = createPortalClientLoadTimingTrace_('project_to_dashboard');
     try {
       if (!AUTH_SESSION_ID) AUTH_SESSION_ID = readStoredSessionId();
       const dashboardRequestPayload = getDashboardContextRequestPayload_();
@@ -27395,6 +27786,50 @@
         return;
       }
 
+      markPortalClientLoadTiming_(trace, 'return_start', {
+        routeType: 'project_to_dashboard',
+        hasToken: !!dashboardRequestPayload.token,
+        hasSession: !!dashboardRequestPayload.sessionId
+      });
+      const cacheBypassReason = getDashboardHomeReturnCacheBypassReason_();
+      if (cacheBypassReason) {
+        markPortalClientLoadTiming_(trace, 'cache_bypassed', {
+          routeType: 'project_to_dashboard',
+          reason: cacheBypassReason
+        });
+      }
+      const cachedDashboardHomeData = cacheBypassReason ? null : getDashboardHomeCacheEntry_(dashboardRequestPayload);
+      if (cachedDashboardHomeData) {
+        markPortalClientLoadTiming_(trace, 'cache_render_start', {
+          routeType: 'project_to_dashboard',
+          cacheHit: true,
+          projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
+        });
+        await renderDashboardHomeFromProjectReturn_(cachedDashboardHomeData, {
+          historyMode: 'push',
+          readyReason: 'dashboard-ready-cache'
+        });
+        logPortalClientLoadTiming_(trace, 'cache_rendered', {
+          routeType: 'project_to_dashboard',
+          ok: true,
+          cacheHit: true,
+          projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
+        });
+        fetchDashboardHomeDataForRequest_(dashboardRequestPayload, {
+          skipContextCheck: true
+        }).then(freshDashboardHomeData => {
+          if (!freshDashboardHomeData || CURRENT_VIEW !== VIEW_DASHBOARD) return;
+          if (getDashboardContextKey_(getDashboardContextRequestPayload_()) !== getDashboardContextKey_(dashboardRequestPayload)) return;
+          resetDashboardHomeTransientState_();
+          applyDashboardHomeData(freshDashboardHomeData);
+          setAuthMessage('', false, { view: VIEW_DASHBOARD });
+          notifyPortalReady({ reason: 'dashboard-ready-refresh' });
+        }).catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to refresh dashboard.'), 'err');
+        });
+        return;
+      }
+
       const dashboardHomeData = await fetchDashboardHomeDataForRequest_(dashboardRequestPayload, {
         skipContextCheck: true
       });
@@ -27402,26 +27837,16 @@
         throw new Error('Unable to load projects.');
       }
 
-      // Keep auth session, but clear one-time portal boot cache before returning.
-      clearStoredPortalPayload();
-      teardownProjectView();
-      applyAuthShellRuntimeState();
-      resetSnapshotDirtyBaseline({ clear: true });
-      if (!isEmbeddedPortalContext_()) {
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (_) {}
-      }
-
-      resetDashboardHomeTransientState_();
-      applyDashboardHomeData(dashboardHomeData);
-      syncCurrentPortalDashboardRoute_({ historyMode: 'push' });
-      setView(VIEW_DASHBOARD, { focus: false });
-      if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      setAuthMessage('', false, { view: VIEW_DASHBOARD });
-      consumeDashboardBootstrapIntent_().catch(() => {});
-      notifyPortalReady({ reason: 'dashboard-ready' });
+      await renderDashboardHomeFromProjectReturn_(dashboardHomeData, {
+        historyMode: 'push',
+        readyReason: 'dashboard-ready'
+      });
+      logPortalClientLoadTiming_(trace, 'fetched_rendered', {
+        routeType: 'project_to_dashboard',
+        ok: true,
+        cacheHit: false,
+        projectCount: Array.isArray(dashboardHomeData.projects) ? dashboardHomeData.projects.length : 0
+      });
     } catch (err) {
       const msg = String((err && err.message) || err || 'Unable to load dashboard.');
       if (/session/i.test(msg) && !hasDashboardTokenContext_()) {
@@ -27435,6 +27860,10 @@
         notifyPortalReady({ reason: 'auth-shell-ready' });
         return;
       }
+      logPortalClientLoadTiming_(trace, 'failed', {
+        routeType: 'project_to_dashboard',
+        ok: false
+      });
       showNotice(msg, 'err', { persist: true });
     } finally {
       rtHideLoader();
@@ -29020,6 +29449,7 @@
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to submit tax exemption details.'));
       }
+      requireFreshDashboardHomeReturn_('account_document_submission');
       applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForDocumentModal_());
       renderAccountDocumentModal_();
       setAccountDocMessage(String(resp.message || 'Tax exemption submission sent for review.'), 'ok');
@@ -29052,6 +29482,7 @@
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to upload the completed document.'));
       }
+      requireFreshDashboardHomeReturn_('account_document_upload');
       applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForDocumentModal_());
       renderAccountDocumentModal_();
       resetAccountDocumentForm_();
@@ -29592,6 +30023,7 @@
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to upload the completed document.'));
       }
+      requireFreshDashboardHomeReturn_('account_document_upload');
       applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForTermsWorkspace_());
       closeTermsDocUploadPanel_({ clearFile: true });
       openTermsSubmitSuccessSplash_(String(resp.message || 'Your credit terms document has been submitted for Red Threads review. This view will close automatically in a few seconds.'));
@@ -29977,6 +30409,7 @@
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to upload the completed document.'));
       }
+      requireFreshDashboardHomeReturn_('account_document_upload');
       applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForTaxWorkspace_());
       setTaxDocMessage(String(resp.message || 'Document submitted for Red Threads review.'), 'ok');
       closeTaxDocUploadPanel_({ clearFile: true });
@@ -31824,6 +32257,7 @@
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to submit the completed document.'));
       }
+      requireFreshDashboardHomeReturn_('account_document_submission');
       TAX_FORM_LAST_SUBMISSION_ARTIFACT_FILE_ID = String((resp && resp.artifactFileId) || '').trim();
       TAX_FORM_FINAL_MODAL_MODE = 'success';
       TAX_FORM_FINAL_MODAL_MESSAGE = '';
@@ -31883,6 +32317,19 @@
     if (!TAX_FORM_MANIFEST || typeof TAX_FORM_MANIFEST !== 'object') {
       throw new Error('Tax form manifest is invalid.');
     }
+    TAX_FORM_INDEX = buildTaxFormIndex_(TAX_FORM_MANIFEST);
+    return TAX_FORM_MANIFEST;
+  }
+
+  async function ensureTaxFormManifestLoaded_(){
+    if (TAX_FORM_MANIFEST) return TAX_FORM_MANIFEST;
+    const embeddedRaw = String((taxForm3372ManifestData && taxForm3372ManifestData.textContent) || '').trim();
+    if (embeddedRaw) return getTaxFormManifest_();
+    const resp = await callServer('getTaxForm3372Manifest', {});
+    if (!resp || resp.ok !== true || !resp.manifest || typeof resp.manifest !== 'object') {
+      throw new Error(String((resp && resp.error) || 'Unable to load tax form manifest.'));
+    }
+    TAX_FORM_MANIFEST = resp.manifest;
     TAX_FORM_INDEX = buildTaxFormIndex_(TAX_FORM_MANIFEST);
     return TAX_FORM_MANIFEST;
   }
@@ -33863,9 +34310,17 @@
     closeTaxDocEmailPanel_();
     setTaxDocMessage('', 'info');
     try {
+      await ensureTaxFormManifestLoaded_();
       hydrateTaxFormFoundation_();
     } catch (err) {
-      setTaxDocMessage(String((err && err.message) || err || 'Unable to load the tax form.'), 'err');
+      const message = String((err && err.message) || err || 'Unable to load the tax form.');
+      setTaxDocMessage(message, 'err');
+      if (CURRENT_VIEW === VIEW_DASHBOARD) {
+        setAuthMessage(message, true, { view: VIEW_DASHBOARD });
+      } else {
+        showNotice(message, 'err', { persist: true });
+      }
+      return;
     }
     showAccountDocumentLoader_();
     try {
@@ -34091,6 +34546,7 @@
     if (!resp || resp.ok !== true) {
       throw new Error(String((resp && resp.error) || 'Could not save artwork approval.'));
     }
+    requireFreshDashboardHomeReturn_('project_mutation');
     return resp;
   }
 
@@ -34112,6 +34568,7 @@
     if (!resp || resp.ok !== true) {
       throw new Error(String((resp && resp.error) || 'Could not clear artwork approval.'));
     }
+    requireFreshDashboardHomeReturn_('project_mutation');
     return resp;
   }
 
@@ -35059,7 +35516,10 @@
       || response.accountSummary
     );
     if (!hasLifecyclePayload) return false;
-    applyOrderFlowPortalPayload(response, opts);
+    requireFreshDashboardHomeReturn_('order_flow');
+    applyOrderFlowPortalPayload(response, Object.assign({}, opts, {
+      skipDashboardHomeInvalidation: true
+    }));
     updateOrderStateFromResponse(response, {
       renderOrderFlowSummaryViewer: opts.renderOrderFlowSummaryViewer !== false
     });
@@ -37773,6 +38233,9 @@
   function applyOrderFlowPortalPayload(resp, options){
     const opts = (options && typeof options === 'object') ? options : {};
     if (!resp || !resp.portalPayload) return;
+    if (opts.skipDashboardHomeInvalidation !== true) {
+      requireFreshDashboardHomeReturn_('order_flow');
+    }
     const payload = buildOrderFlowPortalPayloadForApply(resp.portalPayload, opts.expectedPortalState);
     applyPortalPayloadInPlace(payload, {
       source: 'order-flow',
@@ -44979,6 +45442,7 @@
       setSaveControls();
       renderPortal();
       resetSnapshotDirtyBaseline();
+      requireFreshDashboardHomeReturn_('project_save');
       await refreshProjectHeaderStatusSeed_();
       if (!suppressSuccessNotice) showNotice('Saved successfully. You can keep editing.', 'ok');
       saveSucceeded = true;
@@ -46272,6 +46736,13 @@
   }
 
   async function init(){
+    PORTAL_CLIENT_BOOT_TRACE = createPortalClientLoadTimingTrace_('portal_boot');
+    PORTAL_CLIENT_BOOT_TRACE_LOGGED = false;
+    markPortalClientLoadTiming_(PORTAL_CLIENT_BOOT_TRACE, 'init_start', {
+      routeType: HAS_PORTAL_TOKEN ? 'token' : (DASHBOARD_DEEPLINK_REQUEST ? 'dashboard' : 'auth_shell'),
+      hasToken: HAS_PORTAL_TOKEN,
+      embedded: isEmbeddedPortalContext_()
+    });
     debugLog('BOOT:init', {
       hasPortalToken: HAS_PORTAL_TOKEN,
       openedFromAuthShell: OPENED_FROM_AUTH_SHELL,
