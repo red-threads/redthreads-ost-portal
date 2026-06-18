@@ -4294,6 +4294,7 @@ function buildDashboardProjectStepFlagsFromLifecycle_(dashboardReadiness, legacy
   const lifecycle = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const dashboardState = (lifecycle.dashboardState && typeof lifecycle.dashboardState === 'object') ? lifecycle.dashboardState : {};
   const orderPlaced = lifecycle.orderPlaced === true || lifecycle.hasPlacedOrder === true;
+  const placedOrderReadinessComplete = orderPlaced === true || trimString_(dashboardState.orderStep) === 'complete';
   const paymentReceived = lifecycle.paymentReceived === true || lifecycle.isPaymentReceived === true;
   const paymentDue = lifecycle.paymentDue === true || trimString_(dashboardState.paymentStep) === 'due';
   const paymentPending = !paymentReceived && (
@@ -4315,10 +4316,10 @@ function buildDashboardProjectStepFlagsFromLifecycle_(dashboardReadiness, legacy
     || trimString_(dashboardState.productionStep) === 'current';
 
   return {
-    hasIncludedJobs: readiness.hasIncludedJobs === true,
-    minimumsMet: readiness.minimumsMet === true,
-    qtySizesComplete: readiness.qtySizesComplete === true,
-    artworkApprovalComplete: readiness.artworkApprovalComplete === true,
+    hasIncludedJobs: readiness.hasIncludedJobs === true || placedOrderReadinessComplete,
+    minimumsMet: readiness.minimumsMet === true || placedOrderReadinessComplete,
+    qtySizesComplete: readiness.qtySizesComplete === true || placedOrderReadinessComplete,
+    artworkApprovalComplete: readiness.artworkApprovalComplete === true || placedOrderReadinessComplete,
     hasPurchaseOrderDraft: lifecycle.hasPurchaseOrderDraft === true || lifecycle.poDraft === true || legacy.hasPurchaseOrderDraft === true,
     orderPlaced: orderPlaced,
     paymentReceived: paymentReceived,
@@ -9363,6 +9364,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const apName = trimString_(opts.apName);
   const purchaserName = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.personName);
+  const purchaserFirstName = trimString_(purchaserName.split(/\s+/)[0]);
   const note = trimString_(opts.note).slice(0, 1200);
   const paymentLink = trimString_(opts.apPaymentLink);
   const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
@@ -9390,12 +9392,18 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const projectAccessLabel = dealNumber
     ? ('Click to access Project #' + dealNumber + ' and make a payment.')
     : 'Click to access this project and make a payment.';
-  const paymentIntro = 'A secure Red Threads ACH payment page is ready for this invoice.';
-  const paymentInstruction = 'Click the button below to access the project and make a payment. Payment is required before production can begin. You will receive a copy of the final invoice upon completion.';
+  const paymentInstruction = 'The invoice for this project/order is attached to this email. Click the button below to access this project and make a secure payment online. Payment is required before production can begin. You will receive an updated copy of the final invoice/receipt when payment succeeds. Please contact ' + (purchaserName || 'the project contact') + ' or Red Threads if you have any questions, or need assistance.';
   const bankDetailsCopy = 'Bank details are not stored anywhere by Red Threads and will be used to complete this order only.';
   const purchaserNoteLabel = purchaserName
-    ? ('Note from the purchaser (' + purchaserName + ')')
-    : 'Note from the purchaser';
+    ? ('Note from ' + purchaserFirstName)
+    : 'Note from the project contact';
+  const heading = purchaserName && dealNumber
+    ? (purchaserName + ' is requesting payment for Red Threads Project # ' + dealNumber)
+    : (purchaserName
+      ? (purchaserName + ' is requesting payment for a Red Threads project')
+      : (dealNumber
+        ? ('Payment is requested for Red Threads Project # ' + dealNumber)
+        : 'Payment is requested for a Red Threads project'));
   const reference = [
     invoiceNumber ? ('Invoice: ' + invoiceNumber) : '',
     dealNumber ? ('Project #: ' + dealNumber) : '',
@@ -9413,7 +9421,6 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     note ? '' : '',
     greeting,
     '',
-    paymentIntro,
     paymentInstruction,
     topCtaUrl ? (projectAccessLabel + ' ' + topCtaUrl) : '',
     '',
@@ -9434,7 +9441,6 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#f8fafc;">',
     purchaserNoteHtml,
     '  <p style="margin:0 0 14px;">' + escapeHtml_(greeting) + '</p>',
-    '  <p style="margin:0 0 10px;">' + escapeHtml_(paymentIntro) + '</p>',
     '  <p style="margin:0 0 10px;color:#cbd5e1;">' + escapeHtml_(paymentInstruction) + '</p>',
     topCtaHtml,
     lifecycleHtml || [
@@ -9456,7 +9462,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
       : 'Red Threads ACH payment page',
     body: bodyLines.join('\n'),
     htmlBody: buildPortalNativeEmailShellHtml_({
-      heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'ACH payment page ready', 'Secure ACH payment page ready.'),
+      heading: heading,
       badgeLabel: 'Payment Ready',
       bodyHtml: htmlBody
     })
@@ -19222,20 +19228,25 @@ function buildCurrentOrderStateSummaryFromRow_(row, accountSummary, latestOrderS
   const account = accountSummary || {};
   const portalState = safeJsonParse_(normalizedRow.portalstatejson, {}) || {};
   const purchaseOrderDraft = readPurchaseOrderDraftFromPortalState_(portalState);
-  const hasCurrentPointers = Boolean(
+  const currentPortalLockState = trimString_(normalizedRow.portallockstate).toLowerCase();
+  const currentOrderState = trimString_(normalizedRow.currentorderstate).toLowerCase();
+  const currentPaymentState = trimString_(normalizedRow.currentpaymentstate).toLowerCase();
+  const currentProductionState = trimString_(normalizedRow.currentproductionauthorizationstate).toLowerCase();
+  const hasCurrentLifecyclePointers = Boolean(
     trimString_(normalizedRow.activeorderid)
     || trimString_(normalizedRow.latestcheckoutattemptid)
-    || trimString_(normalizedRow.currentaccountid)
-    || trimString_(normalizedRow.portallockstate)
-    || trimString_(normalizedRow.currentorderstate)
-    || trimString_(normalizedRow.currentpaymentstate)
-    || trimString_(normalizedRow.currentproductionauthorizationstate)
+    || currentPortalLockState === PORTAL_LOCK_STATES.locked
+    || (currentOrderState && currentOrderState !== ORDER_STATES.draft)
+    || (currentPaymentState && currentPaymentState !== PAYMENT_STATES.not_started)
+    || (currentProductionState && currentProductionState !== PRODUCTION_AUTHORIZATION_STATES.not_authorized)
     || trimString_(normalizedRow.currentpaymentmethod)
-    || trimString_(normalizedRow.latestinvoicenumber)
-    || trimString_(normalizedRow.lastorderupdatedat)
+    || trimString_(normalizedRow.paidat)
+    || trimString_(normalizedRow.posubmittedat)
+    || trimString_(normalizedRow.authorizedtoproduceat)
     || !!purchaseOrderDraft
   );
-  const pointerSource = hasCurrentPointers ? normalizedRow : latest;
+  const hasLatestOrderSummary = !!trimString_(latest.orderId);
+  const pointerSource = (hasCurrentLifecyclePointers || !hasLatestOrderSummary) ? normalizedRow : latest;
   const summary = {
     activeOrderId: trimString_(pointerSource.activeorderid || pointerSource.orderId),
     latestCheckoutAttemptId: trimString_(pointerSource.latestcheckoutattemptid || pointerSource.checkoutAttemptId),
@@ -26077,23 +26088,23 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         : formatLifecycleEmailInvoiceSubject_('ACH payment received', invoiceNumber, 'ACH payment received for your Red Threads order'),
       intro: isTeamAlert
         ? 'A standard ACH payment has been received.'
-        : 'Your ACH payment has been received.',
+        : 'Your ACH payment has been received and your order will begin production.',
       statusCopy: isTeamAlert
         ? 'Continue with the production workflow according to the current portal status.'
-        : 'Your order is authorized for production when reflected by the current portal status.',
+        : '',
       attachmentNote: 'Your updated receipt is attached.'
     });
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
       ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment issue', invoiceNumber, 'Team alert: ACH payment issue')
-      : formatLifecycleEmailInvoiceSubject_('Action needed — ACH payment issue', invoiceNumber, 'Action needed — ACH payment issue for your Red Threads order'),
+      : formatLifecycleEmailInvoiceSubject_('ACH payment issue, production not started', invoiceNumber, 'ACH payment issue, production not started'),
     intro: isTeamAlert
       ? 'A standard ACH payment needs review.'
       : 'Your ACH payment could not be completed or needs review.',
     statusCopy: isTeamAlert
       ? 'Review the portal payment state before production continues.'
-      : 'Production cannot continue until payment is resolved. Open your Red Threads invoice to retry payment or contact Red Threads for help.',
+      : 'Production will not begin until payment is resolved. Open your Red Threads portal to retry payment or contact Red Threads for help.',
     attachmentNote: 'An invoice/status PDF may be attached when available.'
   });
 }
@@ -26231,7 +26242,7 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
       paymentBlocked: true,
       nextStepText: isTeamAlert
         ? 'Review the ACH payment issue in Team Mode.'
-        : 'Open your Red Threads invoice to retry payment or review next steps.'
+        : 'Open your Red Threads Portal/Project below and retry payment.'
     });
   }
   const summary = emailContext.orderSummary || {};
@@ -29086,7 +29097,11 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'po payment received client': 'validated_email_omitted',
   'manual payment received client': 'validated_email_omitted',
   'manual payment pending client': 'validated_email_omitted',
-  'card failed client': 'validated_email_omitted'
+  'card failed client': 'validated_email_omitted',
+  'standard ach pending client': 'validated_email_omitted',
+  'standard ach verification client': 'validated_email_omitted',
+  'standard ach receipt client': 'validated_email_omitted',
+  'standard ach failed client': 'validated_email_omitted'
 };
 
 function getEmailReviewSuiteOmissionReason_(label) {
