@@ -23650,6 +23650,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const approvedIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
       ? 'Red Threads approved the credit terms associated with your account.'
       : 'Red Threads approved the tax exemption associated with your account.';
+    const taxExemptClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved;
     return {
       subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (labels.title + ' approved'),
       heading: isTeam ? (labels.title + ' approved') : approvedIntro.replace(/[.]+$/g, ''),
@@ -23660,8 +23661,10 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
           : 'Approved payment terms are now associated with your account.')
         : (isTeam
           ? 'The approved tax exemption status is now associated with the account.'
-          : 'The approved tax exemption status is now associated with your account.'),
-      nextStep: !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
+          : ''),
+      nextStep: taxExemptClientApproved
+        ? 'You can now toggle sales tax on and off your orders.'
+        : !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
         ? ''
         : 'No action is required.',
       details: details
@@ -24379,6 +24382,9 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     isTeamAlert: isTeamAlert,
     methodLabel: methodLabel
   });
+  const nextStepText = !isTeamAlert && normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted
+    ? 'Return to the portal/project to pay for the order within your approved terms. Late fees will automatically be applied.'
+    : emailContext.nextStepText;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
     family: 'payment_lifecycle',
     milestone: normalized,
@@ -24389,7 +24395,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
-    nextStep: emailContext.nextStepText,
+    nextStep: nextStepText,
     attachmentNote: copy.attachmentNote,
     blocks: sectionBlocks.concat([
       buildPaymentLifecycleInstructionsBlock_(normalized, emailContext.orderSummary),
@@ -25409,6 +25415,10 @@ function resolveLifecycleEmailActionCardTitle_(options) {
 function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, subheading) {
   const note = trimString_(attachmentNote);
   if (!note) return '';
+  if (note === 'Your invoice/receipt is attached to this email updated in the portal.' ||
+      note === 'The invoice/receipt for your order is attached to this email, and payment is still required.') {
+    return note;
+  }
   const haystack = [note, heading, subheading].map(function(value) {
     return trimString_(value).toLowerCase();
   }).join(' ');
@@ -26147,8 +26157,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         ? formatLifecycleEmailInvoiceSubject_('Team alert: purchase order submitted', invoiceNumber, 'Team alert: purchase order submitted')
         : formatLifecycleEmailInvoiceSubject_('Purchase order submitted', invoiceNumber, 'Purchase order submitted for your Red Threads order'),
       intro: isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully.',
-      statusCopy: isTeamAlert ? 'The order status is active under approved terms. Payment remains open until funds are recorded as received.' : 'Your order status is active under your approved terms. Payment remains open until Red Threads records funds as received.',
-      attachmentNote: 'Your invoice is attached.'
+      statusCopy: isTeamAlert ? 'The order status is active under approved terms. Payment remains open until funds are recorded as received.' : 'Your order has been authorized for production.',
+      attachmentNote: isTeamAlert ? 'Your invoice is attached.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -26156,8 +26166,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       ? formatLifecycleEmailInvoiceSubject_('Team alert: PO payment received', invoiceNumber, 'Team alert: PO payment received')
       : formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received for your Red Threads order'),
     intro: isTeamAlert ? 'Purchase order payment has been recorded as received.' : 'Your purchase order payment has been received.',
-    statusCopy: isTeamAlert ? 'The order payment is recorded as received.' : 'Your updated invoice/receipt is available in the portal.',
-    attachmentNote: 'Your updated receipt is attached.'
+    statusCopy: isTeamAlert ? 'The order payment is recorded as received.' : '',
+    attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'Your invoice/receipt is attached to this email updated in the portal.'
   });
 }
 
