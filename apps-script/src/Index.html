@@ -10629,6 +10629,7 @@
     .taxFormPageCanvas{
       position:relative;
       width:100%;
+      aspect-ratio:var(--tax-form-page-aspect-ratio, 612 / 792);
       background:#fff;
       overflow:hidden;
     }
@@ -10636,7 +10637,7 @@
       background:#fff;
     }
     .taxFormPageCanvasInteractive{
-      min-height:220px;
+      min-height:0;
     }
     .taxFormStartDimmer{
       position:absolute;
@@ -16874,7 +16875,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 64">64</div>
+  <div class="devRevisionBadge" aria-label="Development revision 65">65</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24647,6 +24648,88 @@
     } catch (_) {}
   }
 
+  function isAccountDocumentUploadBootstrapIntent_(){
+    const type = String(ACCOUNT_DOC_DEEPLINK_TYPE || '').trim().toLowerCase();
+    const action = String(ACCOUNT_DOC_DEEPLINK_ACTION || '').trim().toLowerCase();
+    return (type === 'credit_terms' || type === 'tax_exempt') &&
+      (action === 'resubmit' || action === 'upload');
+  }
+
+  function buildAccountDocumentDashboardBootPayload_(requestPayload){
+    const payload = Object.assign({}, (requestPayload && typeof requestPayload === 'object') ? requestPayload : {});
+    const type = String(ACCOUNT_DOC_DEEPLINK_TYPE || '').trim().toLowerCase();
+    if (type) payload.documentType = type;
+    return payload;
+  }
+
+  async function loadAccountDocumentDashboardBoot_(requestPayload){
+    const payload = buildAccountDocumentDashboardBootPayload_(requestPayload || getDashboardContextRequestPayload_() || {});
+    const requestKey = getDashboardContextKey_(payload);
+    if (!requestKey) throw new Error('Missing dashboard context.');
+    const resp = await callServer('getAccountDocumentDashboardBoot', payload);
+    const currentRequestKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
+    if (currentRequestKey && currentRequestKey !== requestKey) return null;
+    if (!resp || resp.ok !== true) {
+      throw new Error(String((resp && resp.error) || 'Unable to load account document dashboard.'));
+    }
+    applyReturnedAccountSummary_(resp.accountSummary || {});
+    return resp;
+  }
+
+  function loadDashboardHomeInBackground_(requestPayload){
+    const payload = (requestPayload && typeof requestPayload === 'object')
+      ? Object.assign({}, requestPayload)
+      : (getDashboardContextRequestPayload_() || null);
+    if (!payload) return;
+    window.setTimeout(() => {
+      loadProjectsForHome({
+        requestPayload: payload,
+        suppressLoadingMessage: true,
+        awaitPaint: true
+      }).catch(() => {});
+    }, 0);
+  }
+
+  async function loadDashboardForDeepLink_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const requestPayload = opts.requestPayload || getDashboardContextRequestPayload_();
+    if (!requestPayload) {
+      notifyPortalReady({ reason: 'dashboard-load-failed' });
+      return null;
+    }
+    if (isAccountDocumentUploadBootstrapIntent_()) {
+      const bootResp = await loadAccountDocumentDashboardBoot_(requestPayload);
+      setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+      if (!bootResp) {
+        notifyPortalReady({ reason: 'dashboard-load-failed' });
+        return null;
+      }
+      syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      showSetupReturnDashboardMessage_(opts.setupReturnResult);
+      await consumeDashboardBootstrapIntent_();
+      notifyPortalReady({ reason: 'account-document-upload-ready' });
+      loadDashboardHomeInBackground_(getDashboardContextRequestPayload_() || requestPayload);
+      return bootResp;
+    }
+    const dashboardHomeResp = await loadProjectsForHome({
+      requestPayload: requestPayload,
+      suppressLoadingMessage: true,
+      awaitPaint: true
+    });
+    setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
+    if (!dashboardHomeResp) {
+      notifyPortalReady({ reason: 'dashboard-load-failed' });
+      return null;
+    }
+    syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    showSetupReturnDashboardMessage_(opts.setupReturnResult);
+    consumeDashboardBootstrapIntent_().catch(() => {});
+    notifyPortalReady({ reason: 'dashboard-ready' });
+    return dashboardHomeResp;
+  }
+
   async function consumeDashboardBootstrapIntent_(){
     if (DASHBOARD_BOOTSTRAP_INTENT_CONSUMED) return false;
     if (CURRENT_VIEW !== VIEW_DASHBOARD) return false;
@@ -29652,6 +29735,7 @@
     if (!termsReviewBackdrop) return;
     bindTermsDocumentWorkspaceEvents_();
     const opts = (options && typeof options === 'object') ? options : {};
+    const uploadFirst = opts.autoOpenUpload === true;
     ACCOUNT_DOC_MODAL_TYPE = 'credit_terms';
     ACCOUNT_DOC_MODAL_CONTEXT = String(opts.context || (CURRENT_VIEW === VIEW_DASHBOARD ? 'dashboard' : 'project')).trim() || 'project';
     closeAccountDocumentModal({ immediate: true });
@@ -29662,6 +29746,7 @@
     resetTermsClientViewState_();
     TERMS_DOC_CLIENT_WORKSPACE_MODE = true;
     TERMS_DOC_CLIENT_LOADING = true;
+    TERMS_DOC_UPLOAD_PANEL_OPEN = uploadFirst;
     renderTermsReviewWorkspace_();
     showAccountDocumentLoader_();
     try {
@@ -29670,6 +29755,25 @@
         setTermsDocMessage_(String((err && err.message) || err || 'Unable to refresh credit terms status.'), 'err');
         return null;
       });
+      if (uploadFirst) {
+        termsReviewBackdrop.hidden = false;
+        requestAnimationFrame(() => {
+          termsReviewBackdrop.classList.add('open');
+          syncOverlayScrollLock();
+          if (termsDocUploadChooseBtn) {
+            termsDocUploadChooseBtn.focus();
+          } else if (termsReviewClose) {
+            termsReviewClose.focus();
+          }
+        });
+        if (termsReviewStage) termsReviewStage.scrollTop = 0;
+        Promise.allSettled([loadPromise, statusPromise]).then(() => {
+          TERMS_DOC_CLIENT_LOADING = false;
+          TERMS_DOC_UPLOAD_PANEL_OPEN = true;
+          renderTermsReviewWorkspace_();
+        });
+        return;
+      }
       await loadPromise;
       TERMS_DOC_CLIENT_LOADING = false;
       renderTermsReviewWorkspace_();
@@ -29681,7 +29785,7 @@
         syncOverlayScrollLock();
       });
       if (termsReviewStage) termsReviewStage.scrollTop = 0;
-      if (opts.autoOpenUpload === true) {
+      if (uploadFirst) {
         TERMS_DOC_UPLOAD_PANEL_OPEN = true;
         renderTermsDocUploadPanel_();
       }
@@ -31973,45 +32077,109 @@
     return chain;
   }
 
+  function setTaxFormPageImageSource_(pageNumber, src){
+    const pageKey = Number(pageNumber);
+    const value = String(src || '').trim();
+    if (!pageKey || !value) return;
+    TAX_FORM_PAGE_IMAGE_SRCS[pageKey] = value;
+    renderTaxFormImages_();
+  }
+
+  function getTaxFormRequiredPageNumbers_(){
+    return [1, 2];
+  }
+
+  function getTaxFormLoadedPageImageSources_(){
+    const out = {};
+    getTaxFormRequiredPageNumbers_().forEach(pageNumber => {
+      const src = String(TAX_FORM_PAGE_IMAGE_SRCS[pageNumber] || '').trim();
+      if (src) out[pageNumber] = src;
+    });
+    return out;
+  }
+
+  function getTaxFormMissingPageNumbers_(sources){
+    const pageSources = (sources && typeof sources === 'object') ? sources : getTaxFormLoadedPageImageSources_();
+    return getTaxFormRequiredPageNumbers_().filter(pageNumber => !String(pageSources[pageNumber] || '').trim());
+  }
+
+  function showTaxFormPartialPreviewWarning_(sources){
+    const pageSources = (sources && typeof sources === 'object') ? sources : getTaxFormLoadedPageImageSources_();
+    const missingPages = getTaxFormMissingPageNumbers_(pageSources);
+    if (!missingPages.length) return;
+    const loadedPages = getTaxFormRequiredPageNumbers_().filter(pageNumber => String(pageSources[pageNumber] || '').trim());
+    if (!loadedPages.length) return;
+    setTaxDocMessage(
+      'Form page ' + missingPages.join(', ') + ' preview could not be loaded. You can still upload the completed form or download the blank PDF.',
+      'err',
+      { timeoutMs: 0 }
+    );
+  }
+
+  function buildTaxFormInlineAssetSourceMap_(assets){
+    const out = {};
+    (Array.isArray(assets) ? assets : []).forEach(asset => {
+      const pageNumber = Number(asset && asset.page);
+      const src = buildTaxFormInlineAssetUrl_(asset);
+      if (pageNumber && src) out[pageNumber] = src;
+    });
+    return out;
+  }
+
+  async function loadTaxFormInlineAssetSources_(){
+    const resp = await callServer('getTaxFormViewerAssets', getTaxWorkspaceDocumentRequestPayload_());
+    if (!resp || resp.ok !== true || !Array.isArray(resp.pageImages)) {
+      throw new Error(String((resp && resp.error) || 'Unable to load tax form viewer assets.'));
+    }
+    return buildTaxFormInlineAssetSourceMap_(resp.pageImages);
+  }
+
   async function ensureTaxFormImageAssetsLoaded_(){
     if (TAX_FORM_PAGE_IMAGE_SRCS[1] && TAX_FORM_PAGE_IMAGE_SRCS[2]) return TAX_FORM_PAGE_IMAGE_SRCS;
     if (TAX_FORM_PAGE_IMAGE_LOAD_PROMISE) return TAX_FORM_PAGE_IMAGE_LOAD_PROMISE;
-    const page1 = getTaxFormPageByNumber_(1);
-    const page2 = getTaxFormPageByNumber_(2);
-    const loadFromDriveCandidates = () => Promise.all([
-      resolveTaxFormPageImageSrc_(page1 && page1.sourceImage && page1.sourceImage.driveFileId),
-      resolveTaxFormPageImageSrc_(page2 && page2.sourceImage && page2.sourceImage.driveFileId)
-    ]).then(results => {
-      const next = {
-        1: String(results[0] || '').trim(),
-        2: String(results[1] || '').trim()
-      };
-      if (!next[1] || !next[2]) {
-        throw new Error('Tax form page images are incomplete.');
-      }
-      return next;
-    });
-    const loadFromInlineAssets = () => callServer('getTaxFormViewerAssets', getTaxWorkspaceDocumentRequestPayload_())
-      .then(resp => {
-        if (!resp || resp.ok !== true || !Array.isArray(resp.pageImages)) {
-          throw new Error(String((resp && resp.error) || 'Unable to load tax form viewer assets.'));
-        }
-        const next = {};
-        resp.pageImages.forEach(asset => {
-          const pageNumber = Number(asset && asset.page);
-          const src = buildTaxFormInlineAssetUrl_(asset);
-          if (pageNumber && src) next[pageNumber] = src;
+    const pageDefs = getTaxFormRequiredPageNumbers_().map(pageNumber => ({
+      pageNumber: pageNumber,
+      page: getTaxFormPageByNumber_(pageNumber)
+    }));
+    TAX_FORM_PAGE_IMAGE_LOAD_PROMISE = Promise.all(pageDefs.map(def => {
+      if (String(TAX_FORM_PAGE_IMAGE_SRCS[def.pageNumber] || '').trim()) {
+        return Promise.resolve({
+          pageNumber: def.pageNumber,
+          src: String(TAX_FORM_PAGE_IMAGE_SRCS[def.pageNumber] || '').trim()
         });
-        if (!next[1] || !next[2]) {
-          throw new Error('Tax form inline assets are incomplete.');
+      }
+      return resolveTaxFormPageImageSrc_(def.page && def.page.sourceImage && def.page.sourceImage.driveFileId)
+        .then(src => {
+          setTaxFormPageImageSource_(def.pageNumber, src);
+          return { pageNumber: def.pageNumber, src: src };
+        })
+        .catch(err => ({
+          pageNumber: def.pageNumber,
+          error: String((err && err.message) || err || 'Unable to load tax form page image.')
+        }));
+    }))
+      .then(() => {
+        const missingAfterDrive = getTaxFormMissingPageNumbers_(getTaxFormLoadedPageImageSources_());
+        if (!missingAfterDrive.length) return getTaxFormLoadedPageImageSources_();
+        return loadTaxFormInlineAssetSources_()
+          .then(inlineSources => {
+            missingAfterDrive.forEach(pageNumber => {
+              if (inlineSources[pageNumber]) setTaxFormPageImageSource_(pageNumber, inlineSources[pageNumber]);
+            });
+            return getTaxFormLoadedPageImageSources_();
+          })
+          .catch(err => {
+            const loaded = getTaxFormLoadedPageImageSources_();
+            if (Object.keys(loaded).length) return loaded;
+            throw err;
+          });
+      })
+      .then(sources => {
+        const loadedSources = (sources && typeof sources === 'object') ? sources : getTaxFormLoadedPageImageSources_();
+        if (!Object.keys(loadedSources).length) {
+          throw new Error('Tax form page images could not be loaded.');
         }
-        return next;
-      });
-    TAX_FORM_PAGE_IMAGE_LOAD_PROMISE = loadFromDriveCandidates()
-      .catch(() => loadFromInlineAssets())
-      .then(next => {
-        TAX_FORM_PAGE_IMAGE_SRCS = next;
-        return next;
+        return loadedSources;
       })
       .finally(() => {
         TAX_FORM_PAGE_IMAGE_LOAD_PROMISE = null;
@@ -32878,6 +33046,15 @@
     }
     taxDocModal.classList.remove('is-team-review-mode');
     const manifest = getTaxFormManifest_();
+    const pageDims = (manifest.source && manifest.source.pageDimensionsPts && typeof manifest.source.pageDimensionsPts === 'object')
+      ? manifest.source.pageDimensionsPts
+      : {};
+    const pageWidth = Math.max(1, Number(pageDims.width) || 612);
+    const pageHeight = Math.max(1, Number(pageDims.height) || 792);
+    const pageRatio = pageWidth + ' / ' + pageHeight;
+    [taxFormPage1Canvas, taxFormPage2Card && taxFormPage2Card.querySelector('.taxFormPageCanvas')].forEach(el => {
+      if (el) el.style.setProperty('--tax-form-page-aspect-ratio', pageRatio);
+    });
     let currentStep = getTaxFormCurrentStep_();
     const reviewReady = isTaxFormReadyForReview_();
     if (currentStep && currentStep.isReview && !reviewReady) {
@@ -33667,6 +33844,7 @@
   async function openTaxExemptWorkspace_(options){
     if (!taxDocBackdrop) return;
     const opts = (options && typeof options === 'object') ? options : {};
+    const uploadFirst = opts.autoOpenUpload === true;
     bindTaxDocumentWorkspaceEvents_();
     TAX_DOC_MODAL_CONTEXT = String(opts.context || (CURRENT_VIEW === VIEW_DASHBOARD ? 'dashboard' : 'project')).trim() || 'project';
     resetTaxClientViewState_();
@@ -33682,8 +33860,38 @@
     }
     showAccountDocumentLoader_();
     try {
-      await ensureTaxFormImageAssetsLoaded_();
-      if (opts.autoOpenUpload === true) {
+      if (uploadFirst) {
+        TAX_DOC_EMAIL_PANEL_OPEN = false;
+        TAX_DOC_UPLOAD_PANEL_OPEN = true;
+        renderTaxFormWorkspace_();
+        taxDocBackdrop.hidden = false;
+        if (TAX_DOC_HIDE_TIMER) {
+          clearTimeout(TAX_DOC_HIDE_TIMER);
+          TAX_DOC_HIDE_TIMER = 0;
+        }
+        requestAnimationFrame(() => {
+          taxDocBackdrop.classList.add('open');
+          syncOverlayScrollLock();
+          if (taxDocUploadChooseBtn) {
+            taxDocUploadChooseBtn.focus();
+          } else if (taxDocClose) {
+            taxDocClose.focus();
+          }
+        });
+        ensureTaxFormImageAssetsLoaded_()
+          .then(sources => {
+            showTaxFormPartialPreviewWarning_(sources);
+            renderTaxFormWorkspace_();
+          })
+          .catch(err => {
+            setTaxDocMessage(String((err && err.message) || err || 'Unable to load the tax form page images.'), 'err');
+            renderTaxFormWorkspace_();
+          });
+        return;
+      }
+      const sources = await ensureTaxFormImageAssetsLoaded_();
+      showTaxFormPartialPreviewWarning_(sources);
+      if (uploadFirst) {
         TAX_DOC_EMAIL_PANEL_OPEN = false;
         TAX_DOC_UPLOAD_PANEL_OPEN = true;
       }
@@ -33696,7 +33904,7 @@
       requestAnimationFrame(() => {
         taxDocBackdrop.classList.add('open');
         syncOverlayScrollLock();
-        if (opts.autoOpenUpload === true && taxDocUploadChooseBtn) {
+        if (uploadFirst && taxDocUploadChooseBtn) {
           taxDocUploadChooseBtn.focus();
         } else if (taxDocStartHeaderBtn && !taxDocStartHeaderBtn.hidden) {
           taxDocStartHeaderBtn.focus();
@@ -46074,21 +46282,11 @@
           setDashboardAccountContext_(accountCtx.accountId, accountCtx.accountAccessToken);
           const setupReturnResult = SETUP_RETURN_RESULT;
           await reconcileCheckoutReturnOnBoot_();
-          const dashboardHomeResp = await loadProjectsForHome({
+          const dashboardResp = await loadDashboardForDeepLink_({
             requestPayload: getDashboardContextRequestPayload_(),
-            suppressLoadingMessage: true,
-            awaitPaint: true
+            setupReturnResult: setupReturnResult
           });
-          setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
-          if (!dashboardHomeResp) {
-            notifyPortalReady({ reason: 'dashboard-load-failed' });
-            return;
-          }
-          syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          showSetupReturnDashboardMessage_(setupReturnResult);
-          consumeDashboardBootstrapIntent_().catch(() => {});
-          notifyPortalReady({ reason: 'dashboard-ready' });
+          if (!dashboardResp) return;
         } finally {
           rtHideLoader();
         }
@@ -46126,21 +46324,11 @@
         }
         const setupReturnResult = SETUP_RETURN_RESULT;
         await reconcileCheckoutReturnOnBoot_();
-        const dashboardHomeResp = await loadProjectsForHome({
+        const dashboardResp = await loadDashboardForDeepLink_({
           requestPayload: getDashboardContextRequestPayload_() || { token: CURRENT_TOKEN },
-          suppressLoadingMessage: true,
-          awaitPaint: true
+          setupReturnResult: setupReturnResult
         });
-        setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
-        if (!dashboardHomeResp) {
-          notifyPortalReady({ reason: 'dashboard-load-failed' });
-          return;
-        }
-        syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        showSetupReturnDashboardMessage_(setupReturnResult);
-        consumeDashboardBootstrapIntent_().catch(() => {});
-        notifyPortalReady({ reason: 'dashboard-ready' });
+        if (!dashboardResp) return;
       } finally {
         rtHideLoader();
       }

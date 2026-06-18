@@ -11036,6 +11036,29 @@ function requestTaxExemptSubmission(payload) {
   }
 }
 
+function getAccountDocumentDashboardBoot_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  const definition = getAccountDocumentDefinition_(payload && payload.documentType, ctx.cfg);
+  if (!definition) return { ok: false, error: 'Unsupported account document type.' };
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    definition.type,
+    'Account document dashboard ready.',
+    {
+      lightweightDashboardBoot: true
+    }
+  );
+}
+
+function getAccountDocumentDashboardBoot(payload) {
+  try {
+    return getAccountDocumentDashboardBoot_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function getTaxExemptWorkspace_(payload) {
   const ctx = buildAccountDocumentContext_(payload);
   if (!ctx || ctx.ok === false) return ctx;
@@ -11441,7 +11464,7 @@ function emailTaxExemptSubmissionCopy_(payload) {
     '',
     'A copy of your completed Michigan sales tax exemption form is attached.',
     'Your form is under review by the Red Threads team. You will receive an update when the review is complete.',
-    portalUrl ? ('You can view the current project status in your portal: ' + portalUrl) : '',
+    portalUrl ? ('You can view the current tax exemption status in your portal: ' + portalUrl) : '',
     '',
     buildStandardNoReplyFooterCopy_(),
     '',
@@ -14627,6 +14650,9 @@ function buildPasswordResetEmailContent_(code, resetUrl) {
     'Return to the portal to reset your password',
     cleanUrl
   );
+  const centeredCtaHtml = cta.html
+    ? ('<div style="text-align:center;">' + cta.html + '</div>')
+    : '';
   const fallback = 'If the button does not work, open the portal and choose Forgot password, then enter this code.';
   const body = [
     'Use this code to reset your Red Threads portal password.',
@@ -14668,7 +14694,7 @@ function buildPasswordResetEmailContent_(code, resetUrl) {
       'text-align': 'center'
     }) + '">' + escapeHtml_(cleanCode) + '</div>',
     '<p style="margin:0 0 16px;color:' + theme.textMuted + ';">This code expires in 15 minutes.</p>',
-    cta.html,
+    centeredCtaHtml,
     '<p style="margin:0 0 14px;color:' + theme.textSoft + ';">' + escapeHtml_(fallback) + '</p>',
     '<p style="margin:0 0 18px;color:' + theme.textSoft + ';">If you did not request this, you can ignore this email.</p>',
     buildLifecycleEmailFooter_().html,
@@ -20157,6 +20183,11 @@ function normalizePortalDocumentProjectNumber_(value) {
   return clean || 'Project';
 }
 
+function isGenericPortalDocumentProjectNumber_(value) {
+  const clean = normalizePortalDocumentProjectNumber_(value).toLowerCase();
+  return !clean || clean === 'project' || clean === 'emailreview';
+}
+
 function zeroPadPortalDocumentVersion_(version) {
   const n = Math.max(1, parseInt(String(version || 1), 10) || 1);
   return n < 10 ? ('0' + n) : String(n);
@@ -20188,14 +20219,54 @@ function getPortalDocumentProjectNumber_(source) {
   const s = (source && typeof source === 'object') ? source : {};
   const row = s.rowObjNormalized && typeof s.rowObjNormalized === 'object' ? s.rowObjNormalized : s;
   const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, null) || row.orderDraft || s.orderDraft || {};
+  const lockedDraft = s.lockedOrderDraft && typeof s.lockedOrderDraft === 'object' ? s.lockedOrderDraft : {};
+  const docReference = s.documentReference || s.invoiceDocumentReference || row.documentReference || draft.documentReference || {};
+  const estimateReference = s.documentReferences && s.documentReferences.estimate
+    ? s.documentReferences.estimate
+    : (draft.documentReferences && draft.documentReferences.estimate ? draft.documentReferences.estimate : {});
+  const parsedDocRef = parsePortalDocumentReference_(
+    s.documentRef ||
+    s.invoiceNumber ||
+    s.invoicenumber ||
+    row.documentRef ||
+    row.invoiceNumber ||
+    row.invoicenumber ||
+    (docReference && docReference.documentRef) ||
+    (estimateReference && estimateReference.documentRef)
+  );
+  const fileNameMatch = trimString_(s.fileName || s.invoiceFileName || s.invoicefilename || row.invoiceFileName || row.invoicefilename)
+    .match(/\bProject\s+([A-Za-z0-9_-]+)/i);
   return trimString_(
+    (parsedDocRef && parsedDocRef.projectNumber) ||
+    (fileNameMatch && fileNameMatch[1]) ||
     s.projectNumber ||
+    s.projectnumber ||
+    row.projectNumber ||
+    row.projectnumber ||
     s.dealNumber ||
     s.dealnumber ||
+    s.dealId ||
+    s.dealid ||
     row.dealnumber ||
     row.dealNumber ||
+    row.dealid ||
+    row.dealId ||
+    (docReference && docReference.projectNumber) ||
+    (docReference && docReference.projectnumber) ||
+    (estimateReference && estimateReference.projectNumber) ||
+    (estimateReference && estimateReference.projectnumber) ||
     draft.dealNumber ||
-    draft.dealnumber
+    draft.dealnumber ||
+    draft.dealId ||
+    draft.dealid ||
+    draft.projectNumber ||
+    draft.projectnumber ||
+    lockedDraft.dealNumber ||
+    lockedDraft.dealnumber ||
+    lockedDraft.dealId ||
+    lockedDraft.dealid ||
+    lockedDraft.projectNumber ||
+    lockedDraft.projectnumber
   ).replace(/[^A-Za-z0-9_-]+/g, '');
 }
 
@@ -20601,6 +20672,18 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     infra: opts.infra,
     token: token
   });
+  const lifecycleEmailContext = (lifecycleSections.emailContext && typeof lifecycleSections.emailContext === 'object')
+    ? lifecycleSections.emailContext
+    : {};
+  const workflowContext = (lifecycleEmailContext.workflowContext && typeof lifecycleEmailContext.workflowContext === 'object')
+    ? lifecycleEmailContext.workflowContext
+    : {};
+  const paymentState = trimString_(summary.paymentState).toLowerCase();
+  const paymentReceived = workflowContext.isPaymentReceived === true ||
+    workflowContext.paymentReceived === true ||
+    !!trimString_(workflowContext.paymentReceivedAt || summary.paidAt || summary.paymentReceivedManuallyAt) ||
+    paymentState === PAYMENT_STATES.paid ||
+    paymentState === PAYMENT_STATES.manual_received;
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
@@ -20630,13 +20713,15 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const shell = buildLifecycleEmailShell_({
     heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'Order confirmation', 'Order confirmation.'),
     intro: intro,
-    nextStep: 'Choose a payment option or send payment using the instructions on your invoice.',
+    nextStep: paymentReceived
+      ? 'No payment action is needed.'
+      : 'Choose a payment option or send payment using the instructions on your invoice.',
     attachmentNote: 'Your invoice is attached.',
     blocks: lifecycleSections.blocks.concat([
       buildLifecycleEmailCtaBlock_('View your order summary', links.summaryUrl),
-      paymentOptionsBlock,
+      paymentReceived ? null : paymentOptionsBlock,
       buildLifecycleEmailFooter_()
-    ])
+    ].filter(Boolean))
   });
   if (!lifecycleText) {
     const fallback = [
@@ -23088,11 +23173,12 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       intro: isTeam ? ('Red Threads approved the ' + labels.noun + ' associated with this account.') : approvedIntro,
       statusCopy: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
         ? (isTeam
-          ? 'The account can use purchase-order submission according to the approved terms.'
-          : 'Your account can use purchase-order submission according to the approved terms.')
+          ? 'Approved payment terms are now associated with this account.'
+          : 'Approved payment terms are now associated with your account.')
         : (isTeam
           ? 'The approved tax exemption status is now associated with the account.'
           : 'The approved tax exemption status is now associated with your account.'),
+      nextStep: 'No action is required.',
       details: details
     };
   }
@@ -23137,6 +23223,18 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     };
   }
   return null;
+}
+
+function resolveAccountDocumentLifecycleNextStep_(copy, milestone, recipientClass) {
+  const source = (copy && typeof copy === 'object') ? copy : {};
+  const explicitStep = trimString_(source.nextStep);
+  if (explicitStep) return explicitStep;
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
+    return 'No action is required.';
+  }
+  return '';
 }
 
 function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext, meta, cfg) {
@@ -23266,6 +23364,10 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
   emailContext.ctaUrl = trimString_(cta.url);
   emailContext.ctaLabel = trimString_(cta.label);
   const copy = buildPortalLifecycleEmailCopy_(normalized, recipientClass, emailContext, meta, ctx.cfg || opts.cfg);
+  const accountDocumentMilestone = isPortalLifecycleAccountDocumentMilestone_(normalized);
+  const resolvedNextStep = accountDocumentMilestone
+    ? resolveAccountDocumentLifecycleNextStep_(copy, normalized, recipientClass)
+    : (copy.nextStep || emailContext.nextStepText);
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
     family: 'portal_lifecycle',
     milestone: normalized,
@@ -23276,7 +23378,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     intro: copy.intro,
     statusCopy: copy.statusCopy,
-    nextStep: copy.nextStep || emailContext.nextStepText,
+    nextStep: resolvedNextStep,
     blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
@@ -27263,10 +27365,18 @@ function sendSummaryEstimatePdfEmail(payload) {
     ? PORTAL_DOCUMENT_KINDS.invoice
     : PORTAL_DOCUMENT_KINDS.estimate;
   const parsedPayloadRef = parsePortalDocumentReference_(p.documentRef || p.documentReference);
-  const documentReference = parsedPayloadRef || buildPortalDocumentReference_({
+  const payloadProjectNumber = getPortalDocumentProjectNumber_({
     projectNumber: dealNumber,
+    dealNumber: dealNumber,
+    documentReference: p.documentReference,
+    documentRef: p.documentRef,
+    fileName: p.fileName
+  });
+  const shouldUseParsedRef = parsedPayloadRef && !isGenericPortalDocumentProjectNumber_(parsedPayloadRef.projectNumber);
+  const documentReference = shouldUseParsedRef ? parsedPayloadRef : buildPortalDocumentReference_({
+    projectNumber: payloadProjectNumber || (parsedPayloadRef && parsedPayloadRef.projectNumber),
     documentKind: documentKind,
-    version: p.documentVersion || 1
+    version: p.documentVersion || (parsedPayloadRef && parsedPayloadRef.version) || 1
   });
   const fileName = sanitizeUploadedDocumentName_(documentReference.fileName, documentReference.fileName);
   const blob = Utilities.newBlob(bytes, trimString_(p.mimeType) || MimeType.PDF, fileName);
@@ -27853,6 +27963,47 @@ function buildEmailReviewFixtureContext_(ss, cfg, infra) {
     chatRow: chatRow,
     accountContext: accountContext
   };
+}
+
+function getEmailReviewFixtureRowProjectNumber_(rowInfo) {
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : ((rowInfo && typeof rowInfo === 'object') ? rowInfo : {});
+  return getPortalDocumentProjectNumber_(row);
+}
+
+function findEmailReviewEstimateRow_(fixture) {
+  const rows = Array.isArray(fixture && fixture.exportRows) ? fixture.exportRows : [];
+  for (let i = 0; i < rows.length; i++) {
+    if (getEmailReviewFixtureRowProjectNumber_(rows[i]) === '1900') return rows[i];
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] && rows[i].rowObjNormalized ? rows[i].rowObjNormalized : {};
+    const projectNumber = getEmailReviewFixtureRowProjectNumber_(rows[i]);
+    if (!projectNumber) continue;
+    const activeOrderId = trimString_(row.activeorderid || row.activeOrderId || row.currentorderid || row.currentOrderId);
+    const submittedAt = trimString_(row.submittedat || row.submittedAt);
+    if (!activeOrderId && !submittedAt) return rows[i];
+  }
+  return null;
+}
+
+function resolveEmailReviewEstimateProjectNumber_(fixture, fallback) {
+  const estimateRow = findEmailReviewEstimateRow_(fixture);
+  const estimateProjectNumber = getEmailReviewFixtureRowProjectNumber_(estimateRow);
+  if (estimateProjectNumber) return estimateProjectNumber;
+  const fallbackProjectNumber = getPortalDocumentProjectNumber_(fallback);
+  if (fallbackProjectNumber && !isGenericPortalDocumentProjectNumber_(fallbackProjectNumber)) return fallbackProjectNumber;
+  return '1900';
+}
+
+function getEmailReviewEstimateProjectName_(rowInfo, fallback) {
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  return trimString_(
+    row.projectname ||
+    row.projectName ||
+    row.dealtitle ||
+    row.dealTitle ||
+    (fallback && (fallback.projectName || fallback.projectname))
+  );
 }
 
 function buildEmailReviewAccountContext_(cfg, ss, infra, accountRows, fallbackExportRow) {
@@ -28617,25 +28768,24 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
   try {
     const sourceAttachment = attachments[0];
     if (sourceAttachment && typeof sourceAttachment.getBytes === 'function') {
+      const estimateRow = findEmailReviewEstimateRow_(fixture);
+      const estimateProjectNumber = resolveEmailReviewEstimateProjectNumber_(fixture, summary);
+      const estimateReference = buildPortalDocumentReference_({
+        projectNumber: estimateProjectNumber,
+        documentKind: PORTAL_DOCUMENT_KINDS.estimate,
+        version: 1
+      });
       const summaryResult = sendSummaryEstimatePdfEmail({
         recipients: [recipients.client],
         base64Data: Utilities.base64Encode(sourceAttachment.getBytes()),
         mimeType: MimeType.PDF,
-        fileName: buildPortalDocumentFileName_({
-          projectNumber: getPortalDocumentProjectNumber_(summary) || 'EmailReview',
-          documentKind: PORTAL_DOCUMENT_KINDS.estimate,
-          version: 1
-        }),
+        fileName: estimateReference.fileName,
         documentKind: 'summary',
-        documentRef: buildPortalDocumentReference_({
-          projectNumber: getPortalDocumentProjectNumber_(summary) || 'EmailReview',
-          documentKind: PORTAL_DOCUMENT_KINDS.estimate,
-          version: 1
-        }).documentRef,
+        documentRef: estimateReference.documentRef,
         documentVersion: 1,
-        token: trimString_(summary.token),
-        dealNumber: trimString_(summary.dealNumber),
-        projectName: trimString_(summary.projectName)
+        token: '',
+        dealNumber: estimateProjectNumber,
+        projectName: getEmailReviewEstimateProjectName_(estimateRow, summary)
       });
       results.push({
         ok: summaryResult && summaryResult.ok === true,
