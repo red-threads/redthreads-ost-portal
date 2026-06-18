@@ -23559,6 +23559,9 @@ function getAccountDocumentEmailLabels_(meta) {
 function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   const labels = getAccountDocumentEmailLabels_(meta);
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
+    return 'Complete New Credit Terms Application';
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
@@ -23690,6 +23693,12 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     };
   }
   return null;
+}
+
+function shouldUseAccountDocumentNextStepFirstLayout_(milestone, recipientClass) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  if (getPortalLifecycleEmailRecipientClass_(recipientClass) !== 'client') return false;
+  return normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset;
 }
 
 function resolveAccountDocumentLifecycleNextStep_(copy, milestone, recipientClass) {
@@ -23846,6 +23855,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     intro: copy.intro,
     statusCopy: copy.statusCopy,
     nextStep: resolvedNextStep,
+    nonOrderLayout: shouldUseAccountDocumentNextStepFirstLayout_(normalized, recipientClass) ? 'next_step_first' : '',
     blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
       buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
@@ -25468,13 +25478,26 @@ function buildLifecycleEmailShell_(options) {
   const productionTimingActionLine = trimString_((progressBlocks.filter(function(block) {
     return trimString_(block && block.productionTimingActionLine);
   })[0] || {}).productionTimingActionLine);
-  const textParts = [
-    intro,
-    statusCopy,
-    nextStep && !noActionNextStep ? ('Next step: ' + nextStep) : '',
-    actionAttachmentSentence ? actionAttachmentSentence : (attachmentNote ? ('Attachment: ' + attachmentNote) : ''),
-    productionTimingActionLine
-  ];
+  const nonOrderLayout = trimString_(opts.nonOrderLayout).toLowerCase();
+  const nonOrderNextStepFirst = !hasOrderContext && nonOrderLayout === 'next_step_first';
+  const textNextStep = nextStep
+    ? ((noActionNextStep ? 'No action required: ' : 'Next step: ') + nextStep)
+    : '';
+  const textParts = nonOrderNextStepFirst
+    ? [
+      textNextStep,
+      intro,
+      statusCopy,
+      actionAttachmentSentence ? actionAttachmentSentence : (attachmentNote ? ('Attachment: ' + attachmentNote) : ''),
+      productionTimingActionLine
+    ]
+    : [
+      intro,
+      statusCopy,
+      nextStep && !noActionNextStep ? ('Next step: ' + nextStep) : '',
+      actionAttachmentSentence ? actionAttachmentSentence : (attachmentNote ? ('Attachment: ' + attachmentNote) : ''),
+      productionTimingActionLine
+    ];
   blocks.forEach(function(block) {
     const item = (block && typeof block === 'object') ? block : {};
     if (trimString_(item.text)) textParts.push(trimString_(item.text));
@@ -25533,12 +25556,28 @@ function buildLifecycleEmailShell_(options) {
   const nonOrderNextStepIsNoAction = !hasOrderContext && isLifecycleEmailNoActionText_(nextStep);
   const nonOrderNextStepColor = nonOrderNextStepIsNoAction ? theme.successGreen : theme.currentAqua;
   const nonOrderNextStepLabel = nonOrderNextStepIsNoAction ? 'No action required:' : 'Next step:';
+  const nonOrderPrimaryCtaHtml = primaryCta
+    ? ('<div style="margin:0 0 18px;' + (nonOrderNextStepFirst ? 'text-align:center;' : '') + '"><a href="' + escapeHtml_(primaryCta.url) + '" style="' + buildPortalNativeEmailStyle_({
+      display: 'inline-block',
+      padding: '12px 18px',
+      'border-radius': '999px',
+      background: theme.brandRed,
+      color: '#ffffff',
+      'font-weight': '900',
+      'text-decoration': 'none',
+      border: '1px solid ' + theme.brandRedMid
+    }) + '">' + escapeHtml_(primaryCta.label || 'Open Red Threads portal') + '</a></div>')
+    : '';
+  const nonOrderNextStepHtml = !hasOrderContext && nextStep
+    ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + nonOrderNextStepColor + ';background:' + theme.panelAltBg + ';color:' + nonOrderNextStepColor + ';font-weight:900;border-radius:12px;"><strong style="color:' + nonOrderNextStepColor + ';">' + escapeHtml_(nonOrderNextStepLabel) + '</strong> ' + escapeHtml_(nextStep) + '</div>')
+    : '';
   const htmlInnerParts = [
     '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
-    hasOrderContext ? actionCardHtml : primaryCtaHtml,
+    hasOrderContext ? actionCardHtml : (nonOrderNextStepFirst ? nonOrderNextStepHtml : primaryCtaHtml),
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
-    !hasOrderContext && nextStep ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + nonOrderNextStepColor + ';background:' + theme.panelAltBg + ';color:' + nonOrderNextStepColor + ';font-weight:900;border-radius:12px;"><strong style="color:' + nonOrderNextStepColor + ';">' + escapeHtml_(nonOrderNextStepLabel) + '</strong> ' + escapeHtml_(nextStep) + '</div>') : '',
+    !hasOrderContext && nonOrderNextStepFirst ? nonOrderPrimaryCtaHtml : '',
+    !hasOrderContext && !nonOrderNextStepFirst ? nonOrderNextStepHtml : '',
     progressHtml,
     detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html
   ];
@@ -28927,7 +28966,8 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'password reset client': 'validated_email_omitted',
   'blank credit terms source client': 'validated_email_omitted',
   'chat digest team to client': 'validated_email_omitted',
-  'blank tax document source client': 'validated_email_omitted'
+  'blank tax document source client': 'validated_email_omitted',
+  'explicit locked-order resend client': 'validated_email_omitted'
 };
 
 function getEmailReviewSuiteOmissionReason_(label) {
