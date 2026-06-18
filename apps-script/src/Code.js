@@ -10418,7 +10418,7 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
   const body = [
     'The blank Michigan sales tax exemption PDF is attached.',
     uploadInstruction,
-    uploadUrl ? ('Upload sales tax exemption form: ' + uploadUrl) : '',
+    uploadUrl ? ('Upload Complete Tax Exemption Form: ' + uploadUrl) : '',
     reviewNote,
     '',
     taxBlankEmailFooter
@@ -10438,7 +10438,7 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
           'font-weight': '900',
           'text-decoration': 'none',
           border: '1px solid ' + theme.brandRedMid
-        }) + '">Upload sales tax exemption form</a>',
+        }) + '">Upload Complete Tax Exemption Form</a>',
         '</div>'
       ].join('')
     : '';
@@ -10448,7 +10448,7 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
     maxWidth: '640px',
     bodyHtml: [
       '<p style="margin:0 0 12px;font-size:16px;line-height:1.7;color:' + theme.text + ';">The blank Michigan sales tax exemption PDF is attached.</p>',
-      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(uploadInstruction) + '</p>',
+      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + (uploadUrl ? theme.brandRed : theme.textMuted) + ';">' + escapeHtml_(uploadInstruction) + '</p>',
       ctaHtml,
       '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(reviewNote) + '</p>',
       '<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:' + theme.textSoft + ';">' + escapeHtml_(taxBlankEmailFooter) + '</p>'
@@ -28885,7 +28885,9 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
 
 const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'password reset client': 'validated_email_omitted',
-  'blank credit terms source client': 'validated_email_omitted'
+  'blank credit terms source client': 'validated_email_omitted',
+  'chat digest team to client': 'validated_email_omitted',
+  'blank tax document source client': 'validated_email_omitted'
 };
 
 function getEmailReviewSuiteOmissionReason_(label) {
