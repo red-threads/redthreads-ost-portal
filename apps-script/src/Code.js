@@ -22795,7 +22795,9 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     }
   });
   const ctaBlock = shouldRenderApAchLifecycleCta_(normalized, recipientClass)
-    ? buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, ctaUrl)
+    ? buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, ctaUrl, {
+      align: isApAchLifecycleFailureMilestone_(normalized) && recipientClass === 'ap' ? 'center' : ''
+    })
     : null;
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
@@ -25405,17 +25407,21 @@ function buildDirectLifecycleEmailSectionBlocks_(source, invoiceInfo, options) {
   };
 }
 
-function buildLifecycleEmailCtaBlock_(label, url) {
+function buildLifecycleEmailCtaBlock_(label, url, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
   const cleanUrl = trimString_(url);
   const cleanLabel = trimString_(label) || 'Open Red Threads portal';
+  const align = trimString_(opts.align).toLowerCase();
+  const wrapperAlignStyle = align === 'center' ? 'text-align:center;' : '';
   if (!cleanUrl) return { text: '', html: '' };
   return {
     kind: 'cta',
     label: cleanLabel,
     url: cleanUrl,
+    align: align === 'center' ? 'center' : '',
     text: cleanLabel + ': ' + cleanUrl,
-    html: '<p style="margin:0 0 18px;"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(cleanLabel) + '</a></p>'
+    html: '<p style="margin:0 0 18px;' + wrapperAlignStyle + '"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(cleanLabel) + '</a></p>'
   };
 }
 
@@ -25579,8 +25585,9 @@ function buildLifecycleEmailActionCardHtml_(options) {
     paragraphs.push('<p style="margin:0;color:' + theme.currentAqua + ';font-weight:900;"><strong style="color:' + theme.currentAqua + ';">Next action:</strong> ' + nextStepHtml + '</p>');
   }
   if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
+  const ctaAlignStyle = trimString_(cta && cta.align).toLowerCase() === 'center' ? 'text-align:center;' : '';
   const ctaHtml = trimString_(cta && cta.url) && !shouldSuppressLifecycleEmailActionCta_(cta)
-    ? ('<div style="margin:14px 0 0;"><a href="' + escapeHtml_(cta.url) + '" style="' + buildPortalNativeEmailStyle_({
+    ? ('<div style="margin:14px 0 0;' + ctaAlignStyle + '"><a href="' + escapeHtml_(cta.url) + '" style="' + buildPortalNativeEmailStyle_({
       display: 'inline-block',
       padding: '10px 15px',
       'border-radius': '999px',
@@ -29164,7 +29171,11 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'standard ach pending client': 'validated_email_omitted',
   'standard ach verification client': 'validated_email_omitted',
   'standard ach receipt client': 'validated_email_omitted',
-  'standard ach failed client': 'validated_email_omitted'
+  'standard ach failed client': 'validated_email_omitted',
+  'ap payment link sent': 'validated_email_omitted',
+  'ap ach pending ap': 'validated_email_omitted',
+  'ap ach receipt ap': 'validated_email_omitted',
+  'ap ach failed ap': 'validated_email_omitted'
 };
 
 function getEmailReviewSuiteOmissionReason_(label) {
