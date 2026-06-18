@@ -20816,6 +20816,13 @@ function buildPortalEstimateEmailAttachmentSentence_(documentReference) {
   return label + ' is attached to this email.';
 }
 
+function buildPortalEstimateEmailReviewPanelHtml_(message) {
+  const text = trimString_(message);
+  if (!text) return '';
+  const theme = getPortalNativeEmailTheme_();
+  return '<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.currentAqua + ';background:' + theme.panelAltBg + ';color:' + theme.currentAqua + ';font-weight:900;border-radius:12px;">' + escapeHtml_(text) + '</div>';
+}
+
 function resolvePortalDocumentVersion_(source, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const parsed = parsePortalDocumentReference_(
@@ -27905,6 +27912,14 @@ function sendSummaryEstimatePdfEmail(payload) {
     ? buildPortalEstimateEmailSubject_(documentReference)
     : ('Red Threads ' + documentReference.displayLabel);
   let lifecycleSections = { blocks: [] };
+  let senderName = trimString_(
+    p.clientName ||
+    p.senderName ||
+    p.sentByName ||
+    p.personName ||
+    p.purchaserName ||
+    p.contactName
+  );
   if (token) {
     try {
       const displayCtx = buildOrderActionContext_({
@@ -27915,6 +27930,14 @@ function sendSummaryEstimatePdfEmail(payload) {
         family: 'summary_pdf',
         recipientClass: 'client'
       });
+      if (!senderName) {
+        const accountSummary = displayCtx && displayCtx.accountInfo && displayCtx.accountInfo.summary;
+        senderName = trimString_(
+          displayCtx && displayCtx.orderDraft && displayCtx.orderDraft.personName ||
+          accountSummary && (accountSummary.billingContactName || accountSummary.primaryContactName) ||
+          displayCtx && displayCtx.row && (displayCtx.row.personname || displayCtx.row.clientname || displayCtx.row.primarycontactname)
+        );
+      }
     } catch (err) {
       lifecycleSections = { blocks: [] };
     }
@@ -27972,6 +27995,7 @@ function sendSummaryEstimatePdfEmail(payload) {
     ].filter(Boolean).join('\n');
   const estimateIntroText = isEstimateDocument
     ? [
+      senderName ? ('This Red Threads Project Estimate was sent to you by ' + senderName + ' for review.') : '',
       projectName ? ('Project Name: ' + projectName) : '',
       attachmentSentence
     ].filter(Boolean).join('\n')
@@ -27984,6 +28008,7 @@ function sendSummaryEstimatePdfEmail(payload) {
     ].filter(Boolean).join('\n');
   const estimateIntroHtml = isEstimateDocument
     ? [
+      buildPortalEstimateEmailReviewPanelHtml_(senderName ? ('This Red Threads Project Estimate was sent to you by ' + senderName + ' for review.') : ''),
       projectName ? ('  <p style="margin:0 0 6px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
       '  <p style="margin:0 0 16px;">' + escapeHtml_(attachmentSentence) + '</p>'
     ].filter(Boolean).join('\n')
@@ -28539,6 +28564,21 @@ function getEmailReviewEstimateProjectName_(rowInfo, fallback) {
     row.dealtitle ||
     row.dealTitle ||
     (fallback && (fallback.projectName || fallback.projectname))
+  );
+}
+
+function getEmailReviewEstimateClientName_(rowInfo, fallback) {
+  const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
+  return trimString_(
+    row.personname ||
+    row.personName ||
+    row.clientname ||
+    row.clientName ||
+    row.primarycontactname ||
+    row.primaryContactName ||
+    row.billingcontactname ||
+    row.billingContactName ||
+    (fallback && (fallback.personName || fallback.personname || fallback.clientName || fallback.clientname))
   );
 }
 
@@ -29341,7 +29381,8 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
         documentVersion: 1,
         token: '',
         dealNumber: estimateProjectNumber,
-        projectName: getEmailReviewEstimateProjectName_(estimateRow, summary)
+        projectName: getEmailReviewEstimateProjectName_(estimateRow, summary),
+        clientName: getEmailReviewEstimateClientName_(estimateRow, summary)
       });
       results.push({
         ok: summaryResult && summaryResult.ok === true,

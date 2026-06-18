@@ -16959,7 +16959,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 73">73</div>
+  <div class="devRevisionBadge" aria-label="Development revision 74">74</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -39478,7 +39478,8 @@
         documentFingerprint: documentReference.currentComparableKey || '',
         token: CURRENT_TOKEN || INITIAL_TOKEN || '',
         dealNumber: getDealNumber(),
-        projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || ''
+        projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || '',
+        clientName: getClientName()
       });
       if (!resp || resp.ok !== true) {
         throw new Error(String((resp && resp.error) || 'Unable to email the Summary PDF.'));
