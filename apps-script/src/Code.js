@@ -23789,6 +23789,41 @@ function buildPortalLifecycleEmailDetailBlock_(lines) {
   };
 }
 
+function isAccountDocumentApprovedTeamMilestone_(milestone, recipientClass) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  return getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team' &&
+    (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved);
+}
+
+function buildAccountDocumentTeamIdentityDetails_(meta, emailContext) {
+  const source = (meta && typeof meta === 'object') ? meta : {};
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const account = (ctx.accountSummary && typeof ctx.accountSummary === 'object') ? ctx.accountSummary : {};
+  const clientName = trimString_(
+    source.clientName ||
+    source.submittedByName ||
+    account.billingContactName ||
+    account.primaryContactName
+  );
+  const organizationName = trimString_(source.organizationName || source.orgName || account.orgName);
+  const clientEmail = firstNormalizedEmailFromValues_([
+    source.clientEmail,
+    source.submittedByEmail,
+    account.billingContactEmail,
+    account.primaryEmail
+  ]);
+  const details = [];
+  if (clientName) details.push('Client name: ' + clientName);
+  if (organizationName) details.push('Organization: ' + organizationName);
+  if (clientEmail) details.push('Email: ' + clientEmail);
+  return details;
+}
+
+function shouldRenderPortalLifecycleEmailCta_(milestone, recipientClass) {
+  return !isAccountDocumentApprovedTeamMilestone_(milestone, recipientClass);
+}
+
 function formatCreditTermsApprovedPaymentDueLabel_(paymentTermsLabel) {
   const clean = trimString_(paymentTermsLabel);
   if (!clean) return 'your approved payment terms';
@@ -23804,6 +23839,9 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   const documentLabel = trimString_(meta && meta.documentLabel) || labels.title;
   const reason = trimString_(meta && meta.reason);
   const paymentTermsLabel = trimString_(meta && meta.paymentTermsLabel);
+  const teamIdentityDetails = Array.isArray(meta && meta.teamIdentityDetails)
+    ? meta.teamIdentityDetails
+    : [];
   const details = [];
   if (paymentTermsLabel) details.push('Approved payment terms: ' + paymentTermsLabel);
   if (reason) details.push('Reason: ' + reason);
@@ -23828,25 +23866,26 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const taxExemptClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved;
     const creditTermsClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved;
     const paymentDueLabel = formatCreditTermsApprovedPaymentDueLabel_(paymentTermsLabel);
+    const approvedDetails = isTeam ? teamIdentityDetails.concat(details) : details;
     return {
       subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (labels.title + ' approved'),
       heading: isTeam ? (labels.title + ' approved') : approvedIntro.replace(/[.]+$/g, ''),
-      intro: isTeam ? ('Red Threads approved the ' + labels.noun + ' associated with this account.') : approvedIntro,
+      intro: isTeam ? '' : approvedIntro,
       statusCopy: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
         ? (creditTermsClientApproved
           ? ('Orders will go to production immediately upon Purchase Order receipt. Payment will be required within ' + paymentDueLabel + ' of your Purchase Order placement, according to the terms in your credit application. Late fees will be automatically applied.')
           : isTeam
-          ? 'Approved payment terms are now associated with this account.'
+          ? ''
           : 'Approved payment terms are now associated with your account.')
         : (isTeam
-          ? 'The approved tax exemption status is now associated with the account.'
+          ? ''
           : ''),
       nextStep: taxExemptClientApproved
         ? 'You can now toggle sales tax on and off your orders.'
         : creditTermsClientApproved
         ? 'Your Organization can now place Purchase Orders with Red Threads.'
-        : 'No action is required.',
-      details: details
+        : 'No action required',
+      details: approvedDetails
     };
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
@@ -23905,6 +23944,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
 
 function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  if (isAccountDocumentApprovedTeamMilestone_(normalized, recipientClass)) return 'no_action_first';
   if (getPortalLifecycleEmailRecipientClass_(recipientClass) !== 'client') return '';
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved) {
@@ -24060,7 +24100,10 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
   }));
   emailContext.ctaUrl = trimString_(cta.url);
   emailContext.ctaLabel = trimString_(cta.label);
-  const copy = buildPortalLifecycleEmailCopy_(normalized, recipientClass, emailContext, meta, ctx.cfg || opts.cfg);
+  const emailMeta = Object.assign({}, meta, {
+    teamIdentityDetails: buildAccountDocumentTeamIdentityDetails_(meta, emailContext)
+  });
+  const copy = buildPortalLifecycleEmailCopy_(normalized, recipientClass, emailContext, emailMeta, ctx.cfg || opts.cfg);
   const accountDocumentMilestone = isPortalLifecycleAccountDocumentMilestone_(normalized);
   const resolvedNextStep = accountDocumentMilestone
     ? resolveAccountDocumentLifecycleNextStep_(copy, normalized, recipientClass)
@@ -24078,6 +24121,18 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     milestone: normalized,
     recipientClass: recipientClass
   });
+  const ctaBlock = shouldRenderPortalLifecycleEmailCta_(normalized, recipientClass)
+    ? buildLifecycleEmailCtaBlock_(
+      teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
+      teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
+      {
+        align: teamActionModel ? teamActionModel.ctaAlign : '',
+        teamModePassword: teamActionModel
+          ? teamActionModel.teamModePassword
+          : (recipientClass === 'team' ? emailContext.teamModePassword : '')
+      }
+    )
+    : null;
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
@@ -24088,18 +24143,9 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     nonOrderLayout: getAccountDocumentLifecycleNonOrderLayout_(normalized, recipientClass),
     blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
-      buildLifecycleEmailCtaBlock_(
-        teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
-        teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
-        {
-          align: teamActionModel ? teamActionModel.ctaAlign : '',
-          teamModePassword: teamActionModel
-            ? teamActionModel.teamModePassword
-            : (recipientClass === 'team' ? emailContext.teamModePassword : '')
-        }
-      ),
+      ctaBlock,
       buildLifecycleEmailFooter_()
-    ])
+    ].filter(Boolean))
   });
   return {
     subject: copy.subject,
@@ -25118,6 +25164,15 @@ function getLifecycleEmailProjectNumberLabel_(emailContext) {
   return trimString_(summary.dealNumber || summary.projectNumber || summary.dealnumber);
 }
 
+function buildLifecycleEmailTeamModeProjectCtaLabel_(projectNumber, suffix) {
+  const cleanProject = trimString_(projectNumber);
+  const cleanSuffix = trimString_(suffix);
+  const base = cleanProject
+    ? ('Open Project #' + cleanProject + ' in Team Mode')
+    : 'Open project in Team Mode';
+  return cleanSuffix ? (base + ' ' + cleanSuffix) : base;
+}
+
 function formatLifecycleEmailProjectNameValue_(projectName, dealNumber) {
   const cleanName = trimString_(projectName);
   const cleanProject = trimString_(dealNumber);
@@ -25154,7 +25209,10 @@ function buildLifecycleEmailProjectDetailsCta_(projectNumber, url, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
   const cleanProject = trimString_(projectNumber);
-  const label = cleanProject
+  const isTeamModeUrl = /[?&]mode=team(?:[&#]|$)/i.test(cleanUrl);
+  const label = trimString_(opts.teamModePassword) || isTeamModeUrl
+    ? buildLifecycleEmailTeamModeProjectCtaLabel_(cleanProject, '')
+    : cleanProject
     ? ('Click to view Project #' + cleanProject + ' in the portal')
     : 'Click to view this project in the portal';
   return [
@@ -26197,8 +26255,10 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
   };
   const ctaUrl = trimString_(opts.ctaUrl) ||
     (token ? buildLifecycleEmailTeamActionUrl_(token, model.teamAction) : trimString_(ctx.ctaUrl));
+  const projectNumber = getLifecycleEmailProjectNumberLabel_(ctx);
   return Object.assign({}, model, {
     action: action || 'none',
+    ctaLabel: buildLifecycleEmailTeamModeProjectCtaLabel_(projectNumber, ''),
     ctaUrl: ctaUrl,
     ctaAlign: 'center',
     teamModePassword: trimString_(ctx.teamModePassword)
@@ -28258,6 +28318,17 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
   const senderName = trimString_(opts.senderName || deriveSenderNameForNotification_(row, 'client', opts) || 'Client');
   const projectName = trimString_(opts.projectName || deriveProjectNameForNotification_(row, safeJsonParse_(row.snapshotjson, null), opts));
   const portalUrl = buildTeamSnapshotPortalUrl_(trimString_(opts.token || row.token));
+  const projectNumber = getChatDigestProjectNumberLabel_(projectName, null);
+  const ctaLabel = buildChatDigestTeamCtaLabel_(projectNumber);
+  let cfg = opts.cfg || null;
+  if (!cfg) {
+    try {
+      cfg = getConfig_();
+    } catch (_) {
+      cfg = null;
+    }
+  }
+  const teamModePassword = cfg ? trimString_(cfg.teamModePassword) : '';
   const messageText = String(opts.messageText || (message && message.text) || '').trim();
   const clientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
   const subject = 'New client portal message' + (projectName ? (' — ' + projectName) : '');
@@ -28270,7 +28341,8 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
     '',
     'Message:',
     messageText || '--',
-    portalUrl ? ('Open portal: ' + portalUrl) : ''
+    portalUrl ? (ctaLabel + ': ' + portalUrl) : '',
+    portalUrl ? buildLifecycleEmailTeamPasswordHintText_(teamModePassword) : ''
   ].filter(Boolean).join('\n');
   const htmlBody = [
     '<div style="margin:0;padding:24px 0;background:#000000;">',
@@ -28287,7 +28359,7 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
     '      <div style="font-size:16px;line-height:1.7;color:#cbd5e1;white-space:pre-wrap;">' + escapeHtml_(messageText || '--') + '</div>',
     '    </div>',
     portalUrl
-      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">Open Team Snapshot</a></p>')
+      ? ('    <p style="margin:0 0 18px;text-align:center;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 22px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;box-shadow:0 14px 26px rgba(190,24,93,.22);">' + escapeHtml_(ctaLabel) + '</a>' + buildLifecycleEmailTeamPasswordHintHtml_(teamModePassword) + '</p>')
       : '',
     '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
@@ -31803,6 +31875,10 @@ function buildChatDigestClientCtaLabel_(projectNumber) {
   return 'Reply to this message in your portal';
 }
 
+function buildChatDigestTeamCtaLabel_(projectNumber) {
+  return buildLifecycleEmailTeamModeProjectCtaLabel_(projectNumber, 'to reply');
+}
+
 function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const row = rowInfo && rowInfo.rowObjNormalized ? rowInfo.rowObjNormalized : {};
@@ -31814,7 +31890,14 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const projectName = deriveProjectNameForNotification_(row, snapshot, opts);
   const messageCount = safeMessages.length;
   const clientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
-  const clientName = trimString_(row.personname || row.clientname || row.orgname || 'there');
+  const clientDisplayName = trimString_(
+    row.personname ||
+    row.clientname ||
+    row.primarycontactname ||
+    row.billingcontactname ||
+    row.orgname
+  );
+  const clientName = clientDisplayName || 'there';
   const firstName = trimString_(clientName.split(/\s+/)[0]) || 'there';
   const portalUrl = isTeamDigest
     ? buildTeamSnapshotPortalUrl_(token)
@@ -31833,7 +31916,8 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     projectDetailsCta: false
   });
   const projectNumber = getChatDigestProjectNumberLabel_(projectName, lifecycleSections);
-  const ctaLabel = isTeamDigest ? 'Open Team Snapshot' : buildChatDigestClientCtaLabel_(projectNumber);
+  const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, projectNumber) || projectName;
+  const ctaLabel = isTeamDigest ? buildChatDigestTeamCtaLabel_(projectNumber) : buildChatDigestClientCtaLabel_(projectNumber);
   const teamModePassword = isTeamDigest && opts.cfg ? trimString_(opts.cfg.teamModePassword) : '';
   const teamPasswordHintText = buildLifecycleEmailTeamPasswordHintText_(teamModePassword);
   const teamPasswordHintHtml = buildLifecycleEmailTeamPasswordHintHtml_(teamModePassword);
@@ -31864,15 +31948,18 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     ? [
         'A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.',
         '',
-        projectName ? ('Project: ' + projectName) : '',
+        projectNumber ? ('Project #: ' + projectNumber) : '',
+        projectNameDisplay ? ('Project name: ' + projectNameDisplay) : '',
+        clientDisplayName ? ('Client name: ' + clientDisplayName) : '',
         clientEmail ? ('Client email: ' + clientEmail) : '',
-        lifecycleText,
         '',
         'Messages:',
         plainMessageLines.join('\n').trim(),
         '',
-        portalUrl ? ('Open portal: ' + portalUrl) : '',
-        portalUrl ? teamPasswordHintText : ''
+        portalUrl ? (ctaLabel + ': ' + portalUrl) : '',
+        portalUrl ? teamPasswordHintText : '',
+        '',
+        lifecycleText
       ].filter(Boolean).join('\n')
     : [
         'Hi ' + firstName + ',',
@@ -31924,7 +32011,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     ? [clientHtmlMessagesBlock, ctaHtml].filter(Boolean).join('\n')
     : '';
   const showProjectSummaryCard = isTeamDigest
-    ? !!(projectName || clientEmail)
+    ? !!(projectNumber || projectNameDisplay || clientDisplayName || clientEmail)
     : !!(projectName && !lifecycleHtml);
   const clientHeaderLabel = projectNumber
     ? ('Project # ' + projectNumber + ' — New portal message' + (messageCount === 1 ? '' : 's'))
@@ -31957,13 +32044,15 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
       : ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>'),
     showProjectSummaryCard
       ? ('    <div style="margin:0 0 18px;padding:16px 18px;border-radius:12px;background:#0f172a;border:1px solid #1e293b;font-size:14px;line-height:1.8;color:#cbd5e1;">'
-        + (projectName ? ('<div><strong>Project:</strong> ' + escapeHtml_(projectName) + '</div>') : '')
-	        + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
+        + (projectNumber ? ('<div><strong>Project #:</strong> ' + escapeHtml_(projectNumber) + '</div>') : '')
+        + (projectNameDisplay ? ('<div><strong>Project name:</strong> ' + escapeHtml_(projectNameDisplay) + '</div>') : '')
+        + (isTeamDigest && clientDisplayName ? ('<div><strong>Client name:</strong> ' + escapeHtml_(clientDisplayName) + '</div>') : '')
+        + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
 	        + '</div>')
 	      : '',
-	    isTeamDigest ? lifecycleHtml : clientMessageAndReplyHtml,
-	    isTeamDigest ? messagesHtmlBlock : lifecycleHtml,
+	    isTeamDigest ? messagesHtmlBlock : clientMessageAndReplyHtml,
 	    isTeamDigest ? ctaHtml : '',
+	    lifecycleHtml,
 	    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
