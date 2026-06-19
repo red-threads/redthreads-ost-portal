@@ -16959,7 +16959,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 104">104</div>
+  <div class="devRevisionBadge" aria-label="Development revision 105">105</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -40025,7 +40025,9 @@
           portalState: JSON.stringify(portalState || {}),
           messageText: String(opts.messageText || '').trim(),
           projectName: String(opts.projectName || '').trim(),
-          printJobId: String(opts.printJobId || '').trim()
+          printJobId: String(opts.printJobId || '').trim(),
+          printJobName: String(opts.printJobName || opts.projectName || '').trim(),
+          pjLabel: String(opts.pjLabel || '').trim()
         });
     });
   }
@@ -40084,7 +40086,9 @@
       const appendResp = await appendChatMessageToExportLog(text, nextState, {
         messageText: typedText,
         projectName: pjName,
-        printJobId: pjId
+        printJobId: pjId,
+        printJobName: pjName,
+        pjLabel: pjLabel
       });
       const serverLog = normalizeMessageLog(appendResp.chatLog);
       const hasServerEcho = serverLog.some(msg => isSameMessageApprox(message, msg));

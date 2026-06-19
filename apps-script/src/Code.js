@@ -1016,6 +1016,9 @@ function appendChatMessage(payload) {
     const text = String(p.text || '').trim();
     const sender = String(p.sender || '').trim().toLowerCase();
     const teamSenderName = String(p.teamSenderName || '').trim();
+    const printJobId = String(p.printJobId || p.pjId || '').trim();
+    const printJobName = String(p.printJobName || p.pjName || p.projectName || '').trim();
+    const printJobLabel = String(p.pjLabel || p.printJobLabel || '').trim();
 
     const validSender = sender === 'client' || sender === 'team';
     if (!token || !text || text.length > 1000 || !validSender) {
@@ -1037,7 +1040,10 @@ function appendChatMessage(payload) {
 
     const chatLog = readChatLogForRow_(sheet, rowInfo);
     const nextMsg = createChatMessage_(sender, text, '', {
-      authorName: sender === 'team' ? teamSenderName : ''
+      authorName: sender === 'team' ? teamSenderName : '',
+      pjId: printJobId,
+      pjName: printJobName,
+      pjLabel: printJobLabel
     });
     const nextChatLog = normalizeChatLog_(chatLog.concat([nextMsg]));
 
@@ -1066,7 +1072,7 @@ function appendChatMessage(payload) {
       teamSenderName: teamSenderName,
       messageText: String(p.messageText || '').trim(),
       projectName: String(p.projectName || '').trim(),
-      printJobId: String(p.printJobId || '').trim()
+      printJobId: printJobId
     });
     queuePortalMessageDigestEmailSafely_(rowInfo, nextMsg, Object.assign({}, notificationPayload, {
       cfg: cfg,
@@ -30242,9 +30248,10 @@ function sendEmailReviewChatExamples_(results, fixture, recipients) {
     return;
   }
   const now = nowIso_();
+  const reviewPjLabel = 'Comment on Print Job PJ1 Review fixture print job';
   const messages = [
-    { id: 'review-client-1', sender: 'client', authorName: 'Client', text: 'Review fixture client message one.', ts: now },
-    { id: 'review-client-2', sender: 'client', authorName: 'Client', text: 'Review fixture client message two.', ts: now }
+    { id: 'review-client-1', sender: 'client', authorName: 'Client', text: reviewPjLabel + '\nReview fixture client message one.', ts: now, pjId: 'PJ1', pjName: 'Review fixture print job', pjLabel: reviewPjLabel },
+    { id: 'review-client-2', sender: 'client', authorName: 'Client', text: reviewPjLabel + '\nReview fixture client message two.', ts: now, pjId: 'PJ1', pjName: 'Review fixture print job', pjLabel: reviewPjLabel }
   ];
   sendEmailReviewContent_(results, 'Chat digest client to team', 'chat_message_digest', 'team', [recipients.team],
     buildChatMessageDigestEmailContent_(rowInfo, messages, {
@@ -30257,7 +30264,7 @@ function sendEmailReviewChatExamples_(results, fixture, recipients) {
     []);
   sendEmailReviewContent_(results, 'Chat digest team to client', 'chat_message_digest', 'client', [recipients.client],
     buildChatMessageDigestEmailContent_(rowInfo, [
-      { id: 'review-team-1', sender: 'team', authorName: 'Red Threads Team', text: 'Review fixture team reply.', ts: now }
+      { id: 'review-team-1', sender: 'team', authorName: 'Red Threads Team', text: reviewPjLabel + '\nReview fixture team reply.', ts: now, pjId: 'PJ1', pjName: 'Review fixture print job', pjLabel: reviewPjLabel }
     ], {
       direction: CHAT_MESSAGE_DIGEST_DIRECTIONS.team_to_client,
       token: trimString_(rowInfo.rowObjNormalized.token),
@@ -32222,6 +32229,67 @@ function formatChatMessageDigestTimestamp_(value) {
   }
 }
 
+function getChatMessageDigestJobNumber_(message) {
+  const idRaw = trimString_(message && (message.pjId || message.printJobId));
+  if (idRaw) {
+    const idMatch = idRaw.match(/(?:^|[^0-9])(\d+)\b/);
+    if (idMatch && idMatch[1]) return trimString_(idMatch[1]);
+  }
+  const sources = [
+    trimString_(message && message.pjLabel),
+    trimString_(String((message && message.text) || '').split(/\r?\n/)[0])
+  ];
+  for (let i = 0; i < sources.length; i += 1) {
+    const raw = sources[i];
+    if (!raw) continue;
+    const jobMatch = raw.match(/\bprint\s*job\s*(?:pj)?\s*(\d+)\b/i);
+    if (jobMatch && jobMatch[1]) return trimString_(jobMatch[1]);
+    const pjMatch = raw.match(/\bpj\s*(\d+)\b/i);
+    if (pjMatch && pjMatch[1]) return trimString_(pjMatch[1]);
+  }
+  return '';
+}
+
+function getChatMessageDigestJobName_(message) {
+  const direct = trimString_(message && (message.pjName || message.printJobName));
+  if (direct) return direct;
+
+  const label = trimString_(message && message.pjLabel);
+  const firstLine = trimString_(String((message && message.text) || '').split(/\r?\n/)[0]);
+  const sources = [label, firstLine];
+  for (let i = 0; i < sources.length; i += 1) {
+    const raw = sources[i];
+    if (!raw) continue;
+    const match = raw.match(/^\s*comment on print\s*job\s*(?:pj)?\s*\d+\s*(.*)$/i);
+    if (match && match[1]) {
+      return trimString_(String(match[1]).replace(/^[\s:;-]+/, ''));
+    }
+  }
+  return '';
+}
+
+function buildChatMessageDigestJobLine_(message) {
+  const number = getChatMessageDigestJobNumber_(message);
+  const name = getChatMessageDigestJobName_(message);
+  if (number && name) return 'PJ' + number + ': ' + name;
+  if (number) return 'PJ' + number;
+  if (name) return name;
+  return '';
+}
+
+function stripChatMessageDigestEmbeddedJobLine_(message, value) {
+  const raw = trimString_(value);
+  if (!raw) return '';
+  const lines = raw.split(/\r?\n/);
+  const firstLine = trimString_(lines[0]);
+  const explicitLabel = trimString_(message && message.pjLabel);
+  const firstLower = firstLine.toLowerCase();
+  const labelLower = explicitLabel.toLowerCase();
+  const dropFirstLine = (labelLower && firstLower === labelLower) ||
+    /^comment on print\s*job\b/i.test(firstLine);
+  return dropFirstLine ? trimString_(lines.slice(1).join('\n')) : raw;
+}
+
 function getChatDigestProjectNumberLabel_(projectName, lifecycleSections) {
   const ctx = lifecycleSections && lifecycleSections.emailContext ? lifecycleSections.emailContext : null;
   const fromContext = getLifecycleEmailProjectNumberLabel_(ctx);
@@ -32303,12 +32371,14 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
       senderName: senderName,
       isTeamMessage: trimString_(message.sender).toLowerCase() === 'team',
       timestamp: formatChatMessageDigestTimestamp_(message.ts),
-      text: trimString_(message.text)
+      jobLine: buildChatMessageDigestJobLine_(message),
+      text: stripChatMessageDigestEmbeddedJobLine_(message, message.text)
     };
   });
   const plainMessageLines = [];
   messageRows.forEach(function(messageRow) {
-    plainMessageLines.push('[' + (messageRow.timestamp || 'Time unavailable') + '] ' + messageRow.senderName + ':');
+    plainMessageLines.push(messageRow.senderName + ' ' + (messageRow.timestamp || 'Time unavailable'));
+    if (messageRow.jobLine) plainMessageLines.push(messageRow.jobLine);
     plainMessageLines.push(messageRow.text || '--');
     plainMessageLines.push('');
   });
@@ -32344,6 +32414,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
       '      <tr>',
       '        <td style="padding:14px 16px;border-top:1px solid #1e293b;">',
       '          <div style="font-size:13px;line-height:1.5;color:' + metaColor + ';"><strong style="color:' + metaColor + ';">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:' + metaColor + ';">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
+      messageRow.jobLine ? ('          <div style="margin-top:6px;font-size:13px;line-height:1.45;color:#f8fafc;font-weight:800;">' + escapeHtml_(messageRow.jobLine) + '</div>') : '',
       '          <div style="margin-top:8px;font-size:15px;line-height:1.65;color:' + textColor + ';white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
       '        </td>',
       '      </tr>'
@@ -32365,6 +32436,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     return [
       '<div style="margin:0 0 14px;' + separator + '">',
       '  <div style="font-size:13px;line-height:1.5;color:' + metaColor + ';"><strong style="color:' + metaColor + ';">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:' + metaColor + ';">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
+      messageRow.jobLine ? ('  <div style="margin-top:6px;font-size:13px;line-height:1.45;color:' + theme.text + ';font-weight:800;">' + escapeHtml_(messageRow.jobLine) + '</div>') : '',
       '  <div style="margin-top:8px;font-size:15px;line-height:1.65;color:' + textColor + ';white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
       '</div>'
     ].join('\n');
@@ -32961,12 +33033,18 @@ function normalizeChatLog_(input) {
       if (!text) return null;
       const tsRaw = String(m.ts || m.tsIso || '').trim();
       const ts = tsRaw && !isNaN(new Date(tsRaw).getTime()) ? tsRaw : new Date().toISOString();
+      const pjId = String(m.pjId || m.printJobId || '').trim();
+      const pjName = String(m.pjName || m.printJobName || m.projectName || '').trim();
+      const pjLabel = String(m.pjLabel || m.printJobLabel || '').trim();
       return {
         id: String(m.id || ('msg_' + Utilities.getUuid())),
         ts: ts,
         sender: sender,
         authorName: authorName,
-        text: text
+        text: text,
+        pjId: pjId,
+        pjName: pjName,
+        pjLabel: pjLabel
       };
     })
     .filter(Boolean);
@@ -33136,7 +33214,10 @@ function createChatMessage_(sender, text, tsOverride, options) {
     ts: String(tsOverride || new Date().toISOString()),
     sender: String(sender || '').trim().toLowerCase() || 'client',
     authorName: String(opts.authorName || '').trim(),
-    text: String(text || '').trim()
+    text: String(text || '').trim(),
+    pjId: String(opts.pjId || opts.printJobId || '').trim(),
+    pjName: String(opts.pjName || opts.printJobName || opts.projectName || '').trim(),
+    pjLabel: String(opts.pjLabel || opts.printJobLabel || '').trim()
   };
 }
 
