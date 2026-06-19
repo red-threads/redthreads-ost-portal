@@ -9434,7 +9434,17 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
   const projectAccessLabel = dealNumber
     ? ('Click to access Project #' + dealNumber + ' and make a payment.')
     : 'Click to access this project and make a payment.';
-  const paymentInstruction = 'The invoice for this project/order is attached to this email. Click the button below to access this project and make a secure payment online. Payment is required before production can begin. You will receive an updated copy of the final invoice/receipt when payment succeeds. Please contact ' + (purchaserName || 'the project contact') + ' or Red Threads if you have any questions, or need assistance.';
+  const paymentContactName = purchaserName || 'the project contact';
+  const paymentInstruction = [
+    'A member of your organization, ' + paymentContactName + ' is requesting payment to be made for an order with Red Threads.',
+    'They are copied on this email if you would like to speak with them directly.',
+    'The invoice for this project/order is attached to this email.',
+    'Click the button below to access this project and make a secure payment online.',
+    'Payment is required before production can begin.',
+    'You will receive an updated copy of the final invoice/receipt when payment succeeds.',
+    'Please contact ' + paymentContactName + ' or Red Threads if you have any questions or need assistance.',
+    'The Red Threads phone number is 989-600-8540 if you would like to verify the nature of this request before proceeding.'
+  ].join(' ');
   const bankDetailsCopy = 'Bank details are not stored anywhere by Red Threads and will be used to complete this order only.';
   const purchaserNoteLabel = purchaserName
     ? ('Note from ' + purchaserFirstName)
