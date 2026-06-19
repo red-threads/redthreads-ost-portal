@@ -10461,12 +10461,13 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
   const taxBlankEmailFooter = buildStandardNoReplyFooterCopy_();
   const token = resolveAccountDocumentPortalToken_(ctx);
   const uploadUrl = token ? buildDashboardAccountDocumentResubmitUrl_(token, definition.type) : '';
+  const taxNotice = "Gain the ability to toggle sales tax on/off of your organization's orders.";
   const uploadInstruction = uploadUrl
-    ? 'Complete and sign the PDF, then click the button below to open your dashboard directly to the sales tax exemption upload step.'
+    ? 'Complete and sign the attached PDF, then click the button below to upload the finished document to your Red Threads portal account.'
     : 'Complete and sign the PDF, then log into your Red Threads portal dashboard and choose Tax Exemption to upload the completed form.';
   const reviewNote = 'The Red Threads team will review the completed form and notify you when the review is complete.';
   const body = [
-    'The blank Michigan sales tax exemption PDF is attached.',
+    taxNotice,
     uploadInstruction,
     uploadUrl ? ('Upload Complete Tax Exemption Form: ' + uploadUrl) : '',
     reviewNote,
@@ -10497,8 +10498,8 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
     heading: definition.label,
     maxWidth: '640px',
     bodyHtml: [
-      '<p style="margin:0 0 12px;font-size:16px;line-height:1.7;color:' + theme.text + ';">The blank Michigan sales tax exemption PDF is attached.</p>',
-      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + (uploadUrl ? theme.brandRed : theme.textMuted) + ';">' + escapeHtml_(uploadInstruction) + '</p>',
+      buildPortalNativeEmailGreenCalloutHtml_(taxNotice),
+      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.text + ';">' + escapeHtml_(uploadInstruction) + '</p>',
       ctaHtml,
       '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(reviewNote) + '</p>',
       '<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:' + theme.textSoft + ';">' + escapeHtml_(taxBlankEmailFooter) + '</p>'
@@ -10529,11 +10530,12 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
   const creditTermsBlankEmailFooter = buildStandardNoReplyFooterCopy_();
   const token = resolveAccountDocumentPortalToken_(ctx);
   const uploadUrl = token ? buildDashboardCreditTermsResubmitUrl_(token) : '';
+  const creditTermsNotice = 'Complete the Credit Application process to apply for net 30, 60, 90 day payment terms and gain the ability for your organization to place Purchase Orders.';
   const uploadInstruction = uploadUrl
-    ? 'Complete and sign the attached PDF, then click the button below to open your portal dashboard directly to the credit terms section. Upload your document in the portal, and our team will reach out after reviewing your account.'
+    ? 'Complete and sign the attached PDF, then click the button below to open your portal dashboard directly to the credit terms section. Upload your document in the portal, and our team will review your account/application.'
     : 'Complete and sign the attached PDF, then log into your Red Threads portal dashboard and choose Credit Terms to upload the completed file.';
   const body = [
-    'The blank credit terms PDF is attached.',
+    creditTermsNotice,
     uploadInstruction,
     uploadUrl ? ('Upload credit terms file: ' + uploadUrl) : '',
     '',
@@ -10563,8 +10565,8 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
     heading: definition.label,
     maxWidth: '640px',
     bodyHtml: [
-      '<p style="margin:0 0 12px;font-size:16px;line-height:1.7;color:' + theme.text + ';">The blank credit terms PDF is attached.</p>',
-      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(uploadInstruction) + '</p>',
+      buildPortalNativeEmailGreenCalloutHtml_(creditTermsNotice),
+      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.text + ';">' + escapeHtml_(uploadInstruction) + '</p>',
       ctaHtml,
       '<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:' + theme.textSoft + ';">' + escapeHtml_(creditTermsBlankEmailFooter) + '</p>'
     ].filter(Boolean).join('\n')
@@ -20881,6 +20883,13 @@ function buildPortalEstimateEmailReviewPanelHtml_(message) {
   return '<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.currentAqua + ';background:' + theme.panelAltBg + ';color:' + theme.currentAqua + ';font-weight:900;border-radius:12px;">' + escapeHtml_(text) + '</div>';
 }
 
+function buildPortalNativeEmailGreenCalloutHtml_(message) {
+  const text = trimString_(message);
+  if (!text) return '';
+  const theme = getPortalNativeEmailTheme_();
+  return '<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + theme.successGreen + ';background:' + theme.panelAltBg + ';color:' + theme.successGreen + ';font-weight:900;border-radius:12px;">' + escapeHtml_(text) + '</div>';
+}
+
 function resolvePortalDocumentVersion_(source, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const parsed = parsePortalDocumentReference_(
@@ -23695,6 +23704,14 @@ function buildPortalLifecycleEmailDetailBlock_(lines) {
   };
 }
 
+function formatCreditTermsApprovedPaymentDueLabel_(paymentTermsLabel) {
+  const clean = trimString_(paymentTermsLabel);
+  if (!clean) return 'your approved payment terms';
+  if (/^net\s+\d+$/i.test(clean)) return clean + ' Days';
+  if (/^net\s+\d+\s+days?$/i.test(clean)) return clean.replace(/\bdays?$/i, 'Days');
+  return clean;
+}
+
 function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   const isTeam = getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team';
@@ -23724,12 +23741,16 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       ? 'Red Threads approved the credit terms associated with your account.'
       : 'Red Threads approved the tax exemption associated with your account.';
     const taxExemptClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved;
+    const creditTermsClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved;
+    const paymentDueLabel = formatCreditTermsApprovedPaymentDueLabel_(paymentTermsLabel);
     return {
       subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (labels.title + ' approved'),
       heading: isTeam ? (labels.title + ' approved') : approvedIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? ('Red Threads approved the ' + labels.noun + ' associated with this account.') : approvedIntro,
       statusCopy: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
-        ? (isTeam
+        ? (creditTermsClientApproved
+          ? ('Orders will go to production immediately upon Purchase Order receipt. Payment will be required within ' + paymentDueLabel + ' of your Purchase Order placement, according to the terms in your credit application. Late fees will be automatically applied.')
+          : isTeam
           ? 'Approved payment terms are now associated with this account.'
           : 'Approved payment terms are now associated with your account.')
         : (isTeam
@@ -23737,8 +23758,8 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
           : ''),
       nextStep: taxExemptClientApproved
         ? 'You can now toggle sales tax on and off your orders.'
-        : !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
-        ? ''
+        : creditTermsClientApproved
+        ? 'Your Organization can now place Purchase Orders with Red Threads.'
         : 'No action is required.',
       details: details
     };
@@ -25498,6 +25519,7 @@ function isLifecycleEmailNoActionText_(value) {
   const clean = trimString_(value).toLowerCase();
   if (!clean) return false;
   if (clean === 'you can now toggle sales tax on and off your orders.') return true;
+  if (clean === 'your organization can now place purchase orders with red threads.') return true;
   return /^no\s+(?:team\s+)?action\s+(?:is\s+)?(?:needed|required)\b/.test(clean) ||
     /^no\s+(?:ap\s+)?payment\s+action\s+(?:is\s+)?(?:needed|required)\b/.test(clean) ||
     /^no\s+action\s+(?:needed|required)\b/.test(clean);
