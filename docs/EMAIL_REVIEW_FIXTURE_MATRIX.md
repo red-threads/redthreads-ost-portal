@@ -6,7 +6,7 @@ This document records the fixture and test-harness maturity plan for lifecycle c
 
 Audit date: 2026-06-19. Spreadsheet: `CALC_EST_OST_EXPORT_LOG`.
 
-The first controlled fixture-storage normalization pass was completed on 2026-06-19 with owner approval. Only the storage/source fixture tabs were mutated:
+The first controlled fixture-storage normalization pass was completed on 2026-06-19 with owner approval. A second controlled fixture-storage buildout was completed the same day to add dedicated lifecycle rows that the current schema can model safely. Only the storage/source fixture tabs were mutated:
 
 - `FIXTURE_EXPORT`
 - `FIXTURE_PORTAL_ORDERS`
@@ -26,9 +26,9 @@ No active runtime tabs were mutated. No review-suite reset copied fixture data i
 
 Before normalization, `FIXTURE_EXPORT` contained repeated historical fixture blocks. The live audit found embedded header rows at rows `70, 139, 208, 277, 346, 415, 484, 553, 622, 691, 760, 829, 898`, plus the real header at row `1`.
 
-The repeated export blocks included the same seven active-order fixture references repeated fourteen times, for ninety-eight active-order fixture references total. The normalization pass preserved the first canonical fixture block and cleared only surplus data rows below that block. Post-normalization, `FIXTURE_EXPORT` has zero embedded header rows and seven active-order fixture references.
+The repeated export blocks included the same seven active-order fixture references repeated fourteen times, for ninety-eight active-order fixture references total. The normalization pass preserved the first canonical fixture block and cleared only surplus data rows below that block. Post-normalization, `FIXTURE_EXPORT` had zero embedded header rows and seven active-order fixture references.
 
-`FIXTURE_PORTAL_ORDERS` was already de-duplicated and still contains those seven unique order rows once. Its lifecycle coverage remains narrow:
+The second fixture-storage buildout added nine dedicated lifecycle order rows, bringing `FIXTURE_EXPORT` and `FIXTURE_PORTAL_ORDERS` to sixteen aligned order-context fixture rows. `FIXTURE_STRIPE_EVENTS` now has nine intentional event rows, including safe paid/failed coverage for card and AP ACH flows. The new rows use existing lifecycle states only; no headers, active runtime tabs, queue rows, or Script Properties were changed.
 
 | Method/state class | Dedicated fixture rows |
 | --- | ---: |
@@ -37,14 +37,17 @@ The repeated export blocks included the same seven active-order fixture referenc
 | Standard ACH paid, authorized | 1 |
 | Standard ACH pending/verification, not authorized | 1 |
 | Purchase order submitted under terms, unpaid, authorized | 2 |
-| Dedicated failed payment rows | 0 |
-| Dedicated card rows | 0 |
-| Dedicated manual received rows | 0 |
-| Dedicated AP ACH paid/failed rows | 0 |
-| Dedicated PO payment received rows | 0 |
-| Dedicated production-complete rows | 0 |
+| Card paid | 1 |
+| Card failed | 1 |
+| Manual/check received, authorized | 1 |
+| AP ACH paid | 1 |
+| AP ACH failed | 1 |
+| PO invoice prepared, awaiting PO submission | 1 |
+| PO payment received | 1 |
+| Production complete/closed | 1 |
+| Team-initiated production before payment | 1 |
 
-`FIXTURE_STRIPE_EVENTS` still has five non-header payment-related event rows. It does not provide broad failed or disputed payment-event coverage.
+The `production_complete` and `team_initiated_production_before_payment` rows are storage-ready because the current lifecycle constants include `closed`, `in_production`, and authorized production without requiring payment receipt. They remain assertion-only in the review matrix until the review-suite can render those cases directly from fixture storage without an active reset.
 
 ### Review-Suite Harness Findings
 
@@ -52,7 +55,7 @@ The deployed review-suite builders synthesize many examples from the small order
 
 Current dry-run behavior checks fixture headers and reports the rows that would be copied or cleared, but it does not mutate active tabs, does not clear `PORTAL_EMAIL_QUEUE`, and does not send email. After the header check, it renders examples from the active runtime tabs. That only validates fixture content when the active tabs already mirror the fixture tabs. For mature pre-blast validation, dry-run should either render from fixture tabs without mutating active tabs or clearly report that it rendered from active tabs.
 
-The local dry-run could not be run in this shell because `RT_EMAIL_REVIEW_TRIGGER_SECRET` was not present. No live review emails were sent.
+The protected headless dry run was run in no-send mode after the storage buildout. It returned `ok:true`, with zero failed email cases and zero lifecycle contradiction warnings/errors. The matrix validator still reports active-render gaps and intent mismatches because dry run renders from active runtime tabs after header checks; it does not render directly from the newly expanded `FIXTURE_*` storage rows unless a later owner-approved reset copies those rows into active tabs.
 
 ## Target Matrix
 
@@ -64,19 +67,19 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 | `ach_pending` | Client + team | Sendable |
 | `ach_verification_required` | Client + team | Sendable |
 | `ach_failed` | Client + team | Sendable |
-| `card_paid` | Client + team | Generated today; add dedicated fixture row later |
-| `card_failed` | Client + team | Generated today; add dedicated fixture row later |
+| `card_paid` | Client + team | Dedicated fixture row added |
+| `card_failed` | Client + team | Dedicated fixture row added |
 | `manual_pending` | Client + team | Sendable |
-| `manual_received` | Client + team | Generated today; add dedicated fixture row later |
-| `po_invoice_prepared` | Client | Add dedicated awaiting-PO fixture row |
+| `manual_received` | Client + team | Dedicated fixture row added |
+| `po_invoice_prepared` | Client | Dedicated awaiting-PO fixture row added |
 | `po_submitted_unpaid_terms_open` | Client + team | Sendable |
-| `po_payment_received` | Client + team | Generated today; add dedicated fixture row later |
+| `po_payment_received` | Client + team | Dedicated fixture row added |
 | `ap_payment_request` | AP + copied purchaser | Sendable |
 | `ap_ach_pending` | AP + team | Sendable |
-| `ap_ach_paid` | AP + team | Generated today; add dedicated fixture row later |
-| `ap_ach_failed` | AP + team | Generated today; add dedicated fixture row later |
-| `team_initiated_production_before_payment` | Client + team | Assertion-only until owner confirms business rule and fixture state |
-| `production_complete` | Client + team | Assertion-only unless completion emails are re-enabled |
+| `ap_ach_paid` | AP + team | Dedicated fixture row added |
+| `ap_ach_failed` | AP + team | Dedicated fixture row added |
+| `team_initiated_production_before_payment` | Client + team | Storage row added; assertion-only until review tooling renders fixture-storage cases without active reset |
+| `production_complete` | Client + team | Storage row added; assertion-only unless completion emails are re-enabled or assertion-only rendering is added |
 | `client_to_team_chat_digest` | Team | Sendable or omitted, but metadata should be inspectable |
 | `team_to_client_chat_digest` | Client | Sendable or omitted, but metadata should be inspectable |
 | `account_document_tax_submitted` | Team | Sendable |
@@ -92,15 +95,14 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 
 ## Fixture Reset Plan
 
-The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. Owner approval is still required before adding synthetic fixture rows, resetting active runtime tabs from fixtures, or running a live review-suite blast.
+The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. Owner approval is still required before resetting active runtime tabs from fixtures or running a live review-suite blast.
 
-Recommended next fixture buildout:
+Recommended next fixture/test-harness step:
 
 1. Preserve headers exactly.
-2. Add dedicated `FIXTURE_EXPORT` and `FIXTURE_PORTAL_ORDERS` rows for missing states only when the state can be derived by the existing lifecycle engine without fake data.
-3. Add `FIXTURE_STRIPE_EVENTS` rows only for event states that the review harness actually consumes.
-4. Keep edge states assertion-only when the current lifecycle engine cannot derive them from row data.
-5. Re-run the fixture audit and matrix validation before any active-tab reset or live email review blast.
+2. Add a no-mutation fixture-storage render mode to the review suite, or run an owner-approved active reset before dry-run validation.
+3. Keep edge states assertion-only when the active review suite intentionally suppresses those communications.
+4. Re-run fixture audit and matrix validation before any active-tab reset or live email review blast.
 
 ## Local Tooling
 
