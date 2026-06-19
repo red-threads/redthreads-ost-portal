@@ -25862,7 +25862,8 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (nextStep && !suppressNextAction) {
     const keepNextStepAllBlue = [
       'Open your Red Threads Portal/Project below and retry payment.',
-      'Make a payment for your order. Check/cash payment instructions are below. You can pay online via Credit Card or ACH in your Red Threads Portal at anytime.'
+      'Make a payment for your order. Check/cash payment instructions are below. You can pay online via Credit Card or ACH in your Red Threads Portal at anytime.',
+      'Forward this invoice to your Purchasing or Accounts Payable team so they can issue a company Purchase Order. Use the portal link below to reopen your project and complete the Purchase Order submission process to place your Red Threads order.'
     ].indexOf(trimString_(nextStep)) >= 0;
     const nextStepHtml = keepNextStepAllBlue
       ? escapeHtml_(nextStep)
@@ -26041,9 +26042,10 @@ function buildLifecycleEmailShell_(options) {
   const htmlInnerParts = [
     '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
     hasOrderContext ? actionCardHtml : (nonOrderNextStepFirst ? nonOrderNextStepHtml : primaryCtaHtml),
+    !hasOrderContext && nonOrderNoActionFirst ? accountDetailsHtml : '',
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
-    !hasOrderContext && nonOrderNextStepFirst ? accountDetailsHtml : '',
+    !hasOrderContext && nonOrderNextStepFirst && !nonOrderNoActionFirst ? accountDetailsHtml : '',
     !hasOrderContext && nonOrderNextStepFirst ? nonOrderPrimaryCtaHtml : '',
     !hasOrderContext && !nonOrderNextStepFirst ? nonOrderNextStepHtml : '',
     progressHtml,
@@ -26552,7 +26554,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
       return buildLifecycleEmailCopyModel_({
         subject: isTeamAlert
           ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH bank verification needed', invoiceNumber, 'Team alert: ACH bank verification needed')
-          : formatLifecycleEmailInvoiceSubject_('Action needed — verify your bank', invoiceNumber, 'Action needed — verify your bank for your Red Threads invoice'),
+          : formatLifecycleEmailInvoiceSubject_('Bank verification required before production begins', invoiceNumber, 'Bank verification required before production begins for your Red Threads invoice'),
         intro: isTeamAlert
           ? 'A standard ACH order needs bank verification before payment can finish.'
           : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish. Order Production will begin as soon as payment is received.',
@@ -26565,7 +26567,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment pending', invoiceNumber, 'Team alert: ACH payment pending')
-        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — ACH payment pending') : 'Red Threads ACH payment pending'),
+        : formatLifecycleEmailInvoiceSubject_('ACH payment pending, production not started', invoiceNumber, 'ACH payment pending, production not started'),
       intro: isTeamAlert
         ? 'A standard ACH order checkout was submitted.'
         : 'Your Red Threads order has been placed.',
@@ -26712,7 +26714,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: purchase order submitted', invoiceNumber, 'Team alert: purchase order submitted')
-        : formatLifecycleEmailInvoiceSubject_('Purchase order submitted', invoiceNumber, 'Purchase order submitted for your Red Threads order'),
+        : formatLifecycleEmailInvoiceSubject_('Purchase Order submitted, production started', invoiceNumber, 'Purchase Order submitted, production started for your Red Threads order'),
       intro: isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully.',
       statusCopy: isTeamAlert ? 'The order status is active under approved terms. Payment remains open until funds are recorded as received.' : 'Your order has been authorized for production.',
       attachmentNote: isTeamAlert ? 'Your invoice is attached.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
