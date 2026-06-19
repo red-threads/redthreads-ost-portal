@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Tax Exempt Submitted Team Review Layout
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, Apps Script version `973`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: apply the credit-terms submitted team-review layout to `Tax exempt submitted team review`, and omit the approved tax-exempt/credit-terms team fixtures from future owner suite sends.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deploy.
+- Decisions: keep the submitted-team-review layout override scoped to account-document submitted team milestones; do not trigger the email review suite.
+- Current-state updates: deployed version `973`; direct Apps Script `/exec` returned HTTP 200 with `Development revision 103` and omitted stale revision `102`; public `/portal` returned HTTP 200, referenced the stable deployment ID, and included `teamAccess` passthrough.
+- Follow-ups: none.
+
 ## 2026-06-19 - Credit Terms Submitted Team Review Layout
 
 - Mode: Full ship.

@@ -23967,6 +23967,16 @@ function isCreditTermsSubmittedTeamMilestone_(milestone, recipientClass) {
     normalizePortalLifecycleEmailMilestone_(milestone) === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted;
 }
 
+function isTaxExemptSubmittedTeamMilestone_(milestone, recipientClass) {
+  return getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team' &&
+    normalizePortalLifecycleEmailMilestone_(milestone) === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted;
+}
+
+function isAccountDocumentSubmittedTeamReviewMilestone_(milestone, recipientClass) {
+  return isCreditTermsSubmittedTeamMilestone_(milestone, recipientClass) ||
+    isTaxExemptSubmittedTeamMilestone_(milestone, recipientClass);
+}
+
 function buildAccountDocumentTeamIdentityDetails_(meta, emailContext) {
   const source = (meta && typeof meta === 'object') ? meta : {};
   const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
@@ -24021,17 +24031,20 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const clientIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
       ? 'Red Threads received your credit terms application.'
       : 'Red Threads received your tax exemption form.';
-    const creditTermsTeamReview = isCreditTermsSubmittedTeamMilestone_(normalized, recipientClass);
+    const submittedTeamReview = isAccountDocumentSubmittedTeamReviewMilestone_(normalized, recipientClass);
+    const submittedTeamIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
+      ? 'A client submitted a credit terms application for Red Threads review. Open Team Mode to review the document and update the account status.'
+      : 'A client submitted a Michigan sales tax exemption form for Red Threads review. Open Team Mode to review the document and update the account status.';
     return {
       subject: isTeam ? ('Team review required — ' + documentLabel) : (labels.title + ' submitted'),
       heading: isTeam ? ('Review ' + labels.submission) : clientIntro.replace(/[.]+$/g, ''),
       intro: isTeam
-        ? (creditTermsTeamReview
-          ? 'A client submitted a credit terms application for Red Threads review. Open Team Mode to review the document and update the account status.'
+        ? (submittedTeamReview
+          ? submittedTeamIntro
           : ('A client submitted a ' + labels.submission + ' for review.'))
         : clientIntro,
       statusCopy: isTeam
-        ? (creditTermsTeamReview ? '' : 'Review the submitted document in Team Mode.')
+        ? (submittedTeamReview ? '' : 'Review the submitted document in Team Mode.')
         : 'Red Threads will review the document and update the portal.',
       details: details
     };
@@ -24121,7 +24134,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
 
 function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
-  if (isCreditTermsSubmittedTeamMilestone_(normalized, recipientClass)) return 'details_first_cta_after_copy';
+  if (isAccountDocumentSubmittedTeamReviewMilestone_(normalized, recipientClass)) return 'details_first_cta_after_copy';
   if (isAccountDocumentApprovedTeamMilestone_(normalized, recipientClass)) return 'no_action_first';
   if (getPortalLifecycleEmailRecipientClass_(recipientClass) !== 'client') return '';
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
@@ -24306,7 +24319,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
       {
         align: teamActionModel
           ? teamActionModel.ctaAlign
-          : (isCreditTermsSubmittedTeamMilestone_(normalized, recipientClass) ? 'center' : ''),
+          : (isAccountDocumentSubmittedTeamReviewMilestone_(normalized, recipientClass) ? 'center' : ''),
         teamModePassword: teamActionModel
           ? teamActionModel.teamModePassword
           : (recipientClass === 'team' ? emailContext.teamModePassword : '')
@@ -29847,7 +29860,10 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
-const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
+  'tax exempt approved team': 'team_review_omitted',
+  'credit terms approved team': 'team_review_omitted'
+};
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {
   client: 'client_review_omitted'
 };
