@@ -21324,7 +21324,8 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     attachmentNote: 'Your invoice is attached.',
     blocks: lifecycleSections.blocks.concat([
       teamActionModel ? buildLifecycleEmailCtaBlock_(teamActionModel.ctaLabel, teamActionModel.ctaUrl, {
-        align: teamActionModel.ctaAlign
+        align: teamActionModel.ctaAlign,
+        teamModePassword: teamActionModel.teamModePassword
       }) : null,
       isTeamRecipient || paymentReceived ? null : paymentOptionsBlock,
       buildLifecycleEmailFooter_()
@@ -22887,8 +22888,9 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
       teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
       teamActionModel ? teamActionModel.ctaUrl : ctaUrl,
       {
-      align: teamActionModel ? teamActionModel.ctaAlign : (isApAchLifecycleFailureMilestone_(normalized) && recipientClass === 'ap' ? 'center' : '')
-    })
+        align: teamActionModel ? teamActionModel.ctaAlign : (isApAchLifecycleFailureMilestone_(normalized) && recipientClass === 'ap' ? 'center' : ''),
+        teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
+      })
     : null;
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
@@ -24089,7 +24091,12 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
       buildLifecycleEmailCtaBlock_(
         teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
         teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
-        { align: teamActionModel ? teamActionModel.ctaAlign : '' }
+        {
+          align: teamActionModel ? teamActionModel.ctaAlign : '',
+          teamModePassword: teamActionModel
+            ? teamActionModel.teamModePassword
+            : (recipientClass === 'team' ? emailContext.teamModePassword : '')
+        }
       ),
       buildLifecycleEmailFooter_()
     ])
@@ -24611,7 +24618,10 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
       buildLifecycleEmailCtaBlock_(
         teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
         teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
-        { align: teamActionModel ? teamActionModel.ctaAlign : '' }
+        {
+          align: teamActionModel ? teamActionModel.ctaAlign : '',
+          teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
+        }
       ),
       buildLifecycleEmailFooter_()
     ])
@@ -25120,8 +25130,22 @@ function formatLifecycleEmailProjectNameValue_(projectName, dealNumber) {
   return stripped || cleanName;
 }
 
+function buildLifecycleEmailTeamPasswordHintText_(password) {
+  const clean = trimString_(password);
+  return clean ? ('Password: ' + clean) : '';
+}
+
 function buildLifecycleEmailTeamPasswordHintHtml_(password) {
-  return '';
+  const clean = trimString_(password);
+  if (!clean) return '';
+  const theme = getPortalNativeEmailTheme_();
+  return '<div style="' + buildPortalNativeEmailStyle_({
+    margin: '8px 0 0',
+    color: theme.textMuted,
+    'font-size': '12px',
+    'line-height': '1.4',
+    'font-weight': '900'
+  }) + '">Password: <span style="color:' + theme.text + ';">' + escapeHtml_(clean) + '</span></div>';
 }
 
 function buildLifecycleEmailProjectDetailsCta_(projectNumber, url, options) {
@@ -25538,6 +25562,8 @@ function buildLifecycleEmailCtaBlock_(label, url, options) {
   const cleanUrl = trimString_(url);
   const cleanLabel = trimString_(label) || 'Open Red Threads portal';
   const align = trimString_(opts.align).toLowerCase();
+  const teamPasswordHintText = buildLifecycleEmailTeamPasswordHintText_(opts.teamModePassword);
+  const teamPasswordHintHtml = buildLifecycleEmailTeamPasswordHintHtml_(opts.teamModePassword);
   const wrapperAlignStyle = align === 'center' ? 'text-align:center;' : '';
   if (!cleanUrl) return { text: '', html: '' };
   return {
@@ -25545,8 +25571,9 @@ function buildLifecycleEmailCtaBlock_(label, url, options) {
     label: cleanLabel,
     url: cleanUrl,
     align: align === 'center' ? 'center' : '',
-    text: cleanLabel + ': ' + cleanUrl,
-    html: '<p style="margin:0 0 18px;' + wrapperAlignStyle + '"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(cleanLabel) + '</a></p>'
+    teamModePassword: trimString_(opts.teamModePassword),
+    text: [cleanLabel + ': ' + cleanUrl, teamPasswordHintText].filter(Boolean).join('\n'),
+    html: '<div style="margin:0 0 18px;' + wrapperAlignStyle + '"><a href="' + escapeHtml_(cleanUrl) + '" style="display:inline-block;padding:12px 18px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(cleanLabel) + '</a>' + teamPasswordHintHtml + '</div>'
   };
 }
 
@@ -25705,7 +25732,10 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
   if (attachmentSentence) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(attachmentSentence) + '</p>');
   if (nextStep && !suppressNextAction) {
-    const keepNextStepAllBlue = trimString_(nextStep) === 'Open your Red Threads Portal/Project below and retry payment.';
+    const keepNextStepAllBlue = [
+      'Open your Red Threads Portal/Project below and retry payment.',
+      'Make a payment for your order. Check/cash payment instructions are below. You can pay online via Credit Card or ACH in your Red Threads Portal at anytime.'
+    ].indexOf(trimString_(nextStep)) >= 0;
     const nextStepHtml = keepNextStepAllBlue
       ? escapeHtml_(nextStep)
       : escapeHtml_(nextStep)
@@ -25715,6 +25745,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
   }
   if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
   const ctaAlignStyle = trimString_(cta && cta.align).toLowerCase() === 'center' ? 'text-align:center;' : '';
+  const ctaPasswordHintHtml = buildLifecycleEmailTeamPasswordHintHtml_(cta && cta.teamModePassword);
   const ctaHtml = trimString_(cta && cta.url) && !shouldSuppressLifecycleEmailActionCta_(cta)
     ? ('<div style="margin:14px 0 0;' + ctaAlignStyle + '"><a href="' + escapeHtml_(cta.url) + '" style="' + buildPortalNativeEmailStyle_({
       display: 'inline-block',
@@ -25727,7 +25758,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
       'font-weight': '900',
       'text-decoration': 'none',
       border: '1px solid ' + theme.brandRedMid
-    }) + '">' + escapeHtml_(cta.label || 'Open Red Threads portal') + '</a></div>')
+    }) + '">' + escapeHtml_(cta.label || 'Open Red Threads portal') + '</a>' + ctaPasswordHintHtml + '</div>')
     : '';
   return [
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:14px;background:' + theme.panelBg + ';border-collapse:separate;">',
@@ -25815,7 +25846,7 @@ function buildLifecycleEmailShell_(options) {
       'font-weight': '900',
       'text-decoration': 'none',
       border: '1px solid ' + theme.brandRedMid
-    }) + '">' + escapeHtml_(primaryCta.label || 'Open Red Threads portal') + '</a></div>')
+    }) + '">' + escapeHtml_(primaryCta.label || 'Open Red Threads portal') + '</a>' + buildLifecycleEmailTeamPasswordHintHtml_(primaryCta.teamModePassword) + '</div>')
     : '';
   const actionCardHtml = hasOrderContext
     ? buildLifecycleEmailActionCardHtml_({
@@ -25873,7 +25904,7 @@ function buildLifecycleEmailShell_(options) {
       'font-weight': '900',
       'text-decoration': 'none',
       border: '1px solid ' + theme.brandRedMid
-    }) + '">' + escapeHtml_(primaryCta.label || 'Open Red Threads portal') + '</a></div>')
+    }) + '">' + escapeHtml_(primaryCta.label || 'Open Red Threads portal') + '</a>' + buildLifecycleEmailTeamPasswordHintHtml_(primaryCta.teamModePassword) + '</div>')
     : '';
   const nonOrderNextStepHtml = !hasOrderContext && nextStep
     ? ('<div style="margin:0 0 18px;padding:12px 14px;border-left:4px solid ' + nonOrderNextStepColor + ';background:' + theme.panelAltBg + ';color:' + nonOrderNextStepColor + ';font-weight:900;border-radius:12px;">' + (nonOrderNoActionFirst ? escapeHtml_(nextStep) : ('<strong style="color:' + nonOrderNextStepColor + ';">' + escapeHtml_(nonOrderNextStepLabel) + '</strong> ' + escapeHtml_(nextStep))) + '</div>')
@@ -26169,7 +26200,8 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
   return Object.assign({}, model, {
     action: action || 'none',
     ctaUrl: ctaUrl,
-    ctaAlign: 'center'
+    ctaAlign: 'center',
+    teamModePassword: trimString_(ctx.teamModePassword)
   });
 }
 
@@ -26284,7 +26316,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
       ? buildLifecycleEmailTeamUrl_(token)
       : buildLifecycleEmailInvoiceUrl_(token)
   );
-  const teamModePassword = '';
+  const teamModePassword = recipientClass === 'team' && cfg ? trimString_(cfg.teamModePassword) : '';
   return {
     orderSummary: summary,
     accountSummary: accountSummary,
@@ -26597,7 +26629,10 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
       buildLifecycleEmailCtaBlock_(
         teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
         teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
-        { align: teamActionModel ? teamActionModel.ctaAlign : '' }
+        {
+          align: teamActionModel ? teamActionModel.ctaAlign : '',
+          teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
+        }
       ),
       buildLifecycleEmailFooter_()
     ])
@@ -31799,6 +31834,9 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   });
   const projectNumber = getChatDigestProjectNumberLabel_(projectName, lifecycleSections);
   const ctaLabel = isTeamDigest ? 'Open Team Snapshot' : buildChatDigestClientCtaLabel_(projectNumber);
+  const teamModePassword = isTeamDigest && opts.cfg ? trimString_(opts.cfg.teamModePassword) : '';
+  const teamPasswordHintText = buildLifecycleEmailTeamPasswordHintText_(teamModePassword);
+  const teamPasswordHintHtml = buildLifecycleEmailTeamPasswordHintHtml_(teamModePassword);
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
@@ -31833,7 +31871,8 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         'Messages:',
         plainMessageLines.join('\n').trim(),
         '',
-        portalUrl ? ('Open portal: ' + portalUrl) : ''
+        portalUrl ? ('Open portal: ' + portalUrl) : '',
+        portalUrl ? teamPasswordHintText : ''
       ].filter(Boolean).join('\n')
     : [
         'Hi ' + firstName + ',',
@@ -31868,7 +31907,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     '    </table>'
   ].join('\n');
   const ctaHtml = portalUrl
-    ? ('    <div style="margin:14px 0 18px;' + (isTeamDigest ? 'text-align:center;' : '') + '"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a></div>')
+    ? ('    <div style="margin:14px 0 18px;' + (isTeamDigest ? 'text-align:center;' : '') + '"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a>' + (isTeamDigest ? teamPasswordHintHtml : '') + '</div>')
     : '';
   const clientHtmlMessagesBlock = messageRows.map(function(messageRow, index) {
     const metaColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.textSoft;
