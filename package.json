@@ -8,6 +8,8 @@
     "validate:docs": "node tools/validate-repo.mjs",
     "validate:runtime": "node tools/validate-repo.mjs --allow-runtime",
     "validate:binding": "node tools/validate-repo.mjs --allow-runtime --allow-clasp-binding",
-    "email-review:suite": "node tools/send-email-review-suite.mjs"
+    "email-review:suite": "node tools/send-email-review-suite.mjs",
+    "email-review:fixtures:audit": "node tools/audit-email-review-fixtures.mjs",
+    "email-review:matrix": "node tools/validate-email-communication-matrix.mjs"
   }
 }

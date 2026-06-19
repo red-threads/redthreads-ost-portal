@@ -6,6 +6,7 @@ Last aligned: 2026-06-19.
 
 - Repository: `red-threads/redthreads-ost-portal`.
 - Local path: `/Users/Josiah/Documents/GitHub/redthreads-ost-portal`.
+- Local fixture/test-harness tooling now includes redacted email-review fixture audit and lifecycle communication matrix validation commands. The 2026-06-19 read-only live workbook audit found `FIXTURE_EXPORT` has repeated historical blocks with embedded header rows, while `FIXTURE_PORTAL_ORDERS` contains seven unique order rows and limited dedicated lifecycle-state coverage. No live Sheet fixture mutation, Apps Script deployment, or live review-suite blast was performed for this tooling/audit pass.
 - Runtime root: `apps-script/src/`.
 - Tracked runtime files: `Code.js`, `Index.html`, `TaxForm3372Manifest.html`, `appsscript.json`, `.clasp.json`.
 - Current tracked app has been pulled from the live Apps Script project and includes the fuller portal architecture: auth shell, dashboard/order lifecycle surfaces, Stripe checkout routing, Team Mode lanes, and tax-form manifest support.

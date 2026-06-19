@@ -29,6 +29,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Review: headless dry run returned `ok:true`, sent 0, skipped 32, failed 0, reported 13 known fixture attachment fallbacks, and reported 0 lifecycle-communication warnings/errors. Live review emails were not sent because the patch changed metadata only and did not change rendered email output.
 - Follow-ups: no repo-verifiable lifecycle communication gaps remain from this continuation pass; fixture attachment fallbacks remain due to the known `artifact_project_mismatch` review-artifact condition.
 
+## 2026-06-19 - Email Review Fixture Matrix Audit Tooling
+
+- Mode: Architect + Produce final code, no live mutation.
+- Branch/commit/PR: `main`, local docs/tooling only.
+- Goal: prepare the fixture system for lifecycle/communication maturity testing without changing live fixture tabs or sending the review suite.
+- Files changed: `tools/audit-email-review-fixtures.mjs`, `tools/validate-email-communication-matrix.mjs`, `package.json`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `npm run validate`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Decisions: keep live Sheet mutation behind explicit owner approval; add local redacted tooling for private fixture-tab exports and dry-run communication-matrix JSON instead of committing private fixture data.
+- Current-state updates: read-only live workbook audit confirmed headers match for fixture reset, `FIXTURE_EXPORT` contains repeated historical blocks with embedded header rows, and `FIXTURE_PORTAL_ORDERS` currently has seven unique order rows with limited dedicated lifecycle-state coverage.
+- Follow-ups: owner approval is required before normalizing `FIXTURE_*` tabs; `RT_EMAIL_REVIEW_TRIGGER_SECRET` was not present in this shell, so the protected dry-run could not be executed here.
+
 ## 2026-06-19 - Team Lifecycle Attachment Assertion Cleanup
 
 - Mode: Full ship.
