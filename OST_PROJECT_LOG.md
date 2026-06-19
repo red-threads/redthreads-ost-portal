@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Credit Terms Submitted Team Review Layout
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, Apps Script version `972`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: refine the `Credit terms submitted team review` email so the Details container appears directly below the header, review copy is one clear combined sentence, and the Team Review CTA/password is centered below the copy.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deploy.
+- Decisions: keep the layout override scoped to the credit-terms submitted team-review lifecycle milestone; do not trigger the email review suite.
+- Current-state updates: deployed version `972`; direct Apps Script `/exec` returned HTTP 200 with `Development revision 102` and omitted stale revision `101`; public `/portal` returned HTTP 200, referenced the stable deployment ID, and included `teamAccess` passthrough.
+- Follow-ups: none.
+
 ## 2026-06-19 - Pending ACH Team Email Action Refinement
 
 - Mode: Full ship.
