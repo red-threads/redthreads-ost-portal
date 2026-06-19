@@ -29861,6 +29861,10 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
 }
 
 const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
+  'ap ach failed ap': 'ap_review_omitted',
+  'ap payment link sent': 'ap_review_omitted',
+  'ap ach pending ap': 'ap_review_omitted',
+  'ap ach receipt ap': 'ap_review_omitted',
   'tax exempt approved team': 'team_review_omitted',
   'credit terms approved team': 'team_review_omitted'
 };
