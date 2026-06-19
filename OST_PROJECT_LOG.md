@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Email Review Fixture Storage Normalization
+
+- Mode: Produce final code + controlled fixture-storage mutation.
+- Branch/commit/PR: `main`, no Apps Script deployment.
+- Goal: normalize the owner email-review fixture storage tabs so future review-suite resets start from one intentional fixture block instead of repeated historical blocks.
+- Files changed: `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Live Sheet changes: mutated only `FIXTURE_EXPORT`, `FIXTURE_PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS` in `CALC_EST_OST_EXPORT_LOG`; no active runtime tabs were mutated, no active reset was run, no `PORTAL_EMAIL_QUEUE` rows were cleared, and no live review emails were sent.
+- Fixture result: headers remained compatible; `FIXTURE_EXPORT` embedded historical header rows were cleared, repeated active-order references dropped from 98 to 7, `FIXTURE_PORTAL_ORDERS` remains at 7 unique order rows, and `FIXTURE_STRIPE_EVENTS` remains at 5 payment-event rows.
+- Validation: post-mutation live connector checks passed; local validation commands are recorded in the session final response.
+- Decisions: do not fabricate missing lifecycle states in fixture tabs without a safe lifecycle-derived row model; keep missing dedicated card/manual-received/AP ACH failed-or-paid/PO-payment-received/production-complete states as generated or assertion-only until the next fixture buildout.
+- Follow-ups: add dedicated fixture rows for the missing states only after owner approval of the exact fixture rows; do not run the live review suite until a clean dry run and owner approval.
+
 ## 2026-06-19 - Chat Digest Communication Metadata
 
 - Mode: Inspect + Full ship.

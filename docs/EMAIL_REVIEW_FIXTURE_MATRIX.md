@@ -2,11 +2,17 @@
 
 This document records the fixture and test-harness maturity plan for lifecycle communication review. Operational rules remain in `AGENTS.md`; the run commands remain in `docs/RUNBOOK.md`.
 
-## Live Fixture Audit
+## Live Fixture Audit And Storage Normalization
 
 Audit date: 2026-06-19. Spreadsheet: `CALC_EST_OST_EXPORT_LOG`.
 
-No live Sheet values were edited during this audit.
+The first controlled fixture-storage normalization pass was completed on 2026-06-19 with owner approval. Only the storage/source fixture tabs were mutated:
+
+- `FIXTURE_EXPORT`
+- `FIXTURE_PORTAL_ORDERS`
+- `FIXTURE_STRIPE_EVENTS`
+
+No active runtime tabs were mutated. No review-suite reset copied fixture data into active tabs, no `PORTAL_EMAIL_QUEUE` rows were cleared, no email-review blast was run, and no Apps Script deployment was performed.
 
 ### Header Compatibility
 
@@ -18,11 +24,11 @@ No live Sheet values were edited during this audit.
 
 ### Coverage Findings
 
-`FIXTURE_EXPORT` currently contains repeated historical fixture blocks. The live audit found embedded header rows at rows `70, 139, 208, 277, 346, 415, 484, 553, 622, 691, 760, 829, 898`, plus the real header at row `1`.
+Before normalization, `FIXTURE_EXPORT` contained repeated historical fixture blocks. The live audit found embedded header rows at rows `70, 139, 208, 277, 346, 415, 484, 553, 622, 691, 760, 829, 898`, plus the real header at row `1`.
 
-The repeated export blocks include the same seven active-order fixture references repeated fourteen times, for ninety-eight active-order fixture references total. `FIXTURE_PORTAL_ORDERS` contains those seven unique order rows once.
+The repeated export blocks included the same seven active-order fixture references repeated fourteen times, for ninety-eight active-order fixture references total. The normalization pass preserved the first canonical fixture block and cleared only surplus data rows below that block. Post-normalization, `FIXTURE_EXPORT` has zero embedded header rows and seven active-order fixture references.
 
-Current `FIXTURE_PORTAL_ORDERS` lifecycle coverage is narrow:
+`FIXTURE_PORTAL_ORDERS` was already de-duplicated and still contains those seven unique order rows once. Its lifecycle coverage remains narrow:
 
 | Method/state class | Dedicated fixture rows |
 | --- | ---: |
@@ -38,13 +44,13 @@ Current `FIXTURE_PORTAL_ORDERS` lifecycle coverage is narrow:
 | Dedicated PO payment received rows | 0 |
 | Dedicated production-complete rows | 0 |
 
-`FIXTURE_STRIPE_EVENTS` has five non-header payment-related event rows. It does not provide broad failed or disputed payment-event coverage.
+`FIXTURE_STRIPE_EVENTS` still has five non-header payment-related event rows. It does not provide broad failed or disputed payment-event coverage.
 
 ### Review-Suite Harness Findings
 
 The deployed review-suite builders synthesize many examples from the small order fixture base. This is useful for copy review, but it means fixture coverage and generated case coverage are not the same thing.
 
-Current dry-run behavior checks fixture headers but renders examples from the active runtime tabs. That only validates fixture content when the active tabs already mirror the fixture tabs. For mature pre-blast validation, dry-run should either render from fixture tabs without mutating active tabs or clearly report that it rendered from active tabs.
+Current dry-run behavior checks fixture headers and reports the rows that would be copied or cleared, but it does not mutate active tabs, does not clear `PORTAL_EMAIL_QUEUE`, and does not send email. After the header check, it renders examples from the active runtime tabs. That only validates fixture content when the active tabs already mirror the fixture tabs. For mature pre-blast validation, dry-run should either render from fixture tabs without mutating active tabs or clearly report that it rendered from active tabs.
 
 The local dry-run could not be run in this shell because `RT_EMAIL_REVIEW_TRIGGER_SECRET` was not present. No live review emails were sent.
 
@@ -84,20 +90,17 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 | `blank_tax_source` | Client/entered recipient | Sendable or omitted after validation |
 | `blank_credit_terms_source` | Client/entered recipient | Sendable or omitted after validation |
 
-## Recommended Fixture Reset Plan
+## Fixture Reset Plan
 
-Owner approval is required before any live fixture mutation.
+The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. Owner approval is still required before adding synthetic fixture rows, resetting active runtime tabs from fixtures, or running a live review-suite blast.
 
-When approved:
+Recommended next fixture buildout:
 
-1. Back up the three fixture tabs to a local ignored/private artifact or temporary workbook copy.
-2. Preserve headers exactly.
-3. Clear only fixture data rows in `FIXTURE_EXPORT`, `FIXTURE_PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS`.
-4. Rebuild one canonical export row per fixture case, with no embedded header rows.
-5. Rebuild matching `FIXTURE_PORTAL_ORDERS` rows for every order-context case that can be represented by the current schema.
-6. Keep `FIXTURE_STRIPE_EVENTS` limited to event rows that are needed for specific ACH/AP ACH/card scenarios.
-7. Keep edge states assertion-only when the current lifecycle engine cannot derive them from row data.
-8. Re-run the fixture audit and matrix validation before any live email review blast.
+1. Preserve headers exactly.
+2. Add dedicated `FIXTURE_EXPORT` and `FIXTURE_PORTAL_ORDERS` rows for missing states only when the state can be derived by the existing lifecycle engine without fake data.
+3. Add `FIXTURE_STRIPE_EVENTS` rows only for event states that the review harness actually consumes.
+4. Keep edge states assertion-only when the current lifecycle engine cannot derive them from row data.
+5. Re-run the fixture audit and matrix validation before any active-tab reset or live email review blast.
 
 ## Local Tooling
 
