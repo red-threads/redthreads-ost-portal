@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Chat Digest Communication Metadata
+
+- Mode: Inspect + Full ship.
+- Branch/commit/PR: `main`, Apps Script version `981`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: continue the lifecycle communication contract audit loop and close the remaining compatible-but-uninstrumented active order-context surface.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and diff secret-marker scans passed.
+- Decisions: attach a `chat_digest` lifecycle communication contract to generated chat digest content without changing copy, recipients, queue behavior, Team Mode links, password hints, attachments, or visible rendering.
+- Current-state updates: deployed version `981`; direct Apps Script `/exec` returned HTTP 200 with `Development revision 111` and omitted stale revision `110`; public `/portal` returned HTTP 200, referenced the stable deployment ID, preserved `teamAccess`, and targeted secret-marker checks returned zero hits.
+- Review: headless dry run returned `ok:true`, sent 0, skipped 32, failed 0, reported 13 known fixture attachment fallbacks, and reported 0 lifecycle-communication warnings/errors. Live review emails were not sent because the patch changed metadata only and did not change rendered email output.
+- Follow-ups: no repo-verifiable lifecycle communication gaps remain from this continuation pass; fixture attachment fallbacks remain due to the known `artifact_project_mismatch` review-artifact condition.
+
 ## 2026-06-19 - Team Lifecycle Attachment Assertion Cleanup
 
 - Mode: Full ship.

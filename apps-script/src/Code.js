@@ -33293,6 +33293,16 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     infra: opts.infra,
     projectDetailsCta: false
   });
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: lifecycleSections.emailContext
+  }, {
+    family: 'chat_message_digest',
+    trigger: 'chat_digest',
+    recipientClass: isTeamDigest ? 'team' : 'client',
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
   const projectNumber = getChatDigestProjectNumberLabel_(projectName, lifecycleSections);
   const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, projectNumber) || projectName;
   const ctaLabel = isTeamDigest ? buildChatDigestTeamCtaLabel_(projectNumber) : buildChatDigestClientCtaLabel_(projectNumber);
@@ -33440,7 +33450,8 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   return {
     subject: subject,
     body: body,
-    htmlBody: htmlBody
+    htmlBody: htmlBody,
+    communicationContract: communicationContract
   };
 }
 
