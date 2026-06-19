@@ -16959,7 +16959,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 99">99</div>
+  <div class="devRevisionBadge" aria-label="Development revision 100">100</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19934,6 +19934,8 @@
     );
     TEAM_MODE_AUTH_KEY = IS_TEAM ? readStoredTeamModeAuthKey(INITIAL_TOKEN) : '';
     TEAM_MODE_UNLOCKED = IS_TEAM ? (readStoredTeamModeUnlock(INITIAL_TOKEN) && !!TEAM_MODE_AUTH_KEY) : false;
+    TEAM_MODE_EMAIL_ACCESS_ATTEMPTED = false;
+    TEAM_MODE_EMAIL_ACCESS_IN_FLIGHT = IS_TEAM && !!TEAM_ACCESS_REQUEST;
     if (!IS_TEAM && INITIAL_TOKEN) {
       writeStoredTeamModeAuthKey(INITIAL_TOKEN, '');
       writeStoredTeamModeUnlock(INITIAL_TOKEN, false);
@@ -21449,9 +21451,9 @@
       let changed = false;
       const clearKeys = ['checkoutResult', 'setupResult', 'stripeSessionId'];
       if (opts.checkoutReturn === true || opts.checkoutCancel === true) {
-        clearKeys.push('payNow', 'paymentOrigin', 'mode', 'teamReview', 'teamAction');
+        clearKeys.push('payNow', 'paymentOrigin', 'mode', 'teamReview', 'teamAction', 'teamAccess');
       } else if (opts.setupReturn === true || opts.clearTeamRoute === true) {
-        clearKeys.push('mode', 'teamReview', 'teamAction');
+        clearKeys.push('mode', 'teamReview', 'teamAction', 'teamAccess');
       }
       clearKeys.forEach(key => {
         if (!url.searchParams.has(key)) return;
@@ -22336,6 +22338,7 @@
   const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
   const TEAM_REVIEW_REQUEST = String(VM_REQUEST_ROUTE_META.teamReview || URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
   const TEAM_ACTION_REQUEST = normalizeTeamActionRouteValue_(VM_REQUEST_ROUTE_META.teamAction || URL_QUERY_PARAMS.get('teamAction'));
+  const TEAM_ACCESS_REQUEST = String(VM_REQUEST_ROUTE_META.teamAccess || URL_QUERY_PARAMS.get('teamAccess') || '').trim();
   const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1' || VM_REQUEST_ROUTE_META.dashboard === '1';
   const DASHBOARD_ACCOUNT_ID_PARAM = String(VM_REQUEST_ROUTE_META.accountId || URL_QUERY_PARAMS.get('accountId') || '').trim();
   const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
@@ -22407,6 +22410,8 @@
   let TEAM_MODE_AUTH_KEY = '';
   let TEAM_MODE_SELECTED_SENDER = '';
   let TEAM_MODE_GATE_IN_FLIGHT = false;
+  let TEAM_MODE_EMAIL_ACCESS_ATTEMPTED = false;
+  let TEAM_MODE_EMAIL_ACCESS_IN_FLIGHT = false;
   let activePrintJobId = '';
   let activePanel = 'job';
   let HEADER_DELIVERY_EXPANDED = false;
@@ -22567,6 +22572,7 @@
     'accountDocAction',
     'teamReview',
     'teamAction',
+    'teamAccess',
     'paymentOrigin',
     'mode',
     'reset',
@@ -24077,6 +24083,7 @@
     delete params.mode;
     delete params.teamReview;
     delete params.teamAction;
+    delete params.teamAccess;
     if (accountAccessToken) {
       params.accountAccessToken = accountAccessToken;
       delete params.accountId;
@@ -24126,6 +24133,7 @@
     delete params.checkoutResult;
     delete params.setupResult;
     delete params.stripeSessionId;
+    delete params.teamAccess;
     if (cleanToken) params.t = cleanToken;
     if (extra.summary === '1') params.summary = '1';
     if (extra.payNow) params.payNow = extra.payNow;
@@ -24134,6 +24142,7 @@
       delete params.mode;
       delete params.teamReview;
       delete params.teamAction;
+      delete params.teamAccess;
     } else {
       params.mode = String(extra.mode || '').trim().toLowerCase() === 'team' ||
         !!String(extra.teamReview || '').trim() ||
@@ -25018,7 +25027,9 @@
       teamTaxReviewStatus.textContent = 'Denial sent to client for review and resubmission.';
     }
 
-    if (isTeam && CURRENT_VIEW === VIEW_SNAPSHOT && isLocked) {
+    if (isTeam && CURRENT_VIEW === VIEW_SNAPSHOT && isLocked && TEAM_MODE_EMAIL_ACCESS_IN_FLIGHT) {
+      closeTeamModeGate({ immediate: true });
+    } else if (isTeam && CURRENT_VIEW === VIEW_SNAPSHOT && isLocked) {
       openTeamModeGate({ preserveMessage: true, resetValue: false });
     } else {
       closeTeamModeGate({ immediate: true });
@@ -25058,6 +25069,17 @@
       const url = new URL(window.location.href);
       if (!url.searchParams.has('teamAction')) return;
       url.searchParams.delete('teamAction');
+      const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
+      window.history.replaceState({}, document.title, nextUrl);
+    } catch (_) {}
+  }
+
+  function clearTeamAccessQueryParam_(){
+    if (typeof window === 'undefined' || !window.location || !window.history) return;
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('teamAccess')) return;
+      url.searchParams.delete('teamAccess');
       const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
       window.history.replaceState({}, document.title, nextUrl);
     } catch (_) {}
@@ -25401,6 +25423,53 @@
     renderTaxTeamDecisionModal_();
     setTaxTeamDecisionMessage_('', true);
     if (taxTeamDecisionInput) taxTeamDecisionInput.value = '';
+  }
+
+  async function maybeAutoUnlockTeamModeFromEmailAccess_(){
+    const access = String(TEAM_ACCESS_REQUEST || '').trim();
+    const token = String(CURRENT_TOKEN || INITIAL_TOKEN || '').trim();
+    if (!IS_TEAM || !access || !token || TEAM_MODE_EMAIL_ACCESS_ATTEMPTED) {
+      TEAM_MODE_EMAIL_ACCESS_IN_FLIGHT = false;
+      return false;
+    }
+    const hadExistingUnlock = TEAM_MODE_UNLOCKED && !!TEAM_MODE_AUTH_KEY;
+    TEAM_MODE_EMAIL_ACCESS_ATTEMPTED = true;
+    TEAM_MODE_EMAIL_ACCESS_IN_FLIGHT = true;
+    clearTeamAccessQueryParam_();
+    syncTeamModeUi();
+    try {
+      const resp = await callServer('verifyTeamModeEmailAccess', {
+        token: token,
+        teamAccess: access,
+        teamAction: TEAM_ACTION_REQUEST,
+        teamReview: TEAM_REVIEW_REQUEST
+      });
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'This Team Mode email link has expired or is invalid. Enter the team password to continue.'));
+      }
+      setTeamModeAuthKey(resp.teamAuthKey || '');
+      TEAM_MODE_EMAIL_ACCESS_IN_FLIGHT = false;
+      setTeamModeUnlocked(true);
+      closeTeamModeGate({ immediate: true });
+      showNotice('Team mode unlocked. Replying as ' + String(resp.senderName || getVisibleTeamAuthorName()) + '.', 'ok');
+      maybeAutoOpenTeamCreditTermsReview_();
+      maybeAutoOpenTeamTaxReview_();
+      maybeAutoOpenTeamAction_();
+      return true;
+    } catch (err) {
+      TEAM_MODE_EMAIL_ACCESS_IN_FLIGHT = false;
+      if (hadExistingUnlock) {
+        syncTeamModeUi();
+        return false;
+      }
+      setTeamModeUnlocked(false);
+      setTeamGateMessage(String((err && err.message) || err || 'This Team Mode email link has expired or is invalid. Enter the team password to continue.'), true);
+      openTeamModeGate({ preserveMessage: true, resetValue: false });
+      return false;
+    } finally {
+      clearTeamAccessQueryParam_();
+      syncTeamModeUi();
+    }
   }
 
   async function submitTeamModePassword(){
@@ -47271,6 +47340,7 @@
     try {
       rtDebugStep('OPEN:render:begin');
       startPortalApp();
+      await maybeAutoUnlockTeamModeFromEmailAccess_();
       rtDebugStep('OPEN:render:ok');
       rtDebugStep('OPEN:done');
     } finally {

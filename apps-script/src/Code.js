@@ -41,7 +41,8 @@ const CONFIG_KEYS = {
   STRIPE_PRICE_CURRENCY: 'STRIPE_PRICE_CURRENCY',
   STRIPE_MODE: 'STRIPE_MODE',
   STRIPE_RETURN_URL: 'STRIPE_RETURN_URL',
-  EMAIL_REVIEW_TRIGGER_SECRET: 'EMAIL_REVIEW_TRIGGER_SECRET'
+  EMAIL_REVIEW_TRIGGER_SECRET: 'EMAIL_REVIEW_TRIGGER_SECRET',
+  TEAM_MODE_EMAIL_ACCESS_SECRET: 'TEAM_MODE_EMAIL_ACCESS_SECRET'
 };
 
 const DEFAULT_TEAM_MODE_PASSWORD = '';
@@ -79,6 +80,7 @@ const MAX_ACCOUNT_DOCUMENT_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_SUMMARY_EXPORT_PDF_BYTES = 20 * 1024 * 1024;
 const MAX_TEAM_ARTWORK_OVERRIDE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const TEAM_MODE_AUTH_TTL_MS = 12 * 60 * 60 * 1000;
+const TEAM_MODE_EMAIL_ACCESS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const EXPORT_LOG_COLUMNS = {
   chatLogJson: 28
 };
@@ -887,6 +889,7 @@ function buildPortalRequestRouteMeta_(e) {
     mode: normalizeMode_(params.mode) === 'team' ? 'team' : '',
     teamReview: trimString_(params.teamReview),
     teamAction: normalizeLifecycleEmailTeamAction_(params.teamAction),
+    teamAccess: trimString_(params.teamAccess),
     accountDoc: accountDoc,
     accountDocAction: accountDocAction,
     reset: (String(params.reset || '').trim() === '1' || resetToken) ? '1' : '',
@@ -955,6 +958,7 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     mode: normalizeMode_(meta.mode) === 'team' ? 'team' : '',
     teamReview: trimString_(meta.teamReview),
     teamAction: normalizeLifecycleEmailTeamAction_(meta.teamAction),
+    teamAccess: trimString_(meta.teamAccess),
     accountDoc: normalizeAccountDocumentType_(meta.accountDoc),
     accountDocAction: normalizePortalAccountDocumentRouteAction_(meta.accountDocAction),
     reset: String(meta.reset || '').trim() === '1' ? '1' : '',
@@ -15045,6 +15049,131 @@ function validateTeamModeAuthKey_(token, authKey, cfg) {
   return buildTeamModeAuthKey_(id, cfg, { issuedAt: issuedAt }) === key;
 }
 
+function buildTeamModeEmailAccessSignature_(payloadB64, cfg) {
+  const config = cfg || getConfig_();
+  const secret = String(config.teamModeEmailAccessSecret || '').trim();
+  if (!payloadB64 || !secret) return '';
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(String(payloadB64), secret)
+  ).replace(/=+$/g, '');
+}
+
+function constantTimeStringEquals_(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  let diff = a.length ^ b.length;
+  const max = Math.max(a.length, b.length);
+  for (let i = 0; i < max; i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
+function buildTeamModeEmailAccessToken_(token, options, cfg) {
+  const id = trimString_(token);
+  if (!id) return '';
+  const opts = (options && typeof options === 'object') ? options : {};
+  const issuedAt = Math.max(0, parseInt(String(opts.issuedAt || Date.now()), 10) || Date.now());
+  const expiresAt = Math.max(issuedAt, parseInt(String(opts.expiresAt || (issuedAt + TEAM_MODE_EMAIL_ACCESS_TTL_MS)), 10) || (issuedAt + TEAM_MODE_EMAIL_ACCESS_TTL_MS));
+  const payload = {
+    v: 1,
+    t: id,
+    m: 'team',
+    a: normalizeLifecycleEmailTeamAction_(opts.teamAction),
+    r: trimString_(opts.teamReview).toLowerCase(),
+    iat: issuedAt,
+    exp: expiresAt
+  };
+  const payloadB64 = Utilities.base64EncodeWebSafe(
+    Utilities.newBlob(JSON.stringify(payload), 'application/json').getBytes()
+  ).replace(/=+$/g, '');
+  const signature = buildTeamModeEmailAccessSignature_(payloadB64, cfg);
+  return signature ? (payloadB64 + '.' + signature) : '';
+}
+
+function decodeTeamModeEmailAccessPayload_(payloadB64) {
+  const clean = trimString_(payloadB64);
+  if (!clean) return null;
+  try {
+    const bytes = Utilities.base64DecodeWebSafe(clean);
+    const json = Utilities.newBlob(bytes, 'application/json').getDataAsString();
+    const payload = safeJsonParse_(json, null);
+    return (payload && typeof payload === 'object') ? payload : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function validateTeamModeEmailAccessToken_(teamAccess, options, cfg) {
+  const access = trimString_(teamAccess);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const token = trimString_(opts.token);
+  if (!access || !token) return false;
+  const parts = access.split('.');
+  if (parts.length !== 2) return false;
+  const payloadB64 = trimString_(parts[0]);
+  const signature = trimString_(parts[1]);
+  if (!payloadB64 || !signature) return false;
+  const expected = buildTeamModeEmailAccessSignature_(payloadB64, cfg);
+  if (!expected || !constantTimeStringEquals_(signature, expected)) return false;
+  const payload = decodeTeamModeEmailAccessPayload_(payloadB64);
+  if (!payload) return false;
+  const now = Date.now();
+  const issuedAt = Math.max(0, parseInt(String(payload.iat || 0), 10) || 0);
+  const expiresAt = Math.max(0, parseInt(String(payload.exp || 0), 10) || 0);
+  if (payload.v !== 1 || payload.m !== 'team') return false;
+  if (trimString_(payload.t) !== token) return false;
+  if (!issuedAt || !expiresAt || expiresAt < now || issuedAt > now + (5 * 60 * 1000)) return false;
+  if ((expiresAt - issuedAt) > TEAM_MODE_EMAIL_ACCESS_TTL_MS) return false;
+  const expectedAction = normalizeLifecycleEmailTeamAction_(opts.teamAction);
+  const expectedReview = trimString_(opts.teamReview).toLowerCase();
+  if (normalizeLifecycleEmailTeamAction_(payload.a) !== expectedAction) return false;
+  if (trimString_(payload.r).toLowerCase() !== expectedReview) return false;
+  return true;
+}
+
+function verifyTeamModeEmailAccess(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const token = trimString_(p.token);
+    const teamAccess = trimString_(p.teamAccess);
+    const teamAction = normalizeLifecycleEmailTeamAction_(p.teamAction);
+    const teamReview = trimString_(p.teamReview).toLowerCase();
+    const genericError = 'This Team Mode email link has expired or is invalid. Enter the team password to continue.';
+    if (!token || !teamAccess) {
+      return { ok: false, error: genericError };
+    }
+
+    const cfg = getConfig_();
+    if (!validateTeamModeEmailAccessToken_(teamAccess, {
+      token: token,
+      teamAction: teamAction,
+      teamReview: teamReview
+    }, cfg)) {
+      return { ok: false, error: genericError };
+    }
+
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const exportSheet = ensurePortalInfrastructure_(ss, cfg).exportSheet;
+    if (!exportSheet) {
+      return { ok: false, error: 'Auth configuration is incomplete.' };
+    }
+
+    const rowInfo = findRowByToken_(exportSheet, token);
+    if (!rowInfo) {
+      return { ok: false, error: genericError };
+    }
+
+    return {
+      ok: true,
+      senderName: getVisibleTeamAuthorName_(rowInfo.rowObjNormalized),
+      teamAuthKey: buildTeamModeAuthKey_(token, cfg)
+    };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function assertTeamModeAuthorized_(ctx, payload) {
   const token = trimString_(
     payload && payload.token ||
@@ -15594,6 +15723,24 @@ function normalizeMode_(value) {
 
 /* ---------------- Workbook Infrastructure + Shared Helpers ---------------- */
 
+function ensureTeamModeEmailAccessSecret_(props) {
+  const store = props || PropertiesService.getScriptProperties();
+  let secret = String(store.getProperty(CONFIG_KEYS.TEAM_MODE_EMAIL_ACCESS_SECRET) || '').trim();
+  if (secret) return secret;
+  secret = [
+    Utilities.getUuid(),
+    Utilities.getUuid(),
+    String(Date.now())
+  ].join(':');
+  try {
+    store.setProperty(CONFIG_KEYS.TEAM_MODE_EMAIL_ACCESS_SECRET, secret);
+  } catch (_) {
+    // Fall back to the in-memory value for this execution; the next execution
+    // will retry persistence before any email-link verification succeeds.
+  }
+  return secret;
+}
+
 function getConfig_() {
   const props = PropertiesService.getScriptProperties();
   const driveFolderDefaults = {};
@@ -15625,6 +15772,7 @@ function getConfig_() {
   const portalOrdersSheetName = props.getProperty(CONFIG_KEYS.PORTAL_ORDERS_SHEET) || DEFAULT_PORTAL_ORDERS_SHEET;
   const portalAccountsSheetName = props.getProperty(CONFIG_KEYS.PORTAL_ACCOUNTS_SHEET) || DEFAULT_PORTAL_ACCOUNTS_SHEET;
   const teamModePassword = String(props.getProperty(CONFIG_KEYS.TEAM_MODE_PASSWORD) || DEFAULT_TEAM_MODE_PASSWORD).trim();
+  const teamModeEmailAccessSecret = ensureTeamModeEmailAccessSecret_(props);
   const stripePublishableKey = String(props.getProperty(CONFIG_KEYS.STRIPE_PUBLISHABLE_KEY) || '').trim();
   const stripeSecretKey = String(props.getProperty(CONFIG_KEYS.STRIPE_SECRET_KEY) || '').trim();
   const stripeWebhookSecret = String(props.getProperty(CONFIG_KEYS.STRIPE_WEBHOOK_SECRET) || '').trim();
@@ -15669,6 +15817,7 @@ function getConfig_() {
     portalOrdersSheetName: portalOrdersSheetName,
     portalAccountsSheetName: portalAccountsSheetName,
     teamModePassword: teamModePassword,
+    teamModeEmailAccessSecret: teamModeEmailAccessSecret,
     stripePublishableKey: stripePublishableKey,
     stripeSecretKey: stripeSecretKey,
     stripeWebhookSecret: stripeWebhookSecret,
@@ -17168,7 +17317,10 @@ function buildAccountDocumentTeamReviewUrl_(documentType, token, cfg) {
   if (!id) return '';
   const definition = getAccountDocumentDefinition_(documentType, cfg);
   const reviewQueryValue = trimString_(definition && definition.teamReviewQueryValue);
-  return buildLifecycleEmailTeamReviewUrl_(id, reviewQueryValue);
+  return buildLifecycleEmailTeamUrl_(id, {
+    teamReview: reviewQueryValue,
+    cfg: cfg
+  });
 }
 
 function sanitizeAccountDocumentClientMeta_(meta) {
@@ -17619,6 +17771,13 @@ function buildLifecycleEmailTeamUrl_(token, options) {
   const params = { mode: 'team' };
   const action = normalizeLifecycleEmailTeamAction_(opts.teamAction);
   if (action) params.teamAction = action;
+  const teamReview = trimString_(opts.teamReview).toLowerCase();
+  if (teamReview) params.teamReview = teamReview;
+  const teamAccess = buildTeamModeEmailAccessToken_(tokenValue, {
+    teamAction: action,
+    teamReview: teamReview
+  }, opts.cfg);
+  if (teamAccess) params.teamAccess = teamAccess;
   return appendQueryParamsToUrl_(buildExternalPortalUrl_(tokenValue), params);
 }
 
@@ -17628,10 +17787,8 @@ function buildLifecycleEmailTeamActionUrl_(token, teamAction) {
 }
 
 function buildLifecycleEmailTeamReviewUrl_(token, reviewType) {
-  const baseUrl = buildLifecycleEmailTeamUrl_(token);
   const reviewValue = trimString_(reviewType);
-  if (!baseUrl || !reviewValue) return baseUrl;
-  return appendQueryParamsToUrl_(baseUrl, {
+  return buildLifecycleEmailTeamUrl_(token, {
     teamReview: reviewValue
   });
 }

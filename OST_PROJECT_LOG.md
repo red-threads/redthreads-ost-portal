@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Team Mode Email Auto-Unlock Links
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, Apps Script version `970`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: let Team Mode email buttons auto-unlock by carrying a signed route-scoped `teamAccess` proof while plain Team Mode URLs continue to require the password gate.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `web/squarespace-portal-code-block.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deploy.
+- Decisions: do not put the raw Team Mode password in URLs; use an auto-created Script Property signing secret and 30-day signed links that are scoped to token, Team Mode, optional `teamAction`, and optional `teamReview`.
+- Current-state updates: deployed version `970`; direct Apps Script `/exec` returned HTTP 200 with `Development revision 100`, omitted stale revision `99`, included `teamAccess` and `verifyTeamModeEmailAccess`, and did not expose the signing-secret config key. Public `/portal` returned HTTP 200 and still referenced the stable deployment ID, but the live Squarespace code block did not yet include `teamAccess` or `teamAction`.
+- Follow-ups: refresh the live Squarespace `/portal` code block from `web/squarespace-portal-code-block.html` so public wrapper links forward `teamAccess`; rerun the headless email review dry run after `RT_EMAIL_REVIEW_TRIGGER_SECRET` is available in the active shell.
+
 ## 2026-06-18 - Credit Terms Source Email Refinement
 
 - Mode: Full ship.
