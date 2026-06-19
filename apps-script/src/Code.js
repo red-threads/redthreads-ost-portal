@@ -24474,7 +24474,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
       paymentBlocked: true,
       nextStepText: recipientClass === 'team'
         ? 'Review the failed payment in Team Mode.'
-        : 'Open your Red Threads project/portal below and retry payment.'
+        : 'Open your Red Threads project/portal below and retry payment to begin order production.'
     });
   }
   const summary = emailContext.orderSummary || {};
@@ -25601,9 +25601,12 @@ function buildLifecycleEmailActionCardHtml_(options) {
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
   if (attachmentSentence) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(attachmentSentence) + '</p>');
   if (nextStep && !suppressNextAction) {
-    const nextStepHtml = escapeHtml_(nextStep)
-      .replace(/portal link/g, '<span style="color:' + theme.brandRedMid + ';">portal link</span>')
-      .replace(/Red Threads Portal/g, '<span style="color:' + theme.brandRedMid + ';">Red Threads Portal</span>');
+    const keepNextStepAllBlue = trimString_(nextStep) === 'Open your Red Threads Portal/Project below and retry payment.';
+    const nextStepHtml = keepNextStepAllBlue
+      ? escapeHtml_(nextStep)
+      : escapeHtml_(nextStep)
+        .replace(/portal link/g, '<span style="color:' + theme.brandRedMid + ';">portal link</span>')
+        .replace(/Red Threads Portal/g, '<span style="color:' + theme.brandRedMid + ';">Red Threads Portal</span>');
     paragraphs.push('<p style="margin:0;color:' + theme.currentAqua + ';font-weight:900;"><strong style="color:' + theme.currentAqua + ';">Next action:</strong> ' + nextStepHtml + '</p>');
   }
   if (productionTimingLine) paragraphs.push('<p style="margin:10px 0 0;color:' + theme.successGreen + ';font-weight:900;">' + escapeHtml_(productionTimingLine) + '</p>');
@@ -26145,7 +26148,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
           : formatLifecycleEmailInvoiceSubject_('Action needed — verify your bank', invoiceNumber, 'Action needed — verify your bank for your Red Threads invoice'),
         intro: isTeamAlert
           ? 'A standard ACH order needs bank verification before payment can finish.'
-          : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish.',
+          : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish. Order Production will begin as soon as payment is received.',
         statusCopy: isTeamAlert
           ? 'Monitor the portal payment state before production begins.'
           : 'Stripe may send you a secure bank-verification email for a one-time ACH payment setup with Red Threads. Red Threads does not collect any banking or microdeposit values.',
@@ -26171,7 +26174,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment received', invoiceNumber, 'Team alert: ACH payment received')
-        : formatLifecycleEmailInvoiceSubject_('ACH payment received', invoiceNumber, 'ACH payment received for your Red Threads order'),
+        : formatLifecycleEmailInvoiceSubject_('ACH payment received, production started', invoiceNumber, 'ACH payment received, production started for your Red Threads order'),
       intro: isTeamAlert
         ? 'A standard ACH payment has been received.'
         : 'Your ACH payment has been received and your order will begin production.',
@@ -26230,7 +26233,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment received', invoiceNumber, 'Team alert: AP ACH payment received')
-        : formatLifecycleEmailInvoiceSubject_('Payment Received, Order Started', invoiceNumber, 'Payment Received, Order Started for a Red Threads project'),
+        : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for a Red Threads project'),
       intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'Accounts Payable completed an ACH payment for this Red Threads project, and your order has been authorized for production. The invoice/receipt for the order is attached to this email.',
       statusCopy: isTeamAlert
         ? 'Continue with the production workflow according to the current portal status.'
@@ -26260,7 +26263,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment received', invoiceNumber, 'Team alert: card payment received')
-        : formatLifecycleEmailInvoiceSubject_('Payment Received, Order Started', invoiceNumber, 'Payment Received, Order Started for your Red Threads order'),
+        : formatLifecycleEmailInvoiceSubject_('Payment Received, Production Started', invoiceNumber, 'Payment Received, Production Started for your Red Threads order'),
       intro: isTeamAlert ? 'A card payment has been received.' : 'Your credit card payment has been received, and your order will begin production. The invoice/receipt for your order is attached to this email.',
       statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : '',
       attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : ''
@@ -26272,7 +26275,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment issue', invoiceNumber, 'Team alert: card payment issue')
         : formatLifecycleEmailInvoiceSubject_('Action needed — Credit card payment issue', invoiceNumber, 'Action needed — Credit card payment issue for your Red Threads order'),
       heading: isTeamAlert ? '' : 'Credit card payment issue',
-      intro: isTeamAlert ? 'A card payment could not be completed.' : 'Your credit card payment could not be completed.',
+      intro: isTeamAlert ? 'A card payment could not be completed.' : 'Your credit card payment could not be completed, order production cannot begin.',
       statusCopy: isTeamAlert ? 'Review the portal payment state or wait for the client to retry payment.' : 'Open your Red Threads portal/project to retry payment or contact Red Threads for help.',
       attachmentNote: 'An invoice/status PDF may be attached when available.'
     });
@@ -26292,7 +26295,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment received', invoiceNumber, 'Team alert: manual payment received')
-        : formatLifecycleEmailInvoiceSubject_('Payment received', invoiceNumber, 'Payment received for your Red Threads order'),
+        : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for your Red Threads order'),
       intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received and your order is authorized for production.',
       statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : '',
       attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'The invoice for your order is attached to this email.'
