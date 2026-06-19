@@ -10694,6 +10694,7 @@ function buildAccountDocumentTeamReviewNotificationHtml_(options) {
     '</div>'
   ].filter(Boolean).join('\n');
   return buildPortalNativeEmailShellHtml_({
+    eyebrow: getPortalNativeEmailEyebrow_('team'),
     heading: heading,
     bodyHtml: bodyHtml
   });
@@ -21481,6 +21482,7 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     ].filter(Boolean).join('\n')
   };
   const shell = buildLifecycleEmailShell_({
+    eyebrow: isTeamRecipient ? getPortalNativeEmailEyebrow_('team') : '',
     heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, isTeamRecipient ? 'Team operational resend review' : 'Order confirmation', isTeamRecipient ? 'Team operational resend review.' : 'Order confirmation.'),
     actionTitle: teamActionModel ? teamActionModel.title : '',
     intro: teamActionModel ? teamActionModel.intro : intro,
@@ -23064,6 +23066,7 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
       })
     : null);
   const shell = buildLifecycleEmailShell_({
+    eyebrow: isTeamAlert ? getPortalNativeEmailEyebrow_('team') : '',
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     actionTitle: teamActionModel ? teamActionModel.title : '',
@@ -24066,7 +24069,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const creditTermsClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved;
     const paymentDueLabel = formatCreditTermsApprovedPaymentDueLabel_(paymentTermsLabel);
     return {
-      subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (labels.title + ' approved'),
+      subject: isTeam ? (documentLabel + ' approved') : (labels.title + ' approved'),
       heading: isTeam ? (labels.title + ' approved') : approvedIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? '' : approvedIntro,
       statusCopy: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
@@ -24097,7 +24100,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const taxExemptClientDenied = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied;
     const accountDocumentClientDenied = creditTermsClientDenied || taxExemptClientDenied;
     return {
-      subject: isTeam ? ('Team alert: ' + documentLabel + ' needs attention') : (labels.title + ' needs attention'),
+      subject: isTeam ? (documentLabel + ' needs attention') : (labels.title + ' needs attention'),
       heading: isTeam ? (labels.title + ' needs attention') : deniedIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? ('Red Threads reviewed the ' + labels.noun + ' associated with this account.') : deniedIntro,
       statusCopy: accountDocumentClientDenied
@@ -24121,7 +24124,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       ? 'Red Threads reset the credit terms associated with your account.'
       : 'Red Threads reset the tax exemption associated with your account.';
     return {
-      subject: isTeam ? ('Team alert: ' + documentLabel + ' reset') : (labels.title + ' reset'),
+      subject: isTeam ? (documentLabel + ' reset') : (labels.title + ' reset'),
       heading: isTeam ? (labels.title + ' reset') : resetIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? ('Red Threads reset the ' + labels.noun + ' associated with this account.') : resetIntro,
       statusCopy: isTeam
@@ -24190,50 +24193,50 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   const accountDocumentMilestone = isPortalLifecycleAccountDocumentMilestone_(normalized);
 
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_approved) {
-    subjectParts.push(isTeam ? 'Team alert: artwork approved' : 'Artwork approved');
+    subjectParts.push(isTeam ? 'Artwork approved' : 'Artwork approved');
     intro = isTeam ? 'A client approved artwork in the portal.' : 'Artwork approval has been recorded.';
     statusCopy = printJobIndex ? ('Print job ' + printJobIndex + ' was approved.') : 'Artwork was approved.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_disapproved) {
-    subjectParts.push(isTeam ? 'Team alert: artwork change requested' : 'Artwork change requested');
+    subjectParts.push(isTeam ? 'Artwork change requested' : 'Artwork change requested');
     intro = isTeam ? 'A client requested an artwork change in the portal.' : 'An artwork change request was recorded.';
     statusCopy = printJobIndex ? ('Print job ' + printJobIndex + ' needs artwork review.') : 'Artwork needs review.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_ready_to_order) {
-    subjectParts.push(isTeam ? 'Team alert: project ready to order' : 'Your Red Threads project is ready to order');
+    subjectParts.push(isTeam ? 'Project ready to order' : 'Your Red Threads project is ready to order');
     intro = isTeam ? 'A project reached the ready-to-order state.' : 'Your project is ready for order placement.';
     statusCopy = isTeam
       ? 'Quantities and artwork appear ready. The client can place the order from the portal.'
       : 'Quantities and artwork are ready. Return to the portal when you are ready to place the order.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_unlocked) {
-    subjectParts.push(isTeam ? 'Team alert: project reopened' : 'Your Red Threads project was reopened');
+    subjectParts.push(isTeam ? 'Project reopened' : 'Your Red Threads project was reopened');
     intro = isTeam ? 'A project was reopened for client changes.' : 'Your project has been reopened for updates.';
     statusCopy = 'Review the portal before placing the order again.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.checkout_reset) {
-    subjectParts.push(isTeam ? 'Team alert: checkout reset' : 'Your Red Threads checkout was reset');
+    subjectParts.push(isTeam ? 'Checkout reset' : 'Your Red Threads checkout was reset');
     intro = isTeam ? 'Checkout selection was reset by the team.' : 'Your checkout selection was reset by Red Threads.';
     statusCopy = 'Return to the portal to select payment and continue.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.po_reopened) {
-    subjectParts.push(isTeam ? 'Team alert: PO submission reopened' : 'Purchase-order submission reopened');
+    subjectParts.push(isTeam ? 'PO submission reopened' : 'Purchase-order submission reopened');
     intro = isTeam ? 'Purchase-order submission was reopened.' : 'Your purchase-order submission step has been reopened.';
     statusCopy = 'Return to the portal to upload the corrected purchase order.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.team_hold) {
-    subjectParts.push(isTeam ? 'Team alert: project paused' : 'Your Red Threads project is paused');
+    subjectParts.push(isTeam ? 'Project paused' : 'Your Red Threads project is paused');
     intro = isTeam ? 'The project was placed on a team hold.' : 'Red Threads temporarily paused this project.';
     statusCopy = 'The portal will show the current hold state while the team resolves the next step.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.client_flow_canceled) {
-    subjectParts.push(isTeam ? 'Team alert: client canceled payment flow' : 'Payment flow canceled');
+    subjectParts.push(isTeam ? 'Client canceled payment flow' : 'Payment flow canceled');
     intro = isTeam ? 'A client canceled an in-progress payment workflow.' : 'Your payment workflow was canceled.';
     statusCopy = flowKind === PAYMENT_METHODS.purchase_order
       ? 'The purchase-order workflow returned to editable estimate mode.'
       : 'The manual-payment workflow returned to editable estimate mode.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.production_authorized) {
-    subjectParts.push(isTeam ? 'Team alert: production authorized' : 'Your Red Threads order is authorized for production');
+    subjectParts.push(isTeam ? 'Production authorized' : 'Your Red Threads order is authorized for production');
     intro = isTeam ? 'Production has been authorized for this order.' : 'Your order has been authorized for production.';
     statusCopy = 'The portal progress snapshot below reflects the current production status.';
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed) {
     const complete = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed;
     subjectParts.push(isTeam
-      ? (complete ? 'Team alert: project complete' : 'Team alert: job completion updated')
+      ? (complete ? 'Project complete' : 'Job completion updated')
       : (complete ? 'Your Red Threads project is complete' : 'Red Threads job completion update'));
     intro = isTeam
       ? (complete ? 'All tracked jobs are marked complete.' : 'Job completion dates were updated.')
@@ -24245,14 +24248,14 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     const docCopy = buildAccountDocumentEmailCopy_(normalized, recipientClass, meta);
     const hasDocStatusCopy = docCopy && typeof docCopy === 'object' && Object.prototype.hasOwnProperty.call(docCopy, 'statusCopy');
     const hasDocNextStep = docCopy && typeof docCopy === 'object' && Object.prototype.hasOwnProperty.call(docCopy, 'nextStep');
-    subjectParts.push(docCopy && docCopy.subject ? docCopy.subject : (isTeam ? 'Team alert: account document update' : 'Account document update'));
+    subjectParts.push(docCopy && docCopy.subject ? docCopy.subject : (isTeam ? 'Account document update' : 'Account document update'));
     heading = docCopy && docCopy.heading ? docCopy.heading : '';
     intro = docCopy && docCopy.intro ? docCopy.intro : 'An account document update was recorded.';
     statusCopy = hasDocStatusCopy ? trimString_(docCopy.statusCopy) : 'Review the portal for the current status.';
     nextStep = hasDocNextStep ? trimString_(docCopy.nextStep) : '';
     details = docCopy && Array.isArray(docCopy.details) ? docCopy.details : details;
   } else {
-    subjectParts.push(isTeam ? 'Team alert: Red Threads portal update' : 'Red Threads portal update');
+    subjectParts.push(isTeam ? 'Red Threads portal update' : 'Red Threads portal update');
     intro = 'A portal lifecycle update was recorded.';
     statusCopy = 'Review the current project status below.';
   }
@@ -24335,6 +24338,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     )
     : null;
   const shell = buildLifecycleEmailShell_({
+    eyebrow: recipientClass === 'team' ? getPortalNativeEmailEyebrow_('team') : '',
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     actionTitle: teamActionModel ? teamActionModel.title : '',
@@ -24853,6 +24857,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     recipientClass: recipientClass
   });
   const shell = buildLifecycleEmailShell_({
+    eyebrow: isTeamAlert ? getPortalNativeEmailEyebrow_('team') : '',
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     actionTitle: teamActionModel ? teamActionModel.title : '',
@@ -25135,10 +25140,19 @@ function buildPortalNativeEmailReviewBannerHtml_(label) {
   }) + '"><strong style="color:' + theme.text + ';">Email review fixture:</strong> ' + escapeHtml_(clean) + '</div>';
 }
 
+const PORTAL_NATIVE_EMAIL_STANDARD_EYEBROW_ = 'Red Threads Portal - Notification';
+const PORTAL_NATIVE_EMAIL_TEAM_EYEBROW_ = 'Red Threads Portal - Team Notification';
+
+function getPortalNativeEmailEyebrow_(recipientClass) {
+  return trimString_(recipientClass) === 'team'
+    ? PORTAL_NATIVE_EMAIL_TEAM_EYEBROW_
+    : PORTAL_NATIVE_EMAIL_STANDARD_EYEBROW_;
+}
+
 function buildPortalNativeEmailShellHtml_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
-  const eyebrow = trimString_(opts.eyebrow) || 'Red Threads Portal - Notification';
+  const eyebrow = trimString_(opts.eyebrow) || PORTAL_NATIVE_EMAIL_STANDARD_EYEBROW_;
   const heading = stripPortalNativeEmailHeaderActionRequiredLabel_(opts.heading) || 'Red Threads portal update';
   const subheading = trimString_(opts.subheading);
   const headingColor = theme.text;
@@ -26280,6 +26294,7 @@ function buildLifecycleEmailShell_(options) {
   return {
     body: [headerDisplay.heading, headerDisplay.subheading].concat(textParts).filter(Boolean).join('\n\n'),
     htmlBody: buildPortalNativeEmailShellHtml_({
+      eyebrow: trimString_(opts.eyebrow),
       heading: headerDisplay.heading,
       subheading: headerDisplay.subheading,
       bodyHtml: htmlInnerParts.filter(Boolean).join('\n')
@@ -26804,7 +26819,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     if (verificationRequired) {
       return buildLifecycleEmailCopyModel_({
         subject: isTeamAlert
-          ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH bank verification needed', invoiceNumber, 'Team alert: ACH bank verification needed')
+          ? formatLifecycleEmailInvoiceSubject_('ACH bank verification needed', invoiceNumber, 'ACH bank verification needed')
           : formatLifecycleEmailInvoiceSubject_('Bank verification required before production begins', invoiceNumber, 'Bank verification required before production begins for your Red Threads invoice'),
         intro: isTeamAlert
           ? clientFullName + ' placed their order via standard ACH order checkout, and bank verification is needed before the ACH payment can finish.'
@@ -26817,7 +26832,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment pending', invoiceNumber, 'Team alert: ACH payment pending')
+        ? formatLifecycleEmailInvoiceSubject_('ACH payment pending', invoiceNumber, 'ACH payment pending')
         : formatLifecycleEmailInvoiceSubject_('ACH payment pending, production not started', invoiceNumber, 'ACH payment pending, production not started'),
       intro: isTeamAlert
         ? clientFullName + ' placed their order via standard ACH order checkout.'
@@ -26833,7 +26848,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment received', invoiceNumber, 'Team alert: ACH payment received')
+        ? formatLifecycleEmailInvoiceSubject_('ACH payment received', invoiceNumber, 'ACH payment received')
         : formatLifecycleEmailInvoiceSubject_('ACH payment received, production started', invoiceNumber, 'ACH payment received, production started for your Red Threads order'),
       intro: isTeamAlert
         ? 'A standard ACH payment has been received.'
@@ -26846,7 +26861,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_('Team alert: ACH payment issue', invoiceNumber, 'Team alert: ACH payment issue')
+      ? formatLifecycleEmailInvoiceSubject_('ACH payment issue', invoiceNumber, 'ACH payment issue')
       : formatLifecycleEmailInvoiceSubject_('ACH payment issue, production not started', invoiceNumber, 'ACH payment issue, production not started'),
     intro: isTeamAlert
       ? 'A standard ACH payment needs review.'
@@ -26871,7 +26886,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH checkout started', invoiceNumber, 'Team alert: AP ACH checkout started')
+        ? formatLifecycleEmailInvoiceSubject_('AP ACH checkout started', invoiceNumber, 'AP ACH checkout started')
         : formatLifecycleEmailInvoiceSubject_('AP ACH checkout started', invoiceNumber, 'AP ACH checkout started for a Red Threads invoice'),
       intro: isTeamAlert ? 'Accounts Payable opened ACH checkout for this order.' : 'ACH checkout has started for this Red Threads invoice.',
       statusCopy: 'Payment is not received until the ACH debit is confirmed.',
@@ -26881,7 +26896,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment pending', invoiceNumber, 'Team alert: AP ACH payment pending')
+        ? formatLifecycleEmailInvoiceSubject_('AP ACH payment pending', invoiceNumber, 'AP ACH payment pending')
         : formatLifecycleEmailInvoiceSubject_('ACH Payment Pending', invoiceNumber, 'ACH Payment Pending for a Red Threads project'),
       intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for ' + clientFullName + '\'s Red Threads order.' : 'Accounts Payable has submitted ACH payment for this Red Threads project, and the payment is pending bank confirmation. The invoice for the order is attached to this email. ACH payments can take several business days to confirm. Order production will not begin until payment is received. ' + projectOwnerName + ' will be updated when payment is received and the production begins.',
       statusCopy: isTeamAlert
@@ -26893,7 +26908,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment received', invoiceNumber, 'Team alert: AP ACH payment received')
+        ? formatLifecycleEmailInvoiceSubject_('AP ACH payment received', invoiceNumber, 'AP ACH payment received')
         : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for a Red Threads project'),
       intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'Accounts Payable completed an ACH payment for this Red Threads project, and your order has been authorized for production. The invoice/receipt for the order is attached to this email.',
       statusCopy: isTeamAlert
@@ -26904,7 +26919,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_('Team alert: AP ACH payment issue', invoiceNumber, 'Team alert: AP ACH payment issue')
+      ? formatLifecycleEmailInvoiceSubject_('AP ACH payment issue', invoiceNumber, 'AP ACH payment issue')
       : formatLifecycleEmailInvoiceSubject_('ACH Payment Issue, Order Paused', invoiceNumber, 'ACH Payment Issue, Order Paused for a Red Threads project'),
     intro: isTeamAlert ? 'An AP ACH payment needs review.' : 'The ACH payment made by Accounts Payable could not be completed by our payment processor, Stripe.',
     statusCopy: isTeamAlert
@@ -26923,7 +26938,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment received', invoiceNumber, 'Team alert: card payment received')
+        ? formatLifecycleEmailInvoiceSubject_('Card payment received', invoiceNumber, 'Card payment received')
         : formatLifecycleEmailInvoiceSubject_('Payment Received, Production Started', invoiceNumber, 'Payment Received, Production Started for your Red Threads order'),
       intro: isTeamAlert ? 'A card payment has been received.' : 'Your credit card payment has been received, and your order will begin production. The invoice/receipt for your order is attached to this email.',
       statusCopy: isTeamAlert ? 'Payment is received. Continue production and update job completion when work is ready.' : '',
@@ -26933,7 +26948,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment issue', invoiceNumber, 'Team alert: card payment issue')
+        ? formatLifecycleEmailInvoiceSubject_('Card payment issue', invoiceNumber, 'Card payment issue')
         : formatLifecycleEmailInvoiceSubject_('Action needed — Credit card payment issue', invoiceNumber, 'Action needed — Credit card payment issue for your Red Threads order'),
       heading: isTeamAlert ? '' : 'Credit card payment issue',
       intro: isTeamAlert ? 'A card payment could not be completed.' : 'Your credit card payment could not be completed, order production cannot begin.',
@@ -26944,7 +26959,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment pending', invoiceNumber, 'Team alert: manual payment pending')
+        ? formatLifecycleEmailInvoiceSubject_('Manual payment pending', invoiceNumber, 'Manual payment pending')
         : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — Order Placed, Payment Required to Begin Production') : 'Red Threads order placed — payment required to begin production'),
       heading: isTeamAlert ? '' : 'Order Placed, Payment Required to Begin Production',
       intro: isTeamAlert ? (methodLabel + ' payment order was placed.') : 'Your Red Threads order has been placed.',
@@ -26955,7 +26970,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment received', invoiceNumber, 'Team alert: manual payment received')
+        ? formatLifecycleEmailInvoiceSubject_('Manual payment received', invoiceNumber, 'Manual payment received')
         : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for your Red Threads order'),
       intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received and your order is authorized for production.',
       statusCopy: isTeamAlert ? 'Payment is received. Continue production and update job completion when work is ready.' : '',
@@ -26965,7 +26980,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Team alert: purchase order submitted', invoiceNumber, 'Team alert: purchase order submitted')
+        ? formatLifecycleEmailInvoiceSubject_('Purchase order submitted', invoiceNumber, 'Purchase order submitted')
         : formatLifecycleEmailInvoiceSubject_('Purchase Order submitted, production started', invoiceNumber, 'Purchase Order submitted, production started for your Red Threads order'),
       intro: isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully.',
       statusCopy: isTeamAlert ? 'The order status is active under approved terms. Payment remains open until funds are recorded as received.' : 'Your order has been authorized for production.',
@@ -26974,7 +26989,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_('Team alert: PO payment received', invoiceNumber, 'Team alert: PO payment received')
+      ? formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received')
       : formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received for your Red Threads order'),
     intro: isTeamAlert ? 'Purchase order payment has been recorded as received.' : 'Your purchase order payment has been received.',
     statusCopy: isTeamAlert ? 'The order payment is recorded as received.' : '',
@@ -27036,6 +27051,7 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
       }
     );
   const shell = buildLifecycleEmailShell_({
+    eyebrow: isTeamAlert ? getPortalNativeEmailEyebrow_('team') : '',
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
     actionTitle: teamActionModel ? teamActionModel.title : '',
@@ -32474,7 +32490,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const teamHtmlBody = [
     '<div style="margin:0;padding:24px 0;background:#000000;">',
     '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:700;margin-bottom:12px;">Red Threads Portal Messages</div>',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:700;margin-bottom:12px;">' + escapeHtml_(getPortalNativeEmailEyebrow_('team')) + '</div>',
     isTeamDigest
       ? ''
       : ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>'),
