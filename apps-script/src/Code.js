@@ -21488,7 +21488,9 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     nextStep: teamActionModel ? teamActionModel.nextStep : (paymentReceived
       ? 'No payment action is needed.'
       : 'Choose a payment option or send payment using the instructions on your invoice.'),
-    attachmentNote: 'Your invoice is attached.',
+    attachmentNote: isTeamRecipient
+      ? 'The invoice/receipt for the client\'s order is attached to this email.'
+      : 'Your invoice is attached.',
     blocks: lifecycleSections.blocks.concat([
       teamActionModel ? buildLifecycleEmailCtaBlock_(teamActionModel.ctaLabel, teamActionModel.ctaUrl, {
         align: teamActionModel.ctaAlign,
@@ -26007,6 +26009,7 @@ function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, s
   const note = trimString_(attachmentNote);
   if (!note) return '';
   if (note === 'The invoice/receipt for your order is attached to this email.' ||
+      note === 'The invoice/receipt for the client\'s order is attached to this email.' ||
       note === 'The invoice for their order is attached to this email.' ||
       note === 'Your invoice/receipt is attached to this email and available in your portal.' ||
       note === 'The invoice/receipt for your order is attached to this email, and payment is still required.') {
@@ -26809,7 +26812,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         statusCopy: isTeamAlert
           ? 'Stripe is waiting for bank verification before the ACH payment can finish. ACH payments can take several business days to confirm after verification is complete.'
           : 'Stripe may send you a secure bank-verification email for a one-time ACH payment setup with Red Threads. Red Threads does not collect any banking or microdeposit values.',
-        attachmentNote: isTeamAlert ? 'The invoice for their order is attached to this email.' : 'Your invoice is attached.'
+        attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice is attached.'
       });
     }
     return buildLifecycleEmailCopyModel_({
@@ -26824,7 +26827,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         : (usedConnectedBank
           ? 'Your ACH payment was submitted with a connected bank and is pending bank confirmation. ACH payments can take several business days to confirm.'
           : 'Your ACH payment was submitted and is pending bank confirmation. ACH payments can take several business days to confirm. Production begins after payment is confirmed unless Red Threads explicitly initiates production.'),
-      attachmentNote: isTeamAlert ? 'The invoice for their order is attached to this email.' : 'Your invoice is attached.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice is attached.'
     });
   }
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
@@ -26838,7 +26841,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
       statusCopy: isTeamAlert
         ? 'Payment is received. Continue production and update job completion when work is ready.'
         : '',
-      attachmentNote: 'Your updated receipt is attached.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your updated receipt is attached.'
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -26884,7 +26887,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
       statusCopy: isTeamAlert
         ? 'The payment is pending bank confirmation. ACH payments can take several business days to confirm.'
         : '',
-      attachmentNote: isTeamAlert ? 'The invoice for their order is attached to this email.' : ''
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : ''
     });
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
@@ -26896,7 +26899,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
       statusCopy: isTeamAlert
         ? 'Payment is received. Continue production and update job completion when work is ready.'
         : '',
-      attachmentNote: isTeamAlert ? 'The updated receipt is attached.' : ''
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : ''
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -26924,7 +26927,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         : formatLifecycleEmailInvoiceSubject_('Payment Received, Production Started', invoiceNumber, 'Payment Received, Production Started for your Red Threads order'),
       intro: isTeamAlert ? 'A card payment has been received.' : 'Your credit card payment has been received, and your order will begin production. The invoice/receipt for your order is attached to this email.',
       statusCopy: isTeamAlert ? 'Payment is received. Continue production and update job completion when work is ready.' : '',
-      attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : ''
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : ''
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed) {
@@ -26946,7 +26949,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       heading: isTeamAlert ? '' : 'Order Placed, Payment Required to Begin Production',
       intro: isTeamAlert ? (methodLabel + ' payment order was placed.') : 'Your Red Threads order has been placed.',
       statusCopy: isTeamAlert ? 'Production is waiting for the team to record payment as received.' : 'Production begins after Red Threads records payment as received unless otherwise approved.',
-      attachmentNote: isTeamAlert ? 'Your invoice is attached.' : 'The invoice/receipt for your order is attached to this email.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
@@ -26956,7 +26959,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for your Red Threads order'),
       intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received and your order is authorized for production.',
       statusCopy: isTeamAlert ? 'Payment is received. Continue production and update job completion when work is ready.' : '',
-      attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'The invoice for your order is attached to this email.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice for your order is attached to this email.'
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
@@ -26966,7 +26969,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         : formatLifecycleEmailInvoiceSubject_('Purchase Order submitted, production started', invoiceNumber, 'Purchase Order submitted, production started for your Red Threads order'),
       intro: isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully.',
       statusCopy: isTeamAlert ? 'The order status is active under approved terms. Payment remains open until funds are recorded as received.' : 'Your order has been authorized for production.',
-      attachmentNote: isTeamAlert ? 'Your invoice is attached.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -26975,7 +26978,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       : formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received for your Red Threads order'),
     intro: isTeamAlert ? 'Purchase order payment has been recorded as received.' : 'Your purchase order payment has been received.',
     statusCopy: isTeamAlert ? 'The order payment is recorded as received.' : '',
-    attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'Your invoice/receipt is attached to this email and available in your portal.'
+    attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice/receipt is attached to this email and available in your portal.'
   });
 }
 
