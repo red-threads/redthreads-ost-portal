@@ -29612,14 +29612,21 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
 }
 
 const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
+const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {
+  client: 'client_review_omitted'
+};
 
-function getEmailReviewSuiteOmissionReason_(label) {
+function getEmailReviewSuiteOmissionReason_(label, recipientClass) {
+  const classKey = trimString_(recipientClass).toLowerCase();
+  if (classKey && EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_[classKey]) {
+    return trimString_(EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_[classKey]);
+  }
   const key = trimString_(label).toLowerCase();
   return trimString_(EMAIL_REVIEW_SUITE_OMITTED_LABELS_[key]);
 }
 
 function omitEmailReviewSuiteItemIfNeeded_(results, label, family, recipientClass) {
-  const reason = getEmailReviewSuiteOmissionReason_(label);
+  const reason = getEmailReviewSuiteOmissionReason_(label, recipientClass);
   if (!reason) return false;
   skipEmailReviewResult_(results, label, family, recipientClass, reason);
   return true;
@@ -31995,6 +32002,13 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   );
   const clientName = clientDisplayName || 'there';
   const firstName = trimString_(clientName.split(/\s+/)[0]) || 'there';
+  let resolvedClientSenderName = trimString_(
+    clientDisplayName ||
+    deriveSenderNameForNotification_(row, 'client', opts) ||
+    row.orgname ||
+    'Project contact'
+  );
+  if (/^client$/i.test(resolvedClientSenderName)) resolvedClientSenderName = 'Project contact';
   const portalUrl = isTeamDigest
     ? buildTeamSnapshotPortalUrl_(token)
     : buildExternalPortalUrl_(token);
@@ -32026,7 +32040,9 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const messageRows = safeMessages.map(function(message) {
     const senderName = trimString_(message.sender).toLowerCase() === 'team'
       ? trimString_(message.authorName || getVisibleTeamAuthorName_(row) || 'Red Threads Team')
-      : trimString_(message.authorName || deriveSenderNameForNotification_(row, 'client', opts) || 'Client');
+      : (/^client$/i.test(trimString_(message.authorName))
+        ? resolvedClientSenderName
+        : trimString_(message.authorName || resolvedClientSenderName));
     return {
       senderName: senderName,
       isTeamMessage: trimString_(message.sender).toLowerCase() === 'team',
@@ -32042,13 +32058,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   });
   const body = isTeamDigest
     ? [
-        'A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.',
-        '',
-        projectNumber ? ('Project #: ' + projectNumber) : '',
-        projectNameDisplay ? ('Project name: ' + projectNameDisplay) : '',
-        clientDisplayName ? ('Client name: ' + clientDisplayName) : '',
-        clientEmail ? ('Client email: ' + clientEmail) : '',
-        '',
+        resolvedClientSenderName + ' sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.',
         'Messages:',
         plainMessageLines.join('\n').trim(),
         '',
@@ -32085,7 +32095,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   }).join('\n');
   const messagesHtmlBlock = [
     '    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 20px;border:1px solid #1e293b;border-radius:12px;overflow:hidden;">',
-    '      <tr><td style="padding:12px 16px;background:#0f172a;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;font-weight:800;">Messages</td></tr>',
+    '      <tr><td style="padding:12px 16px;background:#0f172a;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;font-weight:800;">' + escapeHtml_(resolvedClientSenderName + ' sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's')) + '</td></tr>',
     htmlMessages,
     '    </table>'
   ].join('\n');
@@ -32107,7 +32117,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     ? [clientHtmlMessagesBlock, ctaHtml].filter(Boolean).join('\n')
     : '';
   const showProjectSummaryCard = isTeamDigest
-    ? !!(projectNumber || projectNameDisplay || clientDisplayName || clientEmail)
+    ? false
     : !!(projectName && !lifecycleHtml);
   const clientHeaderLabel = projectNumber
     ? ('Project # ' + projectNumber + ' — New portal message' + (messageCount === 1 ? '' : 's'))
@@ -32133,10 +32143,9 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const teamHtmlBody = [
     '<div style="margin:0;padding:24px 0;background:#000000;">',
     '  <div style="max-width:680px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:18px;font-family:Arial,sans-serif;color:#f8fafc;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:12px;">Red Threads Portal Messages</div>',
-    '    <h1 style="margin:0 0 12px;font-size:26px;line-height:1.25;color:#f8fafc;">' + escapeHtml_(isTeamDigest ? 'Client portal message digest' : 'You have new portal messages') + '</h1>',
+    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:700;margin-bottom:12px;">Red Threads Portal Messages</div>',
     isTeamDigest
-      ? ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A client sent ' + messageCount + ' portal message' + (messageCount === 1 ? '' : 's') + '.</p>')
+      ? ''
       : ('    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ', you have ' + messageCount + ' new Red Threads portal message' + (messageCount === 1 ? '' : 's') + '.</p>'),
     showProjectSummaryCard
       ? ('    <div style="margin:0 0 18px;padding:16px 18px;border-radius:12px;background:#0f172a;border:1px solid #1e293b;font-size:14px;line-height:1.8;color:#cbd5e1;">'
@@ -32144,12 +32153,12 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         + (projectNameDisplay ? ('<div><strong>Project name:</strong> ' + escapeHtml_(projectNameDisplay) + '</div>') : '')
         + (isTeamDigest && clientDisplayName ? ('<div><strong>Client name:</strong> ' + escapeHtml_(clientDisplayName) + '</div>') : '')
         + (isTeamDigest && clientEmail ? ('<div><strong>Client email:</strong> ' + escapeHtml_(clientEmail) + '</div>') : '')
-	        + '</div>')
-	      : '',
-	    isTeamDigest ? messagesHtmlBlock : clientMessageAndReplyHtml,
-	    isTeamDigest ? ctaHtml : '',
-	    lifecycleHtml,
-	    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+        + '</div>')
+      : '',
+    isTeamDigest ? messagesHtmlBlock : clientMessageAndReplyHtml,
+    isTeamDigest ? ctaHtml : '',
+    lifecycleHtml,
+    '    <p style="margin:0;font-size:14px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '  </div>',
     '</div>'
   ].filter(Boolean).join('\n');
