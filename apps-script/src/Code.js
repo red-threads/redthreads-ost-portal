@@ -26133,8 +26133,11 @@ function resolveLifecycleEmailActionCardTitle_(options) {
   return 'Current action';
 }
 
-function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, subheading) {
+function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, subheading, options) {
   const note = trimString_(attachmentNote);
+  const opts = (options && typeof options === 'object') ? options : {};
+  const recipientClass = trimString_(opts.recipientClass).toLowerCase();
+  const isTeamRecipient = recipientClass === 'team';
   if (!note) return '';
   if (note === 'The invoice/receipt for your order is attached to this email.' ||
       note === 'The invoice/receipt for the client\'s order is attached to this email.' ||
@@ -26146,6 +26149,16 @@ function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, s
   const haystack = [note, heading, subheading].map(function(value) {
     return trimString_(value).toLowerCase();
   }).join(' ');
+  if (isTeamRecipient) {
+    if (/\bmay be attached when available\b/i.test(note)) {
+      return /\binvoice|receipt|status pdf\b/i.test(haystack)
+        ? 'An invoice/status PDF for the client\'s order may be attached when available.'
+        : note;
+    }
+    if (/\bestimate\b/.test(haystack)) return 'The estimate for the client\'s order is attached to this email.';
+    if (/\breceipt\b/.test(haystack)) return 'The receipt for the client\'s order is attached to this email.';
+    if (/\binvoice\b/.test(haystack)) return 'The invoice for the client\'s order is attached to this email.';
+  }
   if (/\bestimate\b/.test(haystack)) return 'The estimate for your order is attached to this email.';
   if (/\breceipt\b/.test(haystack)) return 'The receipt for your order is attached to this email.';
   if (/\binvoice\b/.test(haystack)) return 'The invoice for your order is attached to this email.';
@@ -26246,6 +26259,10 @@ function buildLifecycleEmailShell_(options) {
   const nextStepLabel = trimString_(opts.nextStepLabel);
   const nextStepTone = trimString_(opts.nextStepTone).toLowerCase();
   const suppressActionCardCta = opts.suppressActionCardCta === true;
+  const recipientClass = trimString_(opts.recipientClass).toLowerCase() === 'team' ||
+    /team notification/i.test(trimString_(opts.eyebrow))
+    ? 'team'
+    : normalizePortalCommunicationRecipientClass_(opts.recipientClass);
   const blocks = Array.isArray(opts.blocks) ? opts.blocks : [];
   const ctaBlocks = [];
   const footerBlocks = [];
@@ -26273,7 +26290,9 @@ function buildLifecycleEmailShell_(options) {
     ? buildLifecycleEmailHeaderDisplay_(heading, detailsBlocks)
     : { heading: heading, subheading: '' };
   const noActionNextStep = isLifecycleEmailNoActionText_(nextStep);
-  const actionAttachmentSentence = buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, headerDisplay.subheading);
+  const actionAttachmentSentence = buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, headerDisplay.subheading, {
+    recipientClass: recipientClass
+  });
   const productionTimingActionLine = trimString_((progressBlocks.filter(function(block) {
     return trimString_(block && block.productionTimingActionLine);
   })[0] || {}).productionTimingActionLine);
