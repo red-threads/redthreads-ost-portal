@@ -886,6 +886,7 @@ function buildPortalRequestRouteMeta_(e) {
     paymentOrigin: String(params.paymentOrigin || '').trim(),
     mode: normalizeMode_(params.mode) === 'team' ? 'team' : '',
     teamReview: trimString_(params.teamReview),
+    teamAction: normalizeLifecycleEmailTeamAction_(params.teamAction),
     accountDoc: accountDoc,
     accountDocAction: accountDocAction,
     reset: (String(params.reset || '').trim() === '1' || resetToken) ? '1' : '',
@@ -953,6 +954,7 @@ function attachPortalRequestRouteMetaToVm_(vm, routeMeta) {
     paymentOrigin: String(meta.paymentOrigin || '').trim(),
     mode: normalizeMode_(meta.mode) === 'team' ? 'team' : '',
     teamReview: trimString_(meta.teamReview),
+    teamAction: normalizeLifecycleEmailTeamAction_(meta.teamAction),
     accountDoc: normalizeAccountDocumentType_(meta.accountDoc),
     accountDocAction: normalizePortalAccountDocumentRouteAction_(meta.accountDocAction),
     reset: String(meta.reset || '').trim() === '1' ? '1' : '',
@@ -10635,35 +10637,70 @@ function buildDefaultAccountDocumentSubmissionNotificationPayload_(ctx, definiti
   };
 }
 
+function buildAccountDocumentTeamReviewNotificationHtml_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const theme = getPortalNativeEmailTheme_();
+  const heading = trimString_(opts.heading) || 'Team review required';
+  const intro = trimString_(opts.intro);
+  const submittedByName = trimString_(opts.submittedByName) || 'Client';
+  const orgName = trimString_(opts.orgName) || '--';
+  const submittedAt = trimString_(opts.submittedAt) || '--';
+  const submittedAtLabel = trimString_(opts.submittedAtLabel) || 'Submitted At';
+  const artifactUrl = trimString_(opts.artifactUrl);
+  const teamReviewUrl = trimString_(opts.teamReviewUrl);
+  const portalUrl = trimString_(opts.portalUrl);
+  const buttonLabel = trimString_(opts.buttonLabel) || 'Open team review';
+  const bodyHtml = [
+    '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:14px;background:' + theme.panelBg + ';border-collapse:separate;">',
+    '<tr><td style="padding:14px 16px;">',
+    '<div style="font-size:12px;text-transform:uppercase;color:' + theme.currentAqua + ';font-weight:900;margin:0 0 8px;letter-spacing:.08em;">Team action required</div>',
+    intro ? ('<p style="margin:0;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
+    teamReviewUrl ? ('<div style="margin:14px 0 0;text-align:center;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="' + buildPortalNativeEmailStyle_({
+      display: 'inline-block',
+      padding: '10px 15px',
+      'border-radius': '999px',
+      background: theme.brandRed,
+      color: '#ffffff',
+      'font-size': '12px',
+      'line-height': '1.2',
+      'font-weight': '900',
+      'text-decoration': 'none',
+      border: '1px solid ' + theme.brandRedMid
+    }) + '">' + escapeHtml_(buttonLabel) + '</a></div>') : '',
+    '</td></tr></table>',
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:14px;background:' + theme.panelBg + ';border-collapse:separate;">',
+    '<tr><td style="padding:14px 16px;">',
+    '<div style="font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;margin:0 0 8px;letter-spacing:.08em;">Submission details</div>',
+    '<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
+    '<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
+    '<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">' + escapeHtml_(submittedAtLabel) + ':</strong> ' + escapeHtml_(submittedAt) + '</div>',
+    artifactUrl ? ('<div style="margin:0;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:' + theme.brandRedMid + ';font-weight:900;">Open in Drive</a></div>') : '',
+    '</td></tr></table>',
+    portalUrl ? ('<p style="margin:0 0 8px;color:' + theme.textSoft + ';font-size:13px;line-height:1.6;">Direct portal link: <a href="' + escapeHtml_(portalUrl) + '" style="color:' + theme.brandRedMid + ';">Open portal</a></p>') : '',
+    '<p style="margin:0;color:' + theme.textSoft + ';font-size:13px;line-height:1.6;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
+    '</div>'
+  ].filter(Boolean).join('\n');
+  return buildPortalNativeEmailShellHtml_({
+    heading: heading,
+    bodyHtml: bodyHtml
+  });
+}
+
 function buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
-  const submittedByName = trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client';
-  const orgName = trimString_(accountSummary.orgName || '--');
-  const submittedAt = trimString_(submissionEntry && submissionEntry.submittedAt) || '--';
-  const artifactUrl = trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl));
-  const teamReviewUrl = trimString_(opts.teamReviewUrl);
-  return [
-    '<div style="margin:0;padding:24px 0;background:#000000;">',
-    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:20px;font-family:Arial,sans-serif;color:#f8fafc;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Team Review Required</div>',
-    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#f8fafc;">Signed credit terms document submitted</h1>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A client uploaded a completed credit terms document and needs Red Threads review.</p>',
-    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#170b12;border:1px solid #9f1239;">',
-    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Submitted At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
-    artifactUrl
-      ? ('      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
-      : '',
-    '    </div>',
-    teamReviewUrl
-      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Click Here to Review Credit Terms</a></p>')
-      : '',
-    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
-    '  </div>',
-    '</div>'
-  ].filter(Boolean).join('\n');
+  return buildAccountDocumentTeamReviewNotificationHtml_({
+    heading: 'Signed credit terms document submitted',
+    intro: 'A client uploaded a completed credit terms document and needs Red Threads review.',
+    submittedByName: trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client',
+    orgName: trimString_(accountSummary.orgName || '--'),
+    submittedAt: trimString_(submissionEntry && submissionEntry.submittedAt) || '--',
+    submittedAtLabel: 'Submitted At',
+    artifactUrl: trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl)),
+    teamReviewUrl: trimString_(opts.teamReviewUrl),
+    buttonLabel: 'Review credit terms'
+  });
 }
 
 function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submissionEntry) {
@@ -10782,36 +10819,18 @@ function getLatestAccountDocumentSubmission_(ctx, documentType) {
 function buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
-  const submittedByName = trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client';
-  const orgName = trimString_(accountSummary.orgName || '--');
-  const submittedAt = trimString_(submissionEntry && submissionEntry.submittedAt) || '--';
-  const artifactUrl = trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl));
-  const teamReviewUrl = trimString_(opts.teamReviewUrl);
-  const portalUrl = trimString_(opts.portalUrl);
-  return [
-    '<div style="margin:0;padding:24px 0;background:#000000;">',
-    '  <div style="max-width:700px;margin:0 auto;padding:32px 28px;background:#05060a;border:1px solid #1e293b;border-radius:20px;font-family:Arial,sans-serif;color:#f8fafc;">',
-    '    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#be123c;font-weight:800;margin-bottom:12px;">Team Review Required</div>',
-    '    <h1 style="margin:0 0 14px;font-size:30px;line-height:1.18;color:#f8fafc;">Michigan sales tax exemption form submitted</h1>',
-    '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A client has completed the sales tax exempt form and needs review.</p>',
-    '    <div style="margin:0 0 22px;padding:18px 20px;border-radius:16px;background:#170b12;border:1px solid #9f1239;">',
-    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
-    '      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Completed At:</strong> ' + escapeHtml_(submittedAt) + '</div>',
-    artifactUrl
-      ? ('      <div style="font-size:14px;line-height:1.9;color:#cbd5e1;"><strong>Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:#be123c;">Open in Drive</a></div>')
-      : '',
-    '    </div>',
-    teamReviewUrl
-      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(teamReviewUrl) + '" style="display:inline-block;padding:16px 28px;border-radius:999px;background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;box-shadow:0 16px 28px rgba(190,24,93,.24);">Open team review</a></p>')
-      : '',
-    portalUrl
-      ? ('    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#94a3b8;">If the button does not open, use this direct portal link: <a href="' + escapeHtml_(portalUrl) + '" style="color:#be123c;">Open portal</a></p>')
-      : '',
-    '    <p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
-    '  </div>',
-    '</div>'
-  ].filter(Boolean).join('\n');
+  return buildAccountDocumentTeamReviewNotificationHtml_({
+    heading: 'Michigan sales tax exemption form submitted',
+    intro: 'A client completed the sales tax exemption form and needs Red Threads review.',
+    submittedByName: trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client',
+    orgName: trimString_(accountSummary.orgName || '--'),
+    submittedAt: trimString_(submissionEntry && submissionEntry.submittedAt) || '--',
+    submittedAtLabel: 'Completed At',
+    artifactUrl: trimString_(opts.artifactUrl || (submissionEntry && submissionEntry.artifactUrl)),
+    teamReviewUrl: trimString_(opts.teamReviewUrl),
+    portalUrl: trimString_(opts.portalUrl),
+    buttonLabel: 'Open team review'
+  });
 }
 
 function buildAccountDocumentDecisionEntry_(definition, decision, ctx, payload, options) {
@@ -17573,12 +17592,35 @@ function buildTeamSnapshotPortalUrl_(token) {
   return buildLifecycleEmailTeamUrl_(tokenValue);
 }
 
-function buildLifecycleEmailTeamUrl_(token) {
+function normalizeLifecycleEmailTeamAction_(value) {
+  const clean = trimString_(value).toLowerCase();
+  const map = {
+    review_payment_issue: 'review_payment_issue',
+    manual_payment: 'manual_payment',
+    mark_manual_payment_received: 'manual_payment',
+    po_payment: 'po_payment',
+    mark_po_payment_received: 'po_payment',
+    initiate_production: 'initiate_production',
+    mark_jobs_completed: 'mark_jobs_completed',
+    mark_production_complete: 'mark_jobs_completed',
+    monitor_payment: 'monitor_payment'
+  };
+  return map[clean] || '';
+}
+
+function buildLifecycleEmailTeamUrl_(token, options) {
   const tokenValue = trimString_(token);
   if (!tokenValue) return '';
-  return appendQueryParamsToUrl_(buildExternalPortalUrl_(tokenValue), {
-    mode: 'team'
-  });
+  const opts = (options && typeof options === 'object') ? options : {};
+  const params = { mode: 'team' };
+  const action = normalizeLifecycleEmailTeamAction_(opts.teamAction);
+  if (action) params.teamAction = action;
+  return appendQueryParamsToUrl_(buildExternalPortalUrl_(tokenValue), params);
+}
+
+function buildLifecycleEmailTeamActionUrl_(token, teamAction) {
+  const action = normalizeLifecycleEmailTeamAction_(teamAction);
+  return buildLifecycleEmailTeamUrl_(token, action ? { teamAction: action } : {});
 }
 
 function buildLifecycleEmailTeamReviewUrl_(token, reviewType) {
@@ -21212,9 +21254,10 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, dealNumber);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
   const intro = trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.';
+  const isTeamRecipient = trimString_(opts.recipientClass) === 'team';
   const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_(ctx, summary, {
     family: 'locked_order_confirmation',
-    recipientClass: trimString_(opts.recipientClass) === 'team' ? 'team' : 'client',
+    recipientClass: isTeamRecipient ? 'team' : 'client',
     lifecycleOrderInfo: opts.lifecycleOrderInfo || opts.orderInfo,
     cfg: opts.cfg,
     ss: opts.ss,
@@ -21224,6 +21267,9 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const lifecycleEmailContext = (lifecycleSections.emailContext && typeof lifecycleSections.emailContext === 'object')
     ? lifecycleSections.emailContext
     : {};
+  if (isTeamRecipient && !trimString_(lifecycleEmailContext.ctaUrl)) {
+    lifecycleEmailContext.ctaUrl = buildLifecycleEmailTeamUrl_(token);
+  }
   const workflowContext = (lifecycleEmailContext.workflowContext && typeof lifecycleEmailContext.workflowContext === 'object')
     ? lifecycleEmailContext.workflowContext
     : {};
@@ -21243,6 +21289,14 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     buildCheckPaymentInstructionsText_(summary)
   ].filter(Boolean);
   const theme = getPortalNativeEmailTheme_();
+  const teamActionModel = isTeamRecipient
+    ? resolveLifecycleTeamEmailActionModel_(lifecycleEmailContext, {
+      family: 'locked_order_confirmation',
+      intro: 'A locked-order payment link was resent for team review.',
+      statusCopy: 'Use Team Mode to review the current project state and continue the correct operational workflow.',
+      token: token
+    })
+    : null;
   const paymentOptionsBlock = {
     kind: 'generic',
     text: buildLifecycleEmailTextBlock_('Payment options', paymentOptionLines),
@@ -21260,14 +21314,19 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     ].filter(Boolean).join('\n')
   };
   const shell = buildLifecycleEmailShell_({
-    heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'Order confirmation', 'Order confirmation.'),
-    intro: intro,
-    nextStep: paymentReceived
+    heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, isTeamRecipient ? 'Team operational resend review' : 'Order confirmation', isTeamRecipient ? 'Team operational resend review.' : 'Order confirmation.'),
+    actionTitle: teamActionModel ? teamActionModel.title : '',
+    intro: teamActionModel ? teamActionModel.intro : intro,
+    statusCopy: teamActionModel ? teamActionModel.statusCopy : '',
+    nextStep: teamActionModel ? teamActionModel.nextStep : (paymentReceived
       ? 'No payment action is needed.'
-      : 'Choose a payment option or send payment using the instructions on your invoice.',
+      : 'Choose a payment option or send payment using the instructions on your invoice.'),
     attachmentNote: 'Your invoice is attached.',
     blocks: lifecycleSections.blocks.concat([
-      paymentReceived ? null : paymentOptionsBlock,
+      teamActionModel ? buildLifecycleEmailCtaBlock_(teamActionModel.ctaLabel, teamActionModel.ctaUrl, {
+        align: teamActionModel.ctaAlign
+      }) : null,
+      isTeamRecipient || paymentReceived ? null : paymentOptionsBlock,
       buildLifecycleEmailFooter_()
     ].filter(Boolean))
   });
@@ -22805,6 +22864,16 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
   });
   const token = getApAchLifecycleOrderToken_(orderInfo, summary);
   const ctaUrl = getApAchLifecycleCtaUrl_(token, recipientClass, normalized);
+  const teamActionModel = isTeamAlert
+    ? resolveLifecycleTeamEmailActionModel_(emailContext, {
+      family: 'ap_ach',
+      milestone: normalized,
+      intro: copy.intro,
+      statusCopy: copy.statusCopy,
+      token: token,
+      teamAction: isApAchLifecycleFailureMilestone_(normalized) ? 'review_payment_issue' : ''
+    })
+    : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
     family: 'ap_ach',
     milestone: normalized,
@@ -22814,16 +22883,20 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     }
   });
   const ctaBlock = shouldRenderApAchLifecycleCta_(normalized, recipientClass)
-    ? buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, ctaUrl, {
-      align: isApAchLifecycleFailureMilestone_(normalized) && recipientClass === 'ap' ? 'center' : ''
+    ? buildLifecycleEmailCtaBlock_(
+      teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
+      teamActionModel ? teamActionModel.ctaUrl : ctaUrl,
+      {
+      align: teamActionModel ? teamActionModel.ctaAlign : (isApAchLifecycleFailureMilestone_(normalized) && recipientClass === 'ap' ? 'center' : '')
     })
     : null;
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
-    intro: copy.intro,
-    statusCopy: copy.statusCopy,
-    nextStep: getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText),
+    actionTitle: teamActionModel ? teamActionModel.title : '',
+    intro: teamActionModel ? teamActionModel.intro : copy.intro,
+    statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
+    nextStep: teamActionModel ? teamActionModel.nextStep : getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText),
     attachmentNote: copy.attachmentNote,
     blocks: sectionBlocks.concat([
       buildLifecycleEmailHistoryBlock_(buildApAchLifecycleEmailHistoryLines_(normalized, emailContext.workflowContext, emailContext.orderSummary)),
@@ -23990,6 +24063,14 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
   const resolvedNextStep = accountDocumentMilestone
     ? resolveAccountDocumentLifecycleNextStep_(copy, normalized, recipientClass)
     : (copy.nextStep || emailContext.nextStepText);
+  const teamActionModel = recipientClass === 'team' && !accountDocumentMilestone
+    ? resolveLifecycleTeamEmailActionModel_(emailContext, {
+      family: 'portal_lifecycle',
+      milestone: normalized,
+      intro: copy.intro,
+      statusCopy: copy.statusCopy
+    })
+    : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
     family: 'portal_lifecycle',
     milestone: normalized,
@@ -23998,13 +24079,18 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
-    intro: copy.intro,
-    statusCopy: copy.statusCopy,
-    nextStep: resolvedNextStep,
+    actionTitle: teamActionModel ? teamActionModel.title : '',
+    intro: teamActionModel ? teamActionModel.intro : copy.intro,
+    statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
+    nextStep: teamActionModel ? teamActionModel.nextStep : resolvedNextStep,
     nonOrderLayout: getAccountDocumentLifecycleNonOrderLayout_(normalized, recipientClass),
     blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
-      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
+      buildLifecycleEmailCtaBlock_(
+        teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
+        teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
+        { align: teamActionModel ? teamActionModel.ctaAlign : '' }
+      ),
       buildLifecycleEmailFooter_()
     ])
   });
@@ -24464,7 +24550,7 @@ function resolvePaymentLifecycleEmailNextStepText_(milestone, fallbackNextStepTe
   }
   if (isPaymentLifecycleReceiptMilestone_(normalized)) {
     return isTeamAlert
-      ? 'Continue with the production workflow according to the current portal status.'
+      ? 'Continue production and update job completion dates in Team Mode when work is finished.'
       : 'No action is needed while production continues.';
   }
   return trimString_(fallbackNextStepText);
@@ -24498,6 +24584,15 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
   const nextStepText = resolvePaymentLifecycleEmailNextStepText_(normalized, emailContext.nextStepText, {
     isTeamAlert: isTeamAlert
   });
+  const teamActionModel = isTeamAlert
+    ? resolveLifecycleTeamEmailActionModel_(emailContext, {
+      family: 'payment_lifecycle',
+      milestone: normalized,
+      intro: copy.intro,
+      statusCopy: copy.statusCopy,
+      teamAction: isPaymentLifecycleFailureMilestone_(normalized) ? 'review_payment_issue' : ''
+    })
+    : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
     family: 'payment_lifecycle',
     milestone: normalized,
@@ -24506,13 +24601,18 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
-    intro: copy.intro,
-    statusCopy: copy.statusCopy,
-    nextStep: nextStepText,
+    actionTitle: teamActionModel ? teamActionModel.title : '',
+    intro: teamActionModel ? teamActionModel.intro : copy.intro,
+    statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
+    nextStep: teamActionModel ? teamActionModel.nextStep : nextStepText,
     attachmentNote: copy.attachmentNote,
     blocks: sectionBlocks.concat([
       buildPaymentLifecycleInstructionsBlock_(normalized, emailContext.orderSummary),
-      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
+      buildLifecycleEmailCtaBlock_(
+        teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
+        teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
+        { align: teamActionModel ? teamActionModel.ctaAlign : '' }
+      ),
       buildLifecycleEmailFooter_()
     ])
   });
@@ -25021,10 +25121,7 @@ function formatLifecycleEmailProjectNameValue_(projectName, dealNumber) {
 }
 
 function buildLifecycleEmailTeamPasswordHintHtml_(password) {
-  const clean = trimString_(password);
-  if (!clean) return '';
-  const theme = getPortalNativeEmailTheme_();
-  return '<div style="margin:8px 0 0;color:' + theme.currentAqua + ';font-size:12px;line-height:1.35;font-weight:900;text-align:center;">Team Mode password: ' + escapeHtml_(clean) + '</div>';
+  return '';
 }
 
 function buildLifecycleEmailProjectDetailsCta_(projectNumber, url, options) {
@@ -25225,9 +25322,6 @@ function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
   lines.forEach(function(line) {
     textLines.push(line);
   });
-  if (trimString_(ctx.teamModePassword) && trimString_(ctx.ctaUrl) && opts.projectDetailsCta !== false) {
-    textLines.push('Team Mode password: ' + trimString_(ctx.teamModePassword));
-  }
   return {
     kind: 'project_details',
     title: title,
@@ -25601,11 +25695,11 @@ function buildLifecycleEmailActionCardHtml_(options) {
   const productionTimingLine = trimString_(opts.productionTimingLine);
   const title = trimString_(opts.title) || 'Current action';
   const cta = (opts.primaryCta && typeof opts.primaryCta === 'object') ? opts.primaryCta : null;
-  const suppressNextAction = isLifecycleEmailNoActionText_(nextStep) && title === 'No action required';
+  const suppressNextAction = isLifecycleEmailNoActionText_(nextStep) && /^no(?: team)? action required$/i.test(title);
   if (!intro && !statusCopy && !nextStep && !attachmentSentence && !productionTimingLine && !trimString_(cta && cta.url)) return '';
-  const titleColor = /^action required$/i.test(title)
+  const titleColor = /^(?:action required|team action required|monitor payment)$/i.test(title)
     ? theme.currentAqua
-    : (/^no action required$/i.test(title) ? theme.successGreen : theme.brandRedMid);
+    : (/^(?:no action required|no team action required|production authorized)$/i.test(title) ? theme.successGreen : theme.brandRedMid);
   const paragraphs = [];
   if (intro) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>');
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
@@ -25654,6 +25748,7 @@ function buildLifecycleEmailShell_(options) {
   const statusCopy = trimString_(opts.statusCopy);
   const nextStep = trimString_(opts.nextStep);
   const attachmentNote = trimString_(opts.attachmentNote);
+  const actionTitle = trimString_(opts.actionTitle);
   const blocks = Array.isArray(opts.blocks) ? opts.blocks : [];
   const ctaBlocks = [];
   const footerBlocks = [];
@@ -25724,7 +25819,7 @@ function buildLifecycleEmailShell_(options) {
     : '';
   const actionCardHtml = hasOrderContext
     ? buildLifecycleEmailActionCardHtml_({
-      title: resolveLifecycleEmailActionCardTitle_({
+      title: actionTitle || resolveLifecycleEmailActionCardTitle_({
         subheading: headerDisplay.subheading,
         intro: intro,
         statusCopy: statusCopy,
@@ -25938,6 +26033,7 @@ function formatLifecycleEmailNextActionText_(workflowContext, options) {
         review_payment_issue: 'Review the ACH payment issue before production continues.',
         mark_manual_payment_received: 'Mark payment received when funds are confirmed.',
         mark_po_payment_received: 'Mark the PO payment received when funds are confirmed.',
+        initiate_production: 'Initiate production only if Red Threads is intentionally starting production before payment settles.',
         mark_production_complete: 'Update job completion when production is finished.',
         monitor_payment: 'Monitor ACH confirmation before production begins.',
         none: 'No team action is required right now.'
@@ -25958,6 +26054,123 @@ function formatLifecycleEmailNextActionText_(workflowContext, options) {
         none: 'No action is needed right now.'
       };
   return trimString_(map[action] || map.none || '');
+}
+
+function resolveLifecycleTeamEmailActionKey_(emailContext, options) {
+  const ctx = (emailContext && emailContext.workflowContext && typeof emailContext.workflowContext === 'object')
+    ? emailContext.workflowContext
+    : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const explicitAction = normalizeLifecycleEmailTeamAction_(opts.teamAction || opts.nextTeamAction || opts.nextTeamActionOverride);
+  if (explicitAction) return explicitAction;
+  const canonicalAction = normalizeLifecycleEmailTeamAction_(ctx.nextTeamAction);
+  if (canonicalAction) return canonicalAction;
+  const family = trimString_(opts.family).toLowerCase();
+  const milestone = trimString_(opts.milestone).toLowerCase();
+  if (family === 'standard_ach' && milestone === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
+    return 'review_payment_issue';
+  }
+  if (family === 'ap_ach' && milestone === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
+    return 'review_payment_issue';
+  }
+  if (family === 'payment_lifecycle' && isPaymentLifecycleFailureMilestone_(milestone)) {
+    return 'review_payment_issue';
+  }
+  if (family === 'payment_lifecycle' && milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
+    return 'manual_payment';
+  }
+  if (family === 'payment_lifecycle' && milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
+    return ctx.canMarkPoPayment === true ? 'po_payment' : 'monitor_payment';
+  }
+  if (ctx.canInitiateProduction === true) return 'initiate_production';
+  if (ctx.canManageJobCompletion === true && ctx.productionComplete !== true) return 'mark_jobs_completed';
+  if (ctx.paymentDue === true) return 'monitor_payment';
+  return '';
+}
+
+function sanitizeLifecycleTeamStatusCopy_(value) {
+  const clean = trimString_(value);
+  if (!clean) return '';
+  if (/continue with the production workflow according to the current portal status/i.test(clean)) return '';
+  if (/review the portal payment state before production continues/i.test(clean)) return '';
+  if (/monitor the portal payment state before production begins/i.test(clean)) return '';
+  return clean;
+}
+
+function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const workflow = (ctx.workflowContext && typeof ctx.workflowContext === 'object') ? ctx.workflowContext : {};
+  const summary = (ctx.orderSummary && typeof ctx.orderSummary === 'object') ? ctx.orderSummary : {};
+  const token = trimString_(opts.token || summary.token || summary.portalToken || ctx.token);
+  const action = resolveLifecycleTeamEmailActionKey_(ctx, opts);
+  const intro = trimString_(opts.intro);
+  const statusCopy = sanitizeLifecycleTeamStatusCopy_(opts.statusCopy);
+  const models = {
+    review_payment_issue: {
+      title: 'Team action required',
+      intro: intro || 'A payment issue needs team review before production begins or continues.',
+      statusCopy: statusCopy,
+      nextStep: 'Open Team Mode to review the payment issue before production begins or continues.',
+      ctaLabel: 'Review payment issue',
+      teamAction: 'review_payment_issue'
+    },
+    manual_payment: {
+      title: 'Team action required',
+      intro: intro || 'Manual payment is pending team confirmation.',
+      statusCopy: statusCopy,
+      nextStep: 'Confirm funds have arrived, then mark manual payment received in Team Mode to start production.',
+      ctaLabel: 'Mark manual payment received',
+      teamAction: 'manual_payment'
+    },
+    po_payment: {
+      title: 'Team action required',
+      intro: intro || 'Purchase order payment remains open under approved terms.',
+      statusCopy: statusCopy,
+      nextStep: 'Confirm PO funds have arrived, then mark PO payment received in Team Mode.',
+      ctaLabel: 'Mark PO payment received',
+      teamAction: 'po_payment'
+    },
+    initiate_production: {
+      title: 'Team action required',
+      intro: intro || 'Production can be initiated from Team Mode before payment settles when Red Threads intentionally approves that exception.',
+      statusCopy: statusCopy,
+      nextStep: 'Open Team Mode and initiate production only if Red Threads is intentionally starting production before payment settles.',
+      ctaLabel: 'Initiate production',
+      teamAction: 'initiate_production'
+    },
+    mark_jobs_completed: {
+      title: 'Production authorized',
+      intro: intro || 'Production is authorized for this order.',
+      statusCopy: statusCopy,
+      nextStep: 'Continue production and update job completion dates in Team Mode when work is finished.',
+      ctaLabel: 'Update job completion',
+      teamAction: 'mark_jobs_completed'
+    },
+    monitor_payment: {
+      title: 'Monitor payment',
+      intro: intro || 'Payment is still in progress for this order.',
+      statusCopy: statusCopy,
+      nextStep: 'Monitor payment confirmation before production begins unless Red Threads explicitly authorizes production.',
+      ctaLabel: 'Monitor payment',
+      teamAction: 'monitor_payment'
+    }
+  };
+  const model = models[action] || {
+    title: 'No team action required',
+    intro: intro,
+    statusCopy: statusCopy,
+    nextStep: 'No team action is required right now.',
+    ctaLabel: 'Open Team Mode',
+    teamAction: ''
+  };
+  const ctaUrl = trimString_(opts.ctaUrl) ||
+    (token ? buildLifecycleEmailTeamActionUrl_(token, model.teamAction) : trimString_(ctx.ctaUrl));
+  return Object.assign({}, model, {
+    action: action || 'none',
+    ctaUrl: ctaUrl,
+    ctaAlign: 'center'
+  });
 }
 
 function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
@@ -26071,9 +26284,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
       ? buildLifecycleEmailTeamUrl_(token)
       : buildLifecycleEmailInvoiceUrl_(token)
   );
-  const teamModePassword = recipientClass === 'team'
-    ? trimString_(opts.teamModePassword || (cfg && cfg.teamModePassword))
-    : '';
+  const teamModePassword = '';
   return {
     orderSummary: summary,
     accountSummary: accountSummary,
@@ -26160,7 +26371,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
           ? 'A standard ACH order needs bank verification before payment can finish.'
           : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish. Order Production will begin as soon as payment is received.',
         statusCopy: isTeamAlert
-          ? 'Monitor the portal payment state before production begins.'
+          ? 'Monitor payment confirmation before production begins unless Red Threads explicitly initiates production.'
           : 'Stripe may send you a secure bank-verification email for a one-time ACH payment setup with Red Threads. Red Threads does not collect any banking or microdeposit values.',
         attachmentNote: 'Your invoice is attached.'
       });
@@ -26189,7 +26400,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         ? 'A standard ACH payment has been received.'
         : 'Your ACH payment has been received and your order will begin production.',
       statusCopy: isTeamAlert
-        ? 'Continue with the production workflow according to the current portal status.'
+        ? 'Payment is received. Continue production and update job completion when work is ready.'
         : '',
       attachmentNote: 'Your updated receipt is attached.'
     });
@@ -26202,7 +26413,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
       ? 'A standard ACH payment needs review.'
       : 'Your ACH payment could not be completed or needs review.',
     statusCopy: isTeamAlert
-      ? 'Review the portal payment state before production continues.'
+      ? 'Review the ACH payment issue before production begins or continues.'
       : 'Production will not begin until payment is resolved. Open your Red Threads portal to retry payment or contact Red Threads for help.',
     attachmentNote: 'An invoice/status PDF may be attached when available.'
   });
@@ -26246,7 +26457,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
         : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for a Red Threads project'),
       intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'Accounts Payable completed an ACH payment for this Red Threads project, and your order has been authorized for production. The invoice/receipt for the order is attached to this email.',
       statusCopy: isTeamAlert
-        ? 'Continue with the production workflow according to the current portal status.'
+        ? 'Payment is received. Continue production and update job completion when work is ready.'
         : '',
       attachmentNote: isTeamAlert ? 'The updated receipt is attached.' : ''
     });
@@ -26257,7 +26468,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
       : formatLifecycleEmailInvoiceSubject_('ACH Payment Issue, Order Paused', invoiceNumber, 'ACH Payment Issue, Order Paused for a Red Threads project'),
     intro: isTeamAlert ? 'An AP ACH payment needs review.' : 'The ACH payment made by Accounts Payable could not be completed by our payment processor, Stripe.',
     statusCopy: isTeamAlert
-      ? 'Review the portal payment state before production continues.'
+      ? 'Review the AP ACH payment issue before production begins or continues.'
       : 'The invoice for the order is attached to this email for your reference. Payment must be received before Red Threads can begin production.',
     attachmentNote: isTeamAlert ? 'An invoice/status PDF may be attached when available.' : ''
   });
@@ -26275,7 +26486,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         ? formatLifecycleEmailInvoiceSubject_('Team alert: card payment received', invoiceNumber, 'Team alert: card payment received')
         : formatLifecycleEmailInvoiceSubject_('Payment Received, Production Started', invoiceNumber, 'Payment Received, Production Started for your Red Threads order'),
       intro: isTeamAlert ? 'A card payment has been received.' : 'Your credit card payment has been received, and your order will begin production. The invoice/receipt for your order is attached to this email.',
-      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : '',
+      statusCopy: isTeamAlert ? 'Payment is received. Continue production and update job completion when work is ready.' : '',
       attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : ''
     });
   }
@@ -26307,7 +26518,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         ? formatLifecycleEmailInvoiceSubject_('Team alert: manual payment received', invoiceNumber, 'Team alert: manual payment received')
         : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for your Red Threads order'),
       intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received and your order is authorized for production.',
-      statusCopy: isTeamAlert ? 'Continue with the production workflow according to the current portal status.' : '',
+      statusCopy: isTeamAlert ? 'Payment is received. Continue production and update job completion when work is ready.' : '',
       attachmentNote: isTeamAlert ? 'Your updated receipt is attached.' : 'The invoice for your order is attached to this email.'
     });
   }
@@ -26360,6 +26571,15 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     verificationRequired: verificationRequired,
     usedConnectedBank: usedConnectedBank
   });
+  const teamActionModel = isTeamAlert
+    ? resolveLifecycleTeamEmailActionModel_(emailContext, {
+      family: 'standard_ach',
+      milestone: baseType,
+      intro: copy.intro,
+      statusCopy: copy.statusCopy,
+      teamAction: baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email ? 'review_payment_issue' : ''
+    })
+    : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
     family: 'standard_ach',
     milestone: baseType,
@@ -26368,12 +26588,17 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
   const shell = buildLifecycleEmailShell_({
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
-    intro: copy.intro,
-    statusCopy: copy.statusCopy,
-    nextStep: emailContext.nextStepText,
+    actionTitle: teamActionModel ? teamActionModel.title : '',
+    intro: teamActionModel ? teamActionModel.intro : copy.intro,
+    statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
+    nextStep: teamActionModel ? teamActionModel.nextStep : emailContext.nextStepText,
     attachmentNote: copy.attachmentNote,
     blocks: sectionBlocks.concat([
-      buildLifecycleEmailCtaBlock_(emailContext.ctaLabel, emailContext.ctaUrl),
+      buildLifecycleEmailCtaBlock_(
+        teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
+        teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
+        { align: teamActionModel ? teamActionModel.ctaAlign : '' }
+      ),
       buildLifecycleEmailFooter_()
     ])
   });
@@ -29597,6 +29822,13 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
     ss: fixture.ss,
     infra: fixture.infra
   });
+  const lockedTeamContent = buildLockedOrderPaymentEmailContent_({ orderDraft: draft }, summary, {
+    recipientClass: 'team',
+    lifecycleOrderInfo: order,
+    cfg: fixture.cfg,
+    ss: fixture.ss,
+    infra: fixture.infra
+  });
   const poInvoiceContent = buildPurchaseOrderInvoiceEmailContent_(trimString_(summary.token), invoiceInfo, {
     projectName: trimString_(summary.projectName),
     lifecycleOrderInfo: order,
@@ -29613,9 +29845,9 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
     htmlBody: lockedContent.htmlBody
   }, attachments);
   sendEmailReviewContent_(results, 'Explicit locked-order resend team', 'locked_order_resend', 'team', [recipients.team], {
-    subject: summaryInvoiceLabel ? ('Red Threads order confirmation — ' + summaryInvoiceLabel) : 'Red Threads order confirmation',
-    body: lockedContent.body,
-    htmlBody: lockedContent.htmlBody
+    subject: summaryInvoiceLabel ? ('Team operational resend review — ' + summaryInvoiceLabel) : 'Team operational resend review',
+    body: lockedTeamContent.body,
+    htmlBody: lockedTeamContent.htmlBody
   }, attachments);
 
   if (!omitEmailReviewSuiteItemIfNeeded_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client')) {
@@ -31556,17 +31788,15 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     ? 'New client portal messages'
     : 'New Red Threads portal messages';
   const subject = subjectPrefix + ' (' + messageCount + ')' + (projectName ? (' - ' + projectName) : '');
-  const lifecycleSections = !isTeamDigest
-    ? buildDirectLifecycleEmailSectionBlocks_({ rowInfo: rowInfo }, null, {
-        family: 'chat_message_digest',
-        recipientClass: 'client',
-        token: token,
-        cfg: opts.cfg,
-        ss: opts.ss,
-        infra: opts.infra,
-        projectDetailsCta: false
-      })
-    : { blocks: [] };
+  const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_({ rowInfo: rowInfo }, null, {
+    family: 'chat_message_digest',
+    recipientClass: isTeamDigest ? 'team' : 'client',
+    token: token,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra,
+    projectDetailsCta: false
+  });
   const projectNumber = getChatDigestProjectNumberLabel_(projectName, lifecycleSections);
   const ctaLabel = isTeamDigest ? 'Open Team Snapshot' : buildChatDigestClientCtaLabel_(projectNumber);
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
@@ -31598,6 +31828,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
         '',
         projectName ? ('Project: ' + projectName) : '',
         clientEmail ? ('Client email: ' + clientEmail) : '',
+        lifecycleText,
         '',
         'Messages:',
         plainMessageLines.join('\n').trim(),
@@ -31637,7 +31868,7 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     '    </table>'
   ].join('\n');
   const ctaHtml = portalUrl
-    ? ('    <div style="margin:14px 0 0;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a></div>')
+    ? ('    <div style="margin:14px 0 18px;' + (isTeamDigest ? 'text-align:center;' : '') + '"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a></div>')
     : '';
   const clientHtmlMessagesBlock = messageRows.map(function(messageRow, index) {
     const metaColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.textSoft;

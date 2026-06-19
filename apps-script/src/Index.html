@@ -16959,7 +16959,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 93">93</div>
+  <div class="devRevisionBadge" aria-label="Development revision 94">94</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19340,6 +19340,8 @@
   let TAX_DOC_TEAM_REVIEW_LOADING = false;
   let TAX_DOC_TEAM_REVIEW_AUTOOPENED = false;
   let TAX_DOC_TEAM_REVIEW_OPEN_TIMER = 0;
+  let TEAM_ACTION_AUTOOPENED = false;
+  let TEAM_ACTION_OPEN_TIMER = 0;
   let TAX_DOC_TEAM_REVIEW_ARTIFACT_SRC = '';
   let TAX_DOC_TEAM_REVIEW_ARTIFACT_FILE_ID = '';
   let TAX_DOC_TEAM_REVIEW_ARTIFACT_URL = '';
@@ -21447,9 +21449,9 @@
       let changed = false;
       const clearKeys = ['checkoutResult', 'setupResult', 'stripeSessionId'];
       if (opts.checkoutReturn === true || opts.checkoutCancel === true) {
-        clearKeys.push('payNow', 'paymentOrigin', 'mode', 'teamReview');
+        clearKeys.push('payNow', 'paymentOrigin', 'mode', 'teamReview', 'teamAction');
       } else if (opts.setupReturn === true || opts.clearTeamRoute === true) {
-        clearKeys.push('mode', 'teamReview');
+        clearKeys.push('mode', 'teamReview', 'teamAction');
       }
       clearKeys.forEach(key => {
         if (!url.searchParams.has(key)) return;
@@ -21502,7 +21504,8 @@
       return {
         explicitTeamMode: false,
         mode: '',
-        teamReview: ''
+        teamReview: '',
+        teamAction: ''
       };
     }
     const liveMode = String(getLivePortalRouteParam_('mode') || '').trim().toLowerCase();
@@ -21511,11 +21514,15 @@
     const liveTeamReview = String(getLivePortalRouteParam_('teamReview') || '').trim();
     const bootTeamReview = String(VM_REQUEST_ROUTE_META.teamReview || '').trim();
     const teamReview = liveTeamReview || bootTeamReview;
-    const explicitTeamMode = liveMode === 'team' || bootMode === 'team' || vmMode === 'team' || !!teamReview;
+    const liveTeamAction = normalizeTeamActionRouteValue_(getLivePortalRouteParam_('teamAction'));
+    const bootTeamAction = normalizeTeamActionRouteValue_(VM_REQUEST_ROUTE_META.teamAction);
+    const teamAction = liveTeamAction || bootTeamAction || TEAM_ACTION_REQUEST;
+    const explicitTeamMode = liveMode === 'team' || bootMode === 'team' || vmMode === 'team' || !!teamReview || !!teamAction;
     return {
       explicitTeamMode: explicitTeamMode,
       mode: explicitTeamMode ? 'team' : '',
-      teamReview: teamReview
+      teamReview: teamReview,
+      teamAction: teamAction
     };
   }
 
@@ -22292,6 +22299,18 @@
     const normalized = String(value || '').trim().toLowerCase();
     return (normalized === 'success' || normalized === 'cancel') ? normalized : '';
   }
+  function normalizeTeamActionRouteValue_(value){
+    const normalized = String(value || '').trim().toLowerCase();
+    const allowed = {
+      review_payment_issue: true,
+      manual_payment: true,
+      po_payment: true,
+      initiate_production: true,
+      mark_jobs_completed: true,
+      monitor_payment: true
+    };
+    return allowed[normalized] === true ? normalized : '';
+  }
   function getLivePortalRouteParam_(key){
     if (typeof window === 'undefined' || !window.location) return '';
     try {
@@ -22316,6 +22335,7 @@
   const OPENED_FROM_AUTH_QUERY = URL_QUERY_PARAMS.get('fromAuth') === '1';
   const CHECKOUT_RETURN_RESULT = normalizeCheckoutReturnResultValue_(VM_REQUEST_ROUTE_META.checkoutResult || URL_QUERY_PARAMS.get('checkoutResult'));
   const TEAM_REVIEW_REQUEST = String(VM_REQUEST_ROUTE_META.teamReview || URL_QUERY_PARAMS.get('teamReview') || '').trim().toLowerCase();
+  const TEAM_ACTION_REQUEST = normalizeTeamActionRouteValue_(VM_REQUEST_ROUTE_META.teamAction || URL_QUERY_PARAMS.get('teamAction'));
   const DASHBOARD_DEEPLINK_REQUEST = URL_QUERY_PARAMS.get('dashboard') === '1' || VM_REQUEST_ROUTE_META.dashboard === '1';
   const DASHBOARD_ACCOUNT_ID_PARAM = String(VM_REQUEST_ROUTE_META.accountId || URL_QUERY_PARAMS.get('accountId') || '').trim();
   const DASHBOARD_ACCOUNT_ACCESS_TOKEN_PARAM = String(VM_REQUEST_ROUTE_META.accountAccessToken || URL_QUERY_PARAMS.get('accountAccessToken') || URL_QUERY_PARAMS.get('dashboardAccessToken') || '').trim();
@@ -22546,6 +22566,7 @@
     'accountDoc',
     'accountDocAction',
     'teamReview',
+    'teamAction',
     'paymentOrigin',
     'mode',
     'reset',
@@ -23587,7 +23608,8 @@
     const params = getPortalMessageRouteParams_(message);
     const mode = String(params.mode || '').trim().toLowerCase();
     const teamReview = String(params.teamReview || '').trim();
-    return mode === 'team' || !!teamReview;
+    const teamAction = normalizeTeamActionRouteValue_(params.teamAction);
+    return mode === 'team' || !!teamReview || !!teamAction;
   }
 
   function applyCheckoutReturnMetaFromPortalMessage_(message){
@@ -23977,10 +23999,11 @@
       if (String(source[key] || '').trim() === '1') normalized[key] = '1';
     });
 
-    ['payNow', 'poStage', 'accountDoc', 'accountDocAction', 'teamReview', 'paymentOrigin', 'mode', 'resetToken'].forEach(key => {
+    ['payNow', 'poStage', 'accountDoc', 'accountDocAction', 'teamReview', 'teamAction', 'paymentOrigin', 'mode', 'resetToken'].forEach(key => {
       const value = String(source[key] || '').trim();
       if (value) normalized[key] = value;
     });
+    if (normalized.teamAction) normalized.teamAction = normalizeTeamActionRouteValue_(normalized.teamAction);
 
     return normalized;
   }
@@ -24053,6 +24076,7 @@
     const params = Object.assign({}, extra, { dashboard: '1' });
     delete params.mode;
     delete params.teamReview;
+    delete params.teamAction;
     if (accountAccessToken) {
       params.accountAccessToken = accountAccessToken;
       delete params.accountId;
@@ -24094,7 +24118,8 @@
     const forceClientRoute = extra.forceClientMode === true || extra.clientMode === true;
     const explicitTeamRoute = extra.explicitTeamMode === true
       || String(extra.mode || '').trim().toLowerCase() === 'team'
-      || !!String(extra.teamReview || '').trim();
+      || !!String(extra.teamReview || '').trim()
+      || !!normalizeTeamActionRouteValue_(extra.teamAction);
     delete params.forceClientMode;
     delete params.clientMode;
     delete params.explicitTeamMode;
@@ -24108,9 +24133,15 @@
     if (forceClientRoute || !explicitTeamRoute) {
       delete params.mode;
       delete params.teamReview;
+      delete params.teamAction;
     } else {
-      if (extra.mode) params.mode = extra.mode;
+      params.mode = String(extra.mode || '').trim().toLowerCase() === 'team' ||
+        !!String(extra.teamReview || '').trim() ||
+        !!normalizeTeamActionRouteValue_(extra.teamAction)
+        ? 'team'
+        : extra.mode;
       if (extra.teamReview) params.teamReview = extra.teamReview;
+      if (normalizeTeamActionRouteValue_(extra.teamAction)) params.teamAction = normalizeTeamActionRouteValue_(extra.teamAction);
     }
     return normalizePortalRouteParams_(params);
   }
@@ -24999,6 +25030,7 @@
     if (isTeam && !isLocked) {
       maybeAutoOpenTeamCreditTermsReview_();
       maybeAutoOpenTeamTaxReview_();
+      maybeAutoOpenTeamAction_();
     }
   }
 
@@ -25015,6 +25047,17 @@
       const url = new URL(window.location.href);
       if (!url.searchParams.has('teamReview')) return;
       url.searchParams.delete('teamReview');
+      const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
+      window.history.replaceState({}, document.title, nextUrl);
+    } catch (_) {}
+  }
+
+  function clearTeamActionQueryParam_(){
+    if (typeof window === 'undefined' || !window.location || !window.history) return;
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('teamAction')) return;
+      url.searchParams.delete('teamAction');
       const nextUrl = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + (url.hash || '');
       window.history.replaceState({}, document.title, nextUrl);
     } catch (_) {}
@@ -25385,7 +25428,8 @@
       showNotice('Team mode unlocked. Replying as ' + String(resp.senderName || getVisibleTeamAuthorName()) + '.', 'ok');
       maybeAutoOpenTeamCreditTermsReview_();
       maybeAutoOpenTeamTaxReview_();
-      if (!TEAM_REVIEW_REQUEST && chatInput && !chatInput.disabled) chatInput.focus();
+      maybeAutoOpenTeamAction_();
+      if (!TEAM_REVIEW_REQUEST && !TEAM_ACTION_REQUEST && chatInput && !chatInput.disabled) chatInput.focus();
     } catch (err) {
       setTeamModeUnlocked(false);
       setTeamGateMessage(String((err && err.message) || err || 'Incorrect password.'), true);
@@ -31613,6 +31657,79 @@
     renderTeamAccountAdminModal_();
     teamAccountAdminBackdrop.hidden = false;
     syncOverlayScrollLock();
+  }
+
+  function getTeamActionRouteButton_(teamAction){
+    const action = normalizeTeamActionRouteValue_(teamAction);
+    const map = {
+      manual_payment: teamMarkManualPaymentBtn,
+      po_payment: teamMarkPoPaymentBtn,
+      initiate_production: teamAchPendingProductionBtn,
+      mark_jobs_completed: teamMarkJobsCompletedBtn
+    };
+    return map[action] || null;
+  }
+
+  function focusTeamActionRouteButton_(teamAction){
+    const btn = getTeamActionRouteButton_(teamAction);
+    if (!btn || btn.hidden || btn.disabled || typeof btn.focus !== 'function') return false;
+    try {
+      btn.focus({ preventScroll: false });
+    } catch (_) {
+      btn.focus();
+    }
+    return true;
+  }
+
+  function openTeamActionRouteTarget_(teamAction){
+    const action = normalizeTeamActionRouteValue_(teamAction);
+    if (!action) return false;
+    openTeamAccountAdminModal_();
+    if (action === 'initiate_production') {
+      openTeamInitiateProductionPanel_();
+      setTeamAccountAdminMessage_('Confirm only if Red Threads is intentionally starting production before payment settles.', 'info');
+      return true;
+    }
+    if (action === 'mark_jobs_completed') {
+      openTeamAccountAdminJobsPanel_();
+      setTeamAccountAdminMessage_('Update job completion dates when production work is finished.', 'info');
+      return true;
+    }
+    const messages = {
+      manual_payment: 'Confirm funds have arrived, then use the highlighted control to mark manual payment received.',
+      po_payment: 'Confirm PO funds have arrived, then use the highlighted control to mark PO payment received.',
+      review_payment_issue: 'Review the payment issue and use the available Team Controls action that matches the current project state.',
+      monitor_payment: 'Monitor payment confirmation. No Team Mode action is required unless the project state changes.'
+    };
+    setTeamAccountAdminMessage_(messages[action] || 'Review the current Team Mode action state.', 'info');
+    renderTeamAccountAdminModal_();
+    if ((action === 'manual_payment' || action === 'po_payment') && !focusTeamActionRouteButton_(action)) {
+      setTeamAccountAdminMessage_('The requested action is not available for the current project state. Review the visible Team Controls before proceeding.', 'info');
+    }
+    return true;
+  }
+
+  function maybeAutoOpenTeamAction_(){
+    if (TEAM_ACTION_OPEN_TIMER) {
+      clearTimeout(TEAM_ACTION_OPEN_TIMER);
+      TEAM_ACTION_OPEN_TIMER = 0;
+    }
+    const attempt = Math.max(0, parseInt(arguments[0], 10) || 0);
+    if (!IS_TEAM || !TEAM_ACTION_REQUEST || TEAM_REVIEW_REQUEST) return;
+    if (!TEAM_MODE_UNLOCKED || !TEAM_MODE_AUTH_KEY || CURRENT_VIEW !== VIEW_SNAPSHOT) {
+      if (attempt >= 20) return;
+      TEAM_ACTION_OPEN_TIMER = setTimeout(() => {
+        maybeAutoOpenTeamAction_(attempt + 1);
+      }, 120);
+      return;
+    }
+    if (TEAM_ACTION_AUTOOPENED) return;
+    TEAM_ACTION_AUTOOPENED = true;
+    if (openTeamActionRouteTarget_(TEAM_ACTION_REQUEST)) {
+      clearTeamActionQueryParam_();
+    } else {
+      TEAM_ACTION_AUTOOPENED = false;
+    }
   }
 
   function closeTeamAccountAdminModal_(){
@@ -46993,7 +47110,8 @@
         forceClientMode: !!checkoutReturnResult,
         explicitTeamMode: explicitTeamRoute.explicitTeamMode,
         mode: explicitTeamRoute.mode,
-        teamReview: explicitTeamRoute.teamReview
+        teamReview: explicitTeamRoute.teamReview,
+        teamAction: explicitTeamRoute.teamAction
       });
     }
     if (
