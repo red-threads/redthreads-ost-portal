@@ -10643,6 +10643,7 @@ function buildAccountDocumentTeamReviewNotificationHtml_(options) {
   const heading = trimString_(opts.heading) || 'Team review required';
   const intro = trimString_(opts.intro);
   const submittedByName = trimString_(opts.submittedByName) || 'Client';
+  const submittedByEmail = normalizeEmail_(opts.submittedByEmail);
   const orgName = trimString_(opts.orgName) || '--';
   const submittedAt = trimString_(opts.submittedAt) || '--';
   const submittedAtLabel = trimString_(opts.submittedAtLabel) || 'Submitted At';
@@ -10673,6 +10674,7 @@ function buildAccountDocumentTeamReviewNotificationHtml_(options) {
     '<tr><td style="padding:14px 16px;">',
     '<div style="font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;margin:0 0 8px;letter-spacing:.08em;">Submission details</div>',
     '<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Person:</strong> ' + escapeHtml_(submittedByName) + '</div>',
+    submittedByEmail ? ('<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Client email:</strong> ' + escapeHtml_(submittedByEmail) + '</div>') : '',
     '<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Organization:</strong> ' + escapeHtml_(orgName) + '</div>',
     '<div style="margin:0 0 6px;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">' + escapeHtml_(submittedAtLabel) + ':</strong> ' + escapeHtml_(submittedAt) + '</div>',
     artifactUrl ? ('<div style="margin:0;color:' + theme.textMuted + ';font-size:13px;line-height:1.45;"><strong style="color:' + theme.text + ';">Stored Copy:</strong> <a href="' + escapeHtml_(artifactUrl) + '" style="color:' + theme.brandRedMid + ';font-weight:900;">Open in Drive</a></div>') : '',
@@ -10694,6 +10696,7 @@ function buildCreditTermsTeamReviewNotificationHtml_(ctx, submissionEntry, optio
     heading: 'Signed credit terms document submitted',
     intro: 'A client uploaded a completed credit terms document and needs Red Threads review.',
     submittedByName: trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client',
+    submittedByEmail: normalizeEmail_(submissionEntry && submissionEntry.submittedByEmail),
     orgName: trimString_(accountSummary.orgName || '--'),
     submittedAt: trimString_(submissionEntry && submissionEntry.submittedAt) || '--',
     submittedAtLabel: 'Submitted At',
@@ -10823,6 +10826,7 @@ function buildTaxExemptTeamReviewNotificationHtml_(ctx, submissionEntry, options
     heading: 'Michigan sales tax exemption form submitted',
     intro: 'A client completed the sales tax exemption form and needs Red Threads review.',
     submittedByName: trimString_(submissionEntry && submissionEntry.submittedByName) || 'Client',
+    submittedByEmail: normalizeEmail_(submissionEntry && submissionEntry.submittedByEmail),
     orgName: trimString_(accountSummary.orgName || '--'),
     submittedAt: trimString_(submissionEntry && submissionEntry.submittedAt) || '--',
     submittedAtLabel: 'Completed At',
@@ -23816,7 +23820,7 @@ function buildAccountDocumentTeamIdentityDetails_(meta, emailContext) {
   const details = [];
   if (clientName) details.push('Client name: ' + clientName);
   if (organizationName) details.push('Organization: ' + organizationName);
-  if (clientEmail) details.push('Email: ' + clientEmail);
+  if (clientEmail) details.push('Client email: ' + clientEmail);
   return details;
 }
 
@@ -23842,7 +23846,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   const teamIdentityDetails = Array.isArray(meta && meta.teamIdentityDetails)
     ? meta.teamIdentityDetails
     : [];
-  const details = [];
+  const details = isTeam ? teamIdentityDetails.slice() : [];
   if (paymentTermsLabel) details.push('Approved payment terms: ' + paymentTermsLabel);
   if (reason) details.push('Reason: ' + reason);
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
@@ -23866,7 +23870,6 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const taxExemptClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved;
     const creditTermsClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved;
     const paymentDueLabel = formatCreditTermsApprovedPaymentDueLabel_(paymentTermsLabel);
-    const approvedDetails = isTeam ? teamIdentityDetails.concat(details) : details;
     return {
       subject: isTeam ? ('Team alert: ' + documentLabel + ' approved') : (labels.title + ' approved'),
       heading: isTeam ? (labels.title + ' approved') : approvedIntro.replace(/[.]+$/g, ''),
@@ -23885,7 +23888,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         : creditTermsClientApproved
         ? 'Your Organization can now place Purchase Orders with Red Threads.'
         : 'No action required',
-      details: approvedDetails
+      details: details
     };
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
@@ -25380,6 +25383,29 @@ function shouldOmitLifecycleProjectDetailsField_(label) {
     clean === 'receipt';
 }
 
+function buildLifecycleEmailClientDetailFields_(emailContext) {
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const account = (ctx.accountSummary && typeof ctx.accountSummary === 'object') ? ctx.accountSummary : {};
+  const clientName = trimString_(
+    ctx.clientName ||
+    account.billingContactName ||
+    account.primaryContactName
+  );
+  const clientEmail = firstNormalizedEmailFromValues_([
+    ctx.clientEmail,
+    account.billingContactEmail,
+    account.primaryEmail
+  ]);
+  const organizationName = trimString_(ctx.organizationName || account.orgName);
+  return [
+    { label: 'Client name', value: clientName },
+    { label: 'Client email', value: clientEmail },
+    { label: 'Organization', value: organizationName }
+  ].filter(function(field) {
+    return trimString_(field.value);
+  });
+}
+
 function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
   const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
   const opts = (options && typeof options === 'object') ? options : {};
@@ -25393,12 +25419,18 @@ function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
   }).filter(function(field) {
     return field.label && field.value && !shouldOmitLifecycleProjectDetailsField_(field.label);
   });
+  const clientRows = trimString_(opts.recipientClass).toLowerCase() === 'team'
+    ? buildLifecycleEmailClientDetailFields_(ctx)
+    : [];
   const lines = opts.history === false ? [] : uniqueTrimmedStrings_(ctx.historyLines);
-  if (!rows.length && !lines.length) return { text: '', html: '' };
+  if (!rows.length && !clientRows.length && !lines.length) return { text: '', html: '' };
   const projectNumber = getLifecycleEmailProjectNumberLabel_(ctx);
   const title = projectNumber ? ('Project #' + projectNumber + ' Details') : 'Project Details';
   const textLines = [];
   rows.forEach(function(field) {
+    textLines.push(field.label + ': ' + field.value);
+  });
+  clientRows.forEach(function(field) {
     textLines.push(field.label + ': ' + field.value);
   });
   lines.forEach(function(line) {
@@ -25409,6 +25441,7 @@ function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
     title: title,
     projectNumber: projectNumber,
     fields: rows,
+    clientFields: clientRows,
     lines: lines,
     ctaUrl: opts.projectDetailsCta === false ? '' : trimString_(ctx.ctaUrl),
     ctaLabel: trimString_(ctx.ctaLabel),
@@ -25418,6 +25451,7 @@ function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
       title: title,
       projectNumber: projectNumber,
       fields: rows,
+      clientFields: clientRows,
       lines: lines,
       ctaUrl: opts.projectDetailsCta === false ? '' : trimString_(ctx.ctaUrl),
       teamModePassword: trimString_(ctx.teamModePassword)
@@ -25428,19 +25462,55 @@ function buildLifecycleEmailProjectDetailsBlock_(emailContext, options) {
 function buildLifecycleEmailProjectDetailsHtml_(options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const theme = getPortalNativeEmailTheme_();
-  const fields = Array.isArray(opts.fields) ? opts.fields : [];
+  const fields = (Array.isArray(opts.fields) ? opts.fields : []).map(function(field) {
+    const item = (field && typeof field === 'object') ? field : {};
+    return {
+      label: trimString_(item.label),
+      value: trimString_(item.value)
+    };
+  }).filter(function(field) {
+    return field.label && field.value;
+  });
+  const clientFields = (Array.isArray(opts.clientFields) ? opts.clientFields : []).map(function(field) {
+    const item = (field && typeof field === 'object') ? field : {};
+    return {
+      label: trimString_(item.label),
+      value: trimString_(item.value)
+    };
+  }).filter(function(field) {
+    return field.label && field.value;
+  });
   const lines = uniqueTrimmedStrings_(opts.lines);
   const attachmentNote = trimString_(opts.attachmentNote);
   const fieldRows = fields.map(function(field) {
+    return '<tr>' +
+      '<td style="padding:6px 12px 6px 0;color:' + theme.textSoft + ';font-size:13px;font-weight:800;white-space:nowrap;vertical-align:top;">' + escapeHtml_(field.label) + '</td>' +
+      '<td style="padding:6px 0;color:' + theme.text + ';font-size:13px;vertical-align:top;">' + escapeHtml_(field.value) + '</td>' +
+      '</tr>';
+  }).filter(Boolean).join('');
+  function buildCompactFieldCell_(field, side) {
     const item = (field && typeof field === 'object') ? field : {};
     const label = trimString_(item.label);
     const value = trimString_(item.value);
-    if (!label || !value) return '';
-    return '<tr>' +
-      '<td style="padding:6px 12px 6px 0;color:' + theme.textSoft + ';font-size:13px;font-weight:800;white-space:nowrap;vertical-align:top;">' + escapeHtml_(label) + '</td>' +
-      '<td style="padding:6px 0;color:' + theme.text + ';font-size:13px;vertical-align:top;">' + escapeHtml_(value) + '</td>' +
-      '</tr>';
-  }).filter(Boolean).join('');
+    const isRight = trimString_(side) === 'right';
+    return '<td width="50%" style="padding:6px ' + (isRight ? '0 8px 12px' : '12px 8px 0') + ';vertical-align:top;">' +
+      (label && value
+        ? ('<div style="margin:0 0 3px;color:' + theme.textSoft + ';font-size:11px;line-height:1.2;font-weight:900;text-transform:uppercase;letter-spacing:.04em;">' + escapeHtml_(label) + '</div>' +
+          '<div style="margin:0;color:' + theme.text + ';font-size:13px;line-height:1.35;font-weight:900;word-break:break-word;">' + escapeHtml_(value) + '</div>')
+        : '') +
+      '</td>';
+  }
+  const compactFieldRows = clientFields.length
+    ? Array.from({ length: Math.max(fields.length, clientFields.length) }).map(function(_, index) {
+      return '<tr>' +
+        buildCompactFieldCell_(fields[index], 'left') +
+        buildCompactFieldCell_(clientFields[index], 'right') +
+        '</tr>';
+    }).join('')
+    : '';
+  const fieldsHtml = compactFieldRows
+    ? ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' + compactFieldRows + '</table>')
+    : (fieldRows ? ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' + fieldRows + '</table>') : '');
   const historyHtml = lines.length
     ? ('<div style="margin:12px 0 0;padding-top:12px;border-top:1px solid ' + theme.panelBorderSoft + ';">' +
       lines.map(function(line) {
@@ -25455,7 +25525,7 @@ function buildLifecycleEmailProjectDetailsHtml_(options) {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid ' + theme.panelBorder + ';border-radius:14px;background:' + theme.panelBg + ';border-collapse:separate;">',
     '<tr><td style="padding:14px 16px;">',
     '<div style="font-size:12px;text-transform:uppercase;color:' + theme.brandRedMid + ';font-weight:900;margin:0 0 8px;letter-spacing:.08em;">' + escapeHtml_(trimString_(opts.title) || 'Project Details') + '</div>',
-    fieldRows ? ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' + fieldRows + '</table>') : '',
+    fieldsHtml,
     historyHtml,
     attachmentHtml,
     buildLifecycleEmailProjectDetailsCta_(opts.projectNumber, opts.ctaUrl, {
@@ -25937,6 +26007,7 @@ function buildLifecycleEmailShell_(options) {
         title: item.title,
         projectNumber: item.projectNumber,
         fields: item.fields,
+        clientFields: item.clientFields,
         lines: detailLines,
         attachmentNote: actionAttachmentSentence ? '' : attachmentNote,
         ctaUrl: trimString_(item.ctaUrl || (primaryCta && primaryCta.url)),
@@ -26366,6 +26437,26 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     ? (roundMoney_(summary.amountChargedTotal) > 0 ? summary.amountChargedTotal : summary.amountGrandTotal)
     : summary.amountGrandTotal;
   const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, dealNumber);
+  const clientName = trimString_(
+    accountSummary.billingContactName ||
+    accountSummary.primaryContactName ||
+    draft.billingContactName ||
+    draft.primaryContactName ||
+    draft.personName ||
+    row.billingcontactname ||
+    row.primarycontactname ||
+    row.personname ||
+    row.clientname
+  );
+  const clientEmail = firstNormalizedEmailFromValues_([
+    draft.personEmail,
+    row.personemail,
+    row.personEmail,
+    accountSummary.billingContactEmail,
+    accountSummary.primaryEmail,
+    summary.invoiceSentToEmail
+  ]);
+  const organizationName = trimString_(draft.orgName || row.orgname || row.orgName || accountSummary.orgName);
   const paymentDate = trimString_(summary.paidAt) ? buildLifecycleEmailDateLabel_(summary.paidAt) : '';
   const paymentMethodLabel = trimString_(opts.paymentMethodLabel) ||
     getPaymentLifecycleMethodLabel_(summary.paymentMethodSelected || PAYMENT_METHODS.ach);
@@ -26389,6 +26480,9 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     copy: copy,
     projectName: projectName,
     dealNumber: dealNumber,
+    clientName: clientName,
+    clientEmail: clientEmail,
+    organizationName: organizationName,
     invoiceNumber: invoiceNumber,
     invoiceDocumentRef: invoiceReference.documentRef,
     invoiceDocumentReference: invoiceReference,
