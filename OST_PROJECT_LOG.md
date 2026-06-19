@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Lifecycle Communication Contract V1
+
+- Mode: Architect + Produce final code + Full ship.
+- Branch/commit/PR: `main`, Apps Script version `979`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add a production-safe lifecycle communication contract so direct utility/order-context sends cannot render copy that contradicts canonical lifecycle truth.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `tools/send-email-review-suite.mjs`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, stale payment-link phrase scans, and diff secret-marker scans passed before deploy.
+- Decisions: derive communication state from `buildLifecycleEmailContextForOrder_()` and canonical `workflowContext`; migrate direct locked-order confirmation/resend, purchase-order invoice prepared/send, AP payment-link, and order-context summary/invoice/document sends first; keep queued lifecycle families advisory/metadata-only in Phase 1.
+- Current-state updates: added read-only `buildPortalCommunicationContext_()`, `resolveOrderCommunicationContract_()`, contradiction/assertion helpers, direct-send hard blocks for severe contradictions, no-send review-suite dry-run rendering/report metadata, and dry-run-only synthetic lifecycle assertion cases. `Index.html` shows revision `109`; direct Apps Script `/exec` returned HTTP 200 with revision `109` and omitted stale revision `108`; public `/portal` returned HTTP 200, referenced the stable deployment ID, preserved `teamAccess`, and targeted secret-marker checks returned zero hits.
+- Review: headless dry run returned `ok:true`, sent 0, skipped 32, failed 0, and reported 13 known fixture attachment fallbacks. Live headless review returned `ok:true`, sent 15, skipped 32, failed 0, and reported 13 known fixture attachment fallbacks.
+- Follow-ups: queued failed-payment team fixture outputs still report three advisory `team_client_possessive_language` warnings; Phase 2 should trace and remove those remaining client-possessive fragments from queued team failure emails.
+
 ## 2026-06-19 - Tax Exempt Submitted Team Review Layout
 
 - Mode: Full ship.

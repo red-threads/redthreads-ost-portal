@@ -146,6 +146,16 @@ async function main() {
         attachmentMatched: item && item.attachmentMatched,
         attachmentFallback: item && item.attachmentFallback,
         attachmentReason: item && item.attachmentReason,
+        subject: item && item.subject,
+        communicationIntent: item && item.communicationIntent,
+        lifecycleState: item && item.lifecycleState,
+        lifecycleStage: item && item.lifecycleStage,
+        paymentDisposition: item && item.paymentDisposition,
+        productionDisposition: item && item.productionDisposition,
+        ctaMode: item && item.ctaMode,
+        contradictionErrorCount: item && item.contradictionErrorCount,
+        contradictionWarningCount: item && item.contradictionWarningCount,
+        contradictionCodes: item && item.contradictionCodes,
         error: item && item.error
       }))
       : []

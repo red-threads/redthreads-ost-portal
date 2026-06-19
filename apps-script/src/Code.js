@@ -9442,6 +9442,17 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     token: token,
     projectDetailsCta: false
   });
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: lifecycleSections.emailContext
+  }, {
+    family: 'ap_payment_link',
+    trigger: 'ap_payment_request',
+    recipientClass: 'ap',
+    documentLabel: invoiceNumber,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
   const topCtaUrl = paymentLink || (token ? buildLifecycleEmailInvoiceUrl_(token) : '');
   const projectAccessLabel = dealNumber
     ? ('Click to access Project #' + dealNumber + ' and make a payment.')
@@ -9520,7 +9531,7 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     '  <p style="margin:0;color:#94a3b8;">' + escapeHtml_(footer) + '</p>',
     '</div>'
   ].filter(Boolean).join('\n');
-  return {
+  const content = {
     subject: invoiceNumber
       ? ('Red Threads ACH payment page — ' + invoiceNumber)
       : 'Red Threads ACH payment page',
@@ -9529,8 +9540,13 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
       heading: heading,
       badgeLabel: 'Payment Ready',
       bodyHtml: htmlBody
-    })
+    }),
+    communicationContract: communicationContract
   };
+  assertLifecycleCommunicationContentSafe_(communicationContract, content, {
+    hardBlock: true
+  });
+  return content;
 }
 
 function sendAchApPaymentLinkEmail_(ctx, orderSummary, options) {
@@ -12563,7 +12579,11 @@ function adminResendLockedOrderLink_(payload) {
   } else {
     const orderActionCtx = buildOrderActionContext_({ token: ctx.token });
     const paymentEmail = buildLockedOrderPaymentEmailContent_(orderActionCtx, ctx.latestOrderSummary, {
-      intro: 'Your Red Threads invoice and locked order payment links are attached.'
+      trigger: 'locked_order_resend',
+      lifecycleOrderInfo: ctx.latestOrderInfo,
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      infra: ctx.infra
     });
     const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('locked_order_confirmation', '', {});
     const attachmentResult = resolveLifecycleEmailAttachment_(ctx.latestOrderSummary, attachmentPolicy, {
@@ -21421,15 +21441,15 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const dealNumber = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.dealNumber);
   const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, dealNumber);
   const amountDue = formatUsdAmount_(summary.amountGrandTotal);
-  const intro = trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.';
+  const requestedIntro = trimString_(opts.intro);
   const isTeamRecipient = trimString_(opts.recipientClass) === 'team';
   const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_(ctx, summary, {
     family: 'locked_order_confirmation',
     recipientClass: isTeamRecipient ? 'team' : 'client',
     lifecycleOrderInfo: opts.lifecycleOrderInfo || opts.orderInfo,
-    cfg: opts.cfg,
-    ss: opts.ss,
-    infra: opts.infra,
+    cfg: opts.cfg || (ctx && ctx.cfg),
+    ss: opts.ss || (ctx && ctx.ss),
+    infra: opts.infra || (ctx && ctx.infra),
     token: token
   });
   const lifecycleEmailContext = (lifecycleSections.emailContext && typeof lifecycleSections.emailContext === 'object')
@@ -21441,6 +21461,17 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const workflowContext = (lifecycleEmailContext.workflowContext && typeof lifecycleEmailContext.workflowContext === 'object')
     ? lifecycleEmailContext.workflowContext
     : {};
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: lifecycleEmailContext
+  }, {
+    family: 'locked_order_confirmation',
+    trigger: trimString_(opts.trigger) || 'locked_order_confirmation',
+    recipientClass: isTeamRecipient ? 'team' : 'client',
+    documentLabel: invoiceNumber,
+    cfg: opts.cfg || (ctx && ctx.cfg),
+    ss: opts.ss || (ctx && ctx.ss),
+    infra: opts.infra || (ctx && ctx.infra)
+  });
   const paymentState = trimString_(summary.paymentState).toLowerCase();
   const paymentReceived = workflowContext.isPaymentReceived === true ||
     workflowContext.paymentReceived === true ||
@@ -21460,11 +21491,17 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const teamActionModel = isTeamRecipient
     ? resolveLifecycleTeamEmailActionModel_(lifecycleEmailContext, {
       family: 'locked_order_confirmation',
-      intro: 'A locked-order payment link was resent for team review.',
+      intro: communicationContract.intro || 'A locked-order confirmation was resent for team review.',
       statusCopy: 'Use Team Mode to review the current project state and continue the correct operational workflow.',
       token: token
     })
     : null;
+  const shouldSuppressPaymentOptions = isTeamRecipient ||
+    paymentReceived ||
+    communicationContract.suppressPaymentOptions !== false;
+  const lockedHeadingUpdate = isTeamRecipient
+    ? 'Team operational resend review'
+    : (communicationContract.headingUpdateLabel || 'Order confirmation');
   const paymentOptionsBlock = {
     kind: 'generic',
     text: buildLifecycleEmailTextBlock_('Payment options', paymentOptionLines),
@@ -21483,22 +21520,22 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   };
   const shell = buildLifecycleEmailShell_({
     eyebrow: isTeamRecipient ? getPortalNativeEmailEyebrow_('team') : '',
-    heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, isTeamRecipient ? 'Team operational resend review' : 'Order confirmation', isTeamRecipient ? 'Team operational resend review.' : 'Order confirmation.'),
+    heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, lockedHeadingUpdate, isTeamRecipient ? 'Team operational resend review.' : 'Order confirmation.'),
     actionTitle: teamActionModel ? teamActionModel.title : '',
-    intro: teamActionModel ? teamActionModel.intro : intro,
-    statusCopy: teamActionModel ? teamActionModel.statusCopy : '',
+    intro: teamActionModel ? teamActionModel.intro : (communicationContract.intro || requestedIntro || 'Your order is confirmed and the final invoice is attached.'),
+    statusCopy: teamActionModel ? teamActionModel.statusCopy : communicationContract.statusCopy,
     nextStep: teamActionModel ? teamActionModel.nextStep : (paymentReceived
-      ? 'No payment action is needed.'
-      : 'Choose a payment option or send payment using the instructions on your invoice.'),
+      ? (communicationContract.nextStep || 'No payment action is needed.')
+      : (communicationContract.nextStep || 'Choose a payment option or send payment using the instructions on your invoice.')),
     attachmentNote: isTeamRecipient
       ? 'The invoice/receipt for the client\'s order is attached to this email.'
-      : 'Your invoice is attached.',
+      : (communicationContract.attachmentNote || 'Your invoice is attached.'),
     blocks: lifecycleSections.blocks.concat([
       teamActionModel ? buildLifecycleEmailCtaBlock_(teamActionModel.ctaLabel, teamActionModel.ctaUrl, {
         align: teamActionModel.ctaAlign,
         teamModePassword: teamActionModel.teamModePassword
       }) : null,
-      isTeamRecipient || paymentReceived ? null : paymentOptionsBlock,
+      shouldSuppressPaymentOptions ? null : paymentOptionsBlock,
       buildLifecycleEmailFooter_()
     ].filter(Boolean))
   });
@@ -21510,10 +21547,18 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     ].filter(Boolean).join('\n');
     if (fallback) shell.body += '\n\n' + fallback;
   }
+  assertLifecycleCommunicationContentSafe_(communicationContract, {
+    subject: '',
+    body: shell.body,
+    htmlBody: shell.htmlBody
+  }, {
+    hardBlock: true
+  });
   return {
     body: shell.body,
     htmlBody: shell.htmlBody,
-    links: links
+    links: links,
+    communicationContract: communicationContract
   };
 }
 
@@ -21757,7 +21802,20 @@ function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
     documentKind: PORTAL_DOCUMENT_KINDS.invoice
   }).displayLabel;
   const paymentEmail = buildLockedOrderPaymentEmailContent_(ctx, summary, {
-    intro: trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.'
+    intro: trimString_(opts.intro) || 'Your order is confirmed and the final invoice is attached.',
+    trigger: trimString_(opts.trigger) || 'locked_order_confirmation',
+    lifecycleOrderInfo: opts.lifecycleOrderInfo || opts.orderInfo,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
+  const teamPaymentEmail = buildLockedOrderPaymentEmailContent_(ctx, summary, {
+    recipientClass: 'team',
+    trigger: trimString_(opts.trigger) || 'locked_order_confirmation',
+    lifecycleOrderInfo: opts.lifecycleOrderInfo || opts.orderInfo,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
   });
   const attachmentPolicy = resolveLifecycleEmailAttachmentPolicy_('locked_order_confirmation', '', {});
   const attachmentResult = resolveLifecycleEmailAttachment_(summary, attachmentPolicy, {
@@ -21788,8 +21846,8 @@ function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
   sendNotificationEmail_({
     toList: [DOCUMENT_REVIEW_EMAIL],
     subject: subject,
-    body: paymentEmail.body,
-    htmlBody: paymentEmail.htmlBody,
+    body: teamPaymentEmail.body,
+    htmlBody: teamPaymentEmail.htmlBody,
     attachments: attachments,
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
@@ -21895,15 +21953,27 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
-  const poNextStep = [
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: lifecycleSections.emailContext
+  }, {
+    family: 'purchase_order_invoice_email',
+    trigger: 'purchase_order_invoice_prepared',
+    recipientClass: 'client',
+    documentLabel: invoiceNumber,
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
+  const poNextStep = communicationContract.nextStep || [
     'Forward this invoice to your Purchasing or Accounts Payable team so they can issue a company Purchase Order.',
     'Use the portal link below to reopen your project and complete the Purchase Order submission process to place your Red Threads order.'
   ].join(' ');
   const shell = buildLifecycleEmailShell_({
-    heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, 'Purchase order needed', 'Purchase order needed.'),
-    intro: 'The invoice for your Red Threads order is attached to this email.',
+    heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, communicationContract.headingUpdateLabel || 'Purchase order needed', 'Purchase order needed.'),
+    intro: communicationContract.intro || 'The invoice for your Red Threads order is attached to this email.',
+    statusCopy: communicationContract.statusCopy,
     nextStep: poNextStep,
-    attachmentNote: '',
+    attachmentNote: communicationContract.attachmentNote,
     blocks: lifecycleSections.blocks.concat([
       buildLifecycleEmailCtaBlock_('Return to the purchase-order upload step', resumeUrl),
       buildLifecycleEmailFooter_()
@@ -21916,10 +21986,18 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     ].filter(Boolean).join('\n');
     if (fallback) shell.body += '\n\n' + fallback;
   }
-  return {
+  assertLifecycleCommunicationContentSafe_(communicationContract, {
     subject: subject,
     body: shell.body,
     htmlBody: shell.htmlBody
+  }, {
+    hardBlock: true
+  });
+  return {
+    subject: subject,
+    body: shell.body,
+    htmlBody: shell.htmlBody,
+    communicationContract: communicationContract
   };
 }
 
@@ -23083,10 +23161,22 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
       buildLifecycleEmailFooter_()
     ].filter(Boolean))
   });
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: emailContext
+  }, {
+    family: 'ap_ach',
+    trigger: normalized,
+    recipientClass: recipientClass,
+    documentLabel: trimString_(emailContext.invoiceNumber),
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
   return {
     subject: copy.subject,
     body: shell.body,
-    htmlBody: shell.htmlBody
+    htmlBody: shell.htmlBody,
+    communicationContract: communicationContract
   };
 }
 
@@ -24352,10 +24442,22 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
       buildLifecycleEmailFooter_()
     ].filter(Boolean))
   });
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: emailContext
+  }, {
+    family: 'portal_lifecycle',
+    trigger: normalized,
+    recipientClass: recipientClass,
+    documentLabel: trimString_(emailContext.invoiceNumber),
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
   return {
     subject: copy.subject,
     body: shell.body,
-    htmlBody: shell.htmlBody
+    htmlBody: shell.htmlBody,
+    communicationContract: communicationContract
   };
 }
 
@@ -24878,10 +24980,22 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
       buildLifecycleEmailFooter_()
     ])
   });
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: emailContext
+  }, {
+    family: 'payment_lifecycle',
+    trigger: normalized,
+    recipientClass: recipientClass,
+    documentLabel: trimString_(emailContext.invoiceNumber),
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
   return {
     subject: copy.subject,
     body: shell.body,
-    htmlBody: shell.htmlBody
+    htmlBody: shell.htmlBody,
+    communicationContract: communicationContract
   };
 }
 
@@ -26764,6 +26878,446 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
   };
 }
 
+function normalizePortalCommunicationRecipientClass_(value) {
+  const clean = trimString_(value).toLowerCase();
+  if (clean === 'team') return 'team';
+  if (clean === 'ap' || clean === 'accounts_payable') return 'ap';
+  return 'client';
+}
+
+function buildPortalCommunicationContext_(source, options) {
+  const input = (source && typeof source === 'object') ? source : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  let emailContext = (opts.emailContext && typeof opts.emailContext === 'object')
+    ? opts.emailContext
+    : ((input.emailContext && typeof input.emailContext === 'object') ? input.emailContext : null);
+  const orderInfo = opts.orderInfo || input.orderInfo || opts.lifecycleOrderInfo || input.lifecycleOrderInfo || null;
+  const invoiceInfo = opts.invoiceInfo || input.invoiceInfo || null;
+  if (!emailContext && orderInfo) {
+    emailContext = buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, {
+      cfg: opts.cfg,
+      ss: opts.ss,
+      infra: opts.infra,
+      recipientClass: normalizePortalCommunicationRecipientClass_(opts.recipientClass || input.recipientClass),
+      jobType: opts.jobType,
+      milestone: opts.milestone,
+      ctaLabel: opts.ctaLabel,
+      ctaUrl: opts.ctaUrl,
+      paymentMethodLabel: opts.paymentMethodLabel,
+      isReceipt: opts.isReceipt
+    });
+  }
+  emailContext = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  return resolveOrderCommunicationContract_(Object.assign({}, input, opts, {
+    emailContext: emailContext,
+    orderInfo: orderInfo,
+    invoiceInfo: invoiceInfo,
+    recipientClass: normalizePortalCommunicationRecipientClass_(opts.recipientClass || input.recipientClass)
+  }));
+}
+
+function isPortalCommunicationPaymentReceived_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const paymentState = trimString_(ctx.paymentState || summary.paymentState).toLowerCase();
+  return ctx.isPaymentReceived === true ||
+    ctx.paymentReceived === true ||
+    !!trimString_(ctx.paymentReceivedAt || summary.paidAt || summary.paymentReceivedManuallyAt) ||
+    paymentState === PAYMENT_STATES.paid ||
+    paymentState === PAYMENT_STATES.manual_received;
+}
+
+function isPortalCommunicationPaymentIssue_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const lifecycleState = trimString_(ctx.lifecycleState).toLowerCase();
+  const paymentState = trimString_(ctx.paymentState || summary.paymentState).toLowerCase();
+  return ctx.paymentBlocked === true ||
+    paymentState === PAYMENT_STATES.failed ||
+    lifecycleState === PORTAL_LIFECYCLE_STATES.ach_payment_failed ||
+    lifecycleState === PORTAL_LIFECYCLE_STATES.ach_payment_disputed ||
+    trimString_(ctx.nextClientAction) === 'retry_payment';
+}
+
+function isPortalCommunicationAchVerificationRequired_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const detail = trimString_(ctx.achDetailState || summary.achVerificationStatus || summary.achPaymentStatus).toLowerCase();
+  return detail === ACH_DETAIL_STATES.bank_verification_pending ||
+    detail === ACH_DETAIL_STATES.microdeposit_pending ||
+    /verification/.test(detail);
+}
+
+function isPortalCommunicationAchPending_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const lifecycleState = trimString_(ctx.lifecycleState).toLowerCase();
+  const paymentState = trimString_(ctx.paymentState || summary.paymentState).toLowerCase();
+  return paymentState === PAYMENT_STATES.pending ||
+    paymentState === PAYMENT_STATES.submitted ||
+    lifecycleState === PORTAL_LIFECYCLE_STATES.ach_payment_pending;
+}
+
+function isPortalCommunicationManualPending_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const paymentState = trimString_(ctx.paymentState || summary.paymentState).toLowerCase();
+  return ctx.manualPaymentPending === true ||
+    paymentState === PAYMENT_STATES.manual_pending ||
+    trimString_(ctx.nextClientAction) === 'send_manual_payment';
+}
+
+function isPortalCommunicationPoSubmitted_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const paymentMethod = trimString_(summary.paymentMethodSelected || ctx.paymentMethod).toLowerCase();
+  return ctx.poSubmitted === true ||
+    ctx.isPoSubmitted === true ||
+    !!trimString_(ctx.poSubmittedAt || summary.poSubmittedAt || summary.poNumber) ||
+    paymentMethod === PAYMENT_METHODS.purchase_order;
+}
+
+function resolveOrderCommunicationProductionDisposition_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  if (ctx.productionComplete === true || trimString_(ctx.orderState || summary.orderState).toLowerCase() === ORDER_STATES.closed) {
+    return 'complete';
+  }
+  if (ctx.productionCurrent === true || isLifecycleEmailProductionActive_(ctx, summary)) {
+    return 'in_progress';
+  }
+  if (ctx.isProductionAuthorized === true || ctx.productionAuthorized === true) {
+    return 'authorized';
+  }
+  return 'not_started';
+}
+
+function resolveOrderCommunicationIntent_(state) {
+  const source = (state && typeof state === 'object') ? state : {};
+  const family = trimString_(source.family).toLowerCase();
+  if (family === 'chat_message_digest') return 'chat_digest';
+  if (family === 'purchase_order_invoice_email' || family === 'purchase_order_invoice') {
+    return source.poTermsOpen ? 'po_submitted_terms_open' : 'po_invoice_prepared';
+  }
+  if (source.paymentIssue) return 'payment_issue';
+  if (source.paymentReceived) {
+    if (source.poSubmitted) return 'po_payment_received';
+    if (source.manualPending || trimString_(source.paymentMethod).toLowerCase() === PAYMENT_METHODS.check || trimString_(source.paymentMethod).toLowerCase() === PAYMENT_METHODS.cash) {
+      return 'manual_payment_received';
+    }
+    return 'payment_received';
+  }
+  if (source.poTermsOpen) return 'po_submitted_terms_open';
+  if (source.manualPending) return 'manual_payment_pending';
+  if (source.achVerificationRequired) return 'payment_verification_required';
+  if (source.achPending) return 'payment_pending_bank_confirmation';
+  if (source.paymentRequiredBeforeProduction) return 'payment_required_before_production';
+  if (source.productionDisposition === 'in_progress') return 'production_in_progress';
+  if (source.productionDisposition === 'authorized') return 'production_authorized';
+  if (family === 'summary_pdf' || family === 'document_copy') return 'document_copy';
+  if (source.recipientClass === 'team' && trimString_(source.nextTeamAction) && trimString_(source.nextTeamAction) !== 'none') {
+    return 'team_action_required';
+  }
+  return 'no_action_status';
+}
+
+function resolveOrderCommunicationCtaMode_(state) {
+  const source = (state && typeof state === 'object') ? state : {};
+  if (source.recipientClass === 'team') return 'team_mode';
+  if (source.recipientClass === 'ap') return 'pay';
+  if (source.paymentIssue) return 'retry_payment';
+  if (source.manualPending || source.paymentRequiredBeforeProduction) return 'pay';
+  if (source.intent === 'po_invoice_prepared') return 'submit_po';
+  return 'view_project';
+}
+
+function resolveOrderCommunicationCopy_(state) {
+  const source = (state && typeof state === 'object') ? state : {};
+  const documentLabel = trimString_(source.documentLabel || source.invoiceNumber || 'The document');
+  const family = trimString_(source.family).toLowerCase();
+  const recipientClass = source.recipientClass;
+  const recipientOrderNoun = recipientClass === 'team'
+    ? 'the client\'s order'
+    : (recipientClass === 'ap' ? 'this order' : 'your order');
+  const copy = {
+    headingUpdateLabel: 'Order confirmation',
+    intro: '',
+    statusCopy: '',
+    nextStep: '',
+    attachmentNote: recipientClass === 'team'
+      ? 'The invoice/receipt for the client\'s order is attached to this email.'
+      : (recipientClass === 'ap' ? 'The invoice for this order is attached.' : 'Your invoice is attached.'),
+    actionTitle: '',
+    suppressPaymentOptions: true
+  };
+  if (family === 'purchase_order_invoice_email' || family === 'purchase_order_invoice') {
+    copy.headingUpdateLabel = source.intent === 'po_submitted_terms_open'
+      ? 'Purchase order submitted'
+      : 'Purchase order needed';
+    copy.intro = source.intent === 'po_submitted_terms_open'
+      ? 'Production is authorized under approved purchase-order terms.'
+      : 'The invoice for your Red Threads order is attached to this email.';
+    copy.statusCopy = source.intent === 'po_submitted_terms_open'
+      ? 'Payment remains open under the approved terms.'
+      : '';
+    copy.nextStep = source.intent === 'po_submitted_terms_open'
+      ? 'No action is needed right now.'
+      : 'Forward this invoice to your Purchasing or Accounts Payable team so they can issue a company Purchase Order. Use the portal link below to reopen your project and complete the Purchase Order submission process to place your Red Threads order.';
+    copy.attachmentNote = '';
+    return copy;
+  }
+  if (family === 'summary_pdf' || family === 'document_copy') {
+    copy.headingUpdateLabel = 'document attached';
+    copy.intro = source.paymentReceived || source.productionDisposition === 'in_progress'
+      ? (documentLabel + ' is attached for your records.')
+      : (documentLabel + ' is attached.');
+    copy.statusCopy = source.poTermsOpen
+      ? 'Production is authorized under approved purchase-order terms. Payment remains open under the approved terms.'
+      : (source.productionDisposition === 'in_progress' ? 'Production is in progress.' : '');
+    copy.nextStep = (source.paymentReceived || source.productionDisposition === 'in_progress')
+      ? 'No action is needed right now.'
+      : trimString_(source.nextStepText);
+    copy.attachmentNote = '';
+    return copy;
+  }
+  if (source.paymentReceived) {
+    copy.intro = 'Your order confirmation and invoice are attached for your records.';
+    copy.statusCopy = source.productionDisposition === 'complete'
+      ? 'Production is complete.'
+      : (source.productionDisposition === 'in_progress' || source.productionDisposition === 'authorized'
+        ? 'Production is in progress.'
+        : 'Payment has been received.');
+    copy.nextStep = 'No payment action is needed.';
+    copy.attachmentNote = recipientClass === 'team'
+      ? 'The invoice/receipt for the client\'s order is attached to this email.'
+      : (recipientClass === 'ap' ? 'The invoice/receipt for this order is attached.' : 'Your invoice/receipt is attached.');
+    return copy;
+  }
+  if (source.poTermsOpen) {
+    copy.intro = 'Production is authorized under approved purchase-order terms.';
+    copy.statusCopy = 'Payment remains open under the approved terms.';
+    copy.nextStep = 'No action is needed right now.';
+    copy.attachmentNote = recipientClass === 'team'
+      ? 'The invoice/receipt for the client\'s order is attached to this email.'
+      : (recipientClass === 'ap' ? 'The invoice/receipt for this order is attached.' : 'Your invoice/receipt is attached.');
+    return copy;
+  }
+  if (source.paymentIssue) {
+    copy.actionTitle = recipientClass === 'team' ? 'Team action required' : 'Action required';
+    copy.intro = recipientClass === 'team'
+      ? 'A payment issue needs team review before production begins or continues.'
+      : 'Payment could not be completed for ' + recipientOrderNoun + '.';
+    copy.nextStep = recipientClass === 'team'
+      ? 'Open Team Mode to review the payment issue before production begins or continues.'
+      : 'Open your Red Threads project/portal below and retry payment.';
+    return copy;
+  }
+  if (source.manualPending) {
+    copy.actionTitle = 'Action required';
+    copy.suppressPaymentOptions = false;
+    copy.intro = 'Your Red Threads order has been placed.';
+    copy.statusCopy = 'Production begins after Red Threads records payment as received unless otherwise approved.';
+    copy.nextStep = trimString_(source.nextStepText) || 'Make a payment for your order.';
+    copy.attachmentNote = 'The invoice/receipt for your order is attached to this email.';
+    return copy;
+  }
+  if (source.paymentRequiredBeforeProduction) {
+    copy.actionTitle = recipientClass === 'team' ? 'Monitor payment' : 'Action required';
+    copy.suppressPaymentOptions = false;
+    copy.intro = recipientClass === 'ap'
+      ? 'The Red Threads invoice is attached.'
+      : 'Your Red Threads invoice is attached.';
+    copy.statusCopy = 'Payment is required before production can begin.';
+    copy.nextStep = trimString_(source.nextStepText) || 'Return to the portal to complete payment.';
+    return copy;
+  }
+  if (source.achVerificationRequired) {
+    copy.actionTitle = 'Action required';
+    copy.intro = 'Bank verification is required before the ACH payment can finish.';
+    copy.statusCopy = 'Production will begin as soon as payment is received unless Red Threads intentionally authorizes production earlier.';
+    copy.nextStep = trimString_(source.nextStepText) || 'Watch for any Stripe bank-verification email and verify if needed.';
+    return copy;
+  }
+  if (source.achPending) {
+    copy.actionTitle = recipientClass === 'team' ? 'No action required' : 'Action required';
+    copy.intro = 'The ACH payment is pending bank confirmation.';
+    copy.statusCopy = 'ACH payments can take several business days to confirm.';
+    copy.nextStep = trimString_(source.nextStepText);
+    return copy;
+  }
+  copy.intro = 'Your order confirmation and invoice are attached for your records.';
+  copy.nextStep = trimString_(source.nextStepText) || 'No action is needed right now.';
+  return copy;
+}
+
+function resolveOrderCommunicationContract_(input) {
+  const source = (input && typeof input === 'object') ? input : {};
+  const emailContext = (source.emailContext && typeof source.emailContext === 'object') ? source.emailContext : {};
+  const workflow = (emailContext.workflowContext && typeof emailContext.workflowContext === 'object') ? emailContext.workflowContext : {};
+  const summary = (emailContext.orderSummary && typeof emailContext.orderSummary === 'object') ? emailContext.orderSummary : {};
+  const family = trimString_(source.family).toLowerCase();
+  const recipientClass = normalizePortalCommunicationRecipientClass_(source.recipientClass);
+  const paymentReceived = isPortalCommunicationPaymentReceived_(workflow, summary);
+  const paymentIssue = isPortalCommunicationPaymentIssue_(workflow, summary);
+  const achVerificationRequired = isPortalCommunicationAchVerificationRequired_(workflow, summary);
+  const achPending = isPortalCommunicationAchPending_(workflow, summary);
+  const manualPending = isPortalCommunicationManualPending_(workflow, summary);
+  const poSubmitted = isPortalCommunicationPoSubmitted_(workflow, summary);
+  const productionDisposition = resolveOrderCommunicationProductionDisposition_(workflow, summary);
+  const poTermsOpen = poSubmitted && !paymentReceived &&
+    (productionDisposition === 'authorized' || productionDisposition === 'in_progress' || productionDisposition === 'complete');
+  const paymentRequiredBeforeProduction = !paymentReceived &&
+    !poTermsOpen &&
+    productionDisposition === 'not_started' &&
+    (workflow.paymentDue === true ||
+      trimString_(workflow.nextClientAction) === 'send_manual_payment' ||
+      trimString_(workflow.nextClientAction) === 'pay_invoice' ||
+      trimString_(workflow.nextClientAction) === 'complete_checkout');
+  let paymentDisposition = 'unknown';
+  if (paymentReceived) paymentDisposition = 'received';
+  else if (paymentIssue) paymentDisposition = 'failed';
+  else if (poTermsOpen) paymentDisposition = 'po_open_under_terms';
+  else if (manualPending) paymentDisposition = 'manual_pending';
+  else if (achVerificationRequired) paymentDisposition = 'verification_required';
+  else if (achPending) paymentDisposition = 'pending_bank_confirmation';
+  else if (paymentRequiredBeforeProduction) paymentDisposition = 'required_before_production';
+  else if (workflow.paymentDue === false) paymentDisposition = 'not_due';
+  const state = {
+    family: family,
+    trigger: trimString_(source.trigger),
+    recipientClass: recipientClass,
+    lifecycleState: trimString_(workflow.lifecycleState),
+    lifecycleStage: trimString_(workflow.lifecycleStage),
+    paymentMethod: trimString_(summary.paymentMethodSelected || workflow.paymentMethod),
+    paymentReceived: paymentReceived,
+    paymentIssue: paymentIssue,
+    achVerificationRequired: achVerificationRequired,
+    achPending: achPending,
+    manualPending: manualPending,
+    poSubmitted: poSubmitted,
+    poTermsOpen: poTermsOpen,
+    paymentRequiredBeforeProduction: paymentRequiredBeforeProduction,
+    paymentDisposition: paymentDisposition,
+    productionDisposition: productionDisposition,
+    nextClientAction: trimString_(workflow.nextClientAction),
+    nextTeamAction: trimString_(workflow.nextTeamAction),
+    nextStepText: trimString_(emailContext.nextStepText),
+    invoiceNumber: trimString_(emailContext.invoiceNumber),
+    documentLabel: trimString_(source.documentLabel || emailContext.invoiceNumber),
+    emailContext: emailContext
+  };
+  state.intent = resolveOrderCommunicationIntent_(state);
+  state.ctaMode = resolveOrderCommunicationCtaMode_(state);
+  const copy = resolveOrderCommunicationCopy_(state);
+  return Object.assign({}, state, copy, {
+    allowedCtaMode: state.ctaMode,
+    forbiddenCtaModes: state.paymentReceived ? ['pay', 'retry_payment', 'verify_bank'] : [],
+    suppressPaymentOptions: copy.suppressPaymentOptions !== false
+  });
+}
+
+function normalizeLifecycleCommunicationAssertionText_(content) {
+  const source = (content && typeof content === 'object') ? content : {};
+  return [
+    source.subject,
+    source.body,
+    source.htmlBody
+  ].map(function(value) {
+    return String(value || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }).filter(Boolean).join(' ').toLowerCase();
+}
+
+function addLifecycleCommunicationContradiction_(items, code, severity, message) {
+  items.push({
+    code: trimString_(code),
+    severity: trimString_(severity) || 'warning',
+    message: trimString_(message)
+  });
+}
+
+function findLifecycleCommunicationContradictions_(contract, content) {
+  const ctx = (contract && typeof contract === 'object') ? contract : {};
+  const haystack = normalizeLifecycleCommunicationAssertionText_(content);
+  const items = [];
+  if (!haystack) return items;
+  if (ctx.paymentDisposition === 'received') {
+    if (/\bpayment\s+is\s+required\s+before\s+production\s+can\s+begin\b|\bpayment\s+required\b/i.test(haystack)) {
+      addLifecycleCommunicationContradiction_(items, 'paid_order_payment_required_claim', 'error', 'Paid order copy cannot claim payment is required.');
+    }
+    if (/\blocked\s+order\s+payment\s+links?\b|\bpayment\s+links?\s+are\s+attached\b|\bchoose\s+a\s+payment\s+option\b/i.test(haystack)) {
+      addLifecycleCommunicationContradiction_(items, 'paid_order_payment_links', 'error', 'Paid order copy cannot present payment links as the active reason for the email.');
+    }
+    if (/\bnext action:\s*(?:retry|send|submit|complete|make)\s+(?:a\s+)?payment\b/i.test(haystack)) {
+      addLifecycleCommunicationContradiction_(items, 'paid_order_payment_action', 'error', 'Paid order copy cannot render a payment-required next action.');
+    }
+  }
+  if (ctx.intent === 'payment_received' || ctx.intent === 'manual_payment_received' || ctx.intent === 'po_payment_received') {
+    if (/\bnext action:\s*(?:retry payment|send payment|verify (?:your )?bank|watch for .*bank-verification)\b/i.test(haystack)) {
+      addLifecycleCommunicationContradiction_(items, 'receipt_payment_action', 'error', 'Receipt communication cannot ask for retry, send-payment, or bank-verification action.');
+    }
+  }
+  if (ctx.paymentDisposition !== 'received' &&
+      ctx.paymentDisposition !== 'po_open_under_terms' &&
+      ctx.productionDisposition === 'not_started') {
+    if (/\bproduction (?:has )?started\b|\border production has started\b|\bin production\b|\bproduction is in progress\b/i.test(haystack)) {
+      addLifecycleCommunicationContradiction_(items, 'unpaid_production_started_claim', 'error', 'Unpaid non-PO communication cannot claim production has started.');
+    }
+  }
+  if (ctx.paymentDisposition === 'po_open_under_terms' &&
+      /\bproduction (?:cannot|can not|will not) begin until payment is received\b/i.test(haystack)) {
+    addLifecycleCommunicationContradiction_(items, 'po_terms_production_blocked_claim', 'error', 'PO terms communication must not say production cannot begin until payment is received.');
+  }
+  if (ctx.recipientClass === 'team' && /\byour (?:order|invoice)\b/i.test(haystack)) {
+    addLifecycleCommunicationContradiction_(items, 'team_client_possessive_language', 'warning', 'Team-facing operational copy should not use client-facing possessive language.');
+  }
+  if (/\bsnapshotjson\b|\bportalstatejson\b|\bclient_secret\b|\bclientsecret\b|\bhosted_verification_url\b|\bstripe_secret\b|\bqueue payload\b/i.test(haystack)) {
+    addLifecycleCommunicationContradiction_(items, 'sensitive_marker_exposed', 'error', 'Email content contains a sensitive internal marker.');
+  }
+  return items;
+}
+
+function assertLifecycleCommunicationContentSafe_(contract, content, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const contradictions = findLifecycleCommunicationContradictions_(contract, content);
+  const errors = contradictions.filter(function(item) {
+    return trimString_(item && item.severity) === 'error';
+  });
+  if (errors.length && opts.hardBlock === true) {
+    throw new Error('lifecycle_communication_contradiction:' + errors.map(function(item) {
+      return trimString_(item.code);
+    }).filter(Boolean).join(','));
+  }
+  return contradictions;
+}
+
+function buildLifecycleCommunicationReviewSummary_(contract, content) {
+  const ctx = (contract && typeof contract === 'object') ? contract : {};
+  const contradictions = findLifecycleCommunicationContradictions_(ctx, content);
+  const errors = contradictions.filter(function(item) {
+    return trimString_(item && item.severity) === 'error';
+  });
+  const warnings = contradictions.filter(function(item) {
+    return trimString_(item && item.severity) !== 'error';
+  });
+  return {
+    communicationIntent: trimString_(ctx.intent),
+    lifecycleState: trimString_(ctx.lifecycleState),
+    lifecycleStage: trimString_(ctx.lifecycleStage),
+    paymentDisposition: trimString_(ctx.paymentDisposition),
+    productionDisposition: trimString_(ctx.productionDisposition),
+    ctaMode: trimString_(ctx.allowedCtaMode || ctx.ctaMode),
+    contradictionErrorCount: errors.length,
+    contradictionWarningCount: warnings.length,
+    contradictionCodes: contradictions.map(function(item) {
+      return trimString_(item && item.code);
+    }).filter(Boolean)
+  };
+}
+
 function buildLifecycleEmailCopyModel_(copy) {
   const source = (copy && typeof copy === 'object') ? copy : {};
   const subject = trimString_(source.subject);
@@ -27067,10 +27621,22 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
       buildLifecycleEmailFooter_()
     ].filter(Boolean))
   });
+  const communicationContract = buildPortalCommunicationContext_({
+    emailContext: emailContext
+  }, {
+    family: 'standard_ach',
+    trigger: baseType,
+    recipientClass: isTeamAlert ? 'team' : 'client',
+    documentLabel: trimString_(emailContext.invoiceNumber),
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  });
   return {
     subject: copy.subject,
     body: shell.body,
-    htmlBody: shell.htmlBody
+    htmlBody: shell.htmlBody,
+    communicationContract: communicationContract
   };
 }
 
@@ -28946,9 +29512,19 @@ function sendSummaryEstimatePdfEmail(payload) {
     return trimString_(block && block.html);
   }).filter(Boolean).join('\n');
   const isEstimateDocument = documentKind === PORTAL_DOCUMENT_KINDS.estimate;
+  const communicationContract = !isEstimateDocument
+    ? buildPortalCommunicationContext_({
+      emailContext: lifecycleSections.emailContext
+    }, {
+      family: 'summary_pdf',
+      trigger: 'direct_document_send',
+      recipientClass: 'client',
+      documentLabel: documentReference.displayLabel
+    })
+    : null;
   const attachmentSentence = isEstimateDocument
     ? buildPortalEstimateEmailAttachmentSentence_(documentReference)
-    : (documentReference.displayLabel + ' is attached.');
+    : ((communicationContract && communicationContract.intro) || (documentReference.displayLabel + ' is attached.'));
   const fallbackDetailText = isEstimateDocument
     ? ''
     : [
@@ -28961,7 +29537,13 @@ function sendSummaryEstimatePdfEmail(payload) {
       projectName ? ('Project Name: ' + projectName) : '',
       attachmentSentence
     ].filter(Boolean).join('\n')
-    : attachmentSentence;
+    : [
+      attachmentSentence,
+      communicationContract && communicationContract.statusCopy,
+      communicationContract && communicationContract.nextStep && !isLifecycleEmailNoActionText_(communicationContract.nextStep)
+        ? ('Next action: ' + communicationContract.nextStep)
+        : ''
+    ].filter(Boolean).join('\n');
   const fallbackDetailHtml = isEstimateDocument
     ? ''
     : [
@@ -28974,7 +29556,15 @@ function sendSummaryEstimatePdfEmail(payload) {
       projectName ? ('  <p style="margin:0 0 6px;"><strong>Project Name:</strong> ' + escapeHtml_(projectName) + '</p>') : '',
       '  <p style="margin:0 0 16px;">' + escapeHtml_(attachmentSentence) + '</p>'
     ].filter(Boolean).join('\n')
-    : '  <p style="margin:0 0 14px;">' + escapeHtml_(attachmentSentence) + '</p>';
+    : [
+      '  <p style="margin:0 0 14px;">' + escapeHtml_(attachmentSentence) + '</p>',
+      communicationContract && communicationContract.statusCopy
+        ? ('  <p style="margin:0 0 14px;color:#cbd5e1;">' + escapeHtml_(communicationContract.statusCopy) + '</p>')
+        : '',
+      communicationContract && communicationContract.nextStep && !isLifecycleEmailNoActionText_(communicationContract.nextStep)
+        ? ('  <p style="margin:0 0 14px;color:#00c8ff;font-weight:900;"><strong style="color:#00c8ff;">Next action:</strong> ' + escapeHtml_(communicationContract.nextStep) + '</p>')
+        : ''
+    ].filter(Boolean).join('\n');
   const body = [
     estimateIntroText,
     '',
@@ -28990,7 +29580,7 @@ function sendSummaryEstimatePdfEmail(payload) {
     '</div>'
   ].filter(Boolean).join('\n');
 
-  return sendNotificationEmail_({
+  const emailPayload = {
     toList: recipients,
     subject: subject,
     body: body,
@@ -29008,7 +29598,18 @@ function sendSummaryEstimatePdfEmail(payload) {
     attachments: [blob],
     fromAlias: NOTIFICATION_FROM_ALIAS,
     replyTo: NOTIFICATION_FROM_ALIAS
-  });
+  };
+  if (communicationContract) {
+    assertLifecycleCommunicationContentSafe_(communicationContract, {
+      subject: subject,
+      body: body,
+      htmlBody: emailPayload.htmlBody
+    }, {
+      hardBlock: true
+    });
+    emailPayload.communicationContract = communicationContract;
+  }
+  return sendNotificationEmail_(emailPayload);
 }
 
 /* ---------------- Owner Email Review Harness ---------------- */
@@ -29115,34 +29716,21 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
   fixture.reviewInvoiceArtifact = reviewInvoiceArtifact;
   const results = [];
 
-  if (dryRun) {
-    return {
-      ok: true,
-      review: true,
-      headless: opts.headless === true,
-      dryRun: true,
-      portalRenderedInvoiceArtifact: true,
-      resetFixtures: !!resetSummary,
-      resetSummary: resetSummary,
-      artifactSelectionSummary: artifactSelectionSummary,
-      artifactRefreshSummary: {
-        ok: true,
-        skipped: true,
-        reason: 'global_artifact_refresh_removed'
-      },
-      sentCount: 0,
-      skippedCount: 0,
-      failedCount: 0,
-      results: []
-    };
+  const previousRenderOnly = EMAIL_REVIEW_SUITE_RENDER_ONLY_;
+  EMAIL_REVIEW_SUITE_RENDER_ONLY_ = dryRun;
+  try {
+    sendEmailReviewStandardAchExamples_(results, fixture, recipients);
+    sendEmailReviewApAchExamples_(results, fixture, recipients);
+    sendEmailReviewPaymentExamples_(results, fixture, recipients);
+    sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients);
+    sendEmailReviewChatExamples_(results, fixture, recipients);
+    sendEmailReviewUtilityExamples_(results, fixture, recipients);
+    if (dryRun) {
+      appendEmailReviewCommunicationAssertionCases_(results);
+    }
+  } finally {
+    EMAIL_REVIEW_SUITE_RENDER_ONLY_ = previousRenderOnly;
   }
-
-  sendEmailReviewStandardAchExamples_(results, fixture, recipients);
-  sendEmailReviewApAchExamples_(results, fixture, recipients);
-  sendEmailReviewPaymentExamples_(results, fixture, recipients);
-  sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients);
-  sendEmailReviewChatExamples_(results, fixture, recipients);
-  sendEmailReviewUtilityExamples_(results, fixture, recipients);
 
   const sentCount = results.filter(function(item) { return item.ok === true && item.sent === true; }).length;
   const skippedCount = results.filter(function(item) { return item.skipped === true; }).length;
@@ -29153,6 +29741,7 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
     ok: failedCount === 0,
     review: true,
     headless: opts.headless === true,
+    dryRun: dryRun,
     portalRenderedInvoiceArtifact: true,
     resetFixtures: !!resetSummary,
     resetSummary: resetSummary,
@@ -29898,6 +30487,7 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {
   client: 'client_review_omitted'
 };
+let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
 
 function getEmailReviewSuiteOmissionReason_(label, recipientClass) {
   const classKey = trimString_(recipientClass).toLowerCase();
@@ -29915,13 +30505,273 @@ function omitEmailReviewSuiteItemIfNeeded_(results, label, family, recipientClas
   return true;
 }
 
+function appendEmailReviewCommunicationSummary_(result, content) {
+  const target = (result && typeof result === 'object') ? result : {};
+  const source = (content && typeof content === 'object') ? content : {};
+  const contract = source.communicationContract && typeof source.communicationContract === 'object'
+    ? source.communicationContract
+    : null;
+  target.subject = trimString_(source.subject);
+  if (!contract) {
+    target.communicationIntent = '';
+    target.lifecycleState = '';
+    target.lifecycleStage = '';
+    target.paymentDisposition = '';
+    target.productionDisposition = '';
+    target.ctaMode = '';
+    target.contradictionErrorCount = 0;
+    target.contradictionWarningCount = 0;
+    target.contradictionCodes = [];
+    return target;
+  }
+  const summary = buildLifecycleCommunicationReviewSummary_(contract, source);
+  Object.keys(summary).forEach(function(key) {
+    target[key] = summary[key];
+  });
+  return target;
+}
+
+function buildEmailReviewCommunicationAssertionContract_(caseDef) {
+  const source = (caseDef && typeof caseDef === 'object') ? caseDef : {};
+  return buildPortalCommunicationContext_({
+    emailContext: {
+      workflowContext: source.workflowContext || {},
+      orderSummary: source.orderSummary || {},
+      nextStepText: trimString_(source.nextStepText)
+    }
+  }, {
+    family: source.family,
+    trigger: source.trigger || 'email_review_assertion',
+    recipientClass: source.recipientClass,
+    documentLabel: source.documentLabel || 'Invoice ASSERT-v1'
+  });
+}
+
+function appendEmailReviewCommunicationAssertionResult_(results, caseDef) {
+  const source = (caseDef && typeof caseDef === 'object') ? caseDef : {};
+  const contract = buildEmailReviewCommunicationAssertionContract_(source);
+  const body = [
+    contract.intro,
+    contract.statusCopy,
+    contract.nextStep,
+    contract.attachmentNote
+  ].filter(function(line) {
+    return trimString_(line);
+  }).join('\n');
+  const content = {
+    subject: trimString_(source.subject) || ('Communication assertion - ' + trimString_(source.label)),
+    body: body,
+    htmlBody: body,
+    communicationContract: contract
+  };
+  const result = appendEmailReviewCommunicationSummary_({
+    ok: true,
+    dryRun: true,
+    sent: false,
+    assertionOnly: true,
+    label: trimString_(source.label),
+    family: trimString_(source.family),
+    recipientClass: normalizePortalCommunicationRecipientClass_(source.recipientClass),
+    attachmentCount: 0
+  }, content);
+  const expectedIntent = trimString_(source.expectedIntent);
+  if (expectedIntent) result.expectedIntent = expectedIntent;
+  if (expectedIntent && trimString_(result.communicationIntent) !== expectedIntent) {
+    result.ok = false;
+    result.error = 'communication_assertion_intent_mismatch';
+  }
+  results.push(result);
+}
+
+function appendEmailReviewCommunicationAssertionCases_(results) {
+  const now = nowIso_();
+  const baseSummary = {
+    token: 'assertion-token',
+    dealNumber: 'ASSERT',
+    projectName: 'Lifecycle communication assertion project',
+    amountGrandTotal: 100,
+    invoiceNumber: 'INV-ASSERT-v1'
+  };
+  [
+    {
+      label: 'Assertion paid resend client',
+      family: 'locked_order_confirmation',
+      recipientClass: 'client',
+      expectedIntent: 'payment_received',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.paid,
+        paidAt: now
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.production_in_progress,
+        paymentState: PAYMENT_STATES.paid,
+        isPaymentReceived: true,
+        paymentReceivedAt: now,
+        productionCurrent: true,
+        nextClientAction: 'none'
+      }
+    },
+    {
+      label: 'Assertion manual pending client',
+      family: 'locked_order_confirmation',
+      recipientClass: 'client',
+      expectedIntent: 'manual_payment_pending',
+      nextStepText: 'Make a payment for your order.',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.manual_pending,
+        paymentMethodSelected: PAYMENT_METHODS.check
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.manual_payment_pending,
+        paymentState: PAYMENT_STATES.manual_pending,
+        manualPaymentPending: true,
+        paymentDue: true,
+        nextClientAction: 'send_manual_payment'
+      }
+    },
+    {
+      label: 'Assertion PO submitted under terms',
+      family: 'purchase_order_invoice_email',
+      recipientClass: 'client',
+      expectedIntent: 'po_submitted_terms_open',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentMethodSelected: PAYMENT_METHODS.purchase_order,
+        poSubmittedAt: now,
+        paymentState: PAYMENT_STATES.not_started
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.po_submitted_unpaid,
+        paymentState: PAYMENT_STATES.not_started,
+        poSubmitted: true,
+        poSubmittedAt: now,
+        isProductionAuthorized: true,
+        paymentDue: true
+      }
+    },
+    {
+      label: 'Assertion ACH pending client',
+      family: 'locked_order_confirmation',
+      recipientClass: 'client',
+      expectedIntent: 'payment_pending_bank_confirmation',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.pending,
+        paymentMethodSelected: PAYMENT_METHODS.ach
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.ach_payment_pending,
+        paymentState: PAYMENT_STATES.pending,
+        nextClientAction: 'wait_for_payment'
+      }
+    },
+    {
+      label: 'Assertion ACH verification client',
+      family: 'locked_order_confirmation',
+      recipientClass: 'client',
+      expectedIntent: 'payment_verification_required',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.pending,
+        paymentMethodSelected: PAYMENT_METHODS.ach,
+        achVerificationStatus: ACH_DETAIL_STATES.bank_verification_pending
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.ach_payment_pending,
+        paymentState: PAYMENT_STATES.pending,
+        achDetailState: ACH_DETAIL_STATES.bank_verification_pending,
+        nextClientAction: 'verify_bank'
+      }
+    },
+    {
+      label: 'Assertion payment issue client',
+      family: 'locked_order_confirmation',
+      recipientClass: 'client',
+      expectedIntent: 'payment_issue',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.failed,
+        paymentMethodSelected: PAYMENT_METHODS.card
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.ach_payment_failed,
+        paymentState: PAYMENT_STATES.failed,
+        paymentBlocked: true,
+        nextClientAction: 'retry_payment'
+      }
+    },
+    {
+      label: 'Assertion AP payment request',
+      family: 'ap_payment_link',
+      recipientClass: 'ap',
+      expectedIntent: 'payment_required_before_production',
+      nextStepText: 'Make a secure payment online.',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.not_started,
+        paymentMethodSelected: PAYMENT_METHODS.ach
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.checkout_started_unpaid,
+        paymentState: PAYMENT_STATES.not_started,
+        paymentDue: true,
+        nextClientAction: 'complete_checkout'
+      }
+    },
+    {
+      label: 'Assertion team payment issue',
+      family: 'locked_order_confirmation',
+      recipientClass: 'team',
+      expectedIntent: 'payment_issue',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.failed,
+        paymentMethodSelected: PAYMENT_METHODS.card
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.ach_payment_failed,
+        paymentState: PAYMENT_STATES.failed,
+        paymentBlocked: true,
+        nextTeamAction: 'review_payment_issue'
+      }
+    }
+  ].forEach(function(caseDef) {
+    appendEmailReviewCommunicationAssertionResult_(results, caseDef);
+  });
+}
+
+function getEmailReviewCommunicationError_(result) {
+  const count = parseInt(String(result && result.contradictionErrorCount || 0), 10) || 0;
+  return count > 0 ? 'communication_contradiction_detected' : '';
+}
+
 function sendEmailReviewContent_(results, label, family, recipientClass, recipients, content, attachments, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   if (omitEmailReviewSuiteItemIfNeeded_(results, label, family, recipientClass)) return;
   const toList = normalizeEmailRecipients_(recipients);
   const attachmentMeta = opts.attachmentMeta || (attachments && attachments.emailReviewAttachmentMeta) || null;
+  const renderOnly = EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true || opts.dryRun === true;
   try {
     if (!toList.length) throw new Error('missing_review_recipient');
+    const baseResult = appendEmailReviewCommunicationSummary_({
+      ok: true,
+      sent: false,
+      dryRun: renderOnly,
+      label: label,
+      family: family,
+      recipientClass: recipientClass,
+      attachmentCount: Array.isArray(attachments) ? attachments.length : 0
+    }, content);
+    const communicationError = getEmailReviewCommunicationError_(baseResult);
+    if (attachmentMeta) {
+      baseResult.attachmentMatched = attachmentMeta.matched === true;
+      baseResult.attachmentFallback = attachmentMeta.fallback === true;
+      baseResult.attachmentReason = normalizeEmailReviewAttachmentReason_(attachmentMeta.reason);
+    }
+    if (communicationError) {
+      baseResult.ok = false;
+      baseResult.error = communicationError;
+      results.push(baseResult);
+      return;
+    }
+    if (renderOnly) {
+      results.push(baseResult);
+      return;
+    }
     const htmlBody = [
       buildPortalNativeEmailReviewBannerHtml_(label),
       trimString_(content && content.htmlBody)
@@ -29939,7 +30789,7 @@ function sendEmailReviewContent_(results, label, family, recipientClass, recipie
       htmlBody: htmlBody,
       attachments: Array.isArray(attachments) ? attachments : []
     });
-    const result = {
+    const result = appendEmailReviewCommunicationSummary_({
       ok: emailResult && emailResult.ok === true,
       sent: emailResult && emailResult.ok === true,
       label: label,
@@ -29948,7 +30798,7 @@ function sendEmailReviewContent_(results, label, family, recipientClass, recipie
       attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
       transport: trimString_(emailResult && emailResult.transport),
       noReply: emailResult && emailResult.noReply === true
-    };
+    }, content);
     if (attachmentMeta) {
       result.attachmentMatched = attachmentMeta.matched === true;
       result.attachmentFallback = attachmentMeta.fallback === true;
@@ -29956,14 +30806,14 @@ function sendEmailReviewContent_(results, label, family, recipientClass, recipie
     }
     results.push(result);
   } catch (err) {
-    const result = {
+    const result = appendEmailReviewCommunicationSummary_({
       ok: false,
       label: label,
       family: family,
       recipientClass: recipientClass,
       attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
       error: normalizeEmailReviewError_(err)
-    };
+    }, content);
     if (attachmentMeta) {
       result.attachmentMatched = attachmentMeta.matched === true;
       result.attachmentFallback = attachmentMeta.fallback === true;
@@ -30336,48 +31186,63 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
   sendEmailReviewContent_(results, 'Explicit locked-order resend client', 'locked_order_resend', 'client', [recipients.client], {
     subject: summaryInvoiceLabel ? ('Red Threads order confirmation — ' + summaryInvoiceLabel) : 'Red Threads order confirmation',
     body: lockedContent.body,
-    htmlBody: lockedContent.htmlBody
+    htmlBody: lockedContent.htmlBody,
+    communicationContract: lockedContent.communicationContract
   }, attachments);
   sendEmailReviewContent_(results, 'Explicit locked-order resend team', 'locked_order_resend', 'team', [recipients.team], {
     subject: summaryInvoiceLabel ? ('Team operational resend review — ' + summaryInvoiceLabel) : 'Team operational resend review',
     body: lockedTeamContent.body,
-    htmlBody: lockedTeamContent.htmlBody
+    htmlBody: lockedTeamContent.htmlBody,
+    communicationContract: lockedTeamContent.communicationContract
   }, attachments);
 
   if (!omitEmailReviewSuiteItemIfNeeded_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client')) {
     try {
       const sourceAttachment = attachments[0];
       if (sourceAttachment && typeof sourceAttachment.getBytes === 'function') {
-        const estimateRow = findEmailReviewEstimateRow_(fixture);
-        const estimateProjectNumber = resolveEmailReviewEstimateProjectNumber_(fixture, summary);
-        const estimateReference = buildPortalDocumentReference_({
-          projectNumber: estimateProjectNumber,
-          documentKind: PORTAL_DOCUMENT_KINDS.estimate,
-          version: 1
-        });
-        const summaryResult = sendSummaryEstimatePdfEmail({
-          recipients: [recipients.client],
-          base64Data: Utilities.base64Encode(sourceAttachment.getBytes()),
-          mimeType: MimeType.PDF,
-          fileName: estimateReference.fileName,
-          documentKind: 'summary',
-          documentRef: estimateReference.documentRef,
-          documentVersion: 1,
-          token: '',
-          dealNumber: estimateProjectNumber,
-          projectName: getEmailReviewEstimateProjectName_(estimateRow, summary),
-          clientName: getEmailReviewEstimateClientName_(estimateRow, summary)
-        });
-        results.push({
-          ok: summaryResult && summaryResult.ok === true,
-          sent: summaryResult && summaryResult.ok === true,
-          label: 'Summary/invoice explicit send client',
-          family: 'summary_pdf',
-          recipientClass: 'client',
-          attachmentCount: 1,
-          transport: trimString_(summaryResult && summaryResult.transport),
-          noReply: summaryResult && summaryResult.noReply === true
-        });
+        if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
+          results.push({
+            ok: true,
+            dryRun: true,
+            sent: false,
+            label: 'Summary/invoice explicit send client',
+            family: 'summary_pdf',
+            recipientClass: 'client',
+            attachmentCount: 1,
+            subject: 'Red Threads estimate copy'
+          });
+        } else {
+          const estimateRow = findEmailReviewEstimateRow_(fixture);
+          const estimateProjectNumber = resolveEmailReviewEstimateProjectNumber_(fixture, summary);
+          const estimateReference = buildPortalDocumentReference_({
+            projectNumber: estimateProjectNumber,
+            documentKind: PORTAL_DOCUMENT_KINDS.estimate,
+            version: 1
+          });
+          const summaryResult = sendSummaryEstimatePdfEmail({
+            recipients: [recipients.client],
+            base64Data: Utilities.base64Encode(sourceAttachment.getBytes()),
+            mimeType: MimeType.PDF,
+            fileName: estimateReference.fileName,
+            documentKind: 'summary',
+            documentRef: estimateReference.documentRef,
+            documentVersion: 1,
+            token: '',
+            dealNumber: estimateProjectNumber,
+            projectName: getEmailReviewEstimateProjectName_(estimateRow, summary),
+            clientName: getEmailReviewEstimateClientName_(estimateRow, summary)
+          });
+          results.push({
+            ok: summaryResult && summaryResult.ok === true,
+            sent: summaryResult && summaryResult.ok === true,
+            label: 'Summary/invoice explicit send client',
+            family: 'summary_pdf',
+            recipientClass: 'client',
+            attachmentCount: 1,
+            transport: trimString_(summaryResult && summaryResult.transport),
+            noReply: summaryResult && summaryResult.noReply === true
+          });
+        }
       } else {
         skipEmailReviewResult_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client', 'fixture_missing');
       }
@@ -30398,6 +31263,19 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
   skipEmailReviewResult_(results, 'Submitted tax-form copy client', 'submitted_tax_copy', 'client', 'fixture_missing_submission_artifact');
 
   if (!omitEmailReviewSuiteItemIfNeeded_(results, 'Password reset client', 'password_reset', 'client')) {
+    if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
+      results.push({
+        ok: true,
+        dryRun: true,
+        sent: false,
+        label: 'Password reset client',
+        family: 'password_reset',
+        recipientClass: 'client',
+        attachmentCount: 0,
+        subject: 'Reset your Red Threads portal password'
+      });
+      return;
+    }
     const passwordResult = authSendResetCode({
       email: recipients.client
     });
@@ -30427,6 +31305,19 @@ function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, doc
       return;
     }
     const payload = buildAccountDocumentBlankEmailPayload_(fixture.accountContext, definition, [recipients.client]);
+    if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
+      results.push({
+        ok: true,
+        dryRun: true,
+        sent: false,
+        label: label,
+        family: 'account_document_source',
+        recipientClass: 'client',
+        attachmentCount: Array.isArray(payload.attachments) ? payload.attachments.length : 0,
+        subject: trimString_(payload.subject)
+      });
+      return;
+    }
     const result = sendNotificationEmail_(Object.assign({}, payload, {
       subject: '[EMAIL REVIEW] ' + label + ' - ' + trimString_(payload.subject)
     }));
@@ -30457,6 +31348,19 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
   const code = '000000';
   const resetUrl = buildPasswordResetReturnUrl_('00000000-0000-4000-8000-000000000000');
   const content = buildPasswordResetEmailContent_(code, resetUrl);
+  if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
+    results.push({
+      ok: true,
+      dryRun: true,
+      sent: false,
+      label: 'Password reset client',
+      family: 'password_reset',
+      recipientClass: 'client',
+      attachmentCount: 0,
+      subject: trimString_(content.subject)
+    });
+    return;
+  }
   const htmlBody = buildPortalNativeEmailReviewBannerHtml_('Password reset client') + content.htmlBody;
   const result = sendNotificationEmail_({
     to: recipient,
