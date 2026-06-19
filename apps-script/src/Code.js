@@ -29890,6 +29890,8 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'ap payment link sent': 'ap_review_omitted',
   'ap ach pending ap': 'ap_review_omitted',
   'ap ach receipt ap': 'ap_review_omitted',
+  'explicit locked-order resend team': 'team_review_omitted',
+  'chat digest client to team': 'team_review_omitted',
   'tax exempt approved team': 'team_review_omitted',
   'credit terms approved team': 'team_review_omitted'
 };
@@ -32428,7 +32430,9 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const theme = getPortalNativeEmailTheme_();
   const htmlMessages = messageRows.map(function(messageRow) {
     const metaColor = messageRow.isTeamMessage ? theme.brandRedMid : '#94a3b8';
-    const textColor = messageRow.isTeamMessage ? theme.brandRedMid : '#cbd5e1';
+    const textColor = isTeamDigest && !messageRow.isTeamMessage
+      ? theme.successGreen
+      : (messageRow.isTeamMessage ? theme.brandRedMid : '#cbd5e1');
     return [
       '      <tr>',
       '        <td style="padding:14px 16px;border-top:1px solid #1e293b;">',
