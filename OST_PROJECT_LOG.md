@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Pending ACH Team Email Action Refinement
+
+- Mode: Full ship.
+- Branch/commit/PR: `main`, Apps Script version `971`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: change Standard ACH pending team, Standard ACH verification team, and AP ACH pending team emails from required-action framing to no-action informational notices with optional production-exception copy.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deploy.
+- Decisions: keep canonical progress and the lower project-details Team Mode link intact; suppress only the redundant top action-card CTA for pending ACH team notices and render the optional production exception as muted body copy.
+- Current-state updates: deployed version `971`; direct Apps Script `/exec` returned HTTP 200 with `Development revision 101` and omitted stale revision `100`; public `/portal` returned HTTP 200, referenced the stable deployment ID, and included `teamAccess` passthrough.
+- Follow-ups: headless owner email review-suite dry run returned `ok:true`; real suite sent 23, skipped 24, failed 0, with 18 known fixture attachment fallbacks due to `artifact_project_mismatch`.
+
 ## 2026-06-19 - Team Mode Email Auto-Unlock Links
 
 - Mode: Full ship.
