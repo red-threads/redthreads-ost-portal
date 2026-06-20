@@ -52,6 +52,8 @@ The matrix validator reported `16 / 29` cases covered, `11` skipped/omitted case
 
 Version `982` deploys the review-harness patch that selects dedicated active fixture rows for card/AP/manual/PO examples and overrides account-document lifecycle review metadata to account-document intent. The protected dry run after deploying `982` returned `ok:true`, sent `0`, skipped `32`, failed `0`, reported `13` known fixture attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. Matrix validation returned `ok:true`: the four previous intent mismatches cleared, leaving only the two expected assertion-only gaps, `team_initiated_production_before_payment` and `production_complete`.
 
+The post-hardening repo-local pass after version `982` adds synthetic assertion-only review cases for `team_initiated_production_before_payment` and `production_complete`, and adds an explicit `production_complete` lifecycle communication intent. This is not deployed yet, so the live protected dry run remains the version `982` result until a future owner-approved Apps Script ship.
+
 ### Header Compatibility
 
 | Active tab | Fixture tab | Result |
@@ -114,8 +116,8 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 | `ap_ach_pending` | AP + team | Sendable |
 | `ap_ach_paid` | AP + team | Dedicated fixture row added |
 | `ap_ach_failed` | AP + team | Dedicated fixture row added |
-| `team_initiated_production_before_payment` | Client + team | Storage row added; assertion-only until review tooling renders fixture-storage cases without active reset |
-| `production_complete` | Client + team | Storage row added; assertion-only unless completion emails are re-enabled or assertion-only rendering is added |
+| `team_initiated_production_before_payment` | Client + team | Storage row added; repo-local synthetic assertion-only cases added, pending Apps Script deployment |
+| `production_complete` | Client + team | Storage row added; repo-local synthetic assertion-only cases and explicit communication intent added, pending Apps Script deployment |
 | `client_to_team_chat_digest` | Team | Sendable or omitted, but metadata should be inspectable |
 | `team_to_client_chat_digest` | Client | Sendable or omitted, but metadata should be inspectable |
 | `account_document_tax_submitted` | Team | Sendable |
@@ -136,7 +138,7 @@ The first safe normalization step is complete: duplicated fixture-storage blocks
 Recommended next fixture/test-harness step:
 
 1. Preserve headers exactly.
-2. Add assertion-only coverage or explicit sendable review surfaces for `team_initiated_production_before_payment` and `production_complete` if those cases should move from documented gaps into required matrix coverage.
+2. Deploy the repo-local assertion-only coverage for `team_initiated_production_before_payment` and `production_complete` before treating those cases as covered in the protected headless dry run.
 3. Keep edge states assertion-only when the active review suite intentionally suppresses those communications.
 4. Re-run fixture audit and matrix validation before any active-tab reset or live email review blast.
 

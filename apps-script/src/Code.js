@@ -27053,6 +27053,7 @@ function resolveOrderCommunicationIntent_(state) {
     return source.poTermsOpen ? 'po_submitted_terms_open' : 'po_invoice_prepared';
   }
   if (source.paymentIssue) return 'payment_issue';
+  if (source.productionDisposition === 'complete') return 'production_complete';
   if (source.paymentReceived) {
     if (source.poSubmitted) return 'po_payment_received';
     if (source.manualPending || trimString_(source.paymentMethod).toLowerCase() === PAYMENT_METHODS.check || trimString_(source.paymentMethod).toLowerCase() === PAYMENT_METHODS.cash) {
@@ -27131,6 +27132,45 @@ function resolveOrderCommunicationCopy_(state) {
       ? 'No action is needed right now.'
       : trimString_(source.nextStepText);
     copy.attachmentNote = '';
+    return copy;
+  }
+  if (source.intent === 'production_complete') {
+    const paymentStillOpen = !source.paymentReceived && !source.poTermsOpen;
+    copy.headingUpdateLabel = 'Production complete';
+    copy.intro = recipientClass === 'team'
+      ? 'Production is complete for the client\'s order.'
+      : (recipientClass === 'ap' ? 'Production is complete for this Red Threads order.' : 'Production is complete for your Red Threads order.');
+    copy.statusCopy = source.paymentReceived
+      ? 'Payment has been received.'
+      : (source.poTermsOpen ? 'Payment remains open under the approved terms.' : 'Payment remains open.');
+    copy.nextStep = recipientClass === 'team'
+      ? (paymentStillOpen ? 'Monitor the open payment until it is resolved.' : 'No team action is required right now.')
+      : (paymentStillOpen ? 'Review your portal for current payment status.' : 'No action is needed right now.');
+    copy.attachmentNote = recipientClass === 'team'
+      ? 'The invoice/receipt for the client\'s order is attached to this email.'
+      : (recipientClass === 'ap' ? 'The invoice/receipt for this order is attached.' : 'Your invoice/receipt is attached.');
+    return copy;
+  }
+  if (source.intent === 'production_in_progress' || source.intent === 'production_authorized') {
+    const productionActive = source.intent === 'production_in_progress';
+    const paymentStillOpen = !source.paymentReceived && !source.poTermsOpen;
+    copy.headingUpdateLabel = productionActive ? 'Production in progress' : 'Production authorized';
+    copy.intro = recipientClass === 'team'
+      ? (productionActive ? 'Production is in progress for the client\'s order.' : 'Production is authorized for the client\'s order.')
+      : (recipientClass === 'ap'
+        ? (productionActive ? 'Production is in progress for this Red Threads order.' : 'Production is authorized for this Red Threads order.')
+        : (productionActive ? 'Production is in progress for your Red Threads order.' : 'Production is authorized for your Red Threads order.'));
+    copy.statusCopy = source.paymentReceived
+      ? 'Payment has been received.'
+      : (source.poTermsOpen ? 'Payment remains open under the approved terms.' : 'Payment remains open while production is authorized.');
+    copy.nextStep = recipientClass === 'team'
+      ? (paymentStillOpen
+        ? 'Monitor payment while production continues and update job completion dates when work is finished.'
+        : 'Continue production workflow and update job completion dates when work is finished.')
+      : (paymentStillOpen ? 'Review your portal for current payment status.' : 'No action is needed right now.');
+    copy.attachmentNote = recipientClass === 'team'
+      ? 'The invoice/receipt for the client\'s order is attached to this email.'
+      : (recipientClass === 'ap' ? 'The invoice/receipt for this order is attached.' : 'Your invoice/receipt is attached.');
     return copy;
   }
   if (source.paymentReceived) {
@@ -30866,6 +30906,102 @@ function appendEmailReviewCommunicationAssertionCases_(results) {
         paymentState: PAYMENT_STATES.not_started,
         paymentDue: true,
         nextClientAction: 'complete_checkout'
+      }
+    },
+    {
+      label: 'Assertion team initiated production before payment client',
+      family: 'locked_order_confirmation',
+      recipientClass: 'client',
+      expectedIntent: 'production_in_progress',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.not_started,
+        paymentMethodSelected: PAYMENT_METHODS.ach,
+        orderState: ORDER_STATES.in_production,
+        productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.production_in_progress,
+        lifecycleStage: PORTAL_LIFECYCLE_STAGES.in_production_or_complete,
+        paymentState: PAYMENT_STATES.not_started,
+        orderState: ORDER_STATES.in_production,
+        isProductionAuthorized: true,
+        productionAuthorized: true,
+        productionCurrent: true,
+        paymentDue: true,
+        nextClientAction: 'pay_invoice'
+      }
+    },
+    {
+      label: 'Assertion team initiated production before payment team',
+      family: 'locked_order_confirmation',
+      recipientClass: 'team',
+      expectedIntent: 'production_in_progress',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.not_started,
+        paymentMethodSelected: PAYMENT_METHODS.ach,
+        orderState: ORDER_STATES.in_production,
+        productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.production_in_progress,
+        lifecycleStage: PORTAL_LIFECYCLE_STAGES.in_production_or_complete,
+        paymentState: PAYMENT_STATES.not_started,
+        orderState: ORDER_STATES.in_production,
+        isProductionAuthorized: true,
+        productionAuthorized: true,
+        productionCurrent: true,
+        paymentDue: true,
+        nextTeamAction: 'monitor_payment'
+      }
+    },
+    {
+      label: 'Assertion production complete client',
+      family: 'locked_order_confirmation',
+      recipientClass: 'client',
+      expectedIntent: 'production_complete',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.paid,
+        paidAt: now,
+        orderState: ORDER_STATES.closed,
+        productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.production_complete,
+        lifecycleStage: PORTAL_LIFECYCLE_STAGES.in_production_or_complete,
+        paymentState: PAYMENT_STATES.paid,
+        orderState: ORDER_STATES.closed,
+        isPaymentReceived: true,
+        paymentReceivedAt: now,
+        isProductionAuthorized: true,
+        productionAuthorized: true,
+        productionCurrent: true,
+        productionComplete: true,
+        nextClientAction: 'none'
+      }
+    },
+    {
+      label: 'Assertion production complete team',
+      family: 'locked_order_confirmation',
+      recipientClass: 'team',
+      expectedIntent: 'production_complete',
+      orderSummary: Object.assign({}, baseSummary, {
+        paymentState: PAYMENT_STATES.paid,
+        paidAt: now,
+        orderState: ORDER_STATES.closed,
+        productionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized
+      }),
+      workflowContext: {
+        lifecycleState: PORTAL_LIFECYCLE_STATES.production_complete,
+        lifecycleStage: PORTAL_LIFECYCLE_STAGES.in_production_or_complete,
+        paymentState: PAYMENT_STATES.paid,
+        orderState: ORDER_STATES.closed,
+        isPaymentReceived: true,
+        paymentReceivedAt: now,
+        isProductionAuthorized: true,
+        productionAuthorized: true,
+        productionCurrent: true,
+        productionComplete: true,
+        nextTeamAction: 'none'
       }
     },
     {

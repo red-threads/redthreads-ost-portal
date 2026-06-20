@@ -127,16 +127,16 @@ const REQUIRED_MATRIX = [
     caseLabel: 'team_initiated_production_before_payment',
     recipientClass: 'client+team',
     expectedCommunicationIntent: ['production_authorized', 'production_in_progress'],
-    labels: [],
-    sendMode: 'assertion_only_needed',
+    labels: ['Assertion team initiated production before payment client', 'Assertion team initiated production before payment team'],
+    sendMode: 'assertion_only',
     artifactRequirement: 'optional'
   },
   {
     caseLabel: 'production_complete',
     recipientClass: 'client+team',
     expectedCommunicationIntent: ['production_complete'],
-    labels: [],
-    sendMode: 'assertion_only_needed',
+    labels: ['Assertion production complete client', 'Assertion production complete team'],
+    sendMode: 'assertion_only',
     artifactRequirement: 'optional'
   },
   {

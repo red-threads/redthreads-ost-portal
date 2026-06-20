@@ -17,6 +17,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Post-Hardening Lifecycle Communication Audit
+
+- Mode: Architect + QA reviewer + Produce final code; no Apps Script deployment or live review-suite send was authorized.
+- Branch/commit/PR: `main`; commit pending at time of log entry; deployed Apps Script remains version `982`.
+- Goal: audit lifecycle, portal projection, communication contract, direct utility sends, queued lifecycle emails, Team Mode actions, state mutation paths, and review-suite validation for remaining places where trigger-specific copy could contradict canonical lifecycle state.
+- Files changed: `apps-script/src/Code.js`, `tools/validate-email-communication-matrix.mjs`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Findings: deployed version `982` validated the active fixture matrix with `ok:true`, zero intent mismatches, zero lifecycle contradiction warnings/errors, and only the two expected assertion-only gaps. No repo-verifiable direct-send or queued lifecycle path was found that bypasses the canonical order summary/lifecycle/communication contract for current order-context email copy.
+- Implementation: added explicit `production_complete` communication intent resolution, contract-safe production-complete and production-active copy for assertion/direct-send paths, and synthetic assertion-only dry-run cases for `team_initiated_production_before_payment` and `production_complete`; the matrix validator now treats those cases as assertion-only instead of missing.
+- Preservation: no active runtime tabs, fixture-storage tabs, `PORTAL_EMAIL_QUEUE`, Sheet headers, Script Properties, Stripe config, Apps Script config, deployment ID, recipient routing, idempotency keys, attachment policy, or live email sends changed in this pass.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-email-communication-matrix.mjs`, and `git diff --check` passed before this log entry; full validation is recorded in the final session result.
+- Deployment status: local runtime patch is not deployed. A future owner-approved Apps Script ship is required before the protected headless dry run can exercise the new assertion-only cases in the deployed harness.
+- Follow-ups: decide whether to deploy this assertion hardening patch; after deployment, run protected dry run and matrix validation again before any live review-suite blast.
+
 ## 2026-06-19 - Email Review Fixture Intent Selection Ship
 
 - Mode: Focused Full Ship runtime patch + protected dry-run only.
