@@ -12,7 +12,45 @@ The first controlled fixture-storage normalization pass was completed on 2026-06
 - `FIXTURE_PORTAL_ORDERS`
 - `FIXTURE_STRIPE_EVENTS`
 
-No active runtime tabs were mutated. No review-suite reset copied fixture data into active tabs, no `PORTAL_EMAIL_QUEUE` rows were cleared, no email-review blast was run, and no Apps Script deployment was performed.
+During those storage-only passes, no active runtime tabs were mutated. No review-suite reset copied fixture data into active tabs, no `PORTAL_EMAIL_QUEUE` rows were cleared, no email-review blast was run, and no Apps Script deployment was performed.
+
+## Controlled Active Fixture Reset
+
+On 2026-06-19, the normalized fixture storage was activated for dry-run validation only. A private Drive copy of the workbook was created first as a restore point; no private backup file was committed.
+
+Only these active runtime tabs were mutated, by clearing values below the header row and pasting values from the matching fixture-storage tabs:
+
+- `FIXTURE_EXPORT` -> `EXPORT_LOG`
+- `FIXTURE_PORTAL_ORDERS` -> `PORTAL_ORDERS`
+- `FIXTURE_STRIPE_EVENTS` -> `PORTAL_STRIPE_EVENTS`
+
+The header rows were preserved exactly. `USERS`, `USER_SESSIONS`, `PORTAL_ACCOUNTS`, Script Properties, Stripe config, Apps Script config, and `.clasp.json` were not touched. `PORTAL_EMAIL_QUEUE` was intentionally not touched. The built-in non-dry-run review-suite reset path still clears `PORTAL_EMAIL_QUEUE`; this controlled activation used a direct Sheets value copy instead.
+
+Pre/post active grid counts were unchanged:
+
+| Active tab | Grid rows x cols |
+| --- | ---: |
+| `EXPORT_LOG` | `918 x 47` |
+| `PORTAL_ORDERS` | `900 x 68` |
+| `PORTAL_STRIPE_EVENTS` | `1000 x 26` |
+| `PORTAL_EMAIL_QUEUE` | `1000 x 26` |
+
+Fixture storage grid counts at activation time:
+
+| Fixture tab | Grid rows x cols | Intentional content |
+| --- | ---: | --- |
+| `FIXTURE_EXPORT` | `1001 x 47` | 16 aligned order-context fixture rows plus utility rows |
+| `FIXTURE_PORTAL_ORDERS` | `1001 x 68` | 16 aligned order rows |
+| `FIXTURE_STRIPE_EVENTS` | `1001 x 28` | 9 intentional payment-event rows; only active `A:P` columns copied |
+
+The protected headless dry run after active reset returned `ok:true`, sent `0`, skipped `32`, failed `0`, reported `13` attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. No live review emails were sent.
+
+The matrix validator reported `16 / 29` cases covered, `11` skipped/omitted cases, `2` assertion-only missing cases, and `4` intent-metadata mismatches. The mismatches were classified as review-harness metadata issues, not fixture reset failures:
+
+- `card_failed` and `ap_ach_failed` were still rendered from synthetic clones anchored to non-failed base orders.
+- `account_document_tax_submitted` and `account_document_credit_terms_submitted` rendered correct account-document review surfaces but reported order payment intent metadata.
+
+A local review-harness patch now selects dedicated active fixture rows for card/AP/manual/PO examples and overrides account-document lifecycle review metadata to account-document intent. That patch was not deployed in this activation-only task, so deployed dry-run results still reflect the previous stable Apps Script version until a later owner-approved Apps Script ship.
 
 ### Header Compatibility
 
@@ -53,9 +91,7 @@ The `production_complete` and `team_initiated_production_before_payment` rows ar
 
 The deployed review-suite builders synthesize many examples from the small order fixture base. This is useful for copy review, but it means fixture coverage and generated case coverage are not the same thing.
 
-Current dry-run behavior checks fixture headers and reports the rows that would be copied or cleared, but it does not mutate active tabs, does not clear `PORTAL_EMAIL_QUEUE`, and does not send email. After the header check, it renders examples from the active runtime tabs. That only validates fixture content when the active tabs already mirror the fixture tabs. For mature pre-blast validation, dry-run should either render from fixture tabs without mutating active tabs or clearly report that it rendered from active tabs.
-
-The protected headless dry run was run in no-send mode after the storage buildout. It returned `ok:true`, with zero failed email cases and zero lifecycle contradiction warnings/errors. The matrix validator still reports active-render gaps and intent mismatches because dry run renders from active runtime tabs after header checks; it does not render directly from the newly expanded `FIXTURE_*` storage rows unless a later owner-approved reset copies those rows into active tabs.
+Current dry-run behavior checks fixture headers and reports the rows that would be copied or cleared, but it does not mutate active tabs, does not clear `PORTAL_EMAIL_QUEUE`, and does not send email. After the header check, it renders examples from the active runtime tabs. That means fixture content is validated only after a controlled active reset or after a no-mutation fixture-storage render mode is added.
 
 ## Target Matrix
 
@@ -95,12 +131,12 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 
 ## Fixture Reset Plan
 
-The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. Owner approval is still required before resetting active runtime tabs from fixtures or running a live review-suite blast.
+The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. Owner approval is still required before any live review-suite blast or Apps Script deployment.
 
 Recommended next fixture/test-harness step:
 
 1. Preserve headers exactly.
-2. Add a no-mutation fixture-storage render mode to the review suite, or run an owner-approved active reset before dry-run validation.
+2. Deploy the local review-harness metadata/fixture-selection patch before expecting deployed dry-run matrix intent mismatches to clear.
 3. Keep edge states assertion-only when the active review suite intentionally suppresses those communications.
 4. Re-run fixture audit and matrix validation before any active-tab reset or live email review blast.
 

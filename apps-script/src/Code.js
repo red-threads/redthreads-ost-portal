@@ -24453,12 +24453,46 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     ss: opts.ss,
     infra: opts.infra
   });
+  if (accountDocumentMilestone) {
+    const accountIntent = resolveAccountDocumentCommunicationIntent_(normalized);
+    if (accountIntent) {
+      communicationContract.intent = accountIntent;
+      communicationContract.lifecycleState = accountIntent;
+      communicationContract.lifecycleStage = 'account_document';
+      communicationContract.paymentDisposition = 'not_applicable';
+      communicationContract.productionDisposition = 'not_applicable';
+      communicationContract.ctaMode = isAccountDocumentSubmittedTeamReviewMilestone_(normalized, recipientClass)
+        ? 'team_review'
+        : (recipientClass === 'team' ? 'none' : 'account_document');
+      communicationContract.allowedCtaMode = communicationContract.ctaMode;
+      communicationContract.forbiddenCtaModes = [];
+    }
+  }
   return {
     subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody,
     communicationContract: communicationContract
   };
+}
+
+function resolveAccountDocumentCommunicationIntent_(milestone) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted) {
+    return 'account_document_review_required';
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved) {
+    return 'account_document_approved';
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
+    return 'account_document_needs_attention';
+  }
+  return '';
 }
 
 function processPortalLifecycleEmailQueueJob_(jobInfo, options) {
@@ -30054,28 +30088,117 @@ function buildEmailReviewFixtureContext_(ss, cfg, infra) {
     }
     return null;
   };
+  const isMethod = function(row, method) {
+    return trimString_(row.paymentmethodselected).toLowerCase() === trimString_(method).toLowerCase();
+  };
+  const getPaymentState = function(row) {
+    return trimString_(row.paymentstate).toLowerCase();
+  };
+  const getOrderState = function(row) {
+    return trimString_(row.orderstate).toLowerCase();
+  };
+  const getProductionState = function(row) {
+    return trimString_(row.productionauthorizationstate).toLowerCase();
+  };
+  const getAchSource = function(row) {
+    return trimString_(row.achpaymentsource).toLowerCase();
+  };
+  const isPaymentReceived = function(row) {
+    const paymentState = getPaymentState(row);
+    return paymentState === PAYMENT_STATES.paid ||
+      paymentState === PAYMENT_STATES.manual_received ||
+      !!trimString_(row.paidat || row.paymentreceivedmanuallyat);
+  };
+  const isProductionAuthorized = function(row) {
+    const orderState = getOrderState(row);
+    const productionState = getProductionState(row);
+    return productionState === PRODUCTION_AUTHORIZATION_STATES.authorized ||
+      orderState === ORDER_STATES.ready_for_production ||
+      orderState === ORDER_STATES.in_production ||
+      orderState === ORDER_STATES.closed;
+  };
   const standardAchPending = firstOrder(function(row) {
-    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.ach &&
-      trimString_(row.achpaymentsource).toLowerCase() === ACH_PAYMENT_METHOD_SOURCES.order_checkout &&
+    return isMethod(row, PAYMENT_METHODS.ach) &&
+      getAchSource(row) === ACH_PAYMENT_METHOD_SOURCES.order_checkout &&
       trimString_(row.paymentstate).toLowerCase() !== PAYMENT_STATES.paid;
   });
   const standardAchPaid = firstOrder(function(row) {
-    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.ach &&
-      trimString_(row.achpaymentsource).toLowerCase() === ACH_PAYMENT_METHOD_SOURCES.order_checkout &&
-      trimString_(row.paymentstate).toLowerCase() === PAYMENT_STATES.paid;
+    return isMethod(row, PAYMENT_METHODS.ach) &&
+      getAchSource(row) === ACH_PAYMENT_METHOD_SOURCES.order_checkout &&
+      getPaymentState(row) === PAYMENT_STATES.paid;
   });
-  const apAch = firstOrder(function(row) {
-    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.ach &&
-      trimString_(row.achpaymentsource).toLowerCase() === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  const cardPaid = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.card) && getPaymentState(row) === PAYMENT_STATES.paid;
   });
-  const manual = firstOrder(function(row) {
+  const cardFailed = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.card) && getPaymentState(row) === PAYMENT_STATES.failed;
+  });
+  const apPaymentRequest = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.ach) &&
+      getAchSource(row) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link &&
+      getPaymentState(row) === PAYMENT_STATES.not_started;
+  });
+  const apAchPending = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.ach) &&
+      getAchSource(row) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link &&
+      (getPaymentState(row) === PAYMENT_STATES.pending ||
+        getPaymentState(row) === PAYMENT_STATES.submitted ||
+        trimString_(row.achverificationstatus).toLowerCase() === ACH_DETAIL_STATES.processing ||
+        trimString_(row.achverificationstatus).toLowerCase() === ACH_DETAIL_STATES.bank_verification_pending);
+  });
+  const apAchPaid = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.ach) &&
+      getAchSource(row) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link &&
+      getPaymentState(row) === PAYMENT_STATES.paid;
+  });
+  const apAchFailed = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.ach) &&
+      getAchSource(row) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link &&
+      (getPaymentState(row) === PAYMENT_STATES.failed ||
+        trimString_(row.achverificationstatus).toLowerCase() === ACH_DETAIL_STATES.failed);
+  });
+  const apAch = apPaymentRequest || apAchPending || apAchPaid || apAchFailed || firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.ach) &&
+      getAchSource(row) === ACH_PAYMENT_METHOD_SOURCES.ap_payment_link;
+  });
+  const isManualMethod = function(row) {
     const method = trimString_(row.paymentmethodselected).toLowerCase();
     return method === PAYMENT_METHODS.check || method === PAYMENT_METHODS.cash;
+  };
+  const manualPending = firstOrder(function(row) {
+    return isManualMethod(row) && getPaymentState(row) === PAYMENT_STATES.manual_pending;
   });
-  const po = firstOrder(function(row) {
-    return trimString_(row.paymentmethodselected).toLowerCase() === PAYMENT_METHODS.purchase_order;
+  const manualReceived = firstOrder(function(row) {
+    return isManualMethod(row) &&
+      (getPaymentState(row) === PAYMENT_STATES.manual_received || isPaymentReceived(row));
   });
-  const baseOrder = standardAchPaid || standardAchPending || manual || po || apAch || orderRows[0] || null;
+  const manual = manualPending || manualReceived || firstOrder(isManualMethod);
+  const poInvoicePrepared = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.purchase_order) &&
+      !trimString_(row.posubmittedat) &&
+      getPaymentState(row) === PAYMENT_STATES.not_started &&
+      (getOrderState(row) === ORDER_STATES.awaiting_po_submission ||
+        getProductionState(row) === PRODUCTION_AUTHORIZATION_STATES.po_pending);
+  });
+  const poSubmittedTermsOpen = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.purchase_order) &&
+      !isPaymentReceived(row) &&
+      isProductionAuthorized(row) &&
+      (!!trimString_(row.posubmittedat) || getProductionState(row) === PRODUCTION_AUTHORIZATION_STATES.authorized);
+  });
+  const poPaymentReceived = firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.purchase_order) && isPaymentReceived(row);
+  });
+  const po = poSubmittedTermsOpen || poInvoicePrepared || poPaymentReceived || firstOrder(function(row) {
+    return isMethod(row, PAYMENT_METHODS.purchase_order);
+  });
+  const productionComplete = firstOrder(function(row) {
+    return getOrderState(row) === ORDER_STATES.closed;
+  });
+  const teamInitiatedProductionBeforePayment = firstOrder(function(row) {
+    return !isPaymentReceived(row) && isProductionAuthorized(row) && !isMethod(row, PAYMENT_METHODS.purchase_order);
+  });
+  const baseOrder = standardAchPaid || standardAchPending || manual || po || apAch || cardPaid || cardFailed || orderRows[0] || null;
   const chatRow = findEmailReviewExportRowForOrder_(exportRows, baseOrder) || exportRows[0] || null;
   const accountContext = buildEmailReviewAccountContext_(cfg, ss, infra, accountRows, chatRow);
   return {
@@ -30088,9 +30211,22 @@ function buildEmailReviewFixtureContext_(ss, cfg, infra) {
     baseOrder: baseOrder,
     standardAchPending: standardAchPending,
     standardAchPaid: standardAchPaid,
+    cardPaid: cardPaid,
+    cardFailed: cardFailed,
+    apPaymentRequest: apPaymentRequest,
+    apAchPending: apAchPending,
+    apAchPaid: apAchPaid,
+    apAchFailed: apAchFailed,
     apAch: apAch,
+    manualPending: manualPending,
+    manualReceived: manualReceived,
     manual: manual,
+    poInvoicePrepared: poInvoicePrepared,
+    poSubmittedTermsOpen: poSubmittedTermsOpen,
+    poPaymentReceived: poPaymentReceived,
     po: po,
+    productionComplete: productionComplete,
+    teamInitiatedProductionBeforePayment: teamInitiatedProductionBeforePayment,
     chatRow: chatRow,
     accountContext: accountContext
   };
@@ -30944,7 +31080,7 @@ function sendEmailReviewStandardAchExamples_(results, fixture, recipients) {
 }
 
 function sendEmailReviewApAchExamples_(results, fixture, recipients) {
-  const base = fixture.apAch || fixture.standardAchPending || fixture.baseOrder;
+  const base = fixture.apPaymentRequest || fixture.apAch || fixture.standardAchPending || fixture.baseOrder;
   if (!base) {
     skipEmailReviewResult_(results, 'AP ACH lifecycle', 'ap_ach', 'ap', 'fixture_missing');
     return;
@@ -30974,7 +31110,8 @@ function sendEmailReviewApAchExamples_(results, fixture, recipients) {
     }),
     apLinkAttachments);
 
-  const submitted = cloneEmailReviewOrderInfo_(apBase, {
+  const submittedBase = fixture.apAchPending || apBase;
+  const submitted = cloneEmailReviewOrderInfo_(submittedBase, {
     paymentstate: PAYMENT_STATES.pending,
     orderstate: ORDER_STATES.awaiting_payment_confirmation,
     productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
@@ -30996,7 +31133,8 @@ function sendEmailReviewApAchExamples_(results, fixture, recipients) {
       submittedAttachments);
   });
 
-  const paid = buildEmailReviewPaidOrderInfo_(apBase, PAYMENT_METHODS.ach, {
+  const paidBase = fixture.apAchPaid || apBase;
+  const paid = buildEmailReviewPaidOrderInfo_(paidBase, PAYMENT_METHODS.ach, {
     overrides: {
       achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
       achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
@@ -31019,7 +31157,8 @@ function sendEmailReviewApAchExamples_(results, fixture, recipients) {
       paidAttachments);
   });
 
-  const failed = buildEmailReviewFailedOrderInfo_(apBase, PAYMENT_METHODS.ach, {
+  const failedBase = fixture.apAchFailed || apBase;
+  const failed = buildEmailReviewFailedOrderInfo_(failedBase, PAYMENT_METHODS.ach, {
     overrides: {
       achpaymentsource: ACH_PAYMENT_METHOD_SOURCES.ap_payment_link,
       achpaymentvisibilityscope: ACH_PAYMENT_VISIBILITY_SCOPES.order_only,
@@ -31049,27 +31188,29 @@ function sendEmailReviewPaymentExamples_(results, fixture, recipients) {
     skipEmailReviewResult_(results, 'Payment lifecycle', 'payment_lifecycle', 'client', 'fixture_missing');
     return;
   }
-  const manualBase = fixture.manual || base;
-  const poBase = fixture.po || base;
+  const manualPendingBase = fixture.manualPending || fixture.manual || base;
+  const manualReceivedBase = fixture.manualReceived || fixture.manual || base;
+  const poSubmittedBase = fixture.poSubmittedTermsOpen || fixture.po || base;
+  const poPaymentReceivedBase = fixture.poPaymentReceived || fixture.po || base;
   const examples = [
-    { label: 'Card paid', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid, order: buildEmailReviewPaidOrderInfo_(base, PAYMENT_METHODS.card), fresh: true },
-    { label: 'Card failed', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed, order: buildEmailReviewFailedOrderInfo_(base, PAYMENT_METHODS.card), fresh: false },
-    { label: 'Manual payment pending', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending, order: cloneEmailReviewOrderInfo_(manualBase, {
-      paymentmethodselected: trimString_(manualBase.rowObjNormalized.paymentmethodselected) || PAYMENT_METHODS.check,
+    { label: 'Card paid', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid, order: buildEmailReviewPaidOrderInfo_(fixture.cardPaid || base, PAYMENT_METHODS.card), fresh: true },
+    { label: 'Card failed', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed, order: buildEmailReviewFailedOrderInfo_(fixture.cardFailed || base, PAYMENT_METHODS.card), fresh: false },
+    { label: 'Manual payment pending', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending, order: cloneEmailReviewOrderInfo_(manualPendingBase, {
+      paymentmethodselected: trimString_(manualPendingBase.rowObjNormalized.paymentmethodselected) || PAYMENT_METHODS.check,
       paymentstate: PAYMENT_STATES.manual_pending,
       orderstate: ORDER_STATES.awaiting_manual_payment,
       productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized
     }), fresh: false },
-    { label: 'Manual payment received', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received, order: buildEmailReviewPaidOrderInfo_(manualBase, trimString_(manualBase.rowObjNormalized.paymentmethodselected) || PAYMENT_METHODS.check, {
+    { label: 'Manual payment received', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received, order: buildEmailReviewPaidOrderInfo_(manualReceivedBase, trimString_(manualReceivedBase.rowObjNormalized.paymentmethodselected) || PAYMENT_METHODS.check, {
       overrides: { paymentstate: PAYMENT_STATES.manual_received }
     }), fresh: true },
-    { label: 'PO submitted', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted, order: cloneEmailReviewOrderInfo_(poBase, {
+    { label: 'PO submitted', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted, order: cloneEmailReviewOrderInfo_(poSubmittedBase, {
       paymentmethodselected: PAYMENT_METHODS.purchase_order,
       paymentstate: PAYMENT_STATES.not_started,
       orderstate: ORDER_STATES.awaiting_po_submission,
       productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.po_pending
     }), fresh: false },
-    { label: 'PO payment received', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, order: buildEmailReviewPaidOrderInfo_(poBase, PAYMENT_METHODS.purchase_order), fresh: true }
+    { label: 'PO payment received', milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, order: buildEmailReviewPaidOrderInfo_(poPaymentReceivedBase, PAYMENT_METHODS.purchase_order), fresh: true }
   ];
   examples.forEach(function(example) {
     const invoiceInfo = buildEmailReviewInvoiceInfo_(fixture, example.order, { fresh: example.fresh });

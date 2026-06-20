@@ -17,6 +17,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Active Fixture Matrix Reset For Dry-Run
+
+- Mode: Controlled active fixture reset + dry-run validation only.
+- Branch/commit/PR: `main`, no Apps Script deployment.
+- Goal: activate the expanded email-review fixture matrix by copying normalized fixture-storage rows into the active runtime tabs that the review dry run reads.
+- Files changed: `apps-script/src/Code.js`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Live Sheet changes: created a private Drive workbook backup first, then mutated only `EXPORT_LOG`, `PORTAL_ORDERS`, and `PORTAL_STRIPE_EVENTS` by copying values from `FIXTURE_EXPORT`, `FIXTURE_PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS` below the preserved header row. `USERS`, `USER_SESSIONS`, `PORTAL_ACCOUNTS`, Script Properties, Apps Script config, Stripe config, and `PORTAL_EMAIL_QUEUE` were not touched.
+- Row counts: active grid counts remained `EXPORT_LOG 918 x 47`, `PORTAL_ORDERS 900 x 68`, `PORTAL_STRIPE_EVENTS 1000 x 26`, and `PORTAL_EMAIL_QUEUE 1000 x 26`. Fixture storage remained `FIXTURE_EXPORT 1001 x 47`, `FIXTURE_PORTAL_ORDERS 1001 x 68`, and `FIXTURE_STRIPE_EVENTS 1001 x 28`.
+- Dry run: protected headless dry run returned `ok:true`, sent `0`, skipped `32`, failed `0`, reported `13` known fixture `artifact_project_mismatch` attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. No live review emails were sent.
+- Matrix: post-reset validator reported `16 / 29` cases covered, `11` skipped/omitted, `2` assertion-only missing, and `4` intent-metadata mismatches. The mismatches were classified as review-harness metadata/fixture-selection issues for `card_failed`, `ap_ach_failed`, submitted tax review, and submitted credit-terms review, not active reset/header failures.
+- Implementation note: prepared a narrow local review-harness patch so the suite selects dedicated active fixture rows for card/AP/manual/PO examples and reports account-document review intent metadata. The patch was not deployed because this task explicitly excluded Apps Script deployment.
+- Follow-ups: owner-approved Apps Script ship is required before deployed dry-run matrix intent mismatches can clear; the two assertion-only gaps remain `team_initiated_production_before_payment` and `production_complete`.
+
 ## 2026-06-19 - Email Review Fixture Storage Normalization
 
 - Mode: Produce final code + controlled fixture-storage mutation.
