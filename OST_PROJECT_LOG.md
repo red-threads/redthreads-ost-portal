@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Lifecycle Communication Assertion Ship
+
+- Mode: Focused Full Ship runtime patch + protected dry-run validation only.
+- Branch/commit/PR: `main`, Apps Script version `983`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: deploy commit `01af15e` so the deployed review harness covers `team_initiated_production_before_payment` and `production_complete` with assertion-only lifecycle communication cases.
+- Files changed: `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deployment.
+- Deployment: `clasp status` showed the expected tracked runtime files, `clasp push --force` pushed four Apps Script files, `clasp version "Harden lifecycle communication assertions"` created version `983`, and `clasp deploy` updated the existing stable deployment ID to `@983`.
+- Smoke: direct Apps Script `/exec` returned HTTP `200` with `Development revision 111`; public `/portal` returned HTTP `200` and referenced the stable deployment ID. Targeted checks found zero client secrets, hosted verification URLs, raw tokenized portal URLs, private URLs, full Checkout URLs, or Drive URLs in the smoke responses; generic static source marker strings were not private URLs.
+- Dry run: protected headless owner email-review dry run returned `ok:true`, sent `0`, skipped `32`, failed `0`, produced `59` render-only results, reported `13` known fixture `artifact_project_mismatch` attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. No live review emails were sent.
+- Matrix: post-deploy matrix validation returned `ok:true` with `29` required cases, `18` covered, `11` skipped/omitted, `0` missing, and `0` intent mismatches. The previous assertion-only gaps `team_initiated_production_before_payment` and `production_complete` are now covered by deployed assertion-only cases.
+- Decisions: no fixture reset, active-tab mutation, fixture-tab mutation, queue clear, Script Property change, Stripe change, or new deployment ID was performed in this pass. The fixture audit command was not run against live data because it requires private `--export`, `--orders`, and `--stripe` files and refused to run without them.
+- Follow-ups: keep the active fixture matrix in fixture-test mode until the owner directs restoration or another controlled reset; run only protected dry-run before any future live email-review blast.
+
 ## 2026-06-19 - Post-Hardening Lifecycle Communication Audit
 
 - Mode: Architect + QA reviewer + Produce final code; no Apps Script deployment or live review-suite send was authorized.
