@@ -50,7 +50,7 @@ The matrix validator reported `16 / 29` cases covered, `11` skipped/omitted case
 - `card_failed` and `ap_ach_failed` were still rendered from synthetic clones anchored to non-failed base orders.
 - `account_document_tax_submitted` and `account_document_credit_terms_submitted` rendered correct account-document review surfaces but reported order payment intent metadata.
 
-A local review-harness patch now selects dedicated active fixture rows for card/AP/manual/PO examples and overrides account-document lifecycle review metadata to account-document intent. That patch was not deployed in this activation-only task, so deployed dry-run results still reflect the previous stable Apps Script version until a later owner-approved Apps Script ship.
+Version `982` deploys the review-harness patch that selects dedicated active fixture rows for card/AP/manual/PO examples and overrides account-document lifecycle review metadata to account-document intent. The protected dry run after deploying `982` returned `ok:true`, sent `0`, skipped `32`, failed `0`, reported `13` known fixture attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. Matrix validation returned `ok:true`: the four previous intent mismatches cleared, leaving only the two expected assertion-only gaps, `team_initiated_production_before_payment` and `production_complete`.
 
 ### Header Compatibility
 
@@ -136,7 +136,7 @@ The first safe normalization step is complete: duplicated fixture-storage blocks
 Recommended next fixture/test-harness step:
 
 1. Preserve headers exactly.
-2. Deploy the local review-harness metadata/fixture-selection patch before expecting deployed dry-run matrix intent mismatches to clear.
+2. Add assertion-only coverage or explicit sendable review surfaces for `team_initiated_production_before_payment` and `production_complete` if those cases should move from documented gaps into required matrix coverage.
 3. Keep edge states assertion-only when the active review suite intentionally suppresses those communications.
 4. Re-run fixture audit and matrix validation before any active-tab reset or live email review blast.
 

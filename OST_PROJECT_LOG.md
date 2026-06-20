@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Email Review Fixture Intent Selection Ship
+
+- Mode: Focused Full Ship runtime patch + protected dry-run only.
+- Branch/commit/PR: `main`, Apps Script version `982`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: deploy committed review-harness fixture-selection/metadata patch `f9da100` so dry-run validation uses the active fixture matrix copied into runtime tabs.
+- Files changed: `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deployment.
+- Deployment: `clasp status` showed the expected tracked runtime files, `clasp push --force` pushed four Apps Script files, `clasp version "Fix email review fixture intent selection"` created version `982`, and `clasp deploy` updated the existing stable deployment ID to `@982`.
+- Smoke: direct Apps Script `/exec` returned HTTP `200` with `Development revision 111`; public `/portal` returned HTTP `200` and referenced the stable deployment ID. Targeted checks found zero `client_secret`, `clientSecret`, `hosted_verification_url`, portal token query URLs, token assignments, Checkout URLs, or Drive file URLs in the smoke responses.
+- Dry run: protected headless owner email-review dry run returned `ok:true`, sent `0`, skipped `32`, failed `0`, reported `13` known fixture `artifact_project_mismatch` attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. No live review emails were sent.
+- Matrix: post-deploy matrix validation returned `ok:true`; the previous `card_failed`, `ap_ach_failed`, `account_document_tax_submitted`, and `account_document_credit_terms_submitted` intent mismatches cleared. Remaining matrix gaps are the expected assertion-only cases `team_initiated_production_before_payment` and `production_complete`.
+- Decisions: no fixture reset, active-tab mutation, queue clear, Script Property change, Stripe change, or new deployment ID was performed in this pass.
+- Follow-ups: decide whether the two assertion-only cases should remain documented gaps or receive synthetic assertion coverage/sendable review surfaces.
+
 ## 2026-06-19 - Active Fixture Matrix Reset For Dry-Run
 
 - Mode: Controlled active fixture reset + dry-run validation only.
