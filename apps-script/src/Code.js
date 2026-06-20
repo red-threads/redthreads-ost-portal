@@ -26663,6 +26663,15 @@ function sanitizeLifecycleTeamStatusCopy_(value) {
   return clean;
 }
 
+function sanitizeLifecycleTeamIntroCopy_(value) {
+  const clean = trimString_(value);
+  if (!clean) return '';
+  return clean
+    .replace(/\bYour order confirmation and invoice are attached for your records\./gi, 'The client\'s order confirmation and invoice are attached for team review.')
+    .replace(/\byour order\b/gi, 'the client\'s order')
+    .replace(/\byour invoice\b/gi, 'the client\'s invoice');
+}
+
 function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
   const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
   const opts = (options && typeof options === 'object') ? options : {};
@@ -26670,7 +26679,7 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
   const summary = (ctx.orderSummary && typeof ctx.orderSummary === 'object') ? ctx.orderSummary : {};
   const token = trimString_(opts.token || summary.token || summary.portalToken || ctx.token);
   const action = resolveLifecycleTeamEmailActionKey_(ctx, opts);
-  const intro = trimString_(opts.intro);
+  const intro = sanitizeLifecycleTeamIntroCopy_(opts.intro);
   const statusCopy = sanitizeLifecycleTeamStatusCopy_(opts.statusCopy);
   const models = {
     review_payment_issue: {
@@ -30715,6 +30724,25 @@ function appendEmailReviewCommunicationSummary_(result, content) {
   return target;
 }
 
+function appendEmailReviewDocumentCopySummary_(result, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const label = trimString_(opts.label || (result && result.label));
+  const family = trimString_(opts.family || (result && result.family));
+  const recipientClass = trimString_(opts.recipientClass || (result && result.recipientClass)) || 'client';
+  const subject = trimString_(opts.subject || (result && result.subject)) || label;
+  return appendEmailReviewCommunicationSummary_(result, {
+    subject: subject,
+    body: subject,
+    htmlBody: subject,
+    communicationContract: buildPortalCommunicationContext_({}, {
+      family: family === 'summary_pdf' ? 'summary_pdf' : 'document_copy',
+      trigger: 'email_review_document_copy',
+      recipientClass: recipientClass,
+      documentLabel: subject
+    })
+  });
+}
+
 function buildEmailReviewCommunicationAssertionContract_(caseDef) {
   const source = (caseDef && typeof caseDef === 'object') ? caseDef : {};
   return buildPortalCommunicationContext_({
@@ -31486,7 +31514,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
       const sourceAttachment = attachments[0];
       if (sourceAttachment && typeof sourceAttachment.getBytes === 'function') {
         if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
-          results.push({
+          results.push(appendEmailReviewDocumentCopySummary_({
             ok: true,
             dryRun: true,
             sent: false,
@@ -31495,7 +31523,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
             recipientClass: 'client',
             attachmentCount: 1,
             subject: 'Red Threads estimate copy'
-          });
+          }));
         } else {
           const estimateRow = findEmailReviewEstimateRow_(fixture);
           const estimateProjectNumber = resolveEmailReviewEstimateProjectNumber_(fixture, summary);
@@ -31517,7 +31545,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
             projectName: getEmailReviewEstimateProjectName_(estimateRow, summary),
             clientName: getEmailReviewEstimateClientName_(estimateRow, summary)
           });
-          results.push({
+          results.push(appendEmailReviewDocumentCopySummary_({
             ok: summaryResult && summaryResult.ok === true,
             sent: summaryResult && summaryResult.ok === true,
             label: 'Summary/invoice explicit send client',
@@ -31526,7 +31554,9 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
             attachmentCount: 1,
             transport: trimString_(summaryResult && summaryResult.transport),
             noReply: summaryResult && summaryResult.noReply === true
-          });
+          }, {
+            subject: 'Red Threads estimate copy'
+          }));
         }
       } else {
         skipEmailReviewResult_(results, 'Summary/invoice explicit send client', 'summary_pdf', 'client', 'fixture_missing');
@@ -31549,7 +31579,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
 
   if (!omitEmailReviewSuiteItemIfNeeded_(results, 'Password reset client', 'password_reset', 'client')) {
     if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
-      results.push({
+      results.push(appendEmailReviewDocumentCopySummary_({
         ok: true,
         dryRun: true,
         sent: false,
@@ -31558,14 +31588,14 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
         recipientClass: 'client',
         attachmentCount: 0,
         subject: 'Reset your Red Threads portal password'
-      });
+      }));
       return;
     }
     const passwordResult = authSendResetCode({
       email: recipients.client
     });
     if (passwordResult && passwordResult.ok === true) {
-      results.push({
+      results.push(appendEmailReviewDocumentCopySummary_({
         ok: true,
         sent: true,
         label: 'Password reset client',
@@ -31574,7 +31604,9 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
         attachmentCount: 0,
         transport: 'mailapp_noreply',
         noReply: true
-      });
+      }, {
+        subject: 'Reset your Red Threads portal password'
+      }));
     } else {
       sendEmailReviewPasswordResetFallback_(results, recipients.client);
     }
@@ -31591,7 +31623,7 @@ function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, doc
     }
     const payload = buildAccountDocumentBlankEmailPayload_(fixture.accountContext, definition, [recipients.client]);
     if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
-      results.push({
+      results.push(appendEmailReviewDocumentCopySummary_({
         ok: true,
         dryRun: true,
         sent: false,
@@ -31600,13 +31632,13 @@ function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, doc
         recipientClass: 'client',
         attachmentCount: Array.isArray(payload.attachments) ? payload.attachments.length : 0,
         subject: trimString_(payload.subject)
-      });
+      }));
       return;
     }
     const result = sendNotificationEmail_(Object.assign({}, payload, {
       subject: '[EMAIL REVIEW] ' + label + ' - ' + trimString_(payload.subject)
     }));
-    results.push({
+    results.push(appendEmailReviewDocumentCopySummary_({
       ok: result && result.ok === true,
       sent: result && result.ok === true,
       label: label,
@@ -31615,7 +31647,9 @@ function sendEmailReviewAccountDocumentSource_(results, fixture, recipients, doc
       attachmentCount: Array.isArray(payload.attachments) ? payload.attachments.length : 0,
       transport: trimString_(result && result.transport),
       noReply: result && result.noReply === true
-    });
+    }, {
+      subject: trimString_(payload.subject)
+    }));
   } catch (err) {
     results.push({
       ok: false,
@@ -31634,7 +31668,7 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
   const resetUrl = buildPasswordResetReturnUrl_('00000000-0000-4000-8000-000000000000');
   const content = buildPasswordResetEmailContent_(code, resetUrl);
   if (EMAIL_REVIEW_SUITE_RENDER_ONLY_ === true) {
-    results.push({
+    results.push(appendEmailReviewDocumentCopySummary_({
       ok: true,
       dryRun: true,
       sent: false,
@@ -31643,7 +31677,7 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
       recipientClass: 'client',
       attachmentCount: 0,
       subject: trimString_(content.subject)
-    });
+    }));
     return;
   }
   const htmlBody = buildPortalNativeEmailReviewBannerHtml_('Password reset client') + content.htmlBody;
@@ -31653,7 +31687,7 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
     body: '[EMAIL REVIEW: Password reset client]\n\n' + content.body,
     htmlBody: htmlBody
   });
-  results.push({
+  results.push(appendEmailReviewDocumentCopySummary_({
     ok: result && result.ok === true,
     sent: result && result.ok === true,
     label: 'Password reset client',
@@ -31662,7 +31696,9 @@ function sendEmailReviewPasswordResetFallback_(results, recipient) {
     attachmentCount: 0,
     transport: trimString_(result && result.transport),
     noReply: result && result.noReply === true
-  });
+  }, {
+    subject: trimString_(content.subject)
+  }));
 }
 
 /* ---------------- Hosted Stripe Checkout Builders + Transport ---------------- */

@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-20 - Final Email Review Matrix Gate And Live Blast On Version 985
+
+- Mode: Full ship runtime patch plus protected dry run and owner-approved live email-review suite.
+- Branch/commit/PR: `main`, Apps Script version `985`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: ship the local email-review metadata/copy patch, close the unlocked review-suite gate, and run the live owner inbox-review suite after a green dry run.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Code.js` now normalizes team action intro copy away from client possessive `your order/invoice` wording and adds document-copy communication metadata to password reset, summary/invoice explicit send, blank tax source, and blank credit-terms source review results. `Index.html` shows development revision `113`.
+- Preservation: no lifecycle eligibility, recipient routing, production/payment communication policy, queue job types, idempotency keys, attachment policy, Sheet schemas, Script Properties, Stripe config, Apps Script config, or deployment ID changed.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Fix email review matrix metadata"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed the stable deployment at `@985 - Fix email review matrix metadata`. Direct Apps Script `/exec` returned HTTP `200` with `Development revision 113` and omitted stale revision `112`; public `/portal` returned HTTP `200`, still referenced the stable deployment ID, and retained route bridge plus `teamAccess` passthrough markers. Targeted checks found zero actual client secrets, hosted verification URLs, raw tokenized portal URLs, private Checkout URLs, or private Drive file URLs.
+- Review suite: protected dry run returned `ok:true`, sent `0`, skipped `1`, failed `0`, total `59`, attachment fallback `30`, contradiction warnings/errors `0`, and matrix `ok:true` with `29` required, `29` covered, `0` skipped/missing, and `0` intent mismatches. Owner-approved live suite returned `ok:true`, sent `46` (`23` client, `19` team, `4` AP), skipped `1`, failed `0`, attachment fallback `30`, and contradiction warnings/errors `0`.
+- Reset/queue behavior: the live non-dry-run suite used its default reset path, re-copying `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then clearing `PORTAL_EMAIL_QUEUE` before sending. Fixture-storage tabs were not mutated.
+- Follow-ups: owner should inspect the 46 delivered review emails for copy/layout findings; active tabs remain fixture-loaded until the owner explicitly chooses restore from the private Drive backup, another fixture reset, or continued fixture mode.
+
 ## 2026-06-19 - Unlock All Email Review Suite Fixtures On Version 984
 
 - Mode: Full ship runtime patch without owner email review-suite execution.

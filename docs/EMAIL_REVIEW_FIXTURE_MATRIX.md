@@ -58,6 +58,8 @@ The first live owner review-suite blast against version `983` was run on 2026-06
 
 Version `984` clears the configured review-suite omission maps so all sendable fixture labels and recipient classes are eligible again. No dry run or live suite was triggered during that unlock ship, so the next protected dry run will produce the authoritative unlocked send/skip matrix.
 
+Version `985` closes the unlocked-suite dry-run gate. It adds document-copy communication metadata to the utility review rows for password reset, summary/invoice explicit send, blank tax source, and blank credit-terms source, and removes the remaining team client-possessive warning from locked-order resend team review copy. The protected dry run returned `ok:true`, total `59`, skipped `1`, failed `0`, attachment fallback `30`, contradiction warnings/errors `0`, and matrix `ok:true` with `29 / 29` required cases covered and `0` intent mismatches. The owner-approved live suite sent `46` review emails (`23` client, `19` team, `4` AP), skipped only `Submitted tax-form copy client` because the submitted artifact is unavailable in fixtures, failed `0`, and reported the same `30` attachment fallbacks. The live non-dry-run path reset `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then cleared `PORTAL_EMAIL_QUEUE`; fixture-storage tabs were not mutated.
+
 ### Header Compatibility
 
 | Active tab | Fixture tab | Result |
@@ -137,14 +139,14 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 
 ## Fixture Reset Plan
 
-The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete; future review-suite blasts or Apps Script deployments still require explicit owner approval.
+The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete, and the unlocked full review-suite blast against version `985` is complete. Future review-suite blasts, active-tab restoration, or Apps Script deployments still require explicit owner approval.
 
 Recommended next fixture/test-harness step:
 
 1. Preserve headers exactly.
 2. Keep `team_initiated_production_before_payment` and `production_complete` as assertion-only unless the owner explicitly wants live sendable review surfaces for those edge states.
 3. Keep edge states assertion-only when the active review suite intentionally suppresses those communications.
-4. Re-run fixture audit and matrix validation before any active-tab reset or live email review blast.
+4. Have the owner inspect the `46` delivered review emails for copy/layout findings, then keep active tabs in fixture mode or restore them from the private Drive backup only after explicit owner direction.
 
 ## Local Tooling
 
