@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Live Owner Email Review Suite Blast On Version 983
+
+- Mode: Live owner email review suite blast only.
+- Branch/commit/PR: `main`; Apps Script stayed on version `983` at deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: send the live owner review-suite emails against the active fixture-test matrix so the owner can inspect real inbox rendering, styling, subjects, recipient/audience handling, CTAs, and attachment behavior.
+- Files changed: `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Preflight: `git status --short --branch`, `git branch --show-current`, and `git pull --ff-only` confirmed clean `main` aligned with `origin/main`; `clasp deployments` confirmed the stable deployment still pointed at `@983 - Harden lifecycle communication assertions`.
+- Final dry run: protected headless owner email-review dry run returned `ok:true`, sent `0`, skipped `32`, failed `0`, produced `59` render/assertion results, reported `13` known fixture `artifact_project_mismatch` attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. Dry-run matrix validation returned `ok:true` with `29` required, `18` covered, `11` skipped/omitted, `0` missing, and `0` intent mismatches.
+- Live blast: the live owner review-suite returned `ok:true`, sent `15`, skipped `32`, failed `0`, reported `13` known fixture attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. Sent labels were the team Standard ACH, AP ACH, card, manual payment, PO, tax-exemption submitted review, and credit-terms submitted review fixtures.
+- Reset/queue behavior: the non-dry-run suite used its default reset path, re-copying `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then clearing `PORTAL_EMAIL_QUEUE` rows before sending. Fixture-storage tabs were not mutated.
+- Post-send validation: matrix validation against the live-send receipt is not the authoritative full matrix because live-send output excludes synthetic assertion-only dry-run rows. The protected dry-run matrix remained clean after the send. `npm run validate:runtime`, `npm run validate`, and `git diff --check` passed.
+- Preservation: no Apps Script deployment, fixture-tab mutation, Sheet header change, Script Property change, Stripe config change, or active restore was performed in this pass.
+- Follow-ups: owner should inspect the 15 inbox emails for copy and visual review; keep active tabs in fixture-test mode until the owner directs restore or another controlled reset.
+
 ## 2026-06-19 - Lifecycle Communication Assertion Ship
 
 - Mode: Focused Full Ship runtime patch + protected dry-run validation only.

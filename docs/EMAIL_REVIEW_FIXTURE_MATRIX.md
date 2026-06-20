@@ -54,6 +54,8 @@ Version `982` deploys the review-harness patch that selects dedicated active fix
 
 Version `983` deploys the post-hardening assertion coverage. The protected dry run after deploying `983` returned `ok:true`, sent `0`, skipped `32`, failed `0`, reported `13` known fixture attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. Matrix validation returned `ok:true` with `29` required cases, `18` covered cases, `11` skipped/omitted cases, `0` missing cases, and `0` intent mismatches. The previously pending `team_initiated_production_before_payment` and `production_complete` cases are now covered by synthetic assertion-only results in the deployed dry-run harness.
 
+The first live owner review-suite blast against version `983` was run on 2026-06-19 after a final clean protected dry run. It returned `ok:true`, sent `15` team-recipient review emails, skipped `32` configured/omitted cases, failed `0`, reported `13` known fixture `artifact_project_mismatch` attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. The non-dry-run suite used its default reset path, re-copying fixture storage into `EXPORT_LOG`, `PORTAL_ORDERS`, and `PORTAL_STRIPE_EVENTS`, and clearing `PORTAL_EMAIL_QUEUE` rows before sending. The live-send response is an inbox-send receipt and does not include synthetic assertion-only dry-run rows; use the protected dry-run JSON for full matrix validation.
+
 ### Header Compatibility
 
 | Active tab | Fixture tab | Result |
@@ -133,7 +135,7 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 
 ## Fixture Reset Plan
 
-The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. Owner approval is still required before any live review-suite blast or Apps Script deployment.
+The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete; future review-suite blasts or Apps Script deployments still require explicit owner approval.
 
 Recommended next fixture/test-harness step:
 
