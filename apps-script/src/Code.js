@@ -30669,19 +30669,8 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
-const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
-  'ap ach failed ap': 'ap_review_omitted',
-  'ap payment link sent': 'ap_review_omitted',
-  'ap ach pending ap': 'ap_review_omitted',
-  'ap ach receipt ap': 'ap_review_omitted',
-  'explicit locked-order resend team': 'team_review_omitted',
-  'chat digest client to team': 'team_review_omitted',
-  'tax exempt approved team': 'team_review_omitted',
-  'credit terms approved team': 'team_review_omitted'
-};
-const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {
-  client: 'client_review_omitted'
-};
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
+const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {};
 let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
 
 function getEmailReviewSuiteOmissionReason_(label, recipientClass) {

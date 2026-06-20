@@ -56,6 +56,8 @@ Version `983` deploys the post-hardening assertion coverage. The protected dry r
 
 The first live owner review-suite blast against version `983` was run on 2026-06-19 after a final clean protected dry run. It returned `ok:true`, sent `15` team-recipient review emails, skipped `32` configured/omitted cases, failed `0`, reported `13` known fixture `artifact_project_mismatch` attachment fallbacks, and reported `0` lifecycle contradiction warnings/errors. The non-dry-run suite used its default reset path, re-copying fixture storage into `EXPORT_LOG`, `PORTAL_ORDERS`, and `PORTAL_STRIPE_EVENTS`, and clearing `PORTAL_EMAIL_QUEUE` rows before sending. The live-send response is an inbox-send receipt and does not include synthetic assertion-only dry-run rows; use the protected dry-run JSON for full matrix validation.
 
+Version `984` clears the configured review-suite omission maps so all sendable fixture labels and recipient classes are eligible again. No dry run or live suite was triggered during that unlock ship, so the next protected dry run will produce the authoritative unlocked send/skip matrix.
+
 ### Header Compatibility
 
 | Active tab | Fixture tab | Result |

@@ -17,6 +17,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-19 - Unlock All Email Review Suite Fixtures On Version 984
+
+- Mode: Full ship runtime patch without owner email review-suite execution.
+- Branch/commit/PR: `main`, Apps Script version `984`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: unlock all configured owner email-review suite emails by removing label-specific and recipient-class omission policies.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `EMAIL_REVIEW_SUITE_OMITTED_LABELS_` and `EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_` are now empty objects, so configured review-suite labels and recipient classes are no longer suppressed by the omission maps. `Index.html` shows development revision `112`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-repo.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deployment.
+- Deployment: `clasp status` showed the expected tracked runtime files, `clasp push --force` pushed four Apps Script files, `clasp version "Unlock all email review fixtures"` created version `984`, and `clasp deploy` updated the existing stable deployment ID to `@984`.
+- Smoke: direct Apps Script `/exec` returned HTTP `200`, contained `Development revision 112`, and omitted stale revision `111`. Public `/portal` returned HTTP `200`, still referenced the stable deployment ID, and retained route bridge plus `teamAccess` passthrough markers. Targeted checks found zero client secrets, hosted verification URLs, or raw tokenized portal URLs; Checkout/Drive marker hits were static source allowlist/helper strings, not private live URLs.
+- Preservation: no email-review dry run, live email-suite send, fixture-tab mutation, active-tab reset, explicit `PORTAL_EMAIL_QUEUE` clear, Script Property change, Stripe config change, Sheet header change, or new deployment ID was performed in this pass.
+- Follow-ups: the next owner-approved protected dry run will show the unlocked review-suite send/skip matrix before any future live blast.
+
 ## 2026-06-19 - Live Owner Email Review Suite Blast On Version 983
 
 - Mode: Live owner email review suite blast only.
