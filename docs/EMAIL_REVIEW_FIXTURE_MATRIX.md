@@ -66,6 +66,25 @@ Version `986` narrows the owner review-suite send set after inbox review by omit
 
 Version `987` adds the centered red dynamic retry CTA to the `Card failed client` action card before hiding that label from future review-suite sends. The CTA reads `Click to access Project #... and retry payment` and continues to use the invoice-summary project portal route. The protected dry run returned `ok:true`, total `59`, skipped `27`, failed `0`, attachment fallback `15`, contradiction warnings/errors `0`, and non-strict matrix `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches. No live review-suite blast was run for version `987`, and active runtime tabs, fixture-storage tabs, and `PORTAL_EMAIL_QUEUE` were not mutated.
 
+Version `988` adds shared email production timing display while preserving the existing owner-reviewed omission policy. Client-facing order-context Project Details cards now show `Production Time` after `Project total` when selected order jobs include parseable business-day turnaround data. Shared client/team progress bars now show current production as `In Production` / `Will Finish M/D` when lifecycle-derived production target timing is available, and completed production as `Production` / `Completed M/D`. The protected post-deploy dry run returned `ok:true`, total `59`, skipped `27`, failed `0`, attachment fallback `15`, contradiction warnings/errors `0`, and non-strict matrix `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches. No live review-suite blast was run for version `988`, and active runtime tabs, fixture-storage tabs, and `PORTAL_EMAIL_QUEUE` were not mutated.
+
+## Client-Facing Email Inventory And Production Timing Display
+
+Inventory date: 2026-06-22. This inventory describes client-recipient email families that can be rendered by the current portal/review harness and whether the shared order-context shell can show production timing.
+
+The new production timing display is intentionally scoped to client-facing order-context emails. Those emails render lifecycle progress and Project Details from the canonical order summary, so they can safely show `Production Time` after `Project total` when selected jobs include a parseable business-day turnaround. Non-order client emails do not receive the row because they do not carry reliable project/job timing context.
+
+| Client-facing email group | Review-suite labels | Shell context | Production timing display | Current review-suite status |
+| --- | --- | --- | --- | --- |
+| Standard ACH client emails | `Standard ACH pending client`, `Standard ACH verification client`, `Standard ACH receipt client`, `Standard ACH failed client` | Order-context progress + Project Details | Show `Production Time` when selected-job turnaround is available; progress shows `Will Finish M/D` when production is current | Hidden as owner-reviewed |
+| Card/manual/PO payment lifecycle client emails | `Card paid client`, `Card failed client`, `Manual payment pending client`, `Manual payment received client`, `PO submitted client`, `PO payment received client` | Order-context progress + Project Details | Show `Production Time` when selected-job turnaround is available; progress shows `Will Finish M/D` or `Completed M/D` from lifecycle timing | Hidden as owner-reviewed |
+| Locked-order and PO invoice client emails | `Explicit locked-order resend client`, `PO invoice prepared client` | Order-context progress + Project Details | Show `Production Time` when selected-job turnaround is available; no timing is fabricated when production data is unavailable | Hidden as owner-reviewed |
+| Team-to-client chat digest | `Chat digest team to client` | Chat digest plus lifecycle progress/details when order context is available | Uses the shared order-context timing display when lifecycle sections render | Hidden as owner-reviewed |
+| Summary/invoice explicit send | `Summary/invoice explicit send client` | Utility/document-copy path | No Project Details timing row; the utility send carries document-copy metadata rather than lifecycle project timing | Hidden as owner-reviewed |
+| Account-document source and decisions | `Blank tax document source client`, `Blank credit terms source client`, `Tax exempt approved client`, `Tax exempt denied client`, `Tax exempt reset client`, `Credit terms approved client`, `Credit terms denied client`, `Credit terms reset client` | Account-document path | No Project Details timing row; these emails are account/document communications, not order production communications | Hidden as owner-reviewed |
+| Password reset | `Password reset client` | Auth utility path | No Project Details timing row | Hidden as owner-reviewed |
+| Submitted tax-form copy | `Submitted tax-form copy client` | Submitted artifact copy path | No Project Details timing row | Safely skipped when submitted artifact is unavailable |
+
 ### Header Compatibility
 
 | Active tab | Fixture tab | Result |

@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-22 - Email Production Timing Display On Version 988
+
+- Mode: Full ship runtime patch without live review-suite send.
+- Branch/commit/PR: `main`, Apps Script version `988`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add production timing to client-facing order-context email details and replace active production progress copy with lifecycle-derived finish-date language.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Code.js` now derives email production timing from selected order jobs, existing turnaround parsing, and canonical lifecycle production-start/completion dates. Client-facing order-context Project Details cards show `Production Time` after `Project total` when a business-day turnaround is available. Shared email progress shows active production as `In Production` / `Will Finish M/D` when the projected finish date is reliable, and completed production as `Production` / `Completed M/D`, preferring actual all-job completion before lifecycle/timeline completion. `Index.html` shows development revision `116`.
+- Preservation: no lifecycle eligibility, recipient routing, production/payment communication policy, queue job types, idempotency keys, attachment policy, Sheet schemas, Script Properties, Stripe config, Apps Script config, or deployment ID changed.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, protected dry run capture, and `npm run email-review:matrix -- --input /tmp/email-review-dry-run-v988.json` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add email production timing"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed the stable deployment at `@988 - Add email production timing`. Direct Apps Script `/exec` returned HTTP `200` with `Development revision 116` and omitted stale revision `115`; public `/portal` returned HTTP `200` and still referenced the stable deployment ID. Targeted checks found zero actual client secrets, hosted verification URLs, routing numbers, bank account tokens, Stripe secrets, private Checkout URLs, or private Drive file URLs.
+- Review suite: protected post-deploy dry run returned `ok:true`, sent `0`, skipped `27`, failed `0`, total `59`, attachment fallback `15`, and contradiction warnings/errors `0`. Non-strict matrix validation returned `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches.
+- Reset/queue behavior: no live review-suite blast was run. The dry run performed only header/reset checks; active runtime tabs, fixture-storage tabs, and `PORTAL_EMAIL_QUEUE` were not mutated in this pass.
+- Follow-ups: if the owner wants inbox visual confirmation for the newly hidden client order-context emails, temporarily unhide selected labels or run a focused fixture render review; active runtime tabs remain fixture-loaded from prior review work until the owner explicitly chooses restoration or continued fixture mode.
+
 ## 2026-06-22 - Add Card Failed Client Retry CTA On Version 987
 
 - Mode: Full ship runtime patch without live review-suite send.

@@ -25475,6 +25475,11 @@ function resolveLifecycleEmailStepCompletedDate_(step, context) {
     return workflow.paymentReceivedAt || summary.paymentReceivedManuallyAt || summary.paidAt || timeline.paidDateValue || '';
   }
   if (key === 'production' || key === 'print') {
+    if (trimString_(item.state).toLowerCase() === 'complete') {
+      return resolveLifecycleEmailProductionCompletionDate_(workflow, summary, {
+        timeline: timeline
+      });
+    }
     if (!isLifecycleEmailProductionActive_(workflow, summary)) return '';
     return resolveLifecycleEmailProductionStartAt_(workflow, summary) || timeline.printStartDateValue || workflow.productionCompletionAt || timeline.completionDateValue || '';
   }
@@ -25494,16 +25499,28 @@ function isLifecycleEmailProductionStep_(step) {
 
 function resolveLifecycleEmailProgressStatusDisplay_(step, context) {
   const item = (step && typeof step === 'object') ? step : {};
+  const ctx = (context && typeof context === 'object') ? context : {};
+  const workflow = (ctx.workflowContext && typeof ctx.workflowContext === 'object') ? ctx.workflowContext : {};
+  const summary = (ctx.orderSummary && typeof ctx.orderSummary === 'object') ? ctx.orderSummary : {};
+  const timeline = (ctx.timeline && typeof ctx.timeline === 'object') ? ctx.timeline : {};
   const state = trimString_(item.state).toLowerCase();
   const completedDate = resolveLifecycleEmailStepCompletedDate_(item, context);
   const completedMonthDay = formatLifecycleEmailProgressMonthDayLabel_(completedDate);
+  const isProductionStep = isLifecycleEmailProductionStep_(item);
   let label = trimString_(item.label);
   let status = 'Next';
-  if (state === 'complete') {
+  if (isProductionStep && state === 'complete') {
+    label = 'Production';
     status = completedMonthDay ? ('Completed ' + completedMonthDay) : 'Completed';
-  } else if (state === 'current' && isLifecycleEmailProductionStep_(item)) {
+  } else if (isProductionStep && state === 'current') {
     label = 'In Production';
-    status = completedMonthDay ? ('Started ' + completedMonthDay) : 'Started';
+    const timing = resolveLifecycleEmailProductionTimingMeta_(workflow, summary, {
+      timeline: timeline
+    });
+    const finishMonthDay = formatLifecycleEmailProgressMonthDayLabel_(timing.targetDateValue || timing.targetDateLabel);
+    status = finishMonthDay ? ('Will Finish ' + finishMonthDay) : (completedMonthDay ? ('Started ' + completedMonthDay) : 'Started');
+  } else if (state === 'complete') {
+    status = completedMonthDay ? ('Completed ' + completedMonthDay) : 'Completed';
   } else if (state !== 'complete' && isLifecycleEmailPaymentStep_(item)) {
     label = 'Complete Payment';
     status = state === 'current' ? 'Current action' : 'Next';
@@ -26516,12 +26533,90 @@ function resolveLifecycleEmailLongestTurnaroundLabel_(jobs) {
   return trimString_(selected);
 }
 
+function getLifecycleEmailProductionTimingJobs_(orderSummary) {
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  return Array.isArray(summary.lockedOrderDraft && summary.lockedOrderDraft.selectedJobs) && summary.lockedOrderDraft.selectedJobs.length
+    ? summary.lockedOrderDraft.selectedJobs
+    : (Array.isArray(summary.selectedJobs) ? summary.selectedJobs : []);
+}
+
+function getLifecycleEmailProductionTimeAnchorLabel_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const variant = trimString_(ctx.variant || summary.variant).toLowerCase();
+  const paymentMethod = trimString_(summary.paymentMethodSelected || ctx.paymentMethodSelected || ctx.currentPaymentMethod).toLowerCase();
+  const paymentReceived = isPortalCommunicationPaymentReceived_(ctx, summary);
+  const poSubmitted = ctx.isPoSubmitted === true ||
+    ctx.poSubmitted === true ||
+    !!trimString_(ctx.poSubmittedAt || summary.poSubmittedAt || ctx.poNumber || summary.poNumber);
+  if (variant === 'purchase_order' || paymentMethod === PAYMENT_METHODS.purchase_order || poSubmitted) {
+    return 'from PO submission';
+  }
+  if (!paymentReceived && isLifecycleEmailProductionActive_(ctx, summary)) {
+    return 'from production authorization';
+  }
+  return 'from payment';
+}
+
+function resolveLifecycleEmailProductionTimeLabel_(workflowContext, orderSummary) {
+  const jobs = getLifecycleEmailProductionTimingJobs_(orderSummary);
+  const turnaround = resolveLifecycleEmailLongestTurnaroundLabel_(jobs);
+  const parsed = parseBusinessDayCountForDashboard_(turnaround);
+  if (!parsed) return '';
+  const anchorLabel = getLifecycleEmailProductionTimeAnchorLabel_(workflowContext, orderSummary);
+  return trimString_([turnaround, anchorLabel].filter(Boolean).join(' '));
+}
+
+function resolveLifecycleEmailProductionCompletionDate_(workflowContext, orderSummary, options) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const timeline = (opts.timeline && typeof opts.timeline === 'object') ? opts.timeline : {};
+  const jobs = getLifecycleEmailProductionTimingJobs_(summary);
+  const completionMap = normalizeTeamJobCompletionMap_(
+    summary.teamJobCompletionByJobId ||
+    ctx.teamJobCompletionByJobId ||
+    ctx.completedJobsByJobId
+  );
+  const actualCompletion = derivePortalValidatedCompletionMeta_(jobs, completionMap, {
+    productionStartAt: resolveLifecycleEmailProductionStartAt_(ctx, summary),
+    lastOrderUpdatedAt: summary.lastUpdatedAt || ctx.lastOrderUpdatedAt
+  });
+  if (actualCompletion.allJobsCompleted === true && Number.isFinite(Number(actualCompletion.dateValue))) {
+    return Number(actualCompletion.dateValue);
+  }
+  return ctx.productionCompletionAt ||
+    timeline.completionDateValue ||
+    timeline.completionDateLabel ||
+    '';
+}
+
+function resolveLifecycleEmailProductionTimingMeta_(workflowContext, orderSummary, options) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const jobs = getLifecycleEmailProductionTimingJobs_(summary);
+  const productionStartAt = resolveLifecycleEmailProductionStartAt_(ctx, summary);
+  const productionActive = isLifecycleEmailProductionActive_(ctx, summary);
+  const target = productionActive && jobs.length
+    ? derivePortalProductionTargetMeta_(jobs, productionStartAt)
+    : {};
+  const completionDate = resolveLifecycleEmailProductionCompletionDate_(ctx, summary, options);
+  return {
+    selectedJobs: jobs,
+    productionStartAt: productionStartAt,
+    productionActive: productionActive,
+    productionTimeLabel: resolveLifecycleEmailProductionTimeLabel_(ctx, summary),
+    targetDateValue: Number.isFinite(Number(target && target.dateValue)) ? Number(target.dateValue) : null,
+    targetDateLabel: trimString_(target && target.dateLabel),
+    targetIso: trimString_(target && target.iso),
+    completionDate: completionDate
+  };
+}
+
 function resolveLifecycleEmailProductionTimingLines_(workflowContext, orderSummary) {
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
-  const selectedJobs = Array.isArray(summary.lockedOrderDraft && summary.lockedOrderDraft.selectedJobs) && summary.lockedOrderDraft.selectedJobs.length
-    ? summary.lockedOrderDraft.selectedJobs
-    : (Array.isArray(summary.selectedJobs) ? summary.selectedJobs : []);
+  const selectedJobs = getLifecycleEmailProductionTimingJobs_(summary);
   if (!selectedJobs.length) return [];
   const lines = [];
   const productionStartAt = resolveLifecycleEmailProductionStartAt_(ctx, summary);
@@ -26907,6 +27002,9 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
       : buildLifecycleEmailInvoiceUrl_(token)
   );
   const teamModePassword = recipientClass === 'team' && cfg ? trimString_(cfg.teamModePassword) : '';
+  const productionTimeLabel = recipientClass === 'client'
+    ? resolveLifecycleEmailProductionTimeLabel_(workflowContext, summary)
+    : '';
   return {
     orderSummary: summary,
     accountSummary: accountSummary,
@@ -26935,6 +27033,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
       { label: 'Project #', value: dealNumber },
       { label: 'Invoice', value: invoiceNumber },
       { label: 'Project total', value: formatUsdAmount_(amount) },
+      { label: 'Production Time', value: productionTimeLabel },
       { label: 'Payment method', value: paymentMethodLabel },
       { label: 'Payment date', value: isReceipt ? paymentDate : '' }
     ],
