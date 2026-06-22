@@ -23071,10 +23071,25 @@ function buildApAchLifecycleEmailHistoryLines_(milestone, workflowContext, order
   const normalized = normalizeApAchLifecycleEmailMilestone_(milestone);
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
-  const lines = buildLifecycleEmailHistoryLines_(ctx, summary, '', {});
+  let lines = buildLifecycleEmailHistoryLines_(ctx, summary, '', {});
   function addLine(label, value) {
     const dateLabel = buildLifecycleEmailDateLabel_(value);
     if (dateLabel) lines.push(label + ': ' + dateLabel);
+  }
+  function replaceOrAddPaymentReceivedLine(label, value) {
+    const dateLabel = buildLifecycleEmailDateLabel_(value);
+    if (!dateLabel) return;
+    const nextLine = label + ': ' + dateLabel;
+    let replaced = false;
+    lines = lines.map(function(line) {
+      const clean = trimString_(line);
+      if (/^(?:ACH payment received|Payment received):/i.test(clean)) {
+        replaced = true;
+        return nextLine;
+      }
+      return line;
+    });
+    if (!replaced) lines.push(nextLine);
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
     addLine('AP checkout started', summary.lastUpdatedAt);
@@ -23083,7 +23098,7 @@ function buildApAchLifecycleEmailHistoryLines_(milestone, workflowContext, order
     addLine('AP ACH submitted', summary.lastUpdatedAt || summary.lockedAt);
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
-    addLine('AP ACH payment received', ctx.paymentReceivedAt || summary.paidAt);
+    replaceOrAddPaymentReceivedLine('AP ACH payment received', ctx.paymentReceivedAt || summary.paidAt);
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
     addLine('AP ACH issue recorded', summary.stripeLatestEventAt || summary.lastUpdatedAt);
@@ -27002,9 +27017,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
       : buildLifecycleEmailInvoiceUrl_(token)
   );
   const teamModePassword = recipientClass === 'team' && cfg ? trimString_(cfg.teamModePassword) : '';
-  const productionTimeLabel = recipientClass === 'client'
-    ? resolveLifecycleEmailProductionTimeLabel_(workflowContext, summary)
-    : '';
+  const productionTimeLabel = resolveLifecycleEmailProductionTimeLabel_(workflowContext, summary);
   return {
     orderSummary: summary,
     accountSummary: accountSummary,
@@ -30793,34 +30806,7 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
-const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
-  'password reset client': 'owner_reviewed_hidden',
-  'blank credit terms source client': 'owner_reviewed_hidden',
-  'blank tax document source client': 'owner_reviewed_hidden',
-  'summary/invoice explicit send client': 'owner_reviewed_hidden',
-  'explicit locked-order resend client': 'owner_reviewed_hidden',
-  'po invoice prepared client': 'owner_reviewed_hidden',
-  'chat digest team to client': 'owner_reviewed_hidden',
-  'credit terms reset client': 'owner_reviewed_hidden',
-  'credit terms denied client': 'owner_reviewed_hidden',
-  'credit terms approved client': 'owner_reviewed_hidden',
-  'tax exempt reset client': 'owner_reviewed_hidden',
-  'tax exempt denied client': 'owner_reviewed_hidden',
-  'tax exempt approved client': 'owner_reviewed_hidden',
-  'po payment received client': 'owner_reviewed_hidden',
-  'po submitted client': 'owner_reviewed_hidden',
-  'manual payment received client': 'owner_reviewed_hidden',
-  'manual payment pending client': 'owner_reviewed_hidden',
-  'card paid client': 'owner_reviewed_hidden',
-  'card failed client': 'owner_reviewed_hidden',
-  'ap ach failed ap': 'owner_reviewed_hidden',
-  'ap ach pending ap': 'owner_reviewed_hidden',
-  'ap payment link sent': 'owner_reviewed_hidden',
-  'standard ach failed client': 'owner_reviewed_hidden',
-  'standard ach receipt client': 'owner_reviewed_hidden',
-  'standard ach verification client': 'owner_reviewed_hidden',
-  'standard ach pending client': 'owner_reviewed_hidden'
-};
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {};
 let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
 
