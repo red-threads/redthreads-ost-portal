@@ -17,6 +17,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-22 - Production Complete Pickup And PO Reminder Copy On Version 999
+
+- Mode: Full ship runtime refinement plus owner-approved live email-review suite.
+- Branch/commit/PR: `main`, Apps Script version `999`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: ship the local production-complete pickup/shipping PO unpaid refinements, clean redundant PO reminder headers/body copy, deploy, and run the email review suite.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Production complete pickup client` now uses a blue `Action required` action-card title, removes the action-card CTA, removes the redundant completed-jobs/payment status sentence, and updates pickup copy to `505 South Saginaw Rd, Midland, Michigan 48640` with Monday-Friday `9am - 5pm` pickup hours. `Production complete shipping PO unpaid client` is hidden from future owner review-suite sends and suppresses the action-card CTA if rendered. PO reminder, past-due, and late-fee client copy now removes duplicate project-number heading language and avoids repeating the full due-date/terms phrase in the next-action line. `Index.html` shows development revision `126`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed before deploy.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine production complete review emails"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@999 - Refine production complete review emails`. Direct `/exec` returned HTTP `200` with `Development revision 126`, omitted stale revision `125`, and referenced the stable deployment ID. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and targeted secret/private-link marker checks found zero hits.
+- Review suite: protected dry run returned `ok:true`, total `72`, sent `0`, skipped `35`, failed `0`, attachment fallback `22`, and contradiction warnings/errors `0`. Matrix validation returned `ok:true` with `36` required, `23` covered, `13` skipped/omitted, `0` missing, and `0` intent mismatches. The owner-approved live suite returned `ok:true`, sent `24` review emails (`8` client, `16` team, `0` AP), skipped `35`, failed `0`, attachment fallback `22`, and contradiction warnings/errors `0`.
+- Reset/queue behavior: the live non-dry-run path reset `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then cleared `PORTAL_EMAIL_QUEUE`. Fixture-storage tabs were not mutated. No Apps Script config, Script Properties, or scheduler trigger changes were made.
+- Follow-ups: active runtime tabs remain fixture-loaded after the review-suite reset. Restore active runtime tabs from the private backup before production runtime resumes, unless the owner chooses continued fixture mode.
+
 ## 2026-06-22 - Client Action Status Email Refinement On Version 998
 
 - Mode: Full ship runtime refinement plus owner-approved live email-review suite.

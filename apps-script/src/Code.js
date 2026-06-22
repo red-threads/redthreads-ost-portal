@@ -24480,6 +24480,7 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
   let attachmentNote = '';
   let ctaLabel = '';
   let ctaAlign = '';
+  let suppressActionCardCta = false;
 
   if (method === FULFILLMENT_METHODS.shipping) {
     subject = isTeam ? 'Project complete - ready to ship' : 'Your Red Threads order is complete and shipping is in progress';
@@ -24509,9 +24510,15 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
     heading = 'Ready for pickup';
     fulfillmentLine = isTeam
       ? ('Client fulfillment language: ready for pickup at ' + RED_THREADS_PICKUP_ADDRESS + '.')
-      : ('Your order is ready for pickup at ' + RED_THREADS_PICKUP_ADDRESS + '.');
-    if (!isTeam && !paymentStillOpen) nextStep = 'Pickup is available during Red Threads pickup hours.';
+      : 'Your order is ready for pickup at Red Threads, 505 South Saginaw Rd, Midland, Michigan 48640. Stop by any time Monday - Friday from 9am - 5pm.';
+    if (!isTeam) {
+      actionTitle = 'Action required';
+      actionTitleTone = 'blue';
+      suppressActionCardCta = true;
+      if (!paymentStillOpen) nextStep = 'Pick up your order from Red Threads.';
+    }
   }
+  const suppressClientCompletionStatusLines = !isTeam && method === FULFILLMENT_METHODS.pickup;
 
   return {
     subject: subject,
@@ -24521,15 +24528,16 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
     intro: intro,
     statusCopy: uniqueTrimmedStrings_([
       fulfillmentLine,
-      (!isTeam && method === FULFILLMENT_METHODS.shipping) ? '' : countLine,
-      (!isTeam && method === FULFILLMENT_METHODS.shipping && !paymentStillOpen) ? '' : paymentLine
+      (!isTeam && method === FULFILLMENT_METHODS.shipping) || suppressClientCompletionStatusLines ? '' : countLine,
+      ((!isTeam && method === FULFILLMENT_METHODS.shipping && !paymentStillOpen) || suppressClientCompletionStatusLines) ? '' : paymentLine
     ]).join('\n'),
     nextStep: nextStep,
     nextStepLabel: nextStepLabel,
     productionTimingLine: productionTimingLine,
     attachmentNote: attachmentNote,
     ctaLabel: ctaLabel,
-    ctaAlign: ctaAlign
+    ctaAlign: ctaAlign,
+    suppressActionCardCta: suppressActionCardCta
   };
 }
 
@@ -24567,6 +24575,7 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   let attachmentNote = '';
   let ctaLabel = '';
   let ctaAlign = '';
+  let suppressActionCardCta = false;
   const accountDocumentMilestone = isPortalLifecycleAccountDocumentMilestone_(normalized);
 
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_approved) {
@@ -24663,6 +24672,7 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
       productionTimingLine = trimString_(completionCopy.productionTimingLine);
       attachmentNote = trimString_(completionCopy.attachmentNote);
       ctaAlign = trimString_(completionCopy.ctaAlign);
+      suppressActionCardCta = completionCopy.suppressActionCardCta === true;
       const projectNumber = getLifecycleEmailProjectNumberLabel_(emailContext);
       if (completionCopy.ctaLabel) {
         ctaLabel = trimString_(completionCopy.ctaLabel);
@@ -24709,6 +24719,7 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     attachmentNote: attachmentNote,
     ctaLabel: ctaLabel,
     ctaAlign: ctaAlign,
+    suppressActionCardCta: suppressActionCardCta || meta.suppressActionCardCta === true,
     details: Array.isArray(details) ? details : []
   };
 }
@@ -24790,6 +24801,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     nextStep: teamActionModel ? teamActionModel.nextStep : resolvedNextStep,
     nextStepLabel: teamActionModel ? teamActionModel.nextStepLabel : copy.nextStepLabel,
     nextStepTone: teamActionModel ? teamActionModel.nextStepTone : '',
+    suppressActionCardCta: teamActionModel ? teamActionModel.suppressActionCardCta === true : copy.suppressActionCardCta === true,
     attachmentNote: copy.attachmentNote,
     productionTimingLine: copy.productionTimingLine,
     nonOrderLayout: getAccountDocumentLifecycleNonOrderLayout_(normalized, recipientClass),
@@ -28536,10 +28548,8 @@ function formatPoPaymentReminderPercent_(value) {
   return (Math.round(num * 10) / 10).toFixed(num % 1 === 0 ? 0 : 1) + '%';
 }
 
-function buildPoPaymentReminderNextStepText_(meta) {
-  const safe = (meta && typeof meta === 'object') ? meta : {};
-  const dueLabel = trimString_(safe.paymentDueDateLabel) || 'the due date';
-  return 'Click below to access your project summary and make a payment for your order by ' + dueLabel + ' ' + formatPoPaymentReminderTermsPhrase_(safe.paymentTermsLabel) + '.';
+function buildPoPaymentReminderNextStepText_() {
+  return 'Open your project summary to make a payment for your order.';
 }
 
 function formatPoPaymentReminderTermsPhrase_(termsLabel) {
@@ -28602,32 +28612,32 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
       : 'Payment reminder - due in 1 business day';
     return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
       subject: formatLifecycleEmailInvoiceSubject_(lead, invoiceNumber, lead + ' for your Red Threads order'),
-      heading: projectLabel + ' - payment due soon',
-      intro: 'Your Red Threads purchase-order payment due date is coming up.',
+      heading: 'Payment due soon',
+      intro: 'Your Red Threads purchase-order payment is coming due.',
       statusCopy: 'Payment is due by ' + dueLabel + ' ' + termsPhrase + '.',
-      nextStep: buildPoPaymentReminderNextStepText_(meta)
+      nextStep: buildPoPaymentReminderNextStepText_()
     }));
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_past_due) {
     return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
       subject: formatLifecycleEmailInvoiceSubject_('PO payment past due', invoiceNumber, 'PO payment past due for your Red Threads order'),
-      heading: projectLabel + ' - payment past due',
-      intro: 'Your Red Threads purchase-order payment due date has lapsed, and payment is officially late.',
+      heading: 'Payment past due',
+      intro: 'Your Red Threads purchase-order payment is now past due.',
       statusCopy: 'Payment was due ' + dueLabel + ' ' + termsPhrase + '. Late fees may apply if payment remains open.',
-      nextStep: 'Click below to access your project summary and make a payment for your order.'
+      nextStep: buildPoPaymentReminderNextStepText_()
     }));
   }
   const lateFeeLine = buildPoPaymentLateFeeCopyLine_(meta);
   return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
     subject: formatLifecycleEmailInvoiceSubject_('PO payment late-fee notice', invoiceNumber, 'PO payment late-fee notice for your Red Threads order'),
-    heading: projectLabel + ' - payment late-fee notice',
-    intro: 'Payment for your Red Threads purchase-order project is past due.',
+    heading: 'Payment late-fee notice',
+    intro: 'Your Red Threads purchase-order payment remains past due.',
     statusCopy: uniqueTrimmedStrings_([
       'Payment was due ' + dueLabel + ' ' + termsPhrase + '.',
       daysPastDue ? ('This notice is based on ' + daysPastDue + ' calendar days past due.') : '',
       lateFeeLine
     ]).join('\n'),
-    nextStep: 'Click below to access your project summary and make a payment for your order.'
+    nextStep: buildPoPaymentReminderNextStepText_()
   }));
 }
 
@@ -31961,7 +31971,8 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'standard ach failed client': 'owner_reviewed_hidden',
   'standard ach receipt client': 'owner_reviewed_hidden',
   'standard ach verification client': 'owner_reviewed_hidden',
-  'standard ach pending client': 'owner_reviewed_hidden'
+  'standard ach pending client': 'owner_reviewed_hidden',
+  'production complete shipping po unpaid client': 'owner_reviewed_hidden'
 };
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {};
 let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
@@ -32916,6 +32927,9 @@ function sendEmailReviewProductionCompleteExamples_(results, fixture, recipients
       fulfillmentMethod: summary.fulfillmentMethod,
       attachmentRequired: false
     }, buildEmailReviewProjectCompletedMeta_(order));
+    if (item.label === 'Production complete shipping PO unpaid client') {
+      meta.suppressActionCardCta = true;
+    }
     if (item.recipientClass === 'client') {
       try {
         const paid = isCommunicationPaymentPaid_(summary);
