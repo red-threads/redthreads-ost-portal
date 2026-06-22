@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-22 - Hide Reviewed Email Suite Pass Communications On Version 986
+
+- Mode: Full ship runtime patch without live review-suite send.
+- Branch/commit/PR: `main`, Apps Script version `986`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: hide owner-reviewed/pass email families from future review-suite sends and apply requested copy/style refinements before hiding those examples.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: populated `EMAIL_REVIEW_SUITE_OMITTED_LABELS_` with the owner-reviewed labels; changed Standard ACH pending/verification/receipt and manual-payment-received client attachment copy to `invoice/receipt`; changed Standard ACH failed client copy to `contact Red Threads for assistance`; added a centered red dynamic `Click to open Project #... to retry payment` action-card button for Standard ACH failed client emails; changed AP ACH failed AP next action to `assistance`; and changed team-to-client chat digest message styling so sender/time, PJ line, and message use distinct red hierarchy with the reply text most prominent. `Index.html` shows development revision `114`.
+- Preservation: no lifecycle eligibility, recipient routing, production/payment communication policy, queue job types, idempotency keys, attachment policy, Sheet schemas, Script Properties, Stripe config, Apps Script config, or deployment ID changed.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine reviewed email suite omissions"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed the stable deployment at `@986 - Refine reviewed email suite omissions`. Direct Apps Script `/exec` returned HTTP `200` with `Development revision 114` and omitted stale revision `113`; public `/portal` returned HTTP `200` and still referenced the stable deployment ID. Targeted checks found zero actual client secrets, hosted verification URLs, raw tokenized portal URLs, private Checkout URLs, or private Drive file URLs.
+- Review suite: protected dry run returned `ok:true`, sent `0`, skipped `26`, failed `0`, total `59`, attachment fallback `16`, and contradiction warnings/errors `0`. Non-strict matrix validation returned `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches. The skipped/omitted count is intentional because owner-reviewed pass communications are now hidden from the send suite.
+- Reset/queue behavior: no live review-suite blast was run. The dry run performed only header/reset checks; active runtime tabs, fixture-storage tabs, and `PORTAL_EMAIL_QUEUE` were not mutated in this pass.
+- Follow-ups: future inbox review-suite sends should focus on the remaining visible labels; active runtime tabs remain fixture-loaded from prior review work until the owner explicitly chooses restore from the private Drive backup, another fixture reset, or continued fixture mode.
+
 ## 2026-06-22 - Fresh Full Email Review Suite Blast On Version 985
 
 - Mode: Live owner email review suite blast after protected dry-run gate; no runtime code change or Apps Script deployment.

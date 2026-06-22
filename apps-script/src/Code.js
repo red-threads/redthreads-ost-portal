@@ -23056,7 +23056,7 @@ function getApAchLifecycleNextStepText_(milestone, recipientClass, fallback) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_failed) {
     return isTeamAlert
       ? 'Review the AP ACH payment issue before production continues.'
-      : 'Click the button below to return to the Portal/Project and retry payment, or contact Red Threads for help.';
+      : 'Click the button below to return to the Portal/Project and retry payment, or contact Red Threads for assistance.';
   }
   return trimString_(fallback);
 }
@@ -27483,7 +27483,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         statusCopy: isTeamAlert
           ? 'Stripe is waiting for bank verification before the ACH payment can finish. ACH payments can take several business days to confirm after verification is complete.'
           : 'Stripe may send you a secure bank-verification email for a one-time ACH payment setup with Red Threads. Red Threads does not collect any banking or microdeposit values.',
-        attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice is attached.'
+        attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
       });
     }
     return buildLifecycleEmailCopyModel_({
@@ -27498,7 +27498,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         : (usedConnectedBank
           ? 'Your ACH payment was submitted with a connected bank and is pending bank confirmation. ACH payments can take several business days to confirm.'
           : 'Your ACH payment was submitted and is pending bank confirmation. ACH payments can take several business days to confirm. Production begins after payment is confirmed unless Red Threads explicitly initiates production.'),
-      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice is attached.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
     });
   }
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
@@ -27512,7 +27512,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
       statusCopy: isTeamAlert
         ? 'Payment is received. Continue production and update job completion when work is ready.'
         : '',
-      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your updated receipt is attached.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -27524,7 +27524,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
       : 'Your ACH payment could not be completed or needs review.',
     statusCopy: isTeamAlert
       ? 'Review the ACH payment issue before production begins or continues.'
-      : 'Production will not begin until payment is resolved. Open your Red Threads portal to retry payment or contact Red Threads for help.',
+      : 'Production will not begin until payment is resolved. Open your Red Threads portal to retry payment or contact Red Threads for assistance.',
     attachmentNote: 'An invoice/status PDF may be attached when available.'
   });
 }
@@ -27630,7 +27630,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for your Red Threads order'),
       intro: isTeamAlert ? (methodLabel + ' payment has been recorded as received.') : 'Your payment has been received and your order is authorized for production.',
       statusCopy: isTeamAlert ? 'Payment is received. Continue production and update job completion when work is ready.' : '',
-      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice for your order is attached to this email.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
@@ -27663,6 +27663,12 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     recipientClass: isTeamAlert ? 'team' : 'client'
   }));
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
+    if (!isTeamAlert) {
+      const retryProjectNumber = getLifecycleEmailProjectNumberLabel_(emailContext);
+      emailContext.ctaLabel = retryProjectNumber
+        ? ('Click to open Project #' + retryProjectNumber + ' to retry payment')
+        : 'Click to open your project to retry payment';
+    }
     applyPaymentBlockedLifecycleEmailContext_(emailContext, {
       paymentBlocked: true,
       nextStepText: isTeamAlert
@@ -27702,7 +27708,9 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
       teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
       teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
       {
-        align: teamActionModel ? teamActionModel.ctaAlign : '',
+        align: teamActionModel
+          ? teamActionModel.ctaAlign
+          : (!isTeamAlert && baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email ? 'center' : ''),
         teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
       }
     );
@@ -30678,7 +30686,33 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
-const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
+  'password reset client': 'owner_reviewed_hidden',
+  'blank credit terms source client': 'owner_reviewed_hidden',
+  'blank tax document source client': 'owner_reviewed_hidden',
+  'summary/invoice explicit send client': 'owner_reviewed_hidden',
+  'explicit locked-order resend client': 'owner_reviewed_hidden',
+  'po invoice prepared client': 'owner_reviewed_hidden',
+  'chat digest team to client': 'owner_reviewed_hidden',
+  'credit terms reset client': 'owner_reviewed_hidden',
+  'credit terms denied client': 'owner_reviewed_hidden',
+  'credit terms approved client': 'owner_reviewed_hidden',
+  'tax exempt reset client': 'owner_reviewed_hidden',
+  'tax exempt denied client': 'owner_reviewed_hidden',
+  'tax exempt approved client': 'owner_reviewed_hidden',
+  'po payment received client': 'owner_reviewed_hidden',
+  'po submitted client': 'owner_reviewed_hidden',
+  'manual payment received client': 'owner_reviewed_hidden',
+  'manual payment pending client': 'owner_reviewed_hidden',
+  'card paid client': 'owner_reviewed_hidden',
+  'ap ach failed ap': 'owner_reviewed_hidden',
+  'ap ach pending ap': 'owner_reviewed_hidden',
+  'ap payment link sent': 'owner_reviewed_hidden',
+  'standard ach failed client': 'owner_reviewed_hidden',
+  'standard ach receipt client': 'owner_reviewed_hidden',
+  'standard ach verification client': 'owner_reviewed_hidden',
+  'standard ach pending client': 'owner_reviewed_hidden'
+};
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {};
 let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
 
@@ -33688,14 +33722,16 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     ? ('    <div style="margin:14px 0 18px;' + (isTeamDigest ? 'text-align:center;' : '') + '"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a>' + (isTeamDigest ? teamPasswordHintHtml : '') + '</div>')
     : '';
   const clientHtmlMessagesBlock = messageRows.map(function(messageRow, index) {
-    const metaColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.textSoft;
-    const textColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.textMuted;
+    const metaColor = messageRow.isTeamMessage ? theme.brandRed : theme.textSoft;
+    const jobLineColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.text;
+    const textColor = messageRow.isTeamMessage ? '#fb7185' : theme.textMuted;
+    const textWeight = messageRow.isTeamMessage ? '800' : '400';
     const separator = index > 0 ? ('padding-top:12px;border-top:1px solid ' + theme.panelBorderSoft + ';') : '';
     return [
       '<div style="margin:0 0 14px;' + separator + '">',
       '  <div style="font-size:13px;line-height:1.5;color:' + metaColor + ';"><strong style="color:' + metaColor + ';">' + escapeHtml_(messageRow.senderName) + '</strong>' + (messageRow.timestamp ? (' <span style="color:' + metaColor + ';">' + escapeHtml_(messageRow.timestamp) + '</span>') : '') + '</div>',
-      messageRow.jobLine ? ('  <div style="margin-top:6px;font-size:13px;line-height:1.45;color:' + theme.text + ';font-weight:800;">' + escapeHtml_(messageRow.jobLine) + '</div>') : '',
-      '  <div style="margin-top:8px;font-size:15px;line-height:1.65;color:' + textColor + ';white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
+      messageRow.jobLine ? ('  <div style="margin-top:6px;font-size:13px;line-height:1.45;color:' + jobLineColor + ';font-weight:800;">' + escapeHtml_(messageRow.jobLine) + '</div>') : '',
+      '  <div style="margin-top:8px;font-size:15px;line-height:1.65;color:' + textColor + ';font-weight:' + textWeight + ';white-space:pre-wrap;">' + escapeHtml_(messageRow.text || '--') + '</div>',
       '</div>'
     ].join('\n');
   }).join('\n');
