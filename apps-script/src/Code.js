@@ -24960,6 +24960,12 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     ctaLabel: getPaymentLifecycleCtaLabel_(normalized)
   }));
   if (isPaymentLifecycleFailureMilestone_(normalized)) {
+    if (recipientClass !== 'team') {
+      const retryProjectNumber = getLifecycleEmailProjectNumberLabel_(emailContext);
+      emailContext.ctaLabel = retryProjectNumber
+        ? ('Click to access Project #' + retryProjectNumber + ' and retry payment')
+        : 'Click to access your project and retry payment';
+    }
     applyPaymentBlockedLifecycleEmailContext_(emailContext, {
       paymentBlocked: true,
       nextStepText: recipientClass === 'team'
@@ -25007,7 +25013,9 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
         teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
         teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
         {
-          align: teamActionModel ? teamActionModel.ctaAlign : '',
+          align: teamActionModel
+            ? teamActionModel.ctaAlign
+            : (recipientClass !== 'team' && isPaymentLifecycleFailureMilestone_(normalized) ? 'center' : ''),
           teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
         }
       ),
@@ -30705,6 +30713,7 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'manual payment received client': 'owner_reviewed_hidden',
   'manual payment pending client': 'owner_reviewed_hidden',
   'card paid client': 'owner_reviewed_hidden',
+  'card failed client': 'owner_reviewed_hidden',
   'ap ach failed ap': 'owner_reviewed_hidden',
   'ap ach pending ap': 'owner_reviewed_hidden',
   'ap payment link sent': 'owner_reviewed_hidden',

@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-22 - Add Card Failed Client Retry CTA On Version 987
+
+- Mode: Full ship runtime patch without live review-suite send.
+- Branch/commit/PR: `main`, Apps Script version `987`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add a centered red action-card retry button to the `Card failed client` email, route it to the project invoice/summary view, then hide that reviewed email from future review-suite sends.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: payment lifecycle failure client emails now override the action-card CTA label to `Click to access Project #... and retry payment` using the dynamic project number, center that CTA in the action card, and continue using the existing invoice-summary portal URL. `Card failed client` was added to `EMAIL_REVIEW_SUITE_OMITTED_LABELS_`. `Index.html` shows development revision `115`.
+- Preservation: no lifecycle eligibility, recipient routing, production/payment communication policy, queue job types, idempotency keys, attachment policy, Sheet schemas, Script Properties, Stripe config, Apps Script config, or deployment ID changed.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add card failed retry CTA"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed the stable deployment at `@987 - Add card failed retry CTA`. Direct Apps Script `/exec` returned HTTP `200` with `Development revision 115` and omitted stale revision `114`; public `/portal` returned HTTP `200` and still referenced the stable deployment ID. Targeted checks found zero actual client secrets, hosted verification URLs, raw tokenized portal URLs, private Checkout URLs, or private Drive file URLs.
+- Review suite: protected dry run returned `ok:true`, sent `0`, skipped `27`, failed `0`, total `59`, attachment fallback `15`, and contradiction warnings/errors `0`. Non-strict matrix validation returned `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches. `Card failed client` appeared in skipped results as intended.
+- Reset/queue behavior: no live review-suite blast was run. The dry run performed only header/reset checks; active runtime tabs, fixture-storage tabs, and `PORTAL_EMAIL_QUEUE` were not mutated in this pass.
+- Follow-ups: future inbox review-suite sends should focus on the remaining visible labels; active runtime tabs remain fixture-loaded from prior review work until the owner explicitly chooses restore from the private Drive backup, another fixture reset, or continued fixture mode.
+
 ## 2026-06-22 - Hide Reviewed Email Suite Pass Communications On Version 986
 
 - Mode: Full ship runtime patch without live review-suite send.

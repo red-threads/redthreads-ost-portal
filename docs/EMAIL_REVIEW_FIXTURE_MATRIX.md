@@ -64,6 +64,8 @@ On 2026-06-22, a fresh full owner review-suite blast was run against version `98
 
 Version `986` narrows the owner review-suite send set after inbox review by omitting owner-reviewed/pass labels from future sends. The runtime still reports omitted labels as safe skipped results. The protected dry run returned `ok:true`, total `59`, skipped `26`, failed `0`, attachment fallback `16`, contradiction warnings/errors `0`, and non-strict matrix `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches. The skipped/omitted matrix count is intentional because accepted client/AP pass communications are now hidden from the send suite. No live review-suite blast was run for version `986`, and active runtime tabs, fixture-storage tabs, and `PORTAL_EMAIL_QUEUE` were not mutated.
 
+Version `987` adds the centered red dynamic retry CTA to the `Card failed client` action card before hiding that label from future review-suite sends. The CTA reads `Click to access Project #... and retry payment` and continues to use the invoice-summary project portal route. The protected dry run returned `ok:true`, total `59`, skipped `27`, failed `0`, attachment fallback `15`, contradiction warnings/errors `0`, and non-strict matrix `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches. No live review-suite blast was run for version `987`, and active runtime tabs, fixture-storage tabs, and `PORTAL_EMAIL_QUEUE` were not mutated.
+
 ### Header Compatibility
 
 | Active tab | Fixture tab | Result |
@@ -143,7 +145,7 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 
 ## Fixture Reset Plan
 
-The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete, the unlocked full review-suite blasts against version `985` are complete, and version `986` now hides accepted/pass communications from future suite sends. Future review-suite blasts, active-tab restoration, or Apps Script deployments still require explicit owner approval.
+The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete, the unlocked full review-suite blasts against version `985` are complete, and versions `986`/`987` now hide accepted/pass communications from future suite sends. Future review-suite blasts, active-tab restoration, or Apps Script deployments still require explicit owner approval.
 
 Recommended next fixture/test-harness step:
 
