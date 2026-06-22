@@ -92,6 +92,62 @@ const REQUIRED_MATRIX = [
     artifactRequirement: 'required'
   },
   {
+    caseLabel: 'po_payment_reminder_5bd_before_due',
+    recipientClass: 'client',
+    expectedCommunicationIntent: ['po_payment_reminder'],
+    labels: ['PO payment reminder 5 business days before due client'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
+    caseLabel: 'po_payment_reminder_1bd_before_due',
+    recipientClass: 'client',
+    expectedCommunicationIntent: ['po_payment_reminder'],
+    labels: ['PO payment reminder 1 business day before due client'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
+    caseLabel: 'po_payment_past_due',
+    recipientClass: 'client',
+    expectedCommunicationIntent: ['po_payment_past_due'],
+    labels: ['PO payment past due client'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
+    caseLabel: 'po_late_fee_2_5',
+    recipientClass: 'client',
+    expectedCommunicationIntent: ['po_payment_late_fee_notice'],
+    labels: ['PO late fee 2.5 client'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
+    caseLabel: 'po_late_fee_7_5',
+    recipientClass: 'client',
+    expectedCommunicationIntent: ['po_payment_late_fee_notice'],
+    labels: ['PO late fee 7.5 client'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
+    caseLabel: 'po_late_fee_12_5',
+    recipientClass: 'client',
+    expectedCommunicationIntent: ['po_payment_late_fee_notice'],
+    labels: ['PO late fee 12.5 client'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
+    caseLabel: 'po_payment_60_day_team_escalation',
+    recipientClass: 'team',
+    expectedCommunicationIntent: ['po_payment_late_fee_escalation'],
+    labels: ['PO payment 60-day escalation team'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
     caseLabel: 'ap_payment_request',
     recipientClass: 'ap',
     expectedCommunicationIntent: ['payment_required_before_production'],

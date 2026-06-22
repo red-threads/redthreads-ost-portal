@@ -262,7 +262,12 @@ const PAYMENT_LIFECYCLE_EMAIL_MILESTONES = {
   manual_pending: 'manual_pending',
   manual_received: 'manual_received',
   po_submitted: 'po_submitted',
-  po_payment_received: 'po_payment_received'
+  po_payment_received: 'po_payment_received',
+  po_payment_due_5bd_before: 'po_payment_due_5bd_before',
+  po_payment_due_1bd_before: 'po_payment_due_1bd_before',
+  po_payment_past_due: 'po_payment_past_due',
+  po_payment_late_fee_notice: 'po_payment_late_fee_notice',
+  po_payment_60_day_team_escalation: 'po_payment_60_day_team_escalation'
 };
 const PORTAL_LIFECYCLE_EMAIL_MILESTONES = {
   artwork_approved: 'artwork_approved',
@@ -321,6 +326,13 @@ const LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS = {
   required_document: 'required_document_attachment_missing',
   optional_unavailable: 'optional_attachment_unavailable'
 };
+const PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_ = 'processPurchaseOrderPaymentReminderSchedule';
+const PO_PAYMENT_REMINDER_DAILY_HOUR_ = 9;
+const PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ = 2.5;
+const PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_ = 5;
+const PO_PAYMENT_LATE_FEE_FIRST_DAY_ = 5;
+const PO_PAYMENT_LATE_FEE_MONTH_1_DAY_ = 30;
+const PO_PAYMENT_LATE_FEE_MONTH_2_DAY_ = 60;
 const PORTAL_RENDERED_INVOICE_DESCRIPTION_MARKER = 'redthreads_portal_rendered_summary_invoice_v1';
 const PORTAL_DOCUMENT_KINDS = {
   estimate: 'estimate',
@@ -5578,6 +5590,78 @@ function addBusinessDaysForDashboard_(dayCount, referenceDate) {
     if (day !== 0 && day !== 6) remaining -= 1;
   }
   return date;
+}
+
+function addBusinessDaysForSchedule_(dayCount, referenceDate) {
+  const days = Math.trunc(Number(dayCount) || 0);
+  const date = normalizeDashboardCalendarDate_(referenceDate);
+  if (!date) return null;
+  if (!days) return date;
+  const direction = days > 0 ? 1 : -1;
+  let remaining = Math.abs(days);
+  while (remaining > 0) {
+    date.setDate(date.getDate() + direction);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+function isBusinessDayForSchedule_(value) {
+  const date = normalizeDashboardCalendarDate_(value);
+  if (!date) return false;
+  const day = date.getDay();
+  return day !== 0 && day !== 6;
+}
+
+function nextBusinessDayOnOrAfterForSchedule_(value) {
+  const date = normalizeDashboardCalendarDate_(value);
+  if (!date) return null;
+  while (!isBusinessDayForSchedule_(date)) {
+    date.setDate(date.getDate() + 1);
+  }
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+function nextBusinessDayAfterForSchedule_(value) {
+  const date = normalizeDashboardCalendarDate_(value);
+  if (!date) return null;
+  date.setDate(date.getDate() + 1);
+  return nextBusinessDayOnOrAfterForSchedule_(date);
+}
+
+function formatScheduleIsoDate_(value) {
+  const date = normalizeDashboardCalendarDate_(value);
+  if (!date) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd');
+}
+
+function isSameScheduleDate_(a, b) {
+  const aIso = formatScheduleIsoDate_(a);
+  const bIso = formatScheduleIsoDate_(b);
+  return !!(aIso && bIso && aIso === bIso);
+}
+
+function calendarDaysBetweenScheduleDates_(startValue, endValue) {
+  const start = normalizeDashboardCalendarDate_(startValue);
+  const end = normalizeDashboardCalendarDate_(endValue);
+  if (!start || !end) return 0;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((end.getTime() - start.getTime()) / msPerDay);
+}
+
+function businessDaysBetweenScheduleDates_(startValue, endValue) {
+  let cursor = normalizeDashboardCalendarDate_(startValue);
+  const end = normalizeDashboardCalendarDate_(endValue);
+  if (!cursor || !end || end.getTime() <= cursor.getTime()) return 0;
+  let count = 0;
+  while (cursor.getTime() < end.getTime()) {
+    cursor.setDate(cursor.getDate() + 1);
+    if (isBusinessDayForSchedule_(cursor)) count += 1;
+  }
+  return count;
 }
 
 function addCalendarDaysForDashboard_(dayCount, referenceDate) {
@@ -21626,7 +21710,8 @@ function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
   }
   if (type === 'payment_lifecycle') {
     const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
-    if (isPaymentLifecycleFailureMilestone_(normalized)) {
+    if (isPaymentLifecycleFailureMilestone_(normalized) ||
+        isScheduledPoPaymentReminderMilestone_(normalized)) {
       return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable, true);
     }
     if (isPaymentLifecycleReceiptMilestone_(normalized)) {
@@ -23509,6 +23594,12 @@ function resolveCommunicationMilestonePolicy_(jobType, milestone, orderInfo, opt
         method && !manualMethod) {
       return suppress('manual_received_competing_payment_method');
     }
+    if (isScheduledPoPaymentReminderMilestone_(paymentMilestone)) {
+      if (paid || failureAction) return suppress('po_payment_reminder_terminal');
+      if (method && method !== PAYMENT_METHODS.purchase_order) return suppress('po_payment_reminder_competing_payment_method');
+      if (!trimString_(summary.poSubmittedAt)) return suppress('po_payment_reminder_missing_po_submission');
+      return allow();
+    }
     if (paymentMilestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
       if (paid || failureAction) return suppress('po_submitted_terminal');
       if (method && method !== PAYMENT_METHODS.purchase_order) return suppress('po_submitted_competing_payment_method');
@@ -23745,13 +23836,20 @@ function queuePortalLifecycleEmailJobSafely_(source, milestone, options) {
   if (!normalized) return null;
   const opts = (options && typeof options === 'object') ? options : {};
   const recipientClass = getPortalLifecycleEmailRecipientClass_(opts.recipientClass);
-  const meta = Object.assign({}, (opts.meta && typeof opts.meta === 'object') ? opts.meta : {}, {
+  let meta = Object.assign({}, (opts.meta && typeof opts.meta === 'object') ? opts.meta : {}, {
     milestone: normalized,
     recipientClass: recipientClass
   });
   try {
     const ctx = resolvePortalLifecycleEmailContext_(source, opts);
     const orderSummary = ctx.orderInfo ? buildPortalOrderSummary_(ctx.orderInfo.rowObjNormalized) : {};
+    if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed &&
+        recipientClass === 'client') {
+      meta = mergePortalLifecycleAttachmentMeta_(
+        meta,
+        buildPortalLifecycleInvoiceReceiptAttachmentMeta_(ctx.orderInfo)
+      );
+    }
     const emailPolicy = resolveLifecycleEmailPolicy_(
       PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
       normalized,
@@ -23991,6 +24089,53 @@ function getPortalLifecycleEmailCta_(milestone, recipientClass, ctx, meta) {
     label: isPortalLifecycleAccountDocumentMilestone_(normalized) ? 'Open Red Threads portal' : 'View project status',
     url: buildPortalSummaryUrl_(token)
   };
+}
+
+function buildPortalLifecycleInvoiceReceiptAttachmentMeta_(orderInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const invoicePdfUrl = trimString_(summary.invoicePdfUrl || row.invoicepdfurl || row.invoicePdfUrl);
+  const fileId = trimString_(row.invoicefileid || row.invoiceFileId) || extractDriveFileIdFromUrl_(invoicePdfUrl);
+  if (!fileId) return {};
+  const fileName = trimString_(row.invoicefilename || row.invoiceFileName || summary.invoiceFileName || summary.fileName);
+  try {
+    const result = buildLifecycleEmailAttachmentSafe_({
+      invoicePdfUrl: invoicePdfUrl,
+      invoiceFileId: fileId,
+      fileName: fileName
+    }, fileName, {
+      requirePortalRenderedInvoice: true
+    });
+    if (!result || result.ok !== true) return {};
+    const attachmentFileNames = {};
+    attachmentFileNames[fileId] = trimString_(result.fileName || fileName);
+    return {
+      attachmentFileIds: [fileId],
+      attachmentFileNames: attachmentFileNames,
+      invoiceReceiptAttached: true
+    };
+  } catch (_) {
+    return {};
+  }
+}
+
+function mergePortalLifecycleAttachmentMeta_(baseMeta, attachmentMeta) {
+  const base = (baseMeta && typeof baseMeta === 'object') ? baseMeta : {};
+  const extra = (attachmentMeta && typeof attachmentMeta === 'object') ? attachmentMeta : {};
+  const fileIds = uniqueTrimmedStrings_([].concat(
+    Array.isArray(base.attachmentFileIds) ? base.attachmentFileIds : [],
+    Array.isArray(extra.attachmentFileIds) ? extra.attachmentFileIds : []
+  ));
+  if (!fileIds.length) return Object.assign({}, base);
+  const fileNames = Object.assign({},
+    (base.attachmentFileNames && typeof base.attachmentFileNames === 'object') ? base.attachmentFileNames : {},
+    (extra.attachmentFileNames && typeof extra.attachmentFileNames === 'object') ? extra.attachmentFileNames : {}
+  );
+  return Object.assign({}, base, {
+    attachmentFileIds: fileIds,
+    attachmentFileNames: fileNames,
+    invoiceReceiptAttached: base.invoiceReceiptAttached === true || extra.invoiceReceiptAttached === true
+  });
 }
 
 function getAccountDocumentEmailLabels_(meta) {
@@ -24302,13 +24447,21 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
   const isTeam = trimString_(recipientClass).toLowerCase() === 'team';
   const paymentLine = trimString_(opts.paymentLine);
   const paymentStillOpen = opts.paymentStillOpen === true;
+  const poPaymentDue = opts.poPaymentDue === true;
+  const invoiceReceiptAttached = opts.invoiceReceiptAttached === true;
+  const completionDateLabel = trimString_(opts.completionDateLabel);
   const completedCount = Math.max(0, parseInt(String(opts.completedCount || 0), 10) || 0);
   const totalCount = Math.max(0, parseInt(String(opts.totalCount || 0), 10) || 0);
   const countLine = completedCount && totalCount
     ? (completedCount + ' of ' + totalCount + ' tracked jobs are marked complete.')
     : 'All tracked jobs are marked complete.';
+  const completedLine = completionDateLabel
+    ? ('All job production completed: ' + completionDateLabel)
+    : countLine;
   let subject = isTeam ? 'Project complete' : 'Your Red Threads project is complete';
   let heading = 'Production complete';
+  let actionTitle = '';
+  let actionTitleTone = '';
   let intro = isTeam
     ? 'All tracked jobs are marked complete for the client\'s order.'
     : 'Production is complete for your Red Threads order.';
@@ -24316,13 +24469,35 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
   let nextStep = isTeam
     ? (paymentStillOpen ? 'Monitor the open payment until it is resolved.' : 'No team action is required right now.')
     : (paymentStillOpen ? 'Review your portal for current payment status.' : 'No action is needed right now.');
+  let nextStepLabel = '';
+  let productionTimingLine = '';
+  let attachmentNote = '';
+  let ctaLabel = '';
+  let ctaAlign = '';
 
   if (method === FULFILLMENT_METHODS.shipping) {
-    subject = isTeam ? 'Project complete - ready to ship' : 'Your Red Threads project is ready to ship';
-    heading = 'Ready to ship';
-    fulfillmentLine = isTeam
-      ? 'Client fulfillment language: ready to ship via UPS Ground. No tracking link is included.'
-      : 'Your order is ready to ship via UPS Ground. No tracking link is included with this notification.';
+    subject = isTeam ? 'Project complete - ready to ship' : 'Your Red Threads order is complete and shipping is in progress';
+    heading = isTeam ? 'Ready to ship' : 'Order complete, shipping in progress';
+    if (isTeam) {
+      fulfillmentLine = 'Client fulfillment language: ready to ship via UPS Ground. No tracking link is included.';
+    } else {
+      intro = 'Your Red Threads order has finished production, and is shipping via UPS ground.';
+      fulfillmentLine = 'No tracking link is included with this notification, but can be provided upon request.';
+      productionTimingLine = completedLine;
+      ctaAlign = 'center';
+      if (invoiceReceiptAttached) {
+        attachmentNote = 'Your project invoice/receipt is attached to this email.';
+      }
+      if (poPaymentDue) {
+        actionTitle = 'Action required';
+        actionTitleTone = 'red';
+        nextStep = buildProductionCompletePoPaymentNextStepText_(opts);
+        nextStepLabel = 'Next action:';
+      } else {
+        actionTitle = 'No action required';
+        nextStep = 'No action is needed right now.';
+      }
+    }
   } else if (method === FULFILLMENT_METHODS.pickup) {
     subject = isTeam ? 'Project complete - ready for pickup' : 'Your Red Threads project is ready for pickup';
     heading = 'Ready for pickup';
@@ -24335,11 +24510,32 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
   return {
     subject: subject,
     heading: heading,
+    actionTitle: actionTitle,
+    actionTitleTone: actionTitleTone,
     intro: intro,
-    statusCopy: uniqueTrimmedStrings_([fulfillmentLine, countLine, paymentLine]).join('\n'),
+    statusCopy: uniqueTrimmedStrings_([
+      fulfillmentLine,
+      (!isTeam && method === FULFILLMENT_METHODS.shipping) ? '' : countLine,
+      (!isTeam && method === FULFILLMENT_METHODS.shipping && !paymentStillOpen) ? '' : paymentLine
+    ]).join('\n'),
     nextStep: nextStep,
-    attachmentNote: ''
+    nextStepLabel: nextStepLabel,
+    productionTimingLine: productionTimingLine,
+    attachmentNote: attachmentNote,
+    ctaLabel: ctaLabel,
+    ctaAlign: ctaAlign
   };
+}
+
+function buildProductionCompletePoPaymentNextStepText_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const paymentDueDateLabel = trimString_(opts.paymentDueDateLabel);
+  const paymentTermsLabel = trimString_(opts.paymentTermsLabel);
+  const duePhrase = paymentDueDateLabel ? ('by ' + paymentDueDateLabel) : 'by the due date';
+  const termsPhrase = paymentTermsLabel
+    ? (' under your account terms: ' + paymentTermsLabel)
+    : ' under your approved terms';
+  return 'Return to your Red Threads project invoice tab and make a payment ' + duePhrase + termsPhrase + '. Late fees will automatically be applied.';
 }
 
 function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext, meta, cfg) {
@@ -24358,6 +24554,13 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   let details = [];
   let heading = '';
   let nextStep = '';
+  let actionTitle = '';
+  let actionTitleTone = '';
+  let nextStepLabel = '';
+  let productionTimingLine = '';
+  let attachmentNote = '';
+  let ctaLabel = '';
+  let ctaAlign = '';
   const accountDocumentMilestone = isPortalLifecycleAccountDocumentMilestone_(normalized);
 
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.artwork_approved) {
@@ -24419,17 +24622,49 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
       const paymentLine = paymentReceived
         ? 'Payment has been received.'
         : (poTermsOpen ? 'Payment remains open under the approved terms.' : 'Payment remains open.');
+      const timeline = (emailContext && emailContext.timeline && typeof emailContext.timeline === 'object')
+        ? emailContext.timeline
+        : {};
+      const accountSummary = (emailContext && emailContext.accountSummary && typeof emailContext.accountSummary === 'object')
+        ? emailContext.accountSummary
+        : {};
+      const productionTimingMeta = resolveLifecycleEmailProductionTimingMeta_(workflow, summary, {
+        timeline: timeline
+      });
+      const completionDateLabel = buildLifecycleEmailDateLabel_(productionTimingMeta.completionDate) ||
+        trimString_(timeline.completionDateLabel);
+      const invoiceReceiptAttached = meta.invoiceReceiptAttached === true ||
+        uniqueTrimmedStrings_(meta.attachmentFileIds).length > 0;
       const completionCopy = buildProductionCompleteFulfillmentEmailCopy_(recipientClass, summary.fulfillmentMethod, {
         completedCount: completedCount,
         totalCount: totalCount,
         paymentLine: paymentLine,
-        paymentStillOpen: paymentStillOpen
+        paymentStillOpen: paymentStillOpen,
+        poPaymentDue: poTermsOpen,
+        paymentDueDateLabel: trimString_(timeline.paymentDueDateLabel),
+        paymentTermsLabel: trimString_(timeline.paymentTermsLabel || accountSummary.approvedPaymentTermsLabel),
+        completionDateLabel: completionDateLabel,
+        invoiceReceiptAttached: invoiceReceiptAttached
       });
       subjectParts.push(completionCopy.subject);
       heading = completionCopy.heading;
       intro = completionCopy.intro;
       statusCopy = completionCopy.statusCopy;
       nextStep = completionCopy.nextStep;
+      actionTitle = trimString_(completionCopy.actionTitle);
+      actionTitleTone = trimString_(completionCopy.actionTitleTone);
+      nextStepLabel = trimString_(completionCopy.nextStepLabel);
+      productionTimingLine = trimString_(completionCopy.productionTimingLine);
+      attachmentNote = trimString_(completionCopy.attachmentNote);
+      ctaAlign = trimString_(completionCopy.ctaAlign);
+      const projectNumber = getLifecycleEmailProjectNumberLabel_(emailContext);
+      if (completionCopy.ctaLabel) {
+        ctaLabel = trimString_(completionCopy.ctaLabel);
+      } else if (!isTeam && normalizeFulfillmentMethod_(summary.fulfillmentMethod) === FULFILLMENT_METHODS.shipping) {
+        ctaLabel = poTermsOpen
+          ? (projectNumber ? ('Click to access Project #' + projectNumber + ' and make a payment.') : 'Click to access your project and make a payment.')
+          : (projectNumber ? ('View project #' + projectNumber + ' in the portal') : 'View your project in the portal');
+      }
     } else {
       subjectParts.push(isTeam ? 'Job completion updated' : 'Red Threads job completion update');
       intro = isTeam ? 'Job completion dates were updated.' : 'A production completion update was recorded for your project.';
@@ -24458,10 +24693,17 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   return {
     subject: subjectParts.filter(Boolean).join(' - '),
     heading: heading,
+    actionTitle: actionTitle,
+    actionTitleTone: actionTitleTone,
     intro: intro,
     statusCopy: statusCopy,
     nextStep: nextStep,
-    details: details
+    nextStepLabel: nextStepLabel,
+    productionTimingLine: productionTimingLine,
+    attachmentNote: attachmentNote,
+    ctaLabel: ctaLabel,
+    ctaAlign: ctaAlign,
+    details: Array.isArray(details) ? details : []
   };
 }
 
@@ -24499,6 +24741,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     teamIdentityDetails: buildAccountDocumentTeamIdentityDetails_(meta, emailContext)
   });
   const copy = buildPortalLifecycleEmailCopy_(normalized, recipientClass, emailContext, emailMeta, ctx.cfg || opts.cfg);
+  if (copy.ctaLabel) emailContext.ctaLabel = trimString_(copy.ctaLabel);
   const accountDocumentMilestone = isPortalLifecycleAccountDocumentMilestone_(normalized);
   const resolvedNextStep = accountDocumentMilestone
     ? resolveAccountDocumentLifecycleNextStep_(copy, normalized, recipientClass)
@@ -24523,7 +24766,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
       {
         align: teamActionModel
           ? teamActionModel.ctaAlign
-          : (isAccountDocumentSubmittedTeamReviewMilestone_(normalized, recipientClass) ? 'center' : ''),
+          : (trimString_(copy.ctaAlign) || (isAccountDocumentSubmittedTeamReviewMilestone_(normalized, recipientClass) ? 'center' : '')),
         teamModePassword: teamActionModel
           ? teamActionModel.teamModePassword
           : (recipientClass === 'team' ? emailContext.teamModePassword : '')
@@ -24534,10 +24777,15 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     eyebrow: recipientClass === 'team' ? getPortalNativeEmailEyebrow_('team') : '',
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
-    actionTitle: teamActionModel ? teamActionModel.title : '',
+    actionTitle: teamActionModel ? teamActionModel.title : copy.actionTitle,
+    actionTitleTone: teamActionModel ? '' : copy.actionTitleTone,
     intro: teamActionModel ? teamActionModel.intro : copy.intro,
     statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
     nextStep: teamActionModel ? teamActionModel.nextStep : resolvedNextStep,
+    nextStepLabel: teamActionModel ? teamActionModel.nextStepLabel : copy.nextStepLabel,
+    nextStepTone: teamActionModel ? teamActionModel.nextStepTone : '',
+    attachmentNote: copy.attachmentNote,
+    productionTimingLine: copy.productionTimingLine,
     nonOrderLayout: getAccountDocumentLifecycleNonOrderLayout_(normalized, recipientClass),
     blocks: sectionBlocks.concat([
       buildPortalLifecycleEmailDetailBlock_(copy.details),
@@ -24697,7 +24945,22 @@ function isPaymentLifecycleFailureMilestone_(milestone) {
   return normalizePaymentLifecycleEmailMilestone_(milestone) === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_failed;
 }
 
+function isScheduledPoPaymentReminderMilestone_(milestone) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  return normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before ||
+    normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_1bd_before ||
+    normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_past_due ||
+    normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice ||
+    normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation;
+}
+
+function isClientScheduledPoPaymentReminderMilestone_(milestone) {
+  return isScheduledPoPaymentReminderMilestone_(milestone) &&
+    normalizePaymentLifecycleEmailMilestone_(milestone) !== PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation;
+}
+
 function isPaymentLifecycleAttachmentRequired_(milestone) {
+  if (isScheduledPoPaymentReminderMilestone_(milestone)) return false;
   return !isPaymentLifecycleFailureMilestone_(milestone);
 }
 
@@ -24749,6 +25012,17 @@ function buildPaymentLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo
   };
 }
 
+function copyDocumentReviewOnScheduledPoReminderRecipients_(recipients) {
+  const source = (recipients && typeof recipients === 'object') ? recipients : {};
+  const ccList = normalizeEmailRecipients_([].concat(source.ccList || [], [DOCUMENT_REVIEW_EMAIL]))
+    .filter(function(email) {
+      return normalizeEmailRecipients_(source.toList).indexOf(email) < 0;
+    });
+  return Object.assign({}, source, {
+    ccList: ccList
+  });
+}
+
 function shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, milestone) {
   const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
   if (!normalized) return false;
@@ -24772,6 +25046,12 @@ function shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, milestone) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
     return (method === PAYMENT_METHODS.check || method === PAYMENT_METHODS.cash) && paid;
   }
+  if (isScheduledPoPaymentReminderMilestone_(normalized)) {
+    return method === PAYMENT_METHODS.purchase_order &&
+      !!trimString_(summary.poSubmittedAt) &&
+      trimString_(summary.productionAuthorizationState).toLowerCase() !== PRODUCTION_AUTHORIZATION_STATES.canceled &&
+      !paid;
+  }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
     return method === PAYMENT_METHODS.purchase_order &&
       !!trimString_(summary.poSubmittedAt) &&
@@ -24783,9 +25063,10 @@ function shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, milestone) {
   return false;
 }
 
-function buildPaymentLifecycleEmailIdempotencyKey_(milestone, recipientClass, orderSummary, recipients, token) {
+function buildPaymentLifecycleEmailIdempotencyKey_(milestone, recipientClass, orderSummary, recipients, token, meta) {
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
+  const safeMeta = (meta && typeof meta === 'object') ? meta : {};
   return buildPortalEmailQueueIdempotencyKeyForSource_({
     jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
     milestone: normalizePaymentLifecycleEmailMilestone_(milestone),
@@ -24797,6 +25078,10 @@ function buildPaymentLifecycleEmailIdempotencyKey_(milestone, recipientClass, or
     stripePaymentIntentId: trimString_(summary.stripePaymentIntentId),
     stripeSessionId: trimString_(summary.stripeSessionId),
     invoiceNumber: trimString_(summary.invoiceNumber),
+    scheduleKey: trimString_(safeMeta.scheduleKey),
+    paymentDueDate: trimString_(safeMeta.paymentDueDate),
+    noticeDate: trimString_(safeMeta.noticeDate),
+    feePercent: trimString_(safeMeta.feePercent),
     toList: normalizeEmailRecipients_(safeRecipients.toList),
     ccList: normalizeEmailRecipients_(safeRecipients.ccList)
   });
@@ -24844,6 +25129,7 @@ function queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, o
   const opts = (options && typeof options === 'object') ? options : {};
   const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'client';
   try {
+    const scheduleMeta = (opts.meta && typeof opts.meta === 'object') ? opts.meta : {};
     const orderSummary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
     const token = getPaymentLifecycleOrderToken_(orderInfo, orderSummary);
     const attachmentRequired = isPaymentLifecycleAttachmentRequired_(normalized);
@@ -24896,9 +25182,12 @@ function queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, o
       ss: ss,
       infra: infra
     });
-    const recipients = recipientClass === 'team'
+    let recipients = recipientClass === 'team'
       ? buildPaymentLifecycleTeamAlertRecipients_()
       : buildPaymentLifecycleEmailRecipients_(orderInfo, stripeObj, accountInfo);
+    if (recipientClass === 'client' && isScheduledPoPaymentReminderMilestone_(normalized)) {
+      recipients = copyDocumentReviewOnScheduledPoReminderRecipients_(recipients);
+    }
     if (!recipients.toList.length) {
       logPaymentLifecycleEmailQueueEvent_('not_queued', {
         ok: false,
@@ -24916,13 +25205,13 @@ function queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, o
     }
     const queueSheet = getPortalEmailQueueSheet_(ss);
     const invoiceInfo = (opts.invoiceInfo && typeof opts.invoiceInfo === 'object') ? opts.invoiceInfo : {};
-    const idempotencyKey = buildPaymentLifecycleEmailIdempotencyKey_(normalized, recipientClass, orderSummary, recipients, token);
+    const idempotencyKey = buildPaymentLifecycleEmailIdempotencyKey_(normalized, recipientClass, orderSummary, recipients, token, scheduleMeta);
     const jobInfo = upsertPortalEmailQueueJob_(queueSheet, {
       jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
       idempotencyKey: idempotencyKey,
       token: token,
       recipientsJson: JSON.stringify(recipients),
-      portalStateJson: JSON.stringify({
+      portalStateJson: JSON.stringify(Object.assign({}, scheduleMeta, {
         jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.payment_lifecycle_email,
         milestone: normalized,
         recipientClass: recipientClass,
@@ -24936,7 +25225,7 @@ function queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, o
         attachmentRequired: attachmentRequired,
         queuedFromEventType: trimString_(opts.eventType),
         queuedAt: nowIso_()
-      }),
+      })),
       orderDraftJson: trimString_(orderInfo && orderInfo.rowObjNormalized && orderInfo.rowObjNormalized.orderdraftjson),
       invoicePdfUrl: trimString_(invoiceInfo.invoicePdfUrl || orderSummary.invoicePdfUrl),
       invoiceFileName: trimString_(invoiceInfo.fileName || invoiceInfo.invoiceFileName)
@@ -24977,6 +25266,310 @@ function queuePaymentLifecycleEmailJobSafely_(orderInfo, stripeObj, milestone, o
       error: String((err && err.message) || err)
     });
     return null;
+  }
+}
+
+function getPurchaseOrderPaymentReminderFeePercentForDays_(daysPastDue) {
+  const days = Math.max(0, parseInt(String(daysPastDue || 0), 10) || 0);
+  if (days >= PO_PAYMENT_LATE_FEE_MONTH_2_DAY_) return 12.5;
+  if (days >= PO_PAYMENT_LATE_FEE_MONTH_1_DAY_) return 7.5;
+  if (days >= PO_PAYMENT_LATE_FEE_FIRST_DAY_) return PO_PAYMENT_LATE_FEE_FIRST_PERCENT_;
+  return 0;
+}
+
+function derivePurchaseOrderPaymentReminderDueMeta_(orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const accountInfo = opts.accountInfo || (opts.cfg && opts.ss && opts.infra
+    ? getPortalAccountInfoForOrder_(orderInfo, {
+      cfg: opts.cfg,
+      ss: opts.ss,
+      infra: opts.infra
+    })
+    : null);
+  const accountSummary = accountInfo && accountInfo.summary ? accountInfo.summary : {};
+  const termsDays = Math.max(
+    0,
+    parseInt(String(
+      accountSummary.approvedPaymentTermsDays ||
+      row.approvedpaymenttermsdays ||
+      row.approvedPaymentTermsDays ||
+      0
+    ), 10) || 0
+  );
+  const termsLabel = trimString_(
+    accountSummary.approvedPaymentTermsLabel ||
+    row.approvedpaymenttermslabel ||
+    row.approvedPaymentTermsLabel
+  ) || (termsDays > 0 ? ('Net ' + termsDays) : '');
+  const poSubmittedDate = normalizeDashboardCalendarDate_(summary.poSubmittedAt || row.posubmittedat);
+  if (!poSubmittedDate) {
+    return { ok: false, reason: 'missing_po_submission_date' };
+  }
+  if (termsDays <= 0) {
+    return { ok: false, reason: 'missing_po_payment_terms' };
+  }
+  const paymentDueDate = addCalendarDaysForDashboard_(termsDays, poSubmittedDate);
+  if (!paymentDueDate) {
+    return { ok: false, reason: 'missing_payment_due_date' };
+  }
+  return {
+    ok: true,
+    accountInfo: accountInfo,
+    paymentTermsDays: termsDays,
+    paymentTermsLabel: termsLabel || 'approved terms',
+    poSubmittedDate: poSubmittedDate,
+    poSubmittedDateIso: formatScheduleIsoDate_(poSubmittedDate),
+    poSubmittedDateLabel: formatDashboardShortDate_(poSubmittedDate),
+    paymentDueDate: paymentDueDate,
+    paymentDueDateIso: formatScheduleIsoDate_(paymentDueDate),
+    paymentDueDateLabel: formatDashboardShortDate_(paymentDueDate),
+    projectTotal: roundMoney_(summary.amountGrandTotal || 0),
+    projectTotalLabel: formatUsdAmount_(summary.amountGrandTotal || 0)
+  };
+}
+
+function buildPurchaseOrderPaymentReminderScheduleMeta_(orderInfo, dueMeta, milestone, noticeDate, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  const meta = (dueMeta && typeof dueMeta === 'object') ? dueMeta : {};
+  const summary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+  const cleanNoticeDate = normalizeDashboardCalendarDate_(noticeDate) || normalizeDashboardCalendarDate_(new Date());
+  const dueDate = normalizeDashboardCalendarDate_(meta.paymentDueDate);
+  const daysPastDue = dueDate && cleanNoticeDate
+    ? Math.max(0, calendarDaysBetweenScheduleDates_(dueDate, cleanNoticeDate))
+    : 0;
+  const feePercent = Number(opts.feePercent || getPurchaseOrderPaymentReminderFeePercentForDays_(daysPastDue) || 0);
+  const feeAmount = feePercent > 0 ? roundMoney_((summary.amountGrandTotal || meta.projectTotal || 0) * (feePercent / 100)) : 0;
+  const feeEffectiveDate = opts.feeEffectiveDate ? normalizeDashboardCalendarDate_(opts.feeEffectiveDate) : null;
+  const scheduleKey = trimString_(opts.scheduleKey) || [
+    normalized,
+    trimString_(meta.paymentDueDateIso) || formatScheduleIsoDate_(dueDate),
+    formatScheduleIsoDate_(cleanNoticeDate),
+    feePercent ? String(feePercent).replace(/\./g, '_') : ''
+  ].filter(Boolean).join('_');
+  return {
+    scheduleKey: scheduleKey,
+    paymentDueDate: trimString_(meta.paymentDueDateIso) || formatScheduleIsoDate_(dueDate),
+    paymentDueDateLabel: trimString_(meta.paymentDueDateLabel) || (dueDate ? formatDashboardShortDate_(dueDate) : ''),
+    paymentTermsDays: Math.max(0, parseInt(String(meta.paymentTermsDays || 0), 10) || 0),
+    paymentTermsLabel: trimString_(meta.paymentTermsLabel) || 'your approved terms',
+    poSubmittedDate: trimString_(meta.poSubmittedDateIso) || formatScheduleIsoDate_(meta.poSubmittedDate),
+    poSubmittedDateLabel: trimString_(meta.poSubmittedDateLabel),
+    noticeDate: formatScheduleIsoDate_(cleanNoticeDate),
+    noticeDateLabel: cleanNoticeDate ? formatDashboardShortDate_(cleanNoticeDate) : '',
+    daysPastDue: daysPastDue,
+    feePercent: feePercent,
+    feeAmount: feeAmount,
+    feeAmountLabel: feeAmount > 0 ? formatUsdAmount_(feeAmount) : '',
+    feeEffectiveDate: feeEffectiveDate ? formatScheduleIsoDate_(feeEffectiveDate) : '',
+    feeEffectiveDateLabel: feeEffectiveDate ? formatDashboardShortDate_(feeEffectiveDate) : '',
+    projectTotalLabel: trimString_(meta.projectTotalLabel) || formatUsdAmount_(summary.amountGrandTotal || 0),
+    scheduledBy: PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_
+  };
+}
+
+function buildPurchaseOrderPaymentReminderNotice_(orderInfo, dueMeta, milestone, noticeDate, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  return {
+    milestone: normalized,
+    recipientClass: trimString_(opts.recipientClass) === 'team' ? 'team' : 'client',
+    meta: buildPurchaseOrderPaymentReminderScheduleMeta_(orderInfo, dueMeta, normalized, noticeDate, opts)
+  };
+}
+
+function listDuePurchaseOrderPaymentReminderNotices_(orderInfo, dueMeta, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const today = normalizeDashboardCalendarDate_(opts.nowDate || new Date());
+  const dueDate = normalizeDashboardCalendarDate_(dueMeta && dueMeta.paymentDueDate);
+  if (!today || !dueDate || !isBusinessDayForSchedule_(today)) return [];
+  const notices = [];
+  const addNotice = function(milestone, noticeDate, extra) {
+    notices.push(buildPurchaseOrderPaymentReminderNotice_(orderInfo, dueMeta, milestone, noticeDate, extra));
+  };
+  const due5BusinessDaysBefore = nextBusinessDayOnOrAfterForSchedule_(addBusinessDaysForSchedule_(-5, dueDate));
+  const due1BusinessDayBefore = nextBusinessDayOnOrAfterForSchedule_(addBusinessDaysForSchedule_(-1, dueDate));
+  const firstPastDueNoticeDate = nextBusinessDayAfterForSchedule_(dueDate);
+  const firstFeeEffectiveDate = addCalendarDaysForDashboard_(PO_PAYMENT_LATE_FEE_FIRST_DAY_, dueDate);
+  const firstFeeNoticeDate = nextBusinessDayOnOrAfterForSchedule_(firstFeeEffectiveDate);
+  const monthOneFeeEffectiveDate = addCalendarDaysForDashboard_(PO_PAYMENT_LATE_FEE_MONTH_1_DAY_, dueDate);
+  const monthOneFeeNoticeDate = nextBusinessDayOnOrAfterForSchedule_(monthOneFeeEffectiveDate);
+  const monthTwoFeeEffectiveDate = addCalendarDaysForDashboard_(PO_PAYMENT_LATE_FEE_MONTH_2_DAY_, dueDate);
+  const monthTwoFeeNoticeDate = nextBusinessDayOnOrAfterForSchedule_(monthTwoFeeEffectiveDate);
+
+  if (isSameScheduleDate_(today, due5BusinessDaysBefore)) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before, today, {
+      scheduleKey: 'po_payment_due_5bd_before_' + formatScheduleIsoDate_(dueDate)
+    });
+  }
+  if (isSameScheduleDate_(today, due1BusinessDayBefore)) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_1bd_before, today, {
+      scheduleKey: 'po_payment_due_1bd_before_' + formatScheduleIsoDate_(dueDate)
+    });
+  }
+  if (isSameScheduleDate_(today, firstPastDueNoticeDate)) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_past_due, today, {
+      scheduleKey: 'po_payment_past_due_' + formatScheduleIsoDate_(dueDate)
+    });
+  }
+  if (isSameScheduleDate_(today, firstFeeNoticeDate)) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice, today, {
+      scheduleKey: 'po_payment_late_fee_2_5_' + formatScheduleIsoDate_(dueDate),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_,
+      feeEffectiveDate: firstFeeEffectiveDate
+    });
+  }
+  if (firstFeeNoticeDate && monthOneFeeNoticeDate &&
+      today.getTime() > firstFeeNoticeDate.getTime() &&
+      today.getTime() < monthOneFeeNoticeDate.getTime() &&
+      businessDaysBetweenScheduleDates_(firstFeeNoticeDate, today) % 5 === 0) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice, today, {
+      scheduleKey: 'po_payment_late_fee_2_5_followup_' + formatScheduleIsoDate_(today) + '_' + formatScheduleIsoDate_(dueDate),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_,
+      feeEffectiveDate: firstFeeEffectiveDate
+    });
+  }
+  if (isSameScheduleDate_(today, monthOneFeeNoticeDate)) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice, today, {
+      scheduleKey: 'po_payment_late_fee_7_5_' + formatScheduleIsoDate_(dueDate),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ + PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_,
+      feeEffectiveDate: monthOneFeeEffectiveDate
+    });
+  }
+  if (monthOneFeeNoticeDate && monthTwoFeeNoticeDate &&
+      today.getTime() > monthOneFeeNoticeDate.getTime() &&
+      today.getTime() < monthTwoFeeNoticeDate.getTime() &&
+      businessDaysBetweenScheduleDates_(monthOneFeeNoticeDate, today) % 5 === 0) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice, today, {
+      scheduleKey: 'po_payment_late_fee_7_5_followup_' + formatScheduleIsoDate_(today) + '_' + formatScheduleIsoDate_(dueDate),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ + PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_,
+      feeEffectiveDate: monthOneFeeEffectiveDate
+    });
+  }
+  if (isSameScheduleDate_(today, monthTwoFeeNoticeDate)) {
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice, today, {
+      scheduleKey: 'po_payment_late_fee_12_5_' + formatScheduleIsoDate_(dueDate),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ + (PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_ * 2),
+      feeEffectiveDate: monthTwoFeeEffectiveDate
+    });
+    addNotice(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation, today, {
+      recipientClass: 'team',
+      scheduleKey: 'po_payment_60_day_team_escalation_' + formatScheduleIsoDate_(dueDate),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ + (PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_ * 2),
+      feeEffectiveDate: monthTwoFeeEffectiveDate
+    });
+  }
+  return notices;
+}
+
+function listLatestPortalOrderInfosForPaymentReminderSchedule_(ordersSheet) {
+  const byToken = {};
+  listSheetRowInfos_(ordersSheet).forEach(function(info) {
+    const row = info && info.rowObjNormalized ? info.rowObjNormalized : {};
+    const summary = buildPortalOrderSummary_(row);
+    const token = trimString_(summary.token || row.token);
+    if (!token) return;
+    if (!byToken[token] || comparePortalOrderInfosDesc_(info, byToken[token]) < 0) {
+      byToken[token] = info;
+    }
+  });
+  return Object.keys(byToken).map(function(token) {
+    return byToken[token];
+  });
+}
+
+function queuePurchaseOrderPaymentReminderNotice_(orderInfo, notice, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const safeNotice = (notice && typeof notice === 'object') ? notice : {};
+  const milestone = normalizePaymentLifecycleEmailMilestone_(safeNotice.milestone);
+  if (!milestone) return null;
+  return queuePaymentLifecycleEmailJobSafely_(orderInfo, null, milestone, {
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra,
+    accountInfo: opts.accountInfo,
+    recipientClass: trimString_(safeNotice.recipientClass) === 'team' ? 'team' : 'client',
+    meta: (safeNotice.meta && typeof safeNotice.meta === 'object') ? safeNotice.meta : {},
+    eventType: 'po_payment_reminder_schedule'
+  });
+}
+
+function processPurchaseOrderPaymentReminderSchedule(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return { ok: false, reason: 'lock_busy' };
+  }
+  const result = {
+    ok: true,
+    scanned: 0,
+    eligible: 0,
+    queued: 0,
+    skipped: 0,
+    errors: []
+  };
+  try {
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const nowDate = normalizeDashboardCalendarDate_(opts.nowDate || new Date()) || new Date();
+    const orderInfos = listLatestPortalOrderInfosForPaymentReminderSchedule_(infra.ordersSheet);
+    orderInfos.forEach(function(orderInfo) {
+      result.scanned += 1;
+      try {
+        if (!shouldQueuePaymentLifecycleEmailForOrder_(orderInfo, PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before)) {
+          result.skipped += 1;
+          return;
+        }
+        const accountInfo = getPortalAccountInfoForOrder_(orderInfo, {
+          cfg: cfg,
+          ss: ss,
+          infra: infra
+        });
+        const dueMeta = derivePurchaseOrderPaymentReminderDueMeta_(orderInfo, {
+          cfg: cfg,
+          ss: ss,
+          infra: infra,
+          accountInfo: accountInfo
+        });
+        if (!dueMeta.ok) {
+          result.skipped += 1;
+          return;
+        }
+        const notices = listDuePurchaseOrderPaymentReminderNotices_(orderInfo, dueMeta, {
+          nowDate: nowDate
+        });
+        if (!notices.length) {
+          result.eligible += 1;
+          result.skipped += 1;
+          return;
+        }
+        result.eligible += 1;
+        notices.forEach(function(notice) {
+          const jobInfo = queuePurchaseOrderPaymentReminderNotice_(orderInfo, notice, {
+            cfg: cfg,
+            ss: ss,
+            infra: infra,
+            accountInfo: accountInfo
+          });
+          if (jobInfo) result.queued += 1;
+        });
+      } catch (err) {
+        result.errors.push(String((err && err.message) || err));
+      }
+    });
+    if (result.errors.length) result.ok = false;
+    console.log('[RT-PO-PAYMENT-REMINDER-SCHEDULE] ' + JSON.stringify(result));
+    return result;
+  } catch (err) {
+    result.ok = false;
+    result.errors.push(String((err && err.message) || err));
+    console.log('[RT-PO-PAYMENT-REMINDER-SCHEDULE] ' + JSON.stringify(result));
+    return result;
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -25057,6 +25650,9 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
   const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
   const opts = (options && typeof options === 'object') ? options : {};
   const recipientClass = trimString_(opts.recipientClass) === 'team' ? 'team' : 'client';
+  const scheduleMeta = (opts.scheduleMeta && typeof opts.scheduleMeta === 'object')
+    ? opts.scheduleMeta
+    : ((opts.meta && typeof opts.meta === 'object') ? opts.meta : {});
   const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, Object.assign({}, opts, {
     milestone: normalized,
     recipientClass: recipientClass,
@@ -25081,18 +25677,34 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
         normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted)) {
     emailContext.ctaLabel = buildLifecycleEmailProjectAccessCtaLabel_(emailContext, 'make a payment.');
   }
+  if (isClientScheduledPoPaymentReminderMilestone_(normalized)) {
+    const projectNumber = getLifecycleEmailProjectNumberLabel_(emailContext);
+    emailContext.ctaLabel = projectNumber
+      ? ('Click to access Project #' + projectNumber + ' and make a payment.')
+      : 'Click to access your project and make a payment.';
+  }
+  if (recipientClass === 'team' &&
+      normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation) {
+    emailContext.ctaLabel = buildLifecycleEmailTeamModeProjectCtaLabel_(
+      getLifecycleEmailProjectNumberLabel_(emailContext),
+      ''
+    );
+  }
   const summary = emailContext.orderSummary || {};
   const method = trimString_(summary.paymentMethodSelected).toLowerCase();
   const methodLabel = getPaymentLifecycleMethodLabel_(method);
   const isTeamAlert = recipientClass === 'team';
   const copy = buildPaymentLifecycleEmailCopy_(normalized, emailContext, {
     isTeamAlert: isTeamAlert,
-    methodLabel: methodLabel
+    methodLabel: methodLabel,
+    scheduleMeta: scheduleMeta,
+    attachmentPresent: opts.attachmentPresent === true
   });
   const nextStepText = resolvePaymentLifecycleEmailNextStepText_(normalized, emailContext.nextStepText, {
     isTeamAlert: isTeamAlert
   });
-  const teamActionModel = isTeamAlert
+  const useTeamActionModel = isTeamAlert && !isScheduledPoPaymentReminderMilestone_(normalized);
+  const teamActionModel = useTeamActionModel
     ? resolveLifecycleTeamEmailActionModel_(emailContext, {
       family: 'payment_lifecycle',
       milestone: normalized,
@@ -25110,24 +25722,30 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     eyebrow: isTeamAlert ? getPortalNativeEmailEyebrow_('team') : '',
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
-    actionTitle: teamActionModel ? teamActionModel.title : '',
+    actionTitle: teamActionModel ? teamActionModel.title : copy.actionTitle,
+    actionTitleTone: teamActionModel ? '' : copy.actionTitleTone,
     intro: teamActionModel ? teamActionModel.intro : copy.intro,
     statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
-    nextStep: teamActionModel ? teamActionModel.nextStep : nextStepText,
+    nextStep: teamActionModel ? teamActionModel.nextStep : (copy.nextStep || nextStepText),
+    nextStepLabel: teamActionModel ? teamActionModel.nextStepLabel : copy.nextStepLabel,
+    nextStepTone: teamActionModel ? teamActionModel.nextStepTone : copy.nextStepTone,
     attachmentNote: copy.attachmentNote,
+    productionTimingLine: copy.productionTimingLine,
+    recipientClass: recipientClass,
     blocks: sectionBlocks.concat([
       buildPaymentLifecycleInstructionsBlock_(normalized, emailContext.orderSummary),
       buildLifecycleEmailCtaBlock_(
-        teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
+        teamActionModel ? teamActionModel.ctaLabel : (copy.ctaLabel || emailContext.ctaLabel),
         teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
         {
           align: teamActionModel
             ? teamActionModel.ctaAlign
-            : (recipientClass !== 'team' && (
+            : (copy.ctaAlign || (recipientClass !== 'team' && (
               isPaymentLifecycleFailureMilestone_(normalized) ||
+              isClientScheduledPoPaymentReminderMilestone_(normalized) ||
               normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending ||
               normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted
-            ) ? 'center' : ''),
+            ) ? 'center' : '')),
           teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
         }
       ),
@@ -25140,6 +25758,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     family: 'payment_lifecycle',
     trigger: normalized,
     recipientClass: recipientClass,
+    meta: scheduleMeta,
     documentLabel: trimString_(emailContext.invoiceNumber),
     cfg: opts.cfg,
     ss: opts.ss,
@@ -25209,7 +25828,9 @@ function processPaymentLifecycleEmailQueueJob_(jobInfo, options) {
     cfg: cfg,
     ss: ss,
     infra: infra,
-    recipientClass: recipientClass
+    recipientClass: recipientClass,
+    scheduleMeta: meta,
+    attachmentPresent: !!(attachmentResult.attachments && attachmentResult.attachments.length)
   });
   const emailResult = sendNotificationEmail_({
     toList: recipients.toList,
@@ -26311,6 +26932,7 @@ function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, s
   const isTeamRecipient = recipientClass === 'team';
   if (!note) return '';
   if (note === 'The invoice/receipt for your order is attached to this email.' ||
+      note === 'Your project invoice/receipt is attached to this email.' ||
       note === 'The invoice/receipt for the client\'s order is attached to this email.' ||
       note === 'The invoice for their order is attached to this email.' ||
       note === 'Your invoice/receipt is attached to this email and available in your portal.' ||
@@ -26383,10 +27005,17 @@ function buildLifecycleEmailActionCardHtml_(options) {
   const cta = (opts.primaryCta && typeof opts.primaryCta === 'object') ? opts.primaryCta : null;
   const nextStepLabel = trimString_(opts.nextStepLabel) || 'Next action:';
   const nextStepTone = trimString_(opts.nextStepTone).toLowerCase();
+  const titleTone = trimString_(opts.titleTone).toLowerCase();
   const recipientClass = trimString_(opts.recipientClass).toLowerCase() === 'team' ? 'team' : '';
   const suppressNextAction = isLifecycleEmailNoActionText_(nextStep) && /^no(?: team)? action required$/i.test(title);
   if (!intro && !statusCopy && !nextStep && !attachmentSentence && !productionTimingLine && !trimString_(cta && cta.url)) return '';
-  const titleColor = recipientClass === 'team'
+  const titleColor = titleTone === 'red'
+    ? theme.brandRedMid
+    : titleTone === 'blue'
+    ? theme.currentAqua
+    : titleTone === 'green'
+    ? theme.successGreen
+    : recipientClass === 'team'
     ? (/^action required$/i.test(title)
       ? theme.brandRedMid
       : (/^potential action required$/i.test(title)
@@ -26453,6 +27082,7 @@ function buildLifecycleEmailShell_(options) {
   const nextStep = trimString_(opts.nextStep);
   const attachmentNote = trimString_(opts.attachmentNote);
   const actionTitle = trimString_(opts.actionTitle);
+  const actionTitleTone = trimString_(opts.actionTitleTone);
   const nextStepLabel = trimString_(opts.nextStepLabel);
   const nextStepTone = trimString_(opts.nextStepTone).toLowerCase();
   const suppressActionCardCta = opts.suppressActionCardCta === true;
@@ -26490,7 +27120,7 @@ function buildLifecycleEmailShell_(options) {
   const actionAttachmentSentence = buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, headerDisplay.subheading, {
     recipientClass: recipientClass
   });
-  const productionTimingActionLine = trimString_((progressBlocks.filter(function(block) {
+  const productionTimingActionLine = trimString_(opts.productionTimingLine) || trimString_((progressBlocks.filter(function(block) {
     return trimString_(block && block.productionTimingActionLine);
   })[0] || {}).productionTimingActionLine);
   const nonOrderLayout = trimString_(opts.nonOrderLayout).toLowerCase();
@@ -26550,6 +27180,7 @@ function buildLifecycleEmailShell_(options) {
       primaryCta: suppressActionCardCta ? null : primaryCta,
       nextStepLabel: nextStepLabel,
       nextStepTone: nextStepTone,
+      titleTone: actionTitleTone,
       recipientClass: recipientClass
     })
     : '';
@@ -27318,6 +27949,14 @@ function resolveOrderCommunicationProductionDisposition_(workflowContext, orderS
 function resolveOrderCommunicationIntent_(state) {
   const source = (state && typeof state === 'object') ? state : {};
   const family = trimString_(source.family).toLowerCase();
+  const trigger = normalizePaymentLifecycleEmailMilestone_(source.trigger);
+  if (trigger === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before ||
+      trigger === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_1bd_before) {
+    return 'po_payment_reminder';
+  }
+  if (trigger === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_past_due) return 'po_payment_past_due';
+  if (trigger === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice) return 'po_payment_late_fee_notice';
+  if (trigger === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation) return 'po_payment_late_fee_escalation';
   if (family === 'chat_message_digest') return 'chat_digest';
   if (family === 'purchase_order_invoice_email' || family === 'purchase_order_invoice') {
     return source.poTermsOpen ? 'po_submitted_terms_open' : 'po_invoice_prepared';
@@ -27347,9 +27986,12 @@ function resolveOrderCommunicationIntent_(state) {
 
 function resolveOrderCommunicationCtaMode_(state) {
   const source = (state && typeof state === 'object') ? state : {};
+  const trigger = normalizePaymentLifecycleEmailMilestone_(source.trigger);
   if (source.recipientClass === 'team') return 'team_mode';
   if (source.recipientClass === 'ap') return 'pay';
   if (source.paymentIssue) return 'retry_payment';
+  if (isClientScheduledPoPaymentReminderMilestone_(trigger)) return 'pay';
+  if (source.intent === 'production_complete' && source.poTermsOpen && !source.paymentReceived) return 'pay';
   if (source.manualPending || source.paymentRequiredBeforeProduction) return 'pay';
   if (source.intent === 'po_invoice_prepared') return 'submit_po';
   return 'view_project';
@@ -27453,6 +28095,24 @@ function resolveOrderCommunicationCopy_(state) {
     copy.attachmentNote = recipientClass === 'team'
       ? 'The invoice/receipt for the client\'s order is attached to this email.'
       : (recipientClass === 'ap' ? 'The invoice/receipt for this order is attached.' : 'Your invoice/receipt is attached.');
+    return copy;
+  }
+  if (source.intent === 'po_payment_reminder' ||
+      source.intent === 'po_payment_past_due' ||
+      source.intent === 'po_payment_late_fee_notice' ||
+      source.intent === 'po_payment_late_fee_escalation') {
+    copy.actionTitle = 'Action required';
+    copy.suppressPaymentOptions = source.recipientClass === 'team';
+    copy.intro = source.intent === 'po_payment_reminder'
+      ? 'Purchase-order payment is coming due.'
+      : 'Purchase-order payment is past due.';
+    copy.statusCopy = source.intent === 'po_payment_late_fee_escalation'
+      ? 'The payment timeline has reached the 60-day escalation threshold.'
+      : 'Payment remains open under the approved terms.';
+    copy.nextStep = source.recipientClass === 'team'
+      ? 'Review the project and follow up with the client.'
+      : 'Open the project summary and make a payment for the order.';
+    copy.attachmentNote = '';
     return copy;
   }
   if (source.poTermsOpen) {
@@ -27688,9 +28348,17 @@ function buildLifecycleEmailCopyModel_(copy) {
     subject: subject,
     heading: trimString_(source.heading) || deriveLifecycleEmailHeadingFromSubject_(subject),
     badgeLabel: trimString_(source.badgeLabel),
+    actionTitle: trimString_(source.actionTitle),
+    actionTitleTone: trimString_(source.actionTitleTone),
     intro: trimString_(source.intro),
     statusCopy: trimString_(source.statusCopy),
-    attachmentNote: trimString_(source.attachmentNote)
+    nextStep: trimString_(source.nextStep),
+    nextStepLabel: trimString_(source.nextStepLabel),
+    nextStepTone: trimString_(source.nextStepTone),
+    attachmentNote: trimString_(source.attachmentNote),
+    productionTimingLine: trimString_(source.productionTimingLine),
+    ctaLabel: trimString_(source.ctaLabel),
+    ctaAlign: trimString_(source.ctaAlign)
   };
 }
 
@@ -27846,12 +28514,111 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   });
 }
 
+function formatPoPaymentReminderPercent_(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return '';
+  return (Math.round(num * 10) / 10).toFixed(num % 1 === 0 ? 0 : 1) + '%';
+}
+
+function buildPoPaymentReminderNextStepText_(meta) {
+  const safe = (meta && typeof meta === 'object') ? meta : {};
+  const dueLabel = trimString_(safe.paymentDueDateLabel) || 'the due date';
+  const termsLabel = trimString_(safe.paymentTermsLabel) || 'your approved terms';
+  return 'Click below to access your project summary and make a payment for your order by ' + dueLabel + ' under ' + termsLabel + '.';
+}
+
+function buildPoPaymentLateFeeCopyLine_(meta) {
+  const safe = (meta && typeof meta === 'object') ? meta : {};
+  const feePercent = formatPoPaymentReminderPercent_(safe.feePercent);
+  const feeAmount = trimString_(safe.feeAmountLabel);
+  const effectiveDate = trimString_(safe.feeEffectiveDateLabel);
+  if (!feePercent) return '';
+  return 'A late fee of ' + feePercent + (feeAmount ? (' (' + feeAmount + ')') : '') +
+    (effectiveDate ? (' applies effective ' + effectiveDate) : ' applies') +
+    ' according to your approved Red Threads terms.';
+}
+
+function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
+  const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const meta = (opts.scheduleMeta && typeof opts.scheduleMeta === 'object') ? opts.scheduleMeta : {};
+  const invoiceNumber = trimString_(ctx.invoiceNumber);
+  const projectNumber = getLifecycleEmailProjectNumberLabel_(ctx);
+  const projectLabel = projectNumber ? ('Project #' + projectNumber) : 'your Red Threads project';
+  const dueLabel = trimString_(meta.paymentDueDateLabel) || 'the due date';
+  const noticeDateLabel = trimString_(meta.noticeDateLabel);
+  const termsLabel = trimString_(meta.paymentTermsLabel) || 'your approved terms';
+  const daysPastDue = Math.max(0, parseInt(String(meta.daysPastDue || 0), 10) || 0);
+  const attachmentNote = opts.attachmentPresent === true
+    ? 'Your project invoice/receipt is attached to this email.'
+    : '';
+  const base = {
+    actionTitle: 'Action required',
+    actionTitleTone: 'red',
+    nextStepLabel: 'Next action:',
+    ctaAlign: 'center',
+    attachmentNote: attachmentNote
+  };
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation) {
+    return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
+      subject: formatLifecycleEmailInvoiceSubject_('PO payment 60-day escalation', invoiceNumber, 'PO payment 60-day escalation'),
+      heading: projectLabel + ' - PO payment 60-day escalation',
+      intro: 'Payment for this purchase-order project is still open 60 calendar days after the due date.',
+      statusCopy: uniqueTrimmedStrings_([
+        'Payment was due ' + dueLabel + ' under ' + termsLabel + '.',
+        buildPoPaymentLateFeeCopyLine_(meta),
+        noticeDateLabel ? ('Escalation notice date: ' + noticeDateLabel + '.') : ''
+      ]).join('\n'),
+      nextStep: 'Review the project and follow up with the client.',
+      nextStepLabel: 'Team action:'
+    }));
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before ||
+      normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_1bd_before) {
+    const lead = normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before
+      ? 'Payment reminder - due in 5 business days'
+      : 'Payment reminder - due in 1 business day';
+    return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
+      subject: formatLifecycleEmailInvoiceSubject_(lead, invoiceNumber, lead + ' for your Red Threads order'),
+      heading: projectLabel + ' - payment due soon',
+      intro: 'Your Red Threads purchase-order payment due date is coming up.',
+      statusCopy: 'Payment is due by ' + dueLabel + ' under ' + termsLabel + '.',
+      nextStep: buildPoPaymentReminderNextStepText_(meta)
+    }));
+  }
+  if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_past_due) {
+    return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
+      subject: formatLifecycleEmailInvoiceSubject_('PO payment past due', invoiceNumber, 'PO payment past due for your Red Threads order'),
+      heading: projectLabel + ' - payment past due',
+      intro: 'Your Red Threads purchase-order payment due date has lapsed, and payment is officially late.',
+      statusCopy: 'Payment was due ' + dueLabel + ' under ' + termsLabel + '. Late fees may apply if payment remains open.',
+      nextStep: 'Click below to access your project summary and make a payment for your order.'
+    }));
+  }
+  const lateFeeLine = buildPoPaymentLateFeeCopyLine_(meta);
+  return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
+    subject: formatLifecycleEmailInvoiceSubject_('PO payment late-fee notice', invoiceNumber, 'PO payment late-fee notice for your Red Threads order'),
+    heading: projectLabel + ' - payment late-fee notice',
+    intro: 'Payment for your Red Threads purchase-order project is past due.',
+    statusCopy: uniqueTrimmedStrings_([
+      'Payment was due ' + dueLabel + ' under ' + termsLabel + '.',
+      daysPastDue ? ('This notice is based on ' + daysPastDue + ' calendar days past due.') : '',
+      lateFeeLine
+    ]).join('\n'),
+    nextStep: 'Click below to access your project summary and make a payment for your order.'
+  }));
+}
+
 function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   const normalized = normalizePaymentLifecycleEmailMilestone_(milestone);
   const opts = (options && typeof options === 'object') ? options : {};
   const isTeamAlert = opts.isTeamAlert === true;
   const methodLabel = trimString_(opts.methodLabel) || 'Payment';
   const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
+  if (isScheduledPoPaymentReminderMilestone_(normalized)) {
+    return buildPoPaymentReminderEmailCopy_(normalized, emailContext, opts);
+  }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
@@ -28116,6 +28883,69 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
   }
   return {
     invoiceInfo: invoiceInfo
+  };
+}
+
+function listPurchaseOrderPaymentReminderScheduleTriggers_() {
+  try {
+    return ScriptApp.getProjectTriggers().filter(function(trigger) {
+      return trigger.getHandlerFunction && trigger.getHandlerFunction() === PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_;
+    });
+  } catch (err) {
+    console.log('[RT-PO-PAYMENT-REMINDER-TRIGGER-LIST] ' + String((err && err.message) || err));
+    return [];
+  }
+}
+
+function deletePurchaseOrderPaymentReminderScheduleTriggers_() {
+  try {
+    listPurchaseOrderPaymentReminderScheduleTriggers_().forEach(function(trigger) {
+      ScriptApp.deleteTrigger(trigger);
+    });
+  } catch (err) {
+    console.log('[RT-PO-PAYMENT-REMINDER-TRIGGER-DELETE] ' + String((err && err.message) || err));
+  }
+}
+
+function installPurchaseOrderPaymentReminderSchedule() {
+  try {
+    deletePurchaseOrderPaymentReminderScheduleTriggers_();
+    ScriptApp.newTrigger(PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_)
+      .timeBased()
+      .inTimezone(Session.getScriptTimeZone() || 'America/Detroit')
+      .everyDays(1)
+      .atHour(PO_PAYMENT_REMINDER_DAILY_HOUR_)
+      .create();
+    const triggers = listPurchaseOrderPaymentReminderScheduleTriggers_();
+    const result = {
+      ok: triggers.length === 1,
+      handler: PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_,
+      hour: PO_PAYMENT_REMINDER_DAILY_HOUR_,
+      timezone: Session.getScriptTimeZone() || 'America/Detroit',
+      triggerCount: triggers.length
+    };
+    console.log('[RT-PO-PAYMENT-REMINDER-TRIGGER-INSTALL] ' + JSON.stringify(result));
+    return result;
+  } catch (err) {
+    const result = {
+      ok: false,
+      handler: PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_,
+      error: String((err && err.message) || err)
+    };
+    console.log('[RT-PO-PAYMENT-REMINDER-TRIGGER-INSTALL] ' + JSON.stringify(result));
+    return result;
+  }
+}
+
+function getPurchaseOrderPaymentReminderScheduleStatus() {
+  const triggers = listPurchaseOrderPaymentReminderScheduleTriggers_();
+  return {
+    ok: true,
+    handler: PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_,
+    hour: PO_PAYMENT_REMINDER_DAILY_HOUR_,
+    timezone: Session.getScriptTimeZone() || 'America/Detroit',
+    triggerCount: triggers.length,
+    installed: triggers.length > 0
   };
 }
 
@@ -30792,6 +31622,43 @@ function cloneEmailReviewOrderInfoWithFulfillment_(orderInfo, fulfillmentMethod)
   });
 }
 
+function buildEmailReviewProductionCompletePoUnpaidOrderInfo_(orderInfo) {
+  const base = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const draft = safeJsonParse_(base.orderdraftjson || base.orderDraftJson, {}) || {};
+  const portalState = safeJsonParse_(base.portalstatejson || base.portalStateJson, {}) || {};
+  const poSubmittedAt = trimString_(base.posubmittedat || base.poSubmittedAt || base.lockedat || base.createdat) || nowIso_();
+  const authorizedAt = trimString_(base.authorizedtoproduceat || base.authorizedToProduceAt || poSubmittedAt);
+  const nextDraft = Object.assign({}, draft, {
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order
+  });
+  const nextPortalState = Object.assign({}, portalState, {
+    currentPaymentMethod: PAYMENT_METHODS.purchase_order,
+    currentPaymentState: PAYMENT_STATES.not_started,
+    currentOrderState: ORDER_STATES.closed,
+    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    poSubmittedAt: poSubmittedAt,
+    paymentDue: true
+  });
+  return cloneEmailReviewOrderInfo_(orderInfo, {
+    orderdraftjson: JSON.stringify(nextDraft),
+    portalstatejson: JSON.stringify(nextPortalState),
+    paymentmethodselected: PAYMENT_METHODS.purchase_order,
+    currentpaymentmethod: PAYMENT_METHODS.purchase_order,
+    paymentstate: PAYMENT_STATES.not_started,
+    currentpaymentstate: PAYMENT_STATES.not_started,
+    orderstate: ORDER_STATES.closed,
+    currentorderstate: ORDER_STATES.closed,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    currentproductionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    posubmittedat: poSubmittedAt,
+    ponumber: trimString_(base.ponumber || base.poNumber) || 'EMAIL-REVIEW-PO',
+    paidat: '',
+    paymentreceivedmanuallyat: '',
+    authorizedtoproduceat: authorizedAt,
+    lastupdatedat: trimString_(base.lastupdatedat || base.lastUpdatedAt) || nowIso_()
+  });
+}
+
 function buildEmailReviewProjectCompletedMeta_(orderInfo) {
   const summary = buildPortalOrderSummary_(orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {});
   const selectedJobs = Array.isArray(summary.selectedJobs) ? summary.selectedJobs : [];
@@ -31016,6 +31883,7 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'tax exempt submitted team review': 'owner_reviewed_hidden',
   'po payment received client': 'owner_reviewed_hidden',
   'manual payment received client': 'owner_reviewed_hidden',
+  'card paid client': 'owner_reviewed_hidden',
   'card failed client': 'owner_reviewed_hidden',
   'ap ach failed ap': 'owner_reviewed_hidden',
   'ap ach receipt ap': 'owner_reviewed_hidden',
@@ -31489,6 +32357,80 @@ function skipEmailReviewResult_(results, label, family, recipientClass, reason) 
   });
 }
 
+function addCalendarDaysForEmailReview_(dayCount, referenceDate) {
+  const date = normalizeDashboardCalendarDate_(referenceDate);
+  if (!date) return null;
+  date.setDate(date.getDate() + Math.trunc(Number(dayCount) || 0));
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+function buildEmailReviewPoReminderOrderInfo_(baseOrder, dueDate, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const termsDays = Math.max(1, parseInt(String(opts.paymentTermsDays || 30), 10) || 30);
+  const due = normalizeDashboardCalendarDate_(dueDate) || addCalendarDaysForEmailReview_(termsDays, new Date());
+  const poSubmittedDate = addCalendarDaysForEmailReview_(-termsDays, due);
+  const poSubmittedIso = poSubmittedDate ? poSubmittedDate.toISOString() : nowIso_();
+  return cloneEmailReviewOrderInfo_(baseOrder, {
+    paymentmethodselected: PAYMENT_METHODS.purchase_order,
+    paymentstate: PAYMENT_STATES.not_started,
+    orderstate: ORDER_STATES.in_production,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    paidat: '',
+    paymentreceivedmanuallyat: '',
+    posubmittedat: poSubmittedIso,
+    authorizedtoproduceat: poSubmittedIso,
+    approvedpaymenttermsdays: termsDays,
+    approvedpaymenttermslabel: trimString_(opts.paymentTermsLabel) || ('Net ' + termsDays)
+  });
+}
+
+function buildEmailReviewPoReminderDueMeta_(orderInfo, dueDate, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const termsDays = Math.max(1, parseInt(String(opts.paymentTermsDays || 30), 10) || 30);
+  const summary = buildPortalOrderSummary_((orderInfo && orderInfo.rowObjNormalized) || {});
+  const due = normalizeDashboardCalendarDate_(dueDate);
+  const poSubmittedDate = addCalendarDaysForEmailReview_(-termsDays, due);
+  return {
+    ok: true,
+    paymentTermsDays: termsDays,
+    paymentTermsLabel: trimString_(opts.paymentTermsLabel) || ('Net ' + termsDays),
+    poSubmittedDate: poSubmittedDate,
+    poSubmittedDateIso: formatScheduleIsoDate_(poSubmittedDate),
+    poSubmittedDateLabel: poSubmittedDate ? formatDashboardShortDate_(poSubmittedDate) : '',
+    paymentDueDate: due,
+    paymentDueDateIso: formatScheduleIsoDate_(due),
+    paymentDueDateLabel: due ? formatDashboardShortDate_(due) : '',
+    projectTotal: roundMoney_(summary.amountGrandTotal || 0),
+    projectTotalLabel: formatUsdAmount_(summary.amountGrandTotal || 0)
+  };
+}
+
+function appendEmailReviewPaidPoSuppressionAssertion_(results, baseOrder, dueDate) {
+  const order = buildEmailReviewPaidOrderInfo_(
+    buildEmailReviewPoReminderOrderInfo_(baseOrder, dueDate, {}),
+    PAYMENT_METHODS.purchase_order
+  );
+  const suppressed = !shouldQueuePaymentLifecycleEmailForOrder_(
+    order,
+    PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before
+  );
+  results.push({
+    ok: suppressed,
+    sent: false,
+    dryRun: true,
+    assertionOnly: true,
+    label: 'PO paid suppression assertion',
+    family: 'payment_lifecycle',
+    recipientClass: 'client',
+    communicationIntent: 'po_payment_reminder',
+    expectedIntent: 'suppressed',
+    suppressed: suppressed,
+    reason: suppressed ? 'paid_po_suppressed' : '',
+    error: suppressed ? '' : 'paid_po_reminder_not_suppressed'
+  });
+}
+
 function normalizeEmailReviewError_(err) {
   const raw = String((err && err.message) || err || 'email_review_failed');
   if (/client_secret|hosted_verification_url|routing|account_number|raw webhook/i.test(raw)) return 'email_review_failed';
@@ -31682,6 +32624,108 @@ function sendEmailReviewApAchExamples_(results, fixture, recipients) {
   });
 }
 
+function sendEmailReviewPoPaymentReminderExamples_(results, fixture, recipients, baseOrder) {
+  if (!baseOrder) {
+    [
+      { label: 'PO payment reminder 5 business days before due client', recipientClass: 'client' },
+      { label: 'PO payment reminder 1 business day before due client', recipientClass: 'client' },
+      { label: 'PO payment past due client', recipientClass: 'client' },
+      { label: 'PO late fee 2.5 client', recipientClass: 'client' },
+      { label: 'PO late fee 7.5 client', recipientClass: 'client' },
+      { label: 'PO late fee 12.5 client', recipientClass: 'client' },
+      { label: 'PO payment 60-day escalation team', recipientClass: 'team' }
+    ].forEach(function(item) {
+      skipEmailReviewResult_(results, item.label, 'payment_lifecycle', item.recipientClass, 'fixture_missing');
+    });
+    return;
+  }
+  const today = normalizeDashboardCalendarDate_(new Date());
+  const termsDays = 30;
+  const examples = [
+    {
+      label: 'PO payment reminder 5 business days before due client',
+      milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before,
+      recipientClass: 'client',
+      to: recipients.client,
+      dueDate: addBusinessDaysForSchedule_(5, today)
+    },
+    {
+      label: 'PO payment reminder 1 business day before due client',
+      milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_1bd_before,
+      recipientClass: 'client',
+      to: recipients.client,
+      dueDate: addBusinessDaysForSchedule_(1, today)
+    },
+    {
+      label: 'PO payment past due client',
+      milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_past_due,
+      recipientClass: 'client',
+      to: recipients.client,
+      dueDate: addBusinessDaysForSchedule_(-1, today)
+    },
+    {
+      label: 'PO late fee 2.5 client',
+      milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice,
+      recipientClass: 'client',
+      to: recipients.client,
+      dueDate: addCalendarDaysForEmailReview_(-PO_PAYMENT_LATE_FEE_FIRST_DAY_, today),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_
+    },
+    {
+      label: 'PO late fee 7.5 client',
+      milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice,
+      recipientClass: 'client',
+      to: recipients.client,
+      dueDate: addCalendarDaysForEmailReview_(-PO_PAYMENT_LATE_FEE_MONTH_1_DAY_, today),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ + PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_
+    },
+    {
+      label: 'PO late fee 12.5 client',
+      milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_late_fee_notice,
+      recipientClass: 'client',
+      to: recipients.client,
+      dueDate: addCalendarDaysForEmailReview_(-PO_PAYMENT_LATE_FEE_MONTH_2_DAY_, today),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ + (PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_ * 2)
+    },
+    {
+      label: 'PO payment 60-day escalation team',
+      milestone: PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation,
+      recipientClass: 'team',
+      to: recipients.team,
+      dueDate: addCalendarDaysForEmailReview_(-PO_PAYMENT_LATE_FEE_MONTH_2_DAY_, today),
+      feePercent: PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ + (PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_ * 2)
+    }
+  ];
+  examples.forEach(function(example) {
+    const order = buildEmailReviewPoReminderOrderInfo_(baseOrder, example.dueDate, {
+      paymentTermsDays: termsDays,
+      paymentTermsLabel: 'Net 30'
+    });
+    const dueMeta = buildEmailReviewPoReminderDueMeta_(order, example.dueDate, {
+      paymentTermsDays: termsDays,
+      paymentTermsLabel: 'Net 30'
+    });
+    const meta = buildPurchaseOrderPaymentReminderScheduleMeta_(order, dueMeta, example.milestone, today, {
+      scheduleKey: 'email_review_' + example.label.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+      feePercent: example.feePercent || 0,
+      feeEffectiveDate: example.feePercent ? today : null
+    });
+    const invoiceInfo = buildEmailReviewInvoiceInfo_(fixture, order, { fresh: false });
+    const attachments = buildEmailReviewAttachments_('payment_lifecycle', example.milestone, order, invoiceInfo);
+    sendEmailReviewContent_(results, example.label, 'payment_lifecycle', example.recipientClass, [example.to],
+      buildPaymentLifecycleEmailContent_(example.milestone, order, invoiceInfo, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        recipientClass: example.recipientClass,
+        scheduleMeta: meta,
+        attachmentPresent: attachments.length > 0
+      }),
+      attachments);
+  });
+  appendEmailReviewPaidPoSuppressionAssertion_(results, baseOrder, addBusinessDaysForSchedule_(5, today));
+}
+
 function sendEmailReviewPaymentExamples_(results, fixture, recipients) {
   const base = fixture.baseOrder || fixture.standardAchPaid || fixture.manual || fixture.po;
   if (!base) {
@@ -31727,8 +32771,9 @@ function sendEmailReviewPaymentExamples_(results, fixture, recipients) {
           recipientClass: item.recipientClass
         }),
         attachments);
-    });
+      });
   });
+  sendEmailReviewPoPaymentReminderExamples_(results, fixture, recipients, poSubmittedBase);
 }
 
 function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
@@ -31778,6 +32823,7 @@ function sendEmailReviewProductionCompleteExamples_(results, fixture, recipients
   if (!baseOrder) {
     [
       { label: 'Production complete shipping client', recipientClass: 'client' },
+      { label: 'Production complete shipping PO unpaid client', recipientClass: 'client' },
       { label: 'Production complete shipping team', recipientClass: 'team' },
       { label: 'Production complete pickup client', recipientClass: 'client' },
       { label: 'Production complete pickup team', recipientClass: 'team' }
@@ -31786,17 +32832,33 @@ function sendEmailReviewProductionCompleteExamples_(results, fixture, recipients
     });
     return;
   }
+  const shippingOrder = cloneEmailReviewOrderInfoWithFulfillment_(baseOrder, FULFILLMENT_METHODS.shipping);
   [
-    { label: 'Production complete shipping client', recipientClass: 'client', to: recipients.client, fulfillmentMethod: FULFILLMENT_METHODS.shipping },
-    { label: 'Production complete shipping team', recipientClass: 'team', to: recipients.team, fulfillmentMethod: FULFILLMENT_METHODS.shipping },
-    { label: 'Production complete pickup client', recipientClass: 'client', to: recipients.client, fulfillmentMethod: FULFILLMENT_METHODS.pickup },
-    { label: 'Production complete pickup team', recipientClass: 'team', to: recipients.team, fulfillmentMethod: FULFILLMENT_METHODS.pickup }
+    { label: 'Production complete shipping client', recipientClass: 'client', to: recipients.client, order: shippingOrder },
+    { label: 'Production complete shipping PO unpaid client', recipientClass: 'client', to: recipients.client, order: buildEmailReviewProductionCompletePoUnpaidOrderInfo_(shippingOrder) },
+    { label: 'Production complete shipping team', recipientClass: 'team', to: recipients.team, order: shippingOrder },
+    { label: 'Production complete pickup client', recipientClass: 'client', to: recipients.client, order: cloneEmailReviewOrderInfoWithFulfillment_(baseOrder, FULFILLMENT_METHODS.pickup) },
+    { label: 'Production complete pickup team', recipientClass: 'team', to: recipients.team, order: cloneEmailReviewOrderInfoWithFulfillment_(baseOrder, FULFILLMENT_METHODS.pickup) }
   ].forEach(function(item) {
-    const order = cloneEmailReviewOrderInfoWithFulfillment_(baseOrder, item.fulfillmentMethod);
+    const order = item.order;
+    const summary = buildPortalOrderSummary_(order && order.rowObjNormalized);
+    let attachments = [];
     const meta = Object.assign({
-      fulfillmentMethod: item.fulfillmentMethod,
+      fulfillmentMethod: summary.fulfillmentMethod,
       attachmentRequired: false
     }, buildEmailReviewProjectCompletedMeta_(order));
+    if (item.recipientClass === 'client') {
+      try {
+        const paid = isCommunicationPaymentPaid_(summary);
+        const invoiceInfo = buildEmailReviewInvoiceInfo_(fixture, order, {
+          fresh: paid
+        });
+        attachments = buildEmailReviewAttachments_('locked_order_confirmation', '', order, invoiceInfo);
+        if (attachments.length) meta.invoiceReceiptAttached = true;
+      } catch (_) {
+        attachments = [];
+      }
+    }
     sendEmailReviewContent_(results, item.label, 'portal_lifecycle', item.recipientClass, [item.to],
       buildPortalLifecycleEmailContent_(PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed, order, {
         cfg: fixture.cfg,
@@ -31813,7 +32875,7 @@ function sendEmailReviewProductionCompleteExamples_(results, fixture, recipients
         }),
         meta: meta
       }),
-      []);
+      attachments);
   });
 }
 
