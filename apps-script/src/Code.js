@@ -24496,7 +24496,7 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
       }
       if (poPaymentDue) {
         actionTitle = 'Action required';
-        actionTitleTone = 'red';
+        actionTitleTone = 'blue';
         nextStep = buildProductionCompletePoPaymentNextStepText_(opts);
         nextStepLabel = 'Next action:';
       } else {
@@ -27012,14 +27012,17 @@ function buildLifecycleEmailActionCardHtml_(options) {
   const nextStepLabel = trimString_(opts.nextStepLabel) || 'Next action:';
   const nextStepTone = trimString_(opts.nextStepTone).toLowerCase();
   const titleTone = trimString_(opts.titleTone).toLowerCase();
-  const recipientClass = trimString_(opts.recipientClass).toLowerCase() === 'team' ? 'team' : '';
+  const recipientClass = normalizePortalCommunicationRecipientClass_(opts.recipientClass);
+  const effectiveTitleTone = recipientClass === 'client' && /^action required$/i.test(title) && titleTone === 'red'
+    ? 'blue'
+    : titleTone;
   const suppressNextAction = isLifecycleEmailNoActionText_(nextStep) && /^no(?: team)? action required$/i.test(title);
   if (!intro && !statusCopy && !nextStep && !attachmentSentence && !productionTimingLine && !trimString_(cta && cta.url)) return '';
-  const titleColor = titleTone === 'red'
+  const titleColor = effectiveTitleTone === 'red'
     ? theme.brandRedMid
-    : titleTone === 'blue'
+    : effectiveTitleTone === 'blue'
     ? theme.currentAqua
-    : titleTone === 'green'
+    : effectiveTitleTone === 'green'
     ? theme.successGreen
     : recipientClass === 'team'
     ? (/^action required$/i.test(title)
@@ -27395,6 +27398,9 @@ function resolveLifecycleEmailProductionTimingLines_(workflowContext, orderSumma
   const selectedJobs = getLifecycleEmailProductionTimingJobs_(summary);
   if (!selectedJobs.length) return [];
   const lines = [];
+  if (resolveOrderCommunicationProductionDisposition_(ctx, summary) === 'complete') {
+    return lines;
+  }
   const productionStartAt = resolveLifecycleEmailProductionStartAt_(ctx, summary);
   const productionActive = isLifecycleEmailProductionActive_(ctx, summary);
   if (productionActive) {
@@ -27412,6 +27418,10 @@ function resolveLifecycleEmailProductionTimingLines_(workflowContext, orderSumma
 function getLifecycleEmailProductionTimingActionLine_(workflowContext, orderSummary) {
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  if (resolveOrderCommunicationProductionDisposition_(ctx, summary) === 'complete') {
+    const completionLabel = buildLifecycleEmailDateLabel_(resolveLifecycleEmailProductionCompletionDate_(ctx, summary, {}));
+    return completionLabel ? ('All job production completed: ' + completionLabel) : 'Production complete';
+  }
   if (!isLifecycleEmailProductionActive_(ctx, summary)) return '';
   return trimString_(resolveLifecycleEmailProductionTimingLines_(ctx, summary)[0]);
 }
@@ -28529,8 +28539,13 @@ function formatPoPaymentReminderPercent_(value) {
 function buildPoPaymentReminderNextStepText_(meta) {
   const safe = (meta && typeof meta === 'object') ? meta : {};
   const dueLabel = trimString_(safe.paymentDueDateLabel) || 'the due date';
-  const termsLabel = trimString_(safe.paymentTermsLabel) || 'your approved terms';
-  return 'Click below to access your project summary and make a payment for your order by ' + dueLabel + ' under ' + termsLabel + '.';
+  return 'Click below to access your project summary and make a payment for your order by ' + dueLabel + ' ' + formatPoPaymentReminderTermsPhrase_(safe.paymentTermsLabel) + '.';
+}
+
+function formatPoPaymentReminderTermsPhrase_(termsLabel) {
+  const clean = (trimString_(termsLabel) || 'approved terms').replace(/^(?:the|your)\s+/i, '');
+  if (/terms/i.test(clean)) return 'under the ' + clean + ' on your account';
+  return 'under the ' + clean + ' terms on your account';
 }
 
 function buildPoPaymentLateFeeCopyLine_(meta) {
@@ -28554,7 +28569,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
   const projectLabel = projectNumber ? ('Project #' + projectNumber) : 'your Red Threads project';
   const dueLabel = trimString_(meta.paymentDueDateLabel) || 'the due date';
   const noticeDateLabel = trimString_(meta.noticeDateLabel);
-  const termsLabel = trimString_(meta.paymentTermsLabel) || 'your approved terms';
+  const termsPhrase = formatPoPaymentReminderTermsPhrase_(meta.paymentTermsLabel);
   const daysPastDue = Math.max(0, parseInt(String(meta.daysPastDue || 0), 10) || 0);
   const attachmentNote = opts.attachmentPresent === true
     ? 'Your project invoice/receipt is attached to this email.'
@@ -28572,7 +28587,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
       heading: projectLabel + ' - PO payment 60-day escalation',
       intro: 'Payment for this purchase-order project is still open 60 calendar days after the due date.',
       statusCopy: uniqueTrimmedStrings_([
-        'Payment was due ' + dueLabel + ' under ' + termsLabel + '.',
+        'Payment was due ' + dueLabel + ' ' + termsPhrase + '.',
         buildPoPaymentLateFeeCopyLine_(meta),
         noticeDateLabel ? ('Escalation notice date: ' + noticeDateLabel + '.') : ''
       ]).join('\n'),
@@ -28589,7 +28604,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
       subject: formatLifecycleEmailInvoiceSubject_(lead, invoiceNumber, lead + ' for your Red Threads order'),
       heading: projectLabel + ' - payment due soon',
       intro: 'Your Red Threads purchase-order payment due date is coming up.',
-      statusCopy: 'Payment is due by ' + dueLabel + ' under ' + termsLabel + '.',
+      statusCopy: 'Payment is due by ' + dueLabel + ' ' + termsPhrase + '.',
       nextStep: buildPoPaymentReminderNextStepText_(meta)
     }));
   }
@@ -28598,7 +28613,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
       subject: formatLifecycleEmailInvoiceSubject_('PO payment past due', invoiceNumber, 'PO payment past due for your Red Threads order'),
       heading: projectLabel + ' - payment past due',
       intro: 'Your Red Threads purchase-order payment due date has lapsed, and payment is officially late.',
-      statusCopy: 'Payment was due ' + dueLabel + ' under ' + termsLabel + '. Late fees may apply if payment remains open.',
+      statusCopy: 'Payment was due ' + dueLabel + ' ' + termsPhrase + '. Late fees may apply if payment remains open.',
       nextStep: 'Click below to access your project summary and make a payment for your order.'
     }));
   }
@@ -28608,7 +28623,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
     heading: projectLabel + ' - payment late-fee notice',
     intro: 'Payment for your Red Threads purchase-order project is past due.',
     statusCopy: uniqueTrimmedStrings_([
-      'Payment was due ' + dueLabel + ' under ' + termsLabel + '.',
+      'Payment was due ' + dueLabel + ' ' + termsPhrase + '.',
       daysPastDue ? ('This notice is based on ' + daysPastDue + ' calendar days past due.') : '',
       lateFeeLine
     ]).join('\n'),

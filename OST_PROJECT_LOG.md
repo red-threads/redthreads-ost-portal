@@ -17,6 +17,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-22 - Client Action Status Email Refinement On Version 998
+
+- Mode: Full ship runtime refinement plus owner-approved live email-review suite.
+- Branch/commit/PR: `main`, Apps Script version `998`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: make client `Action required` action-card titles blue, remove completed-production versus estimated-completion email contradictions, refine PO reminder terms copy, ship the code, and run the email review suite.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `buildLifecycleEmailActionCardHtml_()` now normalizes client-recipient `Action required` red title tones to blue while leaving team `Action required` red. Production timing action/history helpers now suppress stale estimated completion timing once lifecycle production is complete and promote `All job production completed: {date}` when available. PO reminder, past-due, late-fee, and escalation copy now render terms as `under the {terms} terms on your account`. `Index.html` shows development revision `125`. The temporary Apps Script authorization bridge remains removed; `appsscript.json` is unchanged in final source.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine client email action status"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@998 - Refine client email action status`. Direct `/exec` returned HTTP `200` with `Development revision 125`, omitted stale revision `124`, and referenced the stable deployment ID. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and targeted secret/private-link marker checks found zero hits.
+- Review suite: protected dry run returned `ok:true`, total `72`, sent `0`, skipped `34`, failed `0`, attachment fallback `23`, and contradiction warnings/errors `0`. Matrix validation returned `ok:true` with `36` required, `23` covered, `13` skipped/omitted, `0` missing, and `0` intent mismatches. The owner-approved live suite returned `ok:true`, sent `25`, skipped `34`, failed `0`, attachment fallback `23`, and contradiction warnings/errors `0`.
+- Reset/queue behavior: the live non-dry-run path reset `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then cleared `PORTAL_EMAIL_QUEUE`. Fixture-storage tabs were not mutated. No Apps Script config, Script Properties, or scheduler trigger changes were made.
+- Follow-ups: active runtime tabs remain fixture-loaded after the review-suite reset. Restore active runtime tabs from the private backup before production runtime resumes, unless the owner chooses continued fixture mode.
+
 ## 2026-06-22 - PO Reminder Scheduler Installed On Version 997
 
 - Mode: Full ship runtime activation after explicit owner approval to install while active tabs remain fixture-loaded.
