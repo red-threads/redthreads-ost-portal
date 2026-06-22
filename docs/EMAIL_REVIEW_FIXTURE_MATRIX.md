@@ -72,6 +72,8 @@ Version `989` clears the review-suite omission map, extends the same `Production
 
 Version `990` re-hides the owner-reviewed/pass review labels requested after inbox review while preserving production communication policy. It also ships the final visible refinements before hiding those labels: locked-order resend client copy uses `invoice/receipt`, PO invoice prepared gets a centered `Click to access project #... and upload P.O.` action-card CTA, and PO submitted/manual payment pending client emails get centered `Click to access project #... and make a payment.` action-card CTAs. Per owner instruction, no protected dry run or live email-review suite was run for version `990`; active runtime tabs remain fixture-loaded from the version `989` live-suite reset, fixture-storage tabs were not touched, and `PORTAL_EMAIL_QUEUE` was not cleared.
 
+Version `991` enables the production-complete portal lifecycle email for the all-jobs-complete Team Mode trigger while keeping partial `jobs_completed` updates policy-disabled. Client and team emails are rendered by the existing lifecycle shell and shared order-context progress/details/history surfaces. Client production-complete copy now splits by fulfillment method: shipping orders say the order is ready to ship via UPS Ground without a tracking-link claim, and pickup orders say the order is ready for pickup at Red Threads, 505 South Saginaw Road, Midland, Michigan 48640. The review suite now renders `Production complete shipping client`, `Production complete shipping team`, `Production complete pickup client`, and `Production complete pickup team`; matrix coverage for `production_complete` is now sendable, not assertion-only. The protected post-deploy dry run returned `ok:true`, total `63`, skipped `27`, failed `0`, sent `0`, attachment fallback `15`, contradiction warnings/errors `0`, and non-strict matrix `ok:true` with `29` required, `21` covered, `8` skipped/omitted, `0` missing, and `0` intent mismatches. No live review-suite blast was run; the dry run did not reset active runtime tabs, touch fixture-storage tabs, clear `PORTAL_EMAIL_QUEUE`, or send emails.
+
 ## Client/Team Email Inventory And Production Timing Display
 
 Inventory date: 2026-06-22. This inventory describes recipient email families that can be rendered by the current portal/review harness and whether the shared order-context shell can show production timing.
@@ -87,6 +89,7 @@ The production timing display is scoped to order-context emails. These emails re
 | AP ACH/AP payment emails | `AP payment link sent`, `AP ACH pending AP`, `AP ACH pending team`, `AP ACH receipt AP`, `AP ACH receipt team`, `AP ACH failed AP`, `AP ACH failed team` | AP-specific payment copy plus order-context progress/details where available | AP and team variants use the shared lifecycle Project Details/progress surfaces; AP ACH receipt history renders one AP-specific payment-received line | Version `990` hides AP-recipient pass labels; AP ACH team labels remain eligible |
 | Locked-order and PO invoice client emails | `Explicit locked-order resend client`, `PO invoice prepared client` | Order-context progress + Project Details | Show `Production Time` when selected-job turnaround is available; no timing is fabricated when production data is unavailable | Hidden in version `990` after requested copy/CTA changes |
 | Locked-order team email | `Explicit locked-order resend team` | Order-context progress + Project Details + client identity fields | Show `Production Time` when selected-job turnaround is available; no timing is fabricated when production data is unavailable | Sent in version `989` live suite |
+| Production complete client/team emails | `Production complete shipping client`, `Production complete shipping team`, `Production complete pickup client`, `Production complete pickup team` | Order-context progress + Project Details + History | Show completed production progress and shared lifecycle history; client copy splits between ready-to-ship UPS Ground language and ready-for-pickup address language | Sendable dry-run coverage added in version `991`; not hidden |
 | Team-to-client chat digest | `Chat digest team to client` | Chat digest plus lifecycle progress/details when order context is available | Uses the shared order-context timing display when lifecycle sections render | Hidden in version `990` after owner review |
 | Client-to-team chat digest | `Chat digest client to team` | Chat digest plus lifecycle progress/details when order context is available | Uses the shared order-context timing display when lifecycle sections render | Sent in version `989` live suite |
 | Summary/invoice explicit send | `Summary/invoice explicit send client` | Utility/document-copy path | No Project Details timing row; the utility send carries document-copy metadata rather than lifecycle project timing | Hidden in version `990` after owner review |
@@ -136,7 +139,7 @@ The second fixture-storage buildout added nine dedicated lifecycle order rows, b
 | Production complete/closed | 1 |
 | Team-initiated production before payment | 1 |
 
-The `production_complete` and `team_initiated_production_before_payment` rows are storage-ready because the current lifecycle constants include `closed`, `in_production`, and authorized production without requiring payment receipt. They remain assertion-only in the review matrix until the review-suite can render those cases directly from fixture storage without an active reset.
+The `production_complete` and `team_initiated_production_before_payment` rows are storage-ready because the current lifecycle constants include `closed`, `in_production`, and authorized production without requiring payment receipt. Version `991` promotes `production_complete` to sendable pickup/shipping client and team review coverage. `team_initiated_production_before_payment` remains assertion-only because production-before-payment client/team notification is still policy-controlled.
 
 ### Review-Suite Harness Findings
 
@@ -166,7 +169,7 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 | `ap_ach_paid` | AP + team | Dedicated fixture row added |
 | `ap_ach_failed` | AP + team | Dedicated fixture row added |
 | `team_initiated_production_before_payment` | Client + team | Storage row added; covered by deployed synthetic assertion-only cases in version `983` |
-| `production_complete` | Client + team | Storage row added; covered by deployed synthetic assertion-only cases and explicit communication intent in version `983` |
+| `production_complete` | Client + team | Sendable pickup/shipping client + team review cases added in version `991`; no longer assertion-only |
 | `client_to_team_chat_digest` | Team | Sendable or omitted, but metadata should be inspectable |
 | `team_to_client_chat_digest` | Client | Sendable or omitted, but metadata should be inspectable |
 | `account_document_tax_submitted` | Team | Sendable |
@@ -182,13 +185,13 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 
 ## Fixture Reset Plan
 
-The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete, the unlocked full review-suite blasts against version `985` are complete, versions `986`/`987` temporarily hid accepted/pass communications from future suite sends, version `989` re-unlocked the suite and completed another full live blast, and version `990` re-hides the newly owner-reviewed/pass labels without running the email suite. Active runtime tabs remain fixture-loaded after the version `989` live-suite reset. Future active-tab restoration still requires explicit owner approval.
+The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete, the unlocked full review-suite blasts against version `985` are complete, versions `986`/`987` temporarily hid accepted/pass communications from future suite sends, version `989` re-unlocked the suite and completed another full live blast, version `990` re-hides the newly owner-reviewed/pass labels without running the email suite, and version `991` adds sendable production-complete pickup/shipping coverage without a live suite send. Active runtime tabs remain fixture-loaded after the version `989` live-suite reset. Future active-tab restoration still requires explicit owner approval.
 
 Recommended next fixture/test-harness step:
 
 1. Preserve headers exactly.
-2. Keep `team_initiated_production_before_payment` and `production_complete` as assertion-only unless the owner explicitly wants live sendable review surfaces for those edge states.
-3. Keep edge states assertion-only when the active review suite intentionally suppresses those communications.
+2. Keep `team_initiated_production_before_payment` assertion-only unless the owner explicitly wants live sendable review surfaces for that edge state.
+3. Keep edge states assertion-only when the active review suite intentionally suppresses those communications; `production_complete` is now intentionally sendable for pickup/shipping client and team review cases.
 4. Have the owner inspect the `46` delivered review emails for copy/layout findings, then keep active tabs in fixture mode or restore them from the private Drive backup only after explicit owner direction.
 
 ## Local Tooling

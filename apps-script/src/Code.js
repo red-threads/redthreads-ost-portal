@@ -302,8 +302,7 @@ const COMMUNICATION_POLICY_DISABLED_PORTAL_LIFECYCLE_MILESTONES = [
   PORTAL_LIFECYCLE_EMAIL_MILESTONES.team_hold,
   PORTAL_LIFECYCLE_EMAIL_MILESTONES.client_flow_canceled,
   PORTAL_LIFECYCLE_EMAIL_MILESTONES.production_authorized,
-  PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed,
-  PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed
+  PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed
 ];
 const COMMUNICATION_POLICY_DISABLED_AP_ACH_LIFECYCLE_MILESTONES = [
   AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started
@@ -478,6 +477,7 @@ const STRIPE_FULFILLMENT_FREE_SHIPPING_THRESHOLD_CENTS = 50000;
 const STRIPE_FULFILLMENT_FLAT_RATE_SHIPPING_CENTS = 2500;
 const STRIPE_FULFILLMENT_SHIPPING_SERVICE_LABEL = 'UPS Standard Ground Services';
 const STRIPE_FULFILLMENT_ALLOWED_COUNTRIES = ['US'];
+const RED_THREADS_PICKUP_ADDRESS = 'Red Threads, 505 South Saginaw Road, Midland, Michigan 48640';
 
 const PAYMENT_STATES = {
   not_started: 'not_started',
@@ -12679,9 +12679,13 @@ function adminMarkJobsCompleted_(payload) {
   const completedJobIds = Object.keys(completedMap).filter(function(jobId) {
     return !!trimString_(jobId);
   });
+  const selectedJobIds = selectedJobs.map(function(job) {
+    return trimString_(job && job.printJobId);
+  }).filter(Boolean);
   const allJobsCompleted = !!selectedJobs.length && selectedJobs.every(function(job) {
     return !!completedMap[trimString_(job && job.printJobId)];
   });
+  const completionEventJobIds = (allJobsCompleted ? selectedJobIds : completedJobIds).slice().sort();
   queuePortalLifecycleClientAndTeamEmailsSafely_({
     ctx: ctx,
     token: ctx.token,
@@ -12692,7 +12696,8 @@ function adminMarkJobsCompleted_(payload) {
     : PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed, {
     eventType: 'admin_mark_jobs_completed',
     meta: {
-      eventKey: 'jobs_completed_' + trimString_(updatedSummary.orderId) + '_' + completedJobIds.sort().join('_'),
+      eventKey: (allJobsCompleted ? 'project_completed_' : 'jobs_completed_') +
+        trimString_(updatedSummary.orderId) + '_' + completionEventJobIds.join('_'),
       completedJobCount: completedJobIds.length,
       totalJobCount: selectedJobs.length
     }
@@ -24291,6 +24296,52 @@ function resolveAccountDocumentLifecycleNextStep_(copy, milestone, recipientClas
   return '';
 }
 
+function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmentMethod, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const method = normalizeFulfillmentMethod_(fulfillmentMethod);
+  const isTeam = trimString_(recipientClass).toLowerCase() === 'team';
+  const paymentLine = trimString_(opts.paymentLine);
+  const paymentStillOpen = opts.paymentStillOpen === true;
+  const completedCount = Math.max(0, parseInt(String(opts.completedCount || 0), 10) || 0);
+  const totalCount = Math.max(0, parseInt(String(opts.totalCount || 0), 10) || 0);
+  const countLine = completedCount && totalCount
+    ? (completedCount + ' of ' + totalCount + ' tracked jobs are marked complete.')
+    : 'All tracked jobs are marked complete.';
+  let subject = isTeam ? 'Project complete' : 'Your Red Threads project is complete';
+  let heading = 'Production complete';
+  let intro = isTeam
+    ? 'All tracked jobs are marked complete for the client\'s order.'
+    : 'Production is complete for your Red Threads order.';
+  let fulfillmentLine = '';
+  let nextStep = isTeam
+    ? (paymentStillOpen ? 'Monitor the open payment until it is resolved.' : 'No team action is required right now.')
+    : (paymentStillOpen ? 'Review your portal for current payment status.' : 'No action is needed right now.');
+
+  if (method === FULFILLMENT_METHODS.shipping) {
+    subject = isTeam ? 'Project complete - ready to ship' : 'Your Red Threads project is ready to ship';
+    heading = 'Ready to ship';
+    fulfillmentLine = isTeam
+      ? 'Client fulfillment language: ready to ship via UPS Ground. No tracking link is included.'
+      : 'Your order is ready to ship via UPS Ground. No tracking link is included with this notification.';
+  } else if (method === FULFILLMENT_METHODS.pickup) {
+    subject = isTeam ? 'Project complete - ready for pickup' : 'Your Red Threads project is ready for pickup';
+    heading = 'Ready for pickup';
+    fulfillmentLine = isTeam
+      ? ('Client fulfillment language: ready for pickup at ' + RED_THREADS_PICKUP_ADDRESS + '.')
+      : ('Your order is ready for pickup at ' + RED_THREADS_PICKUP_ADDRESS + '.');
+    if (!isTeam && !paymentStillOpen) nextStep = 'Pickup is available during Red Threads pickup hours.';
+  }
+
+  return {
+    subject: subject,
+    heading: heading,
+    intro: intro,
+    statusCopy: uniqueTrimmedStrings_([fulfillmentLine, countLine, paymentLine]).join('\n'),
+    nextStep: nextStep,
+    attachmentNote: ''
+  };
+}
+
 function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext, meta, cfg) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   const isTeam = getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team';
@@ -24352,15 +24403,40 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   } else if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.jobs_completed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed) {
     const complete = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed;
-    subjectParts.push(isTeam
-      ? (complete ? 'Project complete' : 'Job completion updated')
-      : (complete ? 'Your Red Threads project is complete' : 'Red Threads job completion update'));
-    intro = isTeam
-      ? (complete ? 'All tracked jobs are marked complete.' : 'Job completion dates were updated.')
-      : (complete ? 'Your Red Threads project is complete.' : 'A production completion update was recorded for your project.');
-    statusCopy = completedCount && totalCount
-      ? (completedCount + ' of ' + totalCount + ' tracked jobs are marked complete.')
-      : 'The current completion status is shown below.';
+    if (complete) {
+      const summary = (emailContext && emailContext.orderSummary && typeof emailContext.orderSummary === 'object')
+        ? emailContext.orderSummary
+        : {};
+      const workflow = (emailContext && emailContext.workflowContext && typeof emailContext.workflowContext === 'object')
+        ? emailContext.workflowContext
+        : {};
+      const paymentReceived = isPortalCommunicationPaymentReceived_(workflow, summary);
+      const poSubmitted = isPortalCommunicationPoSubmitted_(workflow, summary);
+      const productionDisposition = resolveOrderCommunicationProductionDisposition_(workflow, summary);
+      const poTermsOpen = poSubmitted && !paymentReceived &&
+        (productionDisposition === 'authorized' || productionDisposition === 'in_progress' || productionDisposition === 'complete');
+      const paymentStillOpen = !paymentReceived && !poTermsOpen;
+      const paymentLine = paymentReceived
+        ? 'Payment has been received.'
+        : (poTermsOpen ? 'Payment remains open under the approved terms.' : 'Payment remains open.');
+      const completionCopy = buildProductionCompleteFulfillmentEmailCopy_(recipientClass, summary.fulfillmentMethod, {
+        completedCount: completedCount,
+        totalCount: totalCount,
+        paymentLine: paymentLine,
+        paymentStillOpen: paymentStillOpen
+      });
+      subjectParts.push(completionCopy.subject);
+      heading = completionCopy.heading;
+      intro = completionCopy.intro;
+      statusCopy = completionCopy.statusCopy;
+      nextStep = completionCopy.nextStep;
+    } else {
+      subjectParts.push(isTeam ? 'Job completion updated' : 'Red Threads job completion update');
+      intro = isTeam ? 'Job completion dates were updated.' : 'A production completion update was recorded for your project.';
+      statusCopy = completedCount && totalCount
+        ? (completedCount + ' of ' + totalCount + ' tracked jobs are marked complete.')
+        : 'The current completion status is shown below.';
+    }
   } else if (isPortalLifecycleAccountDocumentMilestone_(normalized)) {
     const docCopy = buildAccountDocumentEmailCopy_(normalized, recipientClass, meta);
     const hasDocStatusCopy = docCopy && typeof docCopy === 'object' && Object.prototype.hasOwnProperty.call(docCopy, 'statusCopy');
@@ -27305,19 +27381,18 @@ function resolveOrderCommunicationCopy_(state) {
   }
   if (source.intent === 'production_complete') {
     const paymentStillOpen = !source.paymentReceived && !source.poTermsOpen;
-    copy.headingUpdateLabel = 'Production complete';
-    copy.intro = recipientClass === 'team'
-      ? 'Production is complete for the client\'s order.'
-      : (recipientClass === 'ap' ? 'Production is complete for this Red Threads order.' : 'Production is complete for your Red Threads order.');
-    copy.statusCopy = source.paymentReceived
+    const paymentLine = source.paymentReceived
       ? 'Payment has been received.'
       : (source.poTermsOpen ? 'Payment remains open under the approved terms.' : 'Payment remains open.');
-    copy.nextStep = recipientClass === 'team'
-      ? (paymentStillOpen ? 'Monitor the open payment until it is resolved.' : 'No team action is required right now.')
-      : (paymentStillOpen ? 'Review your portal for current payment status.' : 'No action is needed right now.');
-    copy.attachmentNote = recipientClass === 'team'
-      ? 'The invoice/receipt for the client\'s order is attached to this email.'
-      : (recipientClass === 'ap' ? 'The invoice/receipt for this order is attached.' : 'Your invoice/receipt is attached.');
+    const completionCopy = buildProductionCompleteFulfillmentEmailCopy_(recipientClass, source.fulfillmentMethod, {
+      paymentLine: paymentLine,
+      paymentStillOpen: paymentStillOpen
+    });
+    copy.headingUpdateLabel = completionCopy.heading;
+    copy.intro = completionCopy.intro;
+    copy.statusCopy = completionCopy.statusCopy;
+    copy.nextStep = completionCopy.nextStep;
+    copy.attachmentNote = completionCopy.attachmentNote;
     return copy;
   }
   if (source.intent === 'production_in_progress' || source.intent === 'production_authorized') {
@@ -27451,6 +27526,7 @@ function resolveOrderCommunicationContract_(input) {
     lifecycleState: trimString_(workflow.lifecycleState),
     lifecycleStage: trimString_(workflow.lifecycleStage),
     paymentMethod: trimString_(summary.paymentMethodSelected || workflow.paymentMethod),
+    fulfillmentMethod: normalizeFulfillmentMethod_(summary.fulfillmentMethod || workflow.fulfillmentMethod),
     paymentReceived: paymentReceived,
     paymentIssue: paymentIssue,
     achVerificationRequired: achVerificationRequired,
@@ -30665,6 +30741,51 @@ function buildEmailReviewFailedOrderInfo_(orderInfo, paymentMethod, options) {
   }, opts.overrides || {}));
 }
 
+function cloneEmailReviewOrderInfoWithFulfillment_(orderInfo, fulfillmentMethod) {
+  const method = normalizeFulfillmentMethod_(fulfillmentMethod);
+  const base = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const draft = safeJsonParse_(base.orderdraftjson || base.orderDraftJson, {}) || {};
+  const rawShippingCharge = trimString_(draft.shippingChargeCents);
+  const hasShippingCharge = rawShippingCharge !== '';
+  const nextDraft = Object.assign({}, draft, {
+    fulfillmentMethod: method,
+    shippingChargeCents: method === FULFILLMENT_METHODS.shipping
+      ? (hasShippingCharge
+        ? Math.max(0, parseInt(String(rawShippingCharge), 10) || 0)
+        : STRIPE_FULFILLMENT_FLAT_RATE_SHIPPING_CENTS)
+      : 0,
+    shippingModeLabel: method === FULFILLMENT_METHODS.shipping
+      ? STRIPE_FULFILLMENT_SHIPPING_SERVICE_LABEL
+      : (method === FULFILLMENT_METHODS.pickup ? 'Local Pickup' : '')
+  });
+  if (method === FULFILLMENT_METHODS.pickup) {
+    nextDraft.shippingDetails = null;
+    nextDraft.shippingDetailsCaptured = false;
+  }
+  return cloneEmailReviewOrderInfo_(orderInfo, {
+    orderdraftjson: JSON.stringify(nextDraft)
+  });
+}
+
+function buildEmailReviewProjectCompletedMeta_(orderInfo) {
+  const summary = buildPortalOrderSummary_(orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {});
+  const selectedJobs = Array.isArray(summary.selectedJobs) ? summary.selectedJobs : [];
+  const completedMap = summary.teamJobCompletionByJobId && typeof summary.teamJobCompletionByJobId === 'object'
+    ? summary.teamJobCompletionByJobId
+    : {};
+  const completedJobCount = selectedJobs.length
+    ? selectedJobs.filter(function(job) {
+      return !!completedMap[trimString_(job && job.printJobId)];
+    }).length
+    : Object.keys(completedMap).filter(function(jobId) {
+      return !!trimString_(jobId);
+    }).length;
+  return {
+    completedJobCount: completedJobCount,
+    totalJobCount: selectedJobs.length
+  };
+}
+
 function buildEmailReviewInvoiceAttachmentName_(summary, fallbackFileName, options) {
   const source = (summary && typeof summary === 'object') ? summary : {};
   const opts = (options && typeof options === 'object') ? options : {};
@@ -31585,6 +31706,7 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
     skipEmailReviewResult_(results, 'Account document lifecycle', 'portal_lifecycle', 'client', 'fixture_missing');
     return;
   }
+  sendEmailReviewProductionCompleteExamples_(results, fixture, recipients);
   const ctx = fixture.accountContext || {};
   const metas = [
     { label: 'Tax exempt submitted team review', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', attachmentRequired: false },
@@ -31617,6 +31739,50 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
         meta: meta
       }),
       attachments);
+  });
+}
+
+function sendEmailReviewProductionCompleteExamples_(results, fixture, recipients) {
+  const baseOrder = fixture && fixture.productionComplete;
+  if (!baseOrder) {
+    [
+      { label: 'Production complete shipping client', recipientClass: 'client' },
+      { label: 'Production complete shipping team', recipientClass: 'team' },
+      { label: 'Production complete pickup client', recipientClass: 'client' },
+      { label: 'Production complete pickup team', recipientClass: 'team' }
+    ].forEach(function(item) {
+      skipEmailReviewResult_(results, item.label, 'portal_lifecycle', item.recipientClass, 'fixture_missing');
+    });
+    return;
+  }
+  [
+    { label: 'Production complete shipping client', recipientClass: 'client', to: recipients.client, fulfillmentMethod: FULFILLMENT_METHODS.shipping },
+    { label: 'Production complete shipping team', recipientClass: 'team', to: recipients.team, fulfillmentMethod: FULFILLMENT_METHODS.shipping },
+    { label: 'Production complete pickup client', recipientClass: 'client', to: recipients.client, fulfillmentMethod: FULFILLMENT_METHODS.pickup },
+    { label: 'Production complete pickup team', recipientClass: 'team', to: recipients.team, fulfillmentMethod: FULFILLMENT_METHODS.pickup }
+  ].forEach(function(item) {
+    const order = cloneEmailReviewOrderInfoWithFulfillment_(baseOrder, item.fulfillmentMethod);
+    const meta = Object.assign({
+      fulfillmentMethod: item.fulfillmentMethod,
+      attachmentRequired: false
+    }, buildEmailReviewProjectCompletedMeta_(order));
+    sendEmailReviewContent_(results, item.label, 'portal_lifecycle', item.recipientClass, [item.to],
+      buildPortalLifecycleEmailContent_(PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed, order, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        recipientClass: item.recipientClass,
+        lifecycleContext: resolvePortalLifecycleEmailContext_({
+          orderInfo: order,
+          token: trimString_(order && order.rowObjNormalized && order.rowObjNormalized.token)
+        }, {
+          cfg: fixture.cfg,
+          ss: fixture.ss,
+          infra: fixture.infra
+        }),
+        meta: meta
+      }),
+      []);
   });
 }
 

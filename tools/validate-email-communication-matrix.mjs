@@ -135,8 +135,13 @@ const REQUIRED_MATRIX = [
     caseLabel: 'production_complete',
     recipientClass: 'client+team',
     expectedCommunicationIntent: ['production_complete'],
-    labels: ['Assertion production complete client', 'Assertion production complete team'],
-    sendMode: 'assertion_only',
+    labels: [
+      'Production complete shipping client',
+      'Production complete shipping team',
+      'Production complete pickup client',
+      'Production complete pickup team'
+    ],
+    sendMode: 'sendable',
     artifactRequirement: 'optional'
   },
   {
