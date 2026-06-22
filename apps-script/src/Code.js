@@ -26383,11 +26383,18 @@ function buildLifecycleEmailActionCardHtml_(options) {
   const cta = (opts.primaryCta && typeof opts.primaryCta === 'object') ? opts.primaryCta : null;
   const nextStepLabel = trimString_(opts.nextStepLabel) || 'Next action:';
   const nextStepTone = trimString_(opts.nextStepTone).toLowerCase();
+  const recipientClass = trimString_(opts.recipientClass).toLowerCase() === 'team' ? 'team' : '';
   const suppressNextAction = isLifecycleEmailNoActionText_(nextStep) && /^no(?: team)? action required$/i.test(title);
   if (!intro && !statusCopy && !nextStep && !attachmentSentence && !productionTimingLine && !trimString_(cta && cta.url)) return '';
-  const titleColor = /^(?:action required|team action required|monitor payment)$/i.test(title)
-    ? theme.currentAqua
-    : (/^(?:no action required|no team action required|production authorized)$/i.test(title) ? theme.successGreen : theme.brandRedMid);
+  const titleColor = recipientClass === 'team'
+    ? (/^action required$/i.test(title)
+      ? theme.brandRedMid
+      : (/^potential action required$/i.test(title)
+        ? theme.currentAqua
+        : (/^no action required$/i.test(title) ? theme.successGreen : theme.brandRedMid)))
+    : (/^(?:action required|team action required|monitor payment)$/i.test(title)
+      ? theme.currentAqua
+      : (/^(?:no action required|no team action required|production authorized)$/i.test(title) ? theme.successGreen : theme.brandRedMid));
   const paragraphs = [];
   if (intro) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>');
   if (statusCopy) paragraphs.push('<p style="margin:0 0 10px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>');
@@ -26542,7 +26549,8 @@ function buildLifecycleEmailShell_(options) {
       productionTimingLine: productionTimingActionLine,
       primaryCta: suppressActionCardCta ? null : primaryCta,
       nextStepLabel: nextStepLabel,
-      nextStepTone: nextStepTone
+      nextStepTone: nextStepTone,
+      recipientClass: recipientClass
     })
     : '';
   const progressHtml = progressBlocks.map(function(block) {
@@ -26989,6 +26997,7 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
     (token ? buildLifecycleEmailTeamActionUrl_(token, model.teamAction) : trimString_(ctx.ctaUrl));
   const projectNumber = getLifecycleEmailProjectNumberLabel_(ctx);
   return Object.assign({}, model, {
+    title: resolveLifecycleTeamEmailActionStatusTitle_(action),
     action: action || 'none',
     ctaLabel: buildLifecycleEmailTeamModeProjectCtaLabel_(projectNumber, ''),
     ctaUrl: ctaUrl,
@@ -26999,6 +27008,22 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
     suppressActionCardCta: model.suppressActionCardCta === true,
     suppressStandaloneCta: model.suppressStandaloneCta === true
   });
+}
+
+function resolveLifecycleTeamEmailActionStatusTitle_(action) {
+  const key = normalizeLifecycleEmailTeamAction_(action);
+  if ([
+    'review_payment_issue',
+    'manual_payment',
+    'po_payment',
+    'initiate_production'
+  ].indexOf(key) >= 0) return 'Action required';
+  if ([
+    'optional_initiate_production',
+    'mark_jobs_completed',
+    'monitor_payment'
+  ].indexOf(key) >= 0) return 'Potential action required';
+  return 'No action required';
 }
 
 function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
@@ -30973,16 +30998,22 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'blank credit terms source client': 'owner_reviewed_hidden',
   'blank tax document source client': 'owner_reviewed_hidden',
   'explicit locked-order resend client': 'owner_reviewed_hidden',
+  'explicit locked-order resend team': 'owner_reviewed_hidden',
   'po invoice prepared client': 'owner_reviewed_hidden',
   'po submitted client': 'owner_reviewed_hidden',
   'manual payment pending client': 'owner_reviewed_hidden',
   'chat digest team to client': 'owner_reviewed_hidden',
+  'chat digest client to team': 'owner_reviewed_hidden',
   'credit terms reset client': 'owner_reviewed_hidden',
   'credit terms denied client': 'owner_reviewed_hidden',
   'credit terms approved client': 'owner_reviewed_hidden',
+  'credit terms approved team': 'owner_reviewed_hidden',
+  'credit terms submitted team review': 'owner_reviewed_hidden',
   'tax exempt reset client': 'owner_reviewed_hidden',
   'tax exempt denied client': 'owner_reviewed_hidden',
   'tax exempt approved client': 'owner_reviewed_hidden',
+  'tax exempt approved team': 'owner_reviewed_hidden',
+  'tax exempt submitted team review': 'owner_reviewed_hidden',
   'po payment received client': 'owner_reviewed_hidden',
   'manual payment received client': 'owner_reviewed_hidden',
   'card failed client': 'owner_reviewed_hidden',
