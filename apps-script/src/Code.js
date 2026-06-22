@@ -21502,6 +21502,17 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
   const lockedHeadingUpdate = isTeamRecipient
     ? 'Team operational resend review'
     : (communicationContract.headingUpdateLabel || 'Order confirmation');
+  const lockedIntro = teamActionModel
+    ? teamActionModel.intro
+    : (communicationContract.intro || requestedIntro || 'Your order is confirmed and the final invoice is attached.');
+  const lockedNextStep = teamActionModel
+    ? teamActionModel.nextStep
+    : (paymentReceived
+      ? (communicationContract.nextStep || 'No payment action is needed.')
+      : (communicationContract.nextStep || 'Choose a payment option or send payment using the instructions on your invoice.'));
+  const lockedAttachmentNote = isTeamRecipient
+    ? 'The invoice/receipt for the client\'s order is attached to this email.'
+    : 'The invoice/receipt for your order is attached to this email.';
   const paymentOptionsBlock = {
     kind: 'generic',
     text: buildLifecycleEmailTextBlock_('Payment options', paymentOptionLines),
@@ -21522,14 +21533,10 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     eyebrow: isTeamRecipient ? getPortalNativeEmailEyebrow_('team') : '',
     heading: buildLifecycleEmailDocumentHeading_(invoiceNumber, lockedHeadingUpdate, isTeamRecipient ? 'Team operational resend review.' : 'Order confirmation.'),
     actionTitle: teamActionModel ? teamActionModel.title : '',
-    intro: teamActionModel ? teamActionModel.intro : (communicationContract.intro || requestedIntro || 'Your order is confirmed and the final invoice is attached.'),
+    intro: isTeamRecipient ? lockedIntro : normalizeLockedOrderInvoiceReceiptWording_(lockedIntro),
     statusCopy: teamActionModel ? teamActionModel.statusCopy : communicationContract.statusCopy,
-    nextStep: teamActionModel ? teamActionModel.nextStep : (paymentReceived
-      ? (communicationContract.nextStep || 'No payment action is needed.')
-      : (communicationContract.nextStep || 'Choose a payment option or send payment using the instructions on your invoice.')),
-    attachmentNote: isTeamRecipient
-      ? 'The invoice/receipt for the client\'s order is attached to this email.'
-      : (communicationContract.attachmentNote || 'Your invoice is attached.'),
+    nextStep: isTeamRecipient ? lockedNextStep : normalizeLockedOrderInvoiceReceiptWording_(lockedNextStep),
+    attachmentNote: lockedAttachmentNote,
     blocks: lifecycleSections.blocks.concat([
       teamActionModel ? buildLifecycleEmailCtaBlock_(teamActionModel.ctaLabel, teamActionModel.ctaUrl, {
         align: teamActionModel.ctaAlign,
@@ -21950,11 +21957,14 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     rowInfo: opts.rowInfo,
     token: token
   });
+  const lifecycleEmailContext = (lifecycleSections.emailContext && typeof lifecycleSections.emailContext === 'object')
+    ? lifecycleSections.emailContext
+    : {};
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
   const communicationContract = buildPortalCommunicationContext_({
-    emailContext: lifecycleSections.emailContext
+    emailContext: lifecycleEmailContext
   }, {
     family: 'purchase_order_invoice_email',
     trigger: 'purchase_order_invoice_prepared',
@@ -21975,7 +21985,9 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     nextStep: poNextStep,
     attachmentNote: communicationContract.attachmentNote,
     blocks: lifecycleSections.blocks.concat([
-      buildLifecycleEmailCtaBlock_('Return to the purchase-order upload step', resumeUrl),
+      buildLifecycleEmailCtaBlock_(buildLifecycleEmailProjectAccessCtaLabel_(lifecycleEmailContext, 'upload P.O.'), resumeUrl, {
+        align: 'center'
+      }),
       buildLifecycleEmailFooter_()
     ])
   });
@@ -24988,6 +25000,11 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
         : 'Open your Red Threads project/portal below and retry payment to begin order production.'
     });
   }
+  if (recipientClass !== 'team' &&
+      (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending ||
+        normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted)) {
+    emailContext.ctaLabel = buildLifecycleEmailProjectAccessCtaLabel_(emailContext, 'make a payment.');
+  }
   const summary = emailContext.orderSummary || {};
   const method = trimString_(summary.paymentMethodSelected).toLowerCase();
   const methodLabel = getPaymentLifecycleMethodLabel_(method);
@@ -25030,7 +25047,11 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
         {
           align: teamActionModel
             ? teamActionModel.ctaAlign
-            : (recipientClass !== 'team' && isPaymentLifecycleFailureMilestone_(normalized) ? 'center' : ''),
+            : (recipientClass !== 'team' && (
+              isPaymentLifecycleFailureMilestone_(normalized) ||
+              normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending ||
+              normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted
+            ) ? 'center' : ''),
           teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
         }
       ),
@@ -26244,6 +26265,25 @@ function shouldSuppressLifecycleEmailActionCta_(cta) {
   return label === 'view red threads invoice' ||
     label === 'view red threads estimate' ||
     label === 'view red threads receipt';
+}
+
+function normalizeLockedOrderInvoiceReceiptWording_(value) {
+  const clean = trimString_(value);
+  if (!clean) return '';
+  return clean
+    .replace(/\bfinal invoice(?!\/receipt)\b/gi, 'final invoice/receipt')
+    .replace(/\bRed Threads invoice(?!\/receipt)\b/gi, 'Red Threads invoice/receipt')
+    .replace(/\byour invoice(?!\/receipt)\b/gi, 'your invoice/receipt')
+    .replace(/\bthis invoice(?!\/receipt)\b/gi, 'this invoice/receipt')
+    .replace(/\bthe invoice(?!\/receipt)\b/gi, 'the invoice/receipt')
+    .replace(/\ban invoice(?!\/receipt)\b/gi, 'an invoice/receipt');
+}
+
+function buildLifecycleEmailProjectAccessCtaLabel_(emailContext, actionText) {
+  const action = trimString_(actionText) || 'open your project.';
+  const projectNumber = getLifecycleEmailProjectNumberLabel_(emailContext);
+  const projectLabel = projectNumber ? ('project #' + projectNumber) : 'your project';
+  return 'Click to access ' + projectLabel + ' and ' + action;
 }
 
 function shouldOmitLifecycleProjectDetailLineForActionCard_(line, productionTimingActionLine) {
@@ -30806,7 +30846,34 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
-const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
+  'password reset client': 'owner_reviewed_hidden',
+  'summary/invoice explicit send client': 'owner_reviewed_hidden',
+  'blank credit terms source client': 'owner_reviewed_hidden',
+  'blank tax document source client': 'owner_reviewed_hidden',
+  'explicit locked-order resend client': 'owner_reviewed_hidden',
+  'po invoice prepared client': 'owner_reviewed_hidden',
+  'po submitted client': 'owner_reviewed_hidden',
+  'manual payment pending client': 'owner_reviewed_hidden',
+  'chat digest team to client': 'owner_reviewed_hidden',
+  'credit terms reset client': 'owner_reviewed_hidden',
+  'credit terms denied client': 'owner_reviewed_hidden',
+  'credit terms approved client': 'owner_reviewed_hidden',
+  'tax exempt reset client': 'owner_reviewed_hidden',
+  'tax exempt denied client': 'owner_reviewed_hidden',
+  'tax exempt approved client': 'owner_reviewed_hidden',
+  'po payment received client': 'owner_reviewed_hidden',
+  'manual payment received client': 'owner_reviewed_hidden',
+  'card failed client': 'owner_reviewed_hidden',
+  'ap ach failed ap': 'owner_reviewed_hidden',
+  'ap ach receipt ap': 'owner_reviewed_hidden',
+  'ap ach pending ap': 'owner_reviewed_hidden',
+  'ap payment link sent': 'owner_reviewed_hidden',
+  'standard ach failed client': 'owner_reviewed_hidden',
+  'standard ach receipt client': 'owner_reviewed_hidden',
+  'standard ach verification client': 'owner_reviewed_hidden',
+  'standard ach pending client': 'owner_reviewed_hidden'
+};
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {};
 let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
 
