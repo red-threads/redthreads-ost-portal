@@ -17,6 +17,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-22 - PO Reminder Scheduler Installed On Version 997
+
+- Mode: Full ship runtime activation after explicit owner approval to install while active tabs remain fixture-loaded.
+- Branch/commit/PR: `main`, Apps Script version `997`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: install the daily PO payment reminder scheduler trigger immediately, accepting fixture-mode activation because pre-runtime review uses test emails.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added protected headless scheduler install/status web-app actions guarded by the existing email-review trigger secret. Apps Script direct `clasp run` could not execute because the project is not API-executable for direct function runs, and the first protected install attempt required the `script.scriptapp` authorization. A temporary authorization bridge was deployed at versions `995`/`996`, the trigger was created from the Apps Script UI under the owner account, and the final stable deployment was returned to the normal manifest shape with revision `124`.
+- Installed trigger: handler `processPurchaseOrderPaymentReminderSchedule`, time-driven, daily, 9am to 10am Eastern, owner `josiah@redthreads.com`. Protected status route returned `ok:true`, timezone `America/Detroit`, hour `9`, trigger count `1`, installed `true`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed after the temporary manifest bridge was removed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Install PO reminder scheduler"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@997 - Install PO reminder scheduler`. Direct `/exec` returned HTTP `200` with `Development revision 124`, omitted stale revision `123`, and referenced the stable deployment ID. Public `/portal` returned HTTP `200` and referenced the stable deployment ID. Targeted secret/private-link marker checks found zero hits.
+- Runtime data state: active runtime tabs remain fixture-loaded from the version `993` live review-suite reset. No review-suite emails were sent in this pass, fixture-storage tabs were not mutated, and `PORTAL_EMAIL_QUEUE` was not cleared by this pass.
+- Follow-ups: because the scheduler is now active against fixture-loaded tabs, restore active runtime tabs from the private backup before production runtime resumes, or keep fixture mode intentionally active for continued scheduler/email review.
+
 ## 2026-06-22 - PO Payment Reminder Emails On Version 993
 
 - Mode: Full ship runtime implementation with protected post-deploy email-review dry run; no live email-review blast.

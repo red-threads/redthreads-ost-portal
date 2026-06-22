@@ -1859,6 +1859,12 @@ function doPost(e) {
     if (action === 'send_email_review_suite_headless') {
       return jsonOutput_(sendEmailReviewSuiteHeadless(payload));
     }
+    if (action === 'install_po_payment_reminder_schedule_headless') {
+      return jsonOutput_(installPurchaseOrderPaymentReminderScheduleHeadless(payload));
+    }
+    if (action === 'get_po_payment_reminder_schedule_status_headless') {
+      return jsonOutput_(getPurchaseOrderPaymentReminderScheduleStatusHeadless(payload));
+    }
     if (action === 'audit_email_review_artifacts') {
       return jsonOutput_(auditEmailReviewArtifacts(payload));
     }
@@ -30840,6 +30846,54 @@ function auditEmailReviewArtifacts(payload) {
 function sendEmailReviewSuiteHeadless(payload) {
   try {
     return sendEmailReviewSuiteHeadless_(payload);
+  } catch (err) {
+    return {
+      ok: false,
+      headless: true,
+      error: normalizeEmailReviewError_(err)
+    };
+  }
+}
+
+function installPurchaseOrderPaymentReminderScheduleHeadless(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const cfg = getConfig_();
+    const auth = validateEmailReviewTriggerSecret_(p.triggerSecret, cfg);
+    if (auth.ok !== true) {
+      return {
+        ok: false,
+        headless: true,
+        error: auth.error
+      };
+    }
+    const result = installPurchaseOrderPaymentReminderSchedule();
+    result.headless = true;
+    return result;
+  } catch (err) {
+    return {
+      ok: false,
+      headless: true,
+      error: normalizeEmailReviewError_(err)
+    };
+  }
+}
+
+function getPurchaseOrderPaymentReminderScheduleStatusHeadless(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const cfg = getConfig_();
+    const auth = validateEmailReviewTriggerSecret_(p.triggerSecret, cfg);
+    if (auth.ok !== true) {
+      return {
+        ok: false,
+        headless: true,
+        error: auth.error
+      };
+    }
+    const result = getPurchaseOrderPaymentReminderScheduleStatus();
+    result.headless = true;
+    return result;
   } catch (err) {
     return {
       ok: false,
