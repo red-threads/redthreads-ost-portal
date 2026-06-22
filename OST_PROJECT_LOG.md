@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-22 - Fresh Full Email Review Suite Blast On Version 985
+
+- Mode: Live owner email review suite blast after protected dry-run gate; no runtime code change or Apps Script deployment.
+- Branch/commit/PR: `main`, Apps Script stayed on version `985`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: send a fresh full owner inbox-review suite across the unlocked lifecycle/communication matrix.
+- Files changed: `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Preflight: `git status --short --branch` confirmed clean `main` aligned with `origin/main`, `git pull --ff-only` reported already up to date, and `clasp deployments` confirmed the stable deployment still pointed at `@985 - Fix email review matrix metadata`.
+- Dry run: protected headless owner email-review dry run returned `ok:true`, sent `0`, skipped `1`, failed `0`, total `59`, attachment fallback `30`, and contradiction warnings/errors `0`. Strict matrix validation returned `ok:true` with `29` required, `29` covered, `0` skipped/omitted, `0` missing, and `0` intent mismatches.
+- Live blast: the live owner review-suite returned `ok:true`, sent `46` review emails (`23` client, `19` team, `4` AP), skipped `1`, failed `0`, attachment matched `0`, attachment fallback `30`, and contradiction warnings/errors `0`. The only skipped label remained `Submitted tax-form copy client`, because the submitted fixture artifact is unavailable.
+- Reset/queue behavior: the live non-dry-run suite used its default reset path, re-copying `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then clearing `PORTAL_EMAIL_QUEUE` before sending. Fixture-storage tabs were not mutated.
+- Follow-ups: owner should inspect the fresh 46 delivered review emails for copy/layout findings; active runtime tabs remain fixture-loaded until the owner explicitly chooses restore from the private Drive backup, another fixture reset, or continued fixture mode.
+
 ## 2026-06-20 - Final Email Review Matrix Gate And Live Blast On Version 985
 
 - Mode: Full ship runtime patch plus protected dry run and owner-approved live email-review suite.
