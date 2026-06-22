@@ -31,6 +31,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Reset/queue behavior: no live review-suite blast was run, no emails were sent, active runtime tabs were not newly reset in this pass, fixture-storage tabs were not touched, and `PORTAL_EMAIL_QUEUE` was not cleared by the review suite. The daily PO reminder trigger was intentionally not installed because active runtime tabs remain fixture-loaded from the version `992` live-suite reset.
 - Follow-ups: restore active runtime tabs or explicitly authorize fixture-mode scheduler activation before running `installPurchaseOrderPaymentReminderSchedule()`. Active runtime tabs still need an explicit owner restoration decision.
 
+## 2026-06-22 - Version 993 Live Email Review Suite
+
+- Mode: Owner-approved live email-review suite after version `993` was already fully shipped.
+- Branch/commit/PR: `main` at `f45f12f`, stable Apps Script deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw @993 - Add PO payment reminder emails`.
+- Preflight: working tree was clean and `main` matched `origin/main`; no unshipped code remained. `clasp deployments` confirmed the stable deployment at version `993`.
+- Dry run: protected dry run returned `ok:true`, total `72`, sent `0`, skipped `34`, failed `0`, attachment fallback `23`, contradiction warnings/errors `0`, and matrix validation returned `36` required, `23` covered, `13` skipped/omitted, `0` missing, and `0` intent mismatches.
+- Live suite: returned `ok:true`, sent `25`, skipped `34`, failed `0`, attachment fallback `23`, and contradiction warnings/errors `0`.
+- Sent labels: `Standard ACH pending team`, `Standard ACH verification team`, `Standard ACH receipt team`, `Standard ACH failed team`, `AP ACH pending team`, `AP ACH receipt team`, `AP ACH failed team`, `Card paid team`, `Card failed team`, `Manual payment pending team`, `Manual payment received team`, `PO submitted team`, `PO payment received team`, `PO payment reminder 5 business days before due client`, `PO payment reminder 1 business day before due client`, `PO payment past due client`, `PO late fee 2.5 client`, `PO late fee 7.5 client`, `PO late fee 12.5 client`, `PO payment 60-day escalation team`, `Production complete shipping client`, `Production complete shipping PO unpaid client`, `Production complete shipping team`, `Production complete pickup client`, and `Production complete pickup team`.
+- Reset/queue behavior: the live non-dry-run path reset `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then cleared `PORTAL_EMAIL_QUEUE`. Fixture-storage tabs were not mutated. No Apps Script deploy was performed in this pass.
+- Follow-ups: active runtime tabs remain fixture-loaded after this live review run. Do not install the PO reminder daily trigger until active runtime tabs are restored or the owner explicitly authorizes fixture-mode scheduler activation.
+
 ## 2026-06-22 - Team Email Action Status Labels On Version 992
 
 - Mode: Full ship runtime refinement plus owner-approved live email-review suite.
