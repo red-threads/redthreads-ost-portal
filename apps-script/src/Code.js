@@ -23236,6 +23236,7 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     });
   }
   const summary = emailContext.orderSummary || {};
+  const productionCompleteForReceipt = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
   const copy = buildApAchLifecycleEmailCopy_(normalized, emailContext, {
     isTeamAlert: isTeamAlert
   });
@@ -23250,7 +23251,9 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
       token: token,
       teamAction: isApAchLifecycleFailureMilestone_(normalized)
         ? 'review_payment_issue'
-        : (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed ? 'move_through_production' : '')
+        : (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed
+          ? (productionCompleteForReceipt ? '' : 'move_through_production')
+          : '')
     })
     : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
@@ -25728,6 +25731,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     );
   }
   const summary = emailContext.orderSummary || {};
+  const productionCompleteForReceipt = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
   const method = trimString_(summary.paymentMethodSelected).toLowerCase();
   const methodLabel = getPaymentLifecycleMethodLabel_(method);
   const isTeamAlert = recipientClass === 'team';
@@ -25750,7 +25754,9 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
         PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid,
         PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received,
         PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received
-      ].indexOf(normalized) >= 0 ? 'move_through_production' : ''));
+      ].indexOf(normalized) >= 0
+        ? (productionCompleteForReceipt ? '' : 'move_through_production')
+        : ''));
   const teamActionModel = useTeamActionModel
     ? resolveLifecycleTeamEmailActionModel_(emailContext, {
       family: 'payment_lifecycle',
@@ -27628,6 +27634,26 @@ function getLifecycleEmailProductionTimingActionLine_(workflowContext, orderSumm
   return trimString_(resolveLifecycleEmailProductionTimingLines_(ctx, summary)[0]);
 }
 
+function isLifecycleEmailProductionCompleteForReceipt_(emailContext) {
+  const ctx = (emailContext && emailContext.workflowContext && typeof emailContext.workflowContext === 'object')
+    ? emailContext.workflowContext
+    : {};
+  const summary = (emailContext && emailContext.orderSummary && typeof emailContext.orderSummary === 'object')
+    ? emailContext.orderSummary
+    : {};
+  return resolveOrderCommunicationProductionDisposition_(ctx, summary) === 'complete';
+}
+
+function getLifecycleEmailCompletedReceiptTimingLine_(emailContext) {
+  const ctx = (emailContext && emailContext.workflowContext && typeof emailContext.workflowContext === 'object')
+    ? emailContext.workflowContext
+    : {};
+  const summary = (emailContext && emailContext.orderSummary && typeof emailContext.orderSummary === 'object')
+    ? emailContext.orderSummary
+    : {};
+  return getLifecycleEmailProductionTimingActionLine_(ctx, summary) || 'Production complete';
+}
+
 function buildLifecycleEmailHistoryLines_(workflowContext, orderSummary, jobType, options) {
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
@@ -28208,6 +28234,13 @@ function resolveOrderCommunicationIntent_(state) {
     return source.poTermsOpen ? 'po_submitted_terms_open' : 'po_invoice_prepared';
   }
   if (source.paymentIssue) return 'payment_issue';
+  if (family === 'payment_lifecycle' && source.paymentReceived) {
+    if (source.poSubmitted) return 'po_payment_received';
+    if (source.manualPending || trimString_(source.paymentMethod).toLowerCase() === PAYMENT_METHODS.check || trimString_(source.paymentMethod).toLowerCase() === PAYMENT_METHODS.cash) {
+      return 'manual_payment_received';
+    }
+    return 'payment_received';
+  }
   if (source.productionDisposition === 'complete') return 'production_complete';
   if (source.paymentReceived) {
     if (source.poSubmitted) return 'po_payment_received';
@@ -28658,6 +28691,8 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   const clientVerificationSubject = /^the client$/i.test(clientFullName)
     ? 'The client'
     : ('The client, ' + clientFullName + ',');
+  const productionComplete = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
+  const completedProductionLine = getLifecycleEmailCompletedReceiptTimingLine_(emailContext);
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
     if (verificationRequired) {
       return buildLifecycleEmailCopyModel_({
@@ -28689,6 +28724,25 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     });
   }
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
+    if (productionComplete) {
+      return buildLifecycleEmailCopyModel_({
+        subject: isTeamAlert
+          ? formatLifecycleEmailInvoiceSubject_('ACH payment received, order complete', invoiceNumber, 'ACH payment received, order complete')
+          : formatLifecycleEmailInvoiceSubject_('ACH payment received, order complete', invoiceNumber, 'ACH payment received, order complete for your Red Threads order'),
+        actionTitle: 'No action required',
+        intro: isTeamAlert
+          ? 'ACH payment has been recorded as received.'
+          : 'Your ACH payment has been received and your Red Threads order is complete.',
+        statusCopy: isTeamAlert
+          ? (clientFullName + ' has been notified that payment has been received. Production is already complete.')
+          : 'Production is already complete.',
+        nextStep: isTeamAlert ? 'No team action is required right now.' : 'No action is needed right now.',
+        attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.',
+        productionTimingLine: completedProductionLine,
+        suppressActionCardCta: isTeamAlert,
+        suppressStandaloneCta: isTeamAlert
+      });
+    }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('ACH payment received', invoiceNumber, 'ACH payment received')
@@ -28726,6 +28780,8 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     : {};
   const projectOwnerName = trimString_(accountSummary.primaryContactName || accountSummary.billingContactName) || 'The project owner';
   const clientFullName = getLifecycleEmailClientFullName_(emailContext);
+  const productionComplete = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
+  const completedProductionLine = getLifecycleEmailCompletedReceiptTimingLine_(emailContext);
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
@@ -28749,6 +28805,25 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     });
   }
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed) {
+    if (productionComplete) {
+      return buildLifecycleEmailCopyModel_({
+        subject: isTeamAlert
+          ? formatLifecycleEmailInvoiceSubject_('AP ACH payment received, order complete', invoiceNumber, 'AP ACH payment received, order complete')
+          : formatLifecycleEmailInvoiceSubject_('Payment received, order complete', invoiceNumber, 'Payment received, order complete for a Red Threads project'),
+        actionTitle: 'No action required',
+        intro: isTeamAlert
+          ? 'Accounts Payable ACH payment has been recorded as received.'
+          : 'Accounts Payable completed an ACH payment for this Red Threads project, and the order is complete.',
+        statusCopy: isTeamAlert
+          ? (clientFullName + ' has been notified that Accounts Payable completed an ACH payment. Production is already complete.')
+          : 'Production is already complete.',
+        nextStep: isTeamAlert ? 'No team action is required right now.' : 'No action is needed right now.',
+        attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : '',
+        productionTimingLine: completedProductionLine,
+        suppressActionCardCta: isTeamAlert,
+        suppressStandaloneCta: isTeamAlert
+      });
+    }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('AP ACH payment received', invoiceNumber, 'AP ACH payment received')
@@ -28962,10 +29037,27 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     emailContext && emailContext.orderSummary,
     emailContext && emailContext.timeline
   ) || 'the due date';
+  const productionComplete = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
+  const completedProductionLine = getLifecycleEmailCompletedReceiptTimingLine_(emailContext);
   if (isScheduledPoPaymentReminderMilestone_(normalized)) {
     return buildPoPaymentReminderEmailCopy_(normalized, emailContext, opts);
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid) {
+    if (productionComplete) {
+      return buildLifecycleEmailCopyModel_({
+        subject: isTeamAlert
+          ? formatLifecycleEmailInvoiceSubject_('Card payment received, order complete', invoiceNumber, 'Card payment received, order complete')
+          : formatLifecycleEmailInvoiceSubject_('Payment received, order complete', invoiceNumber, 'Payment received, order complete for your Red Threads order'),
+        actionTitle: 'No action required',
+        intro: isTeamAlert ? 'Card payment has been recorded as received.' : 'Your credit card payment has been received and your Red Threads order is complete.',
+        statusCopy: isTeamAlert ? (clientFullName + ' has been notified that payment has been received. Production is already complete.') : 'Production is already complete.',
+        nextStep: isTeamAlert ? 'No team action is required right now.' : 'No action is needed right now.',
+        attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.',
+        productionTimingLine: completedProductionLine,
+        suppressActionCardCta: isTeamAlert,
+        suppressStandaloneCta: isTeamAlert
+      });
+    }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Card payment received', invoiceNumber, 'Card payment received')
@@ -29017,6 +29109,21 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     });
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received) {
+    if (productionComplete) {
+      return buildLifecycleEmailCopyModel_({
+        subject: isTeamAlert
+          ? formatLifecycleEmailInvoiceSubject_('Manual payment received, order complete', invoiceNumber, 'Manual payment received, order complete')
+          : formatLifecycleEmailInvoiceSubject_('Payment received, order complete', invoiceNumber, 'Payment received, order complete for your Red Threads order'),
+        actionTitle: 'No action required',
+        intro: isTeamAlert ? 'Physical payment has been recorded as received.' : 'Your payment has been received and your Red Threads order is complete.',
+        statusCopy: isTeamAlert ? (clientFullName + ' has been notified that payment has been received. Production is already complete.') : 'Production is already complete.',
+        nextStep: isTeamAlert ? 'No team action is required right now.' : 'No action is needed right now.',
+        attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.',
+        productionTimingLine: completedProductionLine,
+        suppressActionCardCta: isTeamAlert,
+        suppressStandaloneCta: isTeamAlert
+      });
+    }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('Manual payment received', invoiceNumber, 'Manual payment received')
@@ -29035,6 +29142,23 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       statusCopy: isTeamAlert ? ('This order can begin production. Payment will be due on ' + poPaymentDueDateLabel + '.') : 'Your order has been authorized for production.',
       nextStep: isTeamAlert ? 'Begin production of the project\'s job(s). If payment for ' + poReference + ' is received outside of online portal payments, mark PO payment as received in Team Mode.' : '',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the order is attached to this email.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
+    });
+  }
+  if (productionComplete) {
+    return buildLifecycleEmailCopyModel_({
+      subject: isTeamAlert
+        ? formatLifecycleEmailInvoiceSubject_(poPaymentSubjectPrefix + ', order complete', invoiceNumber, 'PO payment received, order complete')
+        : formatLifecycleEmailInvoiceSubject_(poPaymentSubjectPrefix + ', order complete', invoiceNumber, 'PO payment received, order complete for your Red Threads order'),
+      actionTitle: 'No action required',
+      intro: isTeamAlert ? ('Payment has been recorded as received for ' + poReference + '.') : ('Payment has been received for ' + poReference + '.'),
+      statusCopy: isTeamAlert
+        ? (clientFullName + ' has been notified that payment for ' + poReference + ' has been received. Production is already complete.')
+        : 'Your Red Threads order is complete.',
+      nextStep: isTeamAlert ? 'No team action is required right now.' : 'No action is needed right now.',
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice/receipt is attached to this email and available in your portal.',
+      productionTimingLine: completedProductionLine,
+      suppressActionCardCta: isTeamAlert,
+      suppressStandaloneCta: isTeamAlert
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -29071,6 +29195,7 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     });
   }
   const summary = emailContext.orderSummary || {};
+  const productionCompleteForReceipt = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
   const invoiceNumber = trimString_(emailContext.invoiceNumber);
   const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
   const draft = safeJsonParse_(row.orderdraftjson || row.orderDraftJson, {}) || {};
@@ -29090,7 +29215,9 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
       statusCopy: copy.statusCopy,
       teamAction: baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email
         ? 'review_payment_issue'
-        : (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email ? 'move_through_production' : '')
+        : (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email
+          ? (productionCompleteForReceipt ? '' : 'move_through_production')
+          : '')
     })
     : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
@@ -32076,6 +32203,46 @@ function buildEmailReviewProductionCompletePoUnpaidOrderInfo_(orderInfo) {
   });
 }
 
+function buildEmailReviewProductionCompletePoPaymentReceivedOrderInfo_(orderInfo) {
+  const base = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const draft = safeJsonParse_(base.orderdraftjson || base.orderDraftJson, {}) || {};
+  const portalState = safeJsonParse_(base.portalstatejson || base.portalStateJson, {}) || {};
+  const paidAt = nowIso_();
+  const poSubmittedAt = trimString_(base.posubmittedat || base.poSubmittedAt || base.lockedat || base.createdat) || paidAt;
+  const authorizedAt = trimString_(base.authorizedtoproduceat || base.authorizedToProduceAt || poSubmittedAt);
+  const nextDraft = Object.assign({}, draft, {
+    paymentMethodSelected: PAYMENT_METHODS.purchase_order
+  });
+  const nextPortalState = Object.assign({}, portalState, {
+    currentPaymentMethod: PAYMENT_METHODS.purchase_order,
+    currentPaymentState: PAYMENT_STATES.paid,
+    currentOrderState: ORDER_STATES.closed,
+    currentProductionAuthorizationState: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    poSubmittedAt: poSubmittedAt,
+    paymentDue: false,
+    paidAt: paidAt,
+    paymentReceivedManuallyAt: paidAt
+  });
+  return cloneEmailReviewOrderInfo_(orderInfo, {
+    orderdraftjson: JSON.stringify(nextDraft),
+    portalstatejson: JSON.stringify(nextPortalState),
+    paymentmethodselected: PAYMENT_METHODS.purchase_order,
+    currentpaymentmethod: PAYMENT_METHODS.purchase_order,
+    paymentstate: PAYMENT_STATES.paid,
+    currentpaymentstate: PAYMENT_STATES.paid,
+    orderstate: ORDER_STATES.closed,
+    currentorderstate: ORDER_STATES.closed,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    currentproductionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.authorized,
+    posubmittedat: poSubmittedAt,
+    ponumber: trimString_(base.ponumber || base.poNumber) || 'EMAIL-REVIEW-PO',
+    paidat: paidAt,
+    paymentreceivedmanuallyat: paidAt,
+    authorizedtoproduceat: authorizedAt,
+    lastupdatedat: paidAt
+  });
+}
+
 function buildEmailReviewProjectCompletedMeta_(orderInfo) {
   const summary = buildPortalOrderSummary_(orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {});
   const selectedJobs = Array.isArray(summary.selectedJobs) ? summary.selectedJobs : [];
@@ -32297,6 +32464,7 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'tax exempt approved client': 'owner_reviewed_hidden',
   'tax exempt approved team': 'owner_reviewed_hidden',
   'tax exempt submitted team review': 'owner_reviewed_hidden',
+  'po submitted client': 'owner_reviewed_hidden',
   'po payment received client': 'owner_reviewed_hidden',
   'manual payment received client': 'owner_reviewed_hidden',
   'card paid client': 'owner_reviewed_hidden',
@@ -33207,6 +33375,21 @@ function sendEmailReviewPaymentExamples_(results, fixture, recipients) {
         attachments);
       });
   });
+  if (fixture.productionComplete) {
+    const completedPoReceiptOrder = buildEmailReviewProductionCompletePoPaymentReceivedOrderInfo_(fixture.productionComplete);
+    const completedPoReceiptInvoice = buildEmailReviewInvoiceInfo_(fixture, completedPoReceiptOrder, { fresh: true });
+    const completedPoReceiptAttachments = buildEmailReviewAttachments_('payment_lifecycle', PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, completedPoReceiptOrder, completedPoReceiptInvoice);
+    sendEmailReviewContent_(results, 'PO payment received production complete team', 'payment_lifecycle', 'team', [recipients.team],
+      buildPaymentLifecycleEmailContent_(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, completedPoReceiptOrder, completedPoReceiptInvoice, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        recipientClass: 'team'
+      }),
+      completedPoReceiptAttachments);
+  } else {
+    skipEmailReviewResult_(results, 'PO payment received production complete team', 'payment_lifecycle', 'team', 'fixture_missing');
+  }
   sendEmailReviewPoPaymentReminderExamples_(results, fixture, recipients, poSubmittedBase);
 }
 

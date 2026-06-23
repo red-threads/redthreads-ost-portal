@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-23 - Completed PO Receipt Email Refinement On Version 1006
+
+- Mode: Full ship runtime refinement plus owner-approved live email-review suite; email dry-runs intentionally skipped per owner instruction.
+- Branch/commit/PR: `main`, Apps Script version `1006`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: hide `PO submitted client`, prevent payment-received receipts from using stale production-started/continuing/action language after production is already complete, add completed PO receipt review coverage, deploy, and run the live email review suite.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: Standard ACH receipt, AP ACH receipt, card paid, manual payment received, and PO payment received copy now detects completed lifecycle production and uses completed-order receipt copy instead of production-started or production-continuing copy. Team receipt action models no longer force `move_through_production` after production is complete. `PO payment received production complete team` was added to the review suite and `PO submitted client` is hidden with `owner_reviewed_hidden`. Receipt-triggered completed PO emails keep `po_payment_received` communication intent metadata while showing `productionDisposition: complete`. `Index.html` shows development revision `133`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine completed PO receipt emails"`, and `clasp deploy` to the existing stable deployment ID succeeded. A transient `@1005` deploy was superseded after the first live suite showed the completed receipt branch should keep receipt intent metadata. Final `clasp deployments` confirmed `@1006 - Refine completed PO receipt emails`. Direct `/exec` returned HTTP `200` with `Development revision 133`, omitted stale revision `132`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route-bridge markers, and had zero targeted sensitive markers.
+- Review suite: owner-approved live suite on final version `1006` returned `ok:true`, sent `8`, skipped `52`, failed `0`, attachment fallback `8`, and contradiction warnings/errors `0` across sent results.
+- Sent labels: `Standard ACH failed team`, `AP ACH pending team`, `AP ACH receipt team`, `AP ACH failed team`, `Card failed team`, `PO submitted team`, `PO payment received team`, and `PO payment received production complete team`.
+- Reset/queue behavior: the live non-dry-run path reset `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then cleared `PORTAL_EMAIL_QUEUE`. Fixture-storage tabs were not mutated. No Apps Script config, Script Properties, scheduler trigger, or deployment ID changes were made.
+- Follow-ups: active runtime tabs remain fixture-loaded after the review-suite reset. Restore active runtime tabs from the private backup before production runtime resumes, unless the owner chooses continued fixture mode.
+
 ## 2026-06-23 - PO Number Review Email Refinement On Version 1004
 
 - Mode: Full ship runtime refinement plus owner-approved live email-review suite; email dry-runs intentionally skipped per owner instruction.
