@@ -23246,11 +23246,19 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     ? resolveLifecycleTeamEmailActionModel_(emailContext, {
       family: 'ap_ach',
       milestone: normalized,
+      title: copy.actionTitle,
       intro: copy.intro,
       statusCopy: copy.statusCopy,
+      nextStep: copy.nextStep,
+      nextStepLabel: copy.nextStepLabel,
+      nextStepTone: copy.nextStepTone,
+      nextStepHtml: copy.nextStepHtml,
+      statusAfterAttachment: copy.actionStatusAfterAttachment === true,
+      suppressActionCardCta: copy.suppressActionCardCta === true,
+      suppressStandaloneCta: copy.suppressStandaloneCta === true,
       token: token,
       teamAction: isApAchLifecycleFailureMilestone_(normalized)
-        ? 'review_payment_issue'
+        ? 'monitor_payment'
         : (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed
           ? (productionCompleteForReceipt ? '' : 'move_through_production')
           : '')
@@ -23283,8 +23291,10 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     intro: teamActionModel ? teamActionModel.intro : copy.intro,
     statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
     nextStep: teamActionModel ? teamActionModel.nextStep : getApAchLifecycleNextStepText_(normalized, recipientClass, emailContext.nextStepText),
+    nextStepHtml: teamActionModel ? teamActionModel.nextStepHtml : copy.nextStepHtml,
     nextStepLabel: teamActionModel ? teamActionModel.nextStepLabel : '',
     nextStepTone: teamActionModel ? teamActionModel.nextStepTone : '',
+    actionStatusAfterAttachment: teamActionModel ? teamActionModel.statusAfterAttachment === true : false,
     suppressActionCardCta: teamActionModel ? teamActionModel.suppressActionCardCta : false,
     attachmentNote: copy.attachmentNote,
     blocks: sectionBlocks.concat([
@@ -27686,8 +27696,9 @@ function buildLifecycleEmailHistoryLines_(workflowContext, orderSummary, jobType
     addLine(poRef + ' submitted', ctx.poSubmittedAt || summary.poSubmittedAt);
   }
   if (milestone === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received) {
-    const paymentPoRef = formatLifecycleEmailPoReferenceLabel_(ctx.poNumber || summary.poNumber, 'PO');
-    addLine(paymentPoRef + ' payment received', summary.paymentReceivedManuallyAt || ctx.paymentReceivedAt || summary.paidAt);
+    const paymentPoNumber = trimString_(ctx.poNumber || summary.poNumber);
+    if (paymentPoNumber) lines.push('Purchase Order #: ' + paymentPoNumber);
+    addLine('Payment received', summary.paymentReceivedManuallyAt || ctx.paymentReceivedAt || summary.paidAt);
   }
   if ([
     PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid,
@@ -28688,6 +28699,12 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   const usedConnectedBank = opts.usedConnectedBank === true;
   const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
   const clientFullName = getLifecycleEmailClientFullName_(emailContext);
+  const clientEmail = firstNormalizedEmailFromValues_([
+    emailContext && emailContext.clientEmail,
+    emailContext && emailContext.accountSummary && emailContext.accountSummary.billingContactEmail,
+    emailContext && emailContext.accountSummary && emailContext.accountSummary.primaryEmail,
+    emailContext && emailContext.orderSummary && emailContext.orderSummary.invoiceSentToEmail
+  ]);
   const clientVerificationSubject = /^the client$/i.test(clientFullName)
     ? 'The client'
     : ('The client, ' + clientFullName + ',');
@@ -28756,6 +28773,33 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
     });
   }
+  if (isTeamAlert) {
+    const achFailedTeamIntro = /^the client$/i.test(clientFullName)
+      ? 'The client submitted an ACH payment at checkout, but it could not be completed. They have been notified of this via email just as you have.'
+      : 'The client (' + clientFullName + ') submitted an ACH payment at checkout, but it could not be completed. They have been notified of this via email just as you have.';
+    const achFailedTeamNextStep = clientEmail
+      ? 'Wait a little bit to give the client time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' via email: ' + clientEmail + ' to offer assistance.'
+      : 'Wait a little bit to give the client time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' to offer assistance.';
+    const achFailedTeamNextStepHtml = clientEmail
+      ? escapeHtml_('Wait a little bit to give the client time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' via email: ') +
+        '<span style="color:' + getPortalNativeEmailTheme_().brandRedMid + ';">' + escapeHtml_(clientEmail) + '</span>' +
+        escapeHtml_(' to offer assistance.')
+      : escapeHtml_(achFailedTeamNextStep);
+    return buildLifecycleEmailCopyModel_({
+      subject: formatLifecycleEmailInvoiceSubject_('ACH payment issue', invoiceNumber, 'ACH payment issue'),
+      actionTitle: 'Potential action',
+      intro: achFailedTeamIntro,
+      statusCopy: 'Review the portal ACH payment state or wait for the client to retry payment. A notification will be sent to client and team when payment succeeds.',
+      nextStep: achFailedTeamNextStep,
+      nextStepHtml: achFailedTeamNextStepHtml,
+      nextStepLabel: 'Potential action:',
+      nextStepTone: 'success_plain',
+      attachmentNote: 'The invoice for their order is attached.',
+      actionStatusAfterAttachment: true,
+      suppressActionCardCta: true,
+      suppressStandaloneCta: true
+    });
+  }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
       ? formatLifecycleEmailInvoiceSubject_('ACH payment issue', invoiceNumber, 'ACH payment issue')
@@ -28780,6 +28824,12 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     : {};
   const projectOwnerName = trimString_(accountSummary.primaryContactName || accountSummary.billingContactName) || 'The project owner';
   const clientFullName = getLifecycleEmailClientFullName_(emailContext);
+  const clientEmail = firstNormalizedEmailFromValues_([
+    emailContext && emailContext.clientEmail,
+    accountSummary.billingContactEmail,
+    accountSummary.primaryEmail,
+    emailContext && emailContext.orderSummary && emailContext.orderSummary.invoiceSentToEmail
+  ]);
   const productionComplete = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
   const completedProductionLine = getLifecycleEmailCompletedReceiptTimingLine_(emailContext);
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
@@ -28797,9 +28847,9 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('AP ACH payment pending', invoiceNumber, 'AP ACH payment pending')
         : formatLifecycleEmailInvoiceSubject_('ACH Payment Pending', invoiceNumber, 'ACH Payment Pending for a Red Threads project'),
-      intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for ' + clientFullName + '\'s Red Threads order.' : 'Accounts Payable has submitted ACH payment for this Red Threads project, and the payment is pending bank confirmation. The invoice for the order is attached to this email. ACH payments can take several business days to confirm. Order production will not begin until payment is received. ' + projectOwnerName + ' will be updated when payment is received and the production begins.',
+      intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for ' + clientFullName + '\'s order.' : 'Accounts Payable has submitted ACH payment for this Red Threads project, and the payment is pending bank confirmation. The invoice for the order is attached to this email. ACH payments can take several business days to confirm. Order production will not begin until payment is received. ' + projectOwnerName + ' will be updated when payment is received and the production begins.',
       statusCopy: isTeamAlert
-        ? 'The payment is pending bank confirmation. ACH payments can take several business days to confirm.'
+        ? 'The payment is pending bank confirmation. ACH payments can take several business days to confirm. You and the client will receive an email notification when payment clears, and the order can move into production.'
         : '',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : ''
     });
@@ -28833,6 +28883,33 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
         ? (clientFullName + ' has been notified that Accounts Payable completed an ACH payment and that their order is officially placed and production has started.')
         : '',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : ''
+    });
+  }
+  if (isTeamAlert) {
+    const apFailedTeamIntro = /^the client$/i.test(clientFullName)
+      ? 'Accounts Payable submitted an ACH payment for the client\'s order, but it could not be completed. Accounts Payable has been notified of this via email just as you have.'
+      : 'Accounts Payable submitted an ACH payment for ' + clientFullName + '\'s order, but it could not be completed. Accounts Payable has been notified of this via email just as you have.';
+    const apFailedTeamNextStep = clientEmail
+      ? 'Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' or their Accounts Payable contact via email: ' + clientEmail + ' to offer assistance.'
+      : 'Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' or their Accounts Payable contact to offer assistance.';
+    const apFailedTeamNextStepHtml = clientEmail
+      ? escapeHtml_('Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' or their Accounts Payable contact via email: ') +
+        '<span style="color:' + getPortalNativeEmailTheme_().brandRedMid + ';">' + escapeHtml_(clientEmail) + '</span>' +
+        escapeHtml_(' to offer assistance.')
+      : escapeHtml_(apFailedTeamNextStep);
+    return buildLifecycleEmailCopyModel_({
+      subject: formatLifecycleEmailInvoiceSubject_('AP ACH payment issue', invoiceNumber, 'AP ACH payment issue'),
+      actionTitle: 'Potential action',
+      intro: apFailedTeamIntro,
+      statusCopy: 'Review the AP ACH payment state or wait for Accounts Payable to retry payment. A notification will be sent to Accounts Payable and the Red Threads team when payment succeeds.',
+      nextStep: apFailedTeamNextStep,
+      nextStepHtml: apFailedTeamNextStepHtml,
+      nextStepLabel: 'Potential action:',
+      nextStepTone: 'success_plain',
+      attachmentNote: 'The invoice for the client\'s order is attached.',
+      actionStatusAfterAttachment: true,
+      suppressActionCardCta: true,
+      suppressStandaloneCta: true
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -29152,7 +29229,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       actionTitle: 'No action required',
       intro: isTeamAlert ? ('Payment has been recorded as received for ' + poReference + '.') : ('Payment has been received for ' + poReference + '.'),
       statusCopy: isTeamAlert
-        ? (clientFullName + ' has been notified that payment for ' + poReference + ' has been received. Production is already complete.')
+        ? (clientFullName + ' has been notified that payment for ' + poReference + ' has been received. Production is already complete. Payment was marked received in Team Mode.')
         : 'Your Red Threads order is complete.',
       nextStep: isTeamAlert ? 'No team action is required right now.' : 'No action is needed right now.',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice/receipt is attached to this email and available in your portal.',
@@ -29211,10 +29288,18 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     ? resolveLifecycleTeamEmailActionModel_(emailContext, {
       family: 'standard_ach',
       milestone: baseType,
+      title: copy.actionTitle,
       intro: copy.intro,
       statusCopy: copy.statusCopy,
+      nextStep: copy.nextStep,
+      nextStepLabel: copy.nextStepLabel,
+      nextStepTone: copy.nextStepTone,
+      nextStepHtml: copy.nextStepHtml,
+      statusAfterAttachment: copy.actionStatusAfterAttachment === true,
+      suppressActionCardCta: copy.suppressActionCardCta === true,
+      suppressStandaloneCta: copy.suppressStandaloneCta === true,
       teamAction: baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email
-        ? 'review_payment_issue'
+        ? 'monitor_payment'
         : (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email
           ? (productionCompleteForReceipt ? '' : 'move_through_production')
           : '')
@@ -32472,6 +32557,7 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'ap ach failed ap': 'owner_reviewed_hidden',
   'ap ach receipt ap': 'owner_reviewed_hidden',
   'ap ach pending ap': 'owner_reviewed_hidden',
+  'ap ach pending team': 'owner_reviewed_hidden',
   'ap payment link sent': 'owner_reviewed_hidden',
   'standard ach failed client': 'owner_reviewed_hidden',
   'standard ach receipt client': 'owner_reviewed_hidden',
@@ -32483,6 +32569,7 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'card paid team': 'owner_reviewed_hidden',
   'manual payment pending team': 'owner_reviewed_hidden',
   'manual payment received team': 'owner_reviewed_hidden',
+  'po payment received team': 'owner_reviewed_hidden',
   'po payment 60-day escalation team': 'owner_reviewed_hidden',
   'production complete shipping po unpaid client': 'owner_reviewed_hidden',
   'po payment reminder 5 business days before due client': 'owner_reviewed_hidden',
@@ -33379,15 +33466,21 @@ function sendEmailReviewPaymentExamples_(results, fixture, recipients) {
     const completedPoReceiptOrder = buildEmailReviewProductionCompletePoPaymentReceivedOrderInfo_(fixture.productionComplete);
     const completedPoReceiptInvoice = buildEmailReviewInvoiceInfo_(fixture, completedPoReceiptOrder, { fresh: true });
     const completedPoReceiptAttachments = buildEmailReviewAttachments_('payment_lifecycle', PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, completedPoReceiptOrder, completedPoReceiptInvoice);
-    sendEmailReviewContent_(results, 'PO payment received production complete team', 'payment_lifecycle', 'team', [recipients.team],
-      buildPaymentLifecycleEmailContent_(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, completedPoReceiptOrder, completedPoReceiptInvoice, {
-        cfg: fixture.cfg,
-        ss: fixture.ss,
-        infra: fixture.infra,
-        recipientClass: 'team'
-      }),
-      completedPoReceiptAttachments);
+    [
+      { label: 'PO payment received production complete client', recipientClass: 'client', to: recipients.client },
+      { label: 'PO payment received production complete team', recipientClass: 'team', to: recipients.team }
+    ].forEach(function(item) {
+      sendEmailReviewContent_(results, item.label, 'payment_lifecycle', item.recipientClass, [item.to],
+        buildPaymentLifecycleEmailContent_(PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received, completedPoReceiptOrder, completedPoReceiptInvoice, {
+          cfg: fixture.cfg,
+          ss: fixture.ss,
+          infra: fixture.infra,
+          recipientClass: item.recipientClass
+        }),
+        completedPoReceiptAttachments);
+    });
   } else {
+    skipEmailReviewResult_(results, 'PO payment received production complete client', 'payment_lifecycle', 'client', 'fixture_missing');
     skipEmailReviewResult_(results, 'PO payment received production complete team', 'payment_lifecycle', 'team', 'fixture_missing');
   }
   sendEmailReviewPoPaymentReminderExamples_(results, fixture, recipients, poSubmittedBase);

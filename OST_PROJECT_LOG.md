@@ -17,6 +17,20 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-23 - Completed PO Client Receipt Review On Version 1007
+
+- Mode: Full ship runtime refinement plus owner-approved live email-review suite; email dry-runs intentionally skipped per owner instruction.
+- Branch/commit/PR: `main`, Apps Script version `1007`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add the missing client-facing completed-production PO payment-received review fixture, align Standard ACH/AP ACH failed team copy with the card-failed team variant, hide the reviewed AP pending and generic PO receipt team labels, deploy, and run the live email review suite.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: the review suite now sends `PO payment received production complete client` alongside the completed-production team fixture. PO payment-received history splits `Purchase Order #` and `Payment received` into separate rows. The completed PO team receipt states payment was marked received in Team Mode because no separate card/ACH/check remittance field is stored for the PO receipt marker. Standard ACH failed team and AP ACH failed team now use the potential-action/card-failed structure while preserving pathway-specific language. AP ACH pending team copy now removes the redundant Red Threads-order wording and says team/client will be notified when payment clears; `AP ACH pending team` and generic `PO payment received team` are hidden with `owner_reviewed_hidden`. `Index.html` shows development revision `134`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/audit-email-review-fixtures.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add completed PO client review receipt"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1007 - Add completed PO client review receipt`. Direct `/exec` returned HTTP `200` with `Development revision 134`, omitted stale revision `133`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route-bridge markers, and had zero targeted sensitive markers.
+- Review suite: owner-approved live suite on version `1007` returned `ok:true`, sent `7` actual emails, skipped `54`, failed `0`, attachment fallback `7`, and contradiction warnings/errors `0` across sent results. It also returned one non-email `PO paid suppression assertion` row.
+- Sent labels: `Standard ACH failed team`, `AP ACH receipt team`, `AP ACH failed team`, `Card failed team`, `PO submitted team`, `PO payment received production complete client`, and `PO payment received production complete team`.
+- Reset/queue behavior: the live non-dry-run path reset `FIXTURE_EXPORT -> EXPORT_LOG`, `FIXTURE_PORTAL_ORDERS -> PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS -> PORTAL_STRIPE_EVENTS`, then cleared `PORTAL_EMAIL_QUEUE`. Fixture-storage tabs were not mutated. No Apps Script config, Script Properties, scheduler trigger, or deployment ID changes were made.
+- Follow-ups: inspect the newly sent `PO payment received production complete client` inbox example. Active runtime tabs remain fixture-loaded after the review-suite reset; restore from the private backup before production runtime resumes unless the owner chooses continued fixture mode.
+
 ## 2026-06-23 - Completed PO Receipt Email Refinement On Version 1006
 
 - Mode: Full ship runtime refinement plus owner-approved live email-review suite; email dry-runs intentionally skipped per owner instruction.
