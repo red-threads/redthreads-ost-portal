@@ -242,9 +242,11 @@ const PORTAL_EMAIL_QUEUE_JOB_TYPES = {
   ach_payment_submitted_invoice_email: 'ach_payment_submitted_invoice_email',
   ach_payment_confirmed_receipt_email: 'ach_payment_confirmed_receipt_email',
   ach_payment_failed_action_email: 'ach_payment_failed_action_email',
+  ach_bank_verification_reminder_email: 'ach_bank_verification_reminder_email',
   ach_payment_submitted_team_alert_email: 'ach_payment_submitted_team_alert_email',
   ach_payment_confirmed_team_alert_email: 'ach_payment_confirmed_team_alert_email',
-  ach_payment_failed_team_alert_email: 'ach_payment_failed_team_alert_email'
+  ach_payment_failed_team_alert_email: 'ach_payment_failed_team_alert_email',
+  ach_bank_verification_reminder_team_alert_email: 'ach_bank_verification_reminder_team_alert_email'
 };
 const PORTAL_EMAIL_QUEUE_STATUSES = {
   queued: 'queued',
@@ -328,6 +330,8 @@ const LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS = {
 };
 const PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_ = 'processPurchaseOrderPaymentReminderSchedule';
 const PO_PAYMENT_REMINDER_DAILY_HOUR_ = 9;
+const ACH_VERIFICATION_REMINDER_CALENDAR_DAYS_ = 4;
+const ACH_VERIFICATION_REMINDER_SCHEDULE_KEY_ = 'ach_verification_4_calendar_days';
 const PO_PAYMENT_LATE_FEE_FIRST_PERCENT_ = 2.5;
 const PO_PAYMENT_LATE_FEE_MONTHLY_INCREMENT_PERCENT_ = 5;
 const PO_PAYMENT_LATE_FEE_FIRST_DAY_ = 5;
@@ -21703,6 +21707,9 @@ function resolveLifecycleEmailAttachmentPolicy_(family, milestone, context) {
     if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
       return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable, true);
     }
+    if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email) {
+      return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.optional_send_without, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.optional_unavailable, true);
+    }
     if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email) {
       return policy(LIFECYCLE_EMAIL_ATTACHMENT_POLICIES.required_queue_failed, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice, true);
     }
@@ -22287,9 +22294,11 @@ function normalizeAchLifecycleEmailJobType_(value) {
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email,
     PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_team_alert_email,
-    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_team_alert_email
   ].indexOf(jobType) >= 0 ? jobType : '';
 }
 
@@ -22301,7 +22310,8 @@ function isAchLifecycleTeamAlertEmailJobType_(value) {
   const type = normalizeAchLifecycleEmailJobType_(value);
   return type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_team_alert_email ||
     type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_team_alert_email ||
-    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email;
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email ||
+    type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_team_alert_email;
 }
 
 function getAchLifecycleBaseEmailJobType_(value) {
@@ -22314,6 +22324,9 @@ function getAchLifecycleBaseEmailJobType_(value) {
   }
   if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email) {
     return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email;
+  }
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_team_alert_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email;
   }
   return type;
 }
@@ -22328,6 +22341,9 @@ function getAchLifecycleTeamAlertEmailJobType_(value) {
   }
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email) {
     return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_team_alert_email;
+  }
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email) {
+    return PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_team_alert_email;
   }
   return '';
 }
@@ -22457,6 +22473,12 @@ function shouldQueueAchLifecycleEmailForOrder_(orderInfo, jobType) {
       failureSignal.indexOf('mandate') >= 0 ||
       failureSignal.indexOf('blocked') >= 0;
   }
+  if (type === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email) {
+    return (paymentState === PAYMENT_STATES.pending || paymentState === PAYMENT_STATES.submitted) &&
+      !trimString_(summary.paidAt) &&
+      !isCommunicationPaymentFailureActionState_(summary) &&
+      isAchVerificationRequiredForEmail_(summary);
+  }
   return false;
 }
 
@@ -22470,9 +22492,10 @@ function isAchVerificationRequiredForEmail_(orderSummary) {
   return /(microdeposit|requires_action|unverified|verification_pending|bank_verification_pending)/i.test(signal);
 }
 
-function buildAchLifecycleEmailIdempotencyKey_(jobType, orderSummary, recipients) {
+function buildAchLifecycleEmailIdempotencyKey_(jobType, orderSummary, recipients, meta) {
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
   const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
+  const safeMeta = (meta && typeof meta === 'object') ? meta : {};
   return buildPortalEmailQueueIdempotencyKeyForSource_({
     jobType: normalizeAchLifecycleEmailJobType_(jobType),
     recipientClass: getAchLifecycleEmailRecipientClass_(jobType),
@@ -22480,6 +22503,7 @@ function buildAchLifecycleEmailIdempotencyKey_(jobType, orderSummary, recipients
     token: trimString_(summary.token),
     stripePaymentIntentId: trimString_(summary.stripePaymentIntentId),
     invoiceNumber: trimString_(summary.invoiceNumber),
+    scheduleKey: trimString_(safeMeta.scheduleKey),
     toList: normalizeEmailRecipients_(safeRecipients.toList),
     ccList: normalizeEmailRecipients_(safeRecipients.ccList)
   });
@@ -22623,6 +22647,7 @@ function queueAchLifecycleEmailJobSafely_(orderInfo, stripeObj, jobType, options
     const cfg = opts.cfg || getConfig_();
     const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
     const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const meta = (opts.meta && typeof opts.meta === 'object') ? opts.meta : {};
     const accountInfo = opts.accountInfo || getPortalAccountInfoForOrder_(orderInfo, {
       cfg: cfg,
       ss: ss,
@@ -22648,13 +22673,13 @@ function queueAchLifecycleEmailJobSafely_(orderInfo, stripeObj, jobType, options
     const queueSheet = getPortalEmailQueueSheet_(ss);
     const existingLifecycleJob = findAchLifecycleEmailQueueJob_(queueSheet, type, orderSummary);
     const idempotencyKey = trimString_(existingLifecycleJob && existingLifecycleJob.rowObjNormalized.idempotencykey) ||
-      buildAchLifecycleEmailIdempotencyKey_(type, orderSummary, recipients);
+      buildAchLifecycleEmailIdempotencyKey_(type, orderSummary, recipients, meta);
     const jobInfo = upsertPortalEmailQueueJob_(queueSheet, {
       jobType: type,
       idempotencyKey: idempotencyKey,
       token: trimString_(orderInfo.rowObjNormalized.token),
       recipientsJson: JSON.stringify(recipients),
-      portalStateJson: JSON.stringify({
+      portalStateJson: JSON.stringify(Object.assign({}, meta, {
         jobType: type,
         recipientClass: recipientClass,
         orderId: trimString_(orderSummary.orderId),
@@ -22664,7 +22689,7 @@ function queueAchLifecycleEmailJobSafely_(orderInfo, stripeObj, jobType, options
         invoiceNumber: trimString_(orderSummary.invoiceNumber),
         queuedFromEventType: trimString_(opts.eventType),
         queuedAt: nowIso_()
-      }),
+      })),
       orderDraftJson: trimString_(orderInfo.rowObjNormalized.orderdraftjson),
       invoicePdfUrl: trimString_(orderSummary.invoicePdfUrl),
       invoiceFileName: ''
@@ -25530,6 +25555,142 @@ function listLatestPortalOrderInfosForPaymentReminderSchedule_(ordersSheet) {
   });
 }
 
+function resolveAchVerificationReminderAnchorDate_(orderInfo) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const candidates = [
+    summary.stripeLatestEventAt,
+    row.stripelatesteventat,
+    row.stripeLatestEventAt,
+    summary.lockedAt,
+    row.lockedat,
+    row.lockedAt,
+    summary.createdAt,
+    row.createdat,
+    row.createdAt
+  ];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const date = normalizeDashboardCalendarDate_(candidates[i]);
+    if (date) return date;
+  }
+  return null;
+}
+
+function buildAchVerificationReminderScheduleMeta_(orderInfo, anchorDate, noticeDate) {
+  const row = orderInfo && orderInfo.rowObjNormalized ? orderInfo.rowObjNormalized : {};
+  const summary = buildPortalOrderSummary_(row);
+  const anchor = normalizeDashboardCalendarDate_(anchorDate);
+  const notice = normalizeDashboardCalendarDate_(noticeDate || new Date());
+  const reminderDue = anchor ? addCalendarDaysForDashboard_(ACH_VERIFICATION_REMINDER_CALENDAR_DAYS_, anchor) : null;
+  return {
+    scheduleKey: ACH_VERIFICATION_REMINDER_SCHEDULE_KEY_,
+    verificationRequiredDate: formatScheduleIsoDate_(anchor),
+    verificationRequiredDateLabel: anchor ? formatDashboardShortDate_(anchor) : '',
+    reminderDueDate: formatScheduleIsoDate_(reminderDue),
+    reminderDueDateLabel: reminderDue ? formatDashboardShortDate_(reminderDue) : '',
+    noticeDate: formatScheduleIsoDate_(notice),
+    noticeDateLabel: notice ? formatDashboardShortDate_(notice) : '',
+    calendarDaysSinceVerificationRequired: anchor && notice ? Math.max(0, calendarDaysBetweenScheduleDates_(anchor, notice)) : 0,
+    stripePaymentIntentId: trimString_(summary.stripePaymentIntentId),
+    scheduledBy: PO_PAYMENT_REMINDER_SCHEDULE_TRIGGER_
+  };
+}
+
+function shouldQueueAchVerificationReminderForOrder_(orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  if (!shouldQueueAchLifecycleEmailForOrder_(orderInfo, PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email)) return false;
+  const anchor = resolveAchVerificationReminderAnchorDate_(orderInfo);
+  const today = normalizeDashboardCalendarDate_(opts.nowDate || new Date());
+  if (!anchor || !today) return false;
+  const reminderDue = addCalendarDaysForDashboard_(ACH_VERIFICATION_REMINDER_CALENDAR_DAYS_, anchor);
+  return !!(reminderDue && today.getTime() >= reminderDue.getTime());
+}
+
+function queueAchVerificationReminderNotice_(orderInfo, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const anchor = resolveAchVerificationReminderAnchorDate_(orderInfo);
+  const meta = buildAchVerificationReminderScheduleMeta_(orderInfo, anchor, opts.nowDate || new Date());
+  return queueAchLifecycleClientAndTeamEmailsSafely_(
+    orderInfo,
+    null,
+    PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email,
+    {
+      cfg: opts.cfg,
+      ss: opts.ss,
+      infra: opts.infra,
+      accountInfo: opts.accountInfo,
+      meta: meta,
+      eventType: 'ach_verification_reminder_schedule'
+    }
+  );
+}
+
+function processAchVerificationReminderSchedule_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const result = {
+    ok: true,
+    scanned: 0,
+    eligible: 0,
+    queued: 0,
+    skipped: 0,
+    errors: [],
+    achVerification: null
+  };
+  try {
+    const cfg = opts.cfg || getConfig_();
+    const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+    const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+    const nowDate = normalizeDashboardCalendarDate_(opts.nowDate || new Date()) || new Date();
+    const orderInfos = listLatestPortalOrderInfosForPaymentReminderSchedule_(infra.ordersSheet);
+    orderInfos.forEach(function(orderInfo) {
+      result.scanned += 1;
+      try {
+        if (!shouldQueueAchVerificationReminderForOrder_(orderInfo, { nowDate: nowDate })) {
+          result.skipped += 1;
+          return;
+        }
+        const accountInfo = getPortalAccountInfoForOrder_(orderInfo, {
+          cfg: cfg,
+          ss: ss,
+          infra: infra
+        });
+        const queued = queueAchVerificationReminderNotice_(orderInfo, {
+          cfg: cfg,
+          ss: ss,
+          infra: infra,
+          accountInfo: accountInfo,
+          nowDate: nowDate
+        });
+        result.eligible += 1;
+        if (queued && queued.clientJob) result.queued += 1;
+        if (queued && queued.teamJob) result.queued += 1;
+      } catch (err) {
+        result.errors.push(String((err && err.message) || err));
+      }
+    });
+    if (result.errors.length) result.ok = false;
+    console.log('[RT-ACH-VERIFICATION-REMINDER-SCHEDULE] ' + JSON.stringify(result));
+    return result;
+  } catch (err) {
+    result.ok = false;
+    result.errors.push(String((err && err.message) || err));
+    console.log('[RT-ACH-VERIFICATION-REMINDER-SCHEDULE] ' + JSON.stringify(result));
+    return result;
+  }
+}
+
+function processAchVerificationReminderSchedule(options) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return { ok: false, reason: 'lock_busy' };
+  }
+  try {
+    return processAchVerificationReminderSchedule_(options);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function queuePurchaseOrderPaymentReminderNotice_(orderInfo, notice, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const safeNotice = (notice && typeof notice === 'object') ? notice : {};
@@ -25610,6 +25771,14 @@ function processPurchaseOrderPaymentReminderSchedule(options) {
         result.errors.push(String((err && err.message) || err));
       }
     });
+    const achVerificationResult = processAchVerificationReminderSchedule_({
+      cfg: cfg,
+      ss: ss,
+      infra: infra,
+      nowDate: nowDate
+    });
+    result.achVerification = achVerificationResult;
+    if (!achVerificationResult || achVerificationResult.ok !== true) result.ok = false;
     if (result.errors.length) result.ok = false;
     console.log('[RT-PO-PAYMENT-REMINDER-SCHEDULE] ' + JSON.stringify(result));
     return result;
@@ -28059,6 +28228,23 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     accountSummary.primaryEmail,
     summary.invoiceSentToEmail
   ]);
+  const draftShippingDetails = (draft.shippingDetails && typeof draft.shippingDetails === 'object') ? draft.shippingDetails : {};
+  const clientPhone = trimString_(
+    draft.contactPhone ||
+    draft.phone ||
+    draft.personPhone ||
+    draft.billingContactPhone ||
+    draft.primaryContactPhone ||
+    draftShippingDetails.phone ||
+    row.contactphone ||
+    row.phone ||
+    row.personphone ||
+    row.billingcontactphone ||
+    row.primarycontactphone ||
+    accountSummary.billingContactPhone ||
+    accountSummary.primaryPhone ||
+    accountSummary.phone
+  );
   const organizationName = trimString_(draft.orgName || row.orgname || row.orgName || accountSummary.orgName);
   const paymentDate = trimString_(summary.paidAt) ? buildLifecycleEmailDateLabel_(summary.paidAt) : '';
   const paymentMethodLabel = trimString_(opts.paymentMethodLabel) ||
@@ -28087,6 +28273,7 @@ function buildLifecycleEmailContextForOrder_(orderInfo, invoiceInfo, options) {
     dealNumber: dealNumber,
     clientName: clientName,
     clientEmail: clientEmail,
+    clientPhone: clientPhone,
     organizationName: organizationName,
     invoiceNumber: invoiceNumber,
     invoiceDocumentRef: invoiceReference.documentRef,
@@ -28283,6 +28470,7 @@ function resolveOrderCommunicationCtaMode_(state) {
   if (source.paymentIssue) return 'retry_payment';
   if (isClientScheduledPoPaymentReminderMilestone_(trigger)) return 'pay';
   if (source.intent === 'production_complete' && source.poTermsOpen && !source.paymentReceived) return 'pay';
+  if (source.intent === 'payment_verification_required') return 'view_project';
   if (source.manualPending || source.paymentRequiredBeforeProduction) return 'pay';
   if (source.intent === 'po_invoice_prepared') return 'submit_po';
   return 'view_project';
@@ -28691,6 +28879,26 @@ function getLifecycleEmailClientFullName_(emailContext) {
   ) || 'The client';
 }
 
+function getLifecycleEmailClientPhone_(emailContext) {
+  const ctx = (emailContext && typeof emailContext === 'object') ? emailContext : {};
+  const account = (ctx.accountSummary && typeof ctx.accountSummary === 'object') ? ctx.accountSummary : {};
+  const summary = (ctx.orderSummary && typeof ctx.orderSummary === 'object') ? ctx.orderSummary : {};
+  const draft = (summary.lockedOrderDraft && typeof summary.lockedOrderDraft === 'object') ? summary.lockedOrderDraft : {};
+  const shipping = (draft.shippingDetails && typeof draft.shippingDetails === 'object') ? draft.shippingDetails : {};
+  return trimString_(
+    ctx.clientPhone ||
+    draft.contactPhone ||
+    draft.phone ||
+    draft.personPhone ||
+    draft.billingContactPhone ||
+    draft.primaryContactPhone ||
+    shipping.phone ||
+    account.billingContactPhone ||
+    account.primaryPhone ||
+    account.phone
+  );
+}
+
 function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   const type = normalizeAchLifecycleEmailJobType_(jobType);
   const baseType = getAchLifecycleBaseEmailJobType_(type);
@@ -28698,8 +28906,11 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   const isTeamAlert = opts.isTeamAlert === true;
   const verificationRequired = opts.verificationRequired === true;
   const usedConnectedBank = opts.usedConnectedBank === true;
+  const attachmentPresent = opts.attachmentPresent === true;
   const invoiceNumber = trimString_(emailContext && emailContext.invoiceNumber);
   const clientFullName = getLifecycleEmailClientFullName_(emailContext);
+  const clientPhone = getLifecycleEmailClientPhone_(emailContext);
+  const projectNumber = getLifecycleEmailProjectNumberLabel_(emailContext);
   const clientEmail = firstNormalizedEmailFromValues_([
     emailContext && emailContext.clientEmail,
     emailContext && emailContext.accountSummary && emailContext.accountSummary.billingContactEmail,
@@ -28711,6 +28922,44 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     : ('The client, ' + clientFullName + ',');
   const productionComplete = isLifecycleEmailProductionCompleteForReceipt_(emailContext);
   const completedProductionLine = getLifecycleEmailCompletedReceiptTimingLine_(emailContext);
+  if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email) {
+    const clientNextStep = 'Look for the Stripe microdeposit-verification email in your inbox or spam folder, check your bank account for the Stripe microdeposit amounts, then use the Stripe email to enter those values and complete bank verification.';
+    const teamContactTarget = clientEmail
+      ? (clientFullName + ' at ' + clientEmail)
+      : clientFullName;
+    const teamPhoneText = clientPhone ? (' or call ' + clientPhone) : '';
+    const teamNextStep = 'Contact ' + teamContactTarget + teamPhoneText + ' to help them complete Stripe microdeposit verification.';
+    const teamNextStepHtml = clientEmail
+      ? escapeHtml_('Contact ' + clientFullName + ' at ') +
+        '<span style="color:' + getPortalNativeEmailTheme_().brandRedMid + ';">' + escapeHtml_(clientEmail) + '</span>' +
+        escapeHtml_(teamPhoneText + ' to help them complete Stripe microdeposit verification.')
+      : escapeHtml_(teamNextStep);
+    return buildLifecycleEmailCopyModel_({
+      subject: formatLifecycleEmailInvoiceSubject_('ACH bank verification still needed', invoiceNumber, 'ACH bank verification still needed'),
+      heading: 'ACH bank verification still needed',
+      actionTitle: isTeamAlert ? 'Potential action' : 'Action required',
+      actionTitleTone: isTeamAlert ? 'green' : 'blue',
+      intro: isTeamAlert
+        ? clientFullName + ' has been notified that ACH bank verification is still incomplete.'
+        : 'Your ACH bank verification is still waiting on Stripe.',
+      statusCopy: isTeamAlert
+        ? 'The ACH payment cannot finish and the order cannot begin processing until bank verification is completed.'
+        : 'The ACH payment cannot finish and production cannot begin until bank verification is completed.',
+      nextStep: isTeamAlert ? teamNextStep : clientNextStep,
+      nextStepHtml: isTeamAlert ? teamNextStepHtml : '',
+      nextStepLabel: isTeamAlert ? 'Potential action:' : 'Next action:',
+      nextStepTone: isTeamAlert ? 'success_plain' : '',
+      attachmentNote: attachmentPresent
+        ? (isTeamAlert ? 'The invoice/status PDF for the client\'s order is attached to this email.' : 'The invoice/status PDF for your order is attached to this email.')
+        : '',
+      ctaLabel: isTeamAlert
+        ? ''
+        : (projectNumber ? ('View Project #' + projectNumber + ' in the portal') : 'View your project in the portal'),
+      ctaAlign: 'center',
+      suppressActionCardCta: isTeamAlert,
+      suppressStandaloneCta: isTeamAlert
+    });
+  }
   if (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_submitted_invoice_email) {
     if (verificationRequired) {
       return buildLifecycleEmailCopyModel_({
@@ -29283,8 +29532,10 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
   const copy = buildAchLifecycleEmailCopy_(type, emailContext, {
     isTeamAlert: isTeamAlert,
     verificationRequired: verificationRequired,
-    usedConnectedBank: usedConnectedBank
+    usedConnectedBank: usedConnectedBank,
+    attachmentPresent: opts.attachmentPresent === true
   });
+  const effectiveCtaLabel = trimString_(copy.ctaLabel) || emailContext.ctaLabel;
   const teamActionModel = isTeamAlert
     ? resolveLifecycleTeamEmailActionModel_(emailContext, {
       family: 'standard_ach',
@@ -29301,9 +29552,11 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
       suppressStandaloneCta: copy.suppressStandaloneCta === true,
       teamAction: baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email
         ? 'monitor_payment'
+        : (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email
+          ? 'monitor_payment'
         : (baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_confirmed_receipt_email
           ? (productionCompleteForReceipt ? '' : 'move_through_production')
-          : '')
+          : ''))
     })
     : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
@@ -29314,12 +29567,12 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
   const actionCtaBlock = teamActionModel && teamActionModel.suppressStandaloneCta
     ? null
     : buildLifecycleEmailCtaBlock_(
-      teamActionModel ? teamActionModel.ctaLabel : emailContext.ctaLabel,
+      teamActionModel ? teamActionModel.ctaLabel : effectiveCtaLabel,
       teamActionModel ? teamActionModel.ctaUrl : emailContext.ctaUrl,
       {
         align: teamActionModel
           ? teamActionModel.ctaAlign
-          : (!isTeamAlert && baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email ? 'center' : ''),
+          : (trimString_(copy.ctaAlign) || (!isTeamAlert && baseType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_payment_failed_action_email ? 'center' : '')),
         teamModePassword: teamActionModel ? teamActionModel.teamModePassword : ''
       }
     );
@@ -29327,15 +29580,18 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     eyebrow: isTeamAlert ? getPortalNativeEmailEyebrow_('team') : '',
     heading: copy.heading,
     badgeLabel: copy.badgeLabel || getLifecycleEmailCurrentStepLabel_(emailContext.steps),
-    actionTitle: teamActionModel ? teamActionModel.title : '',
+    actionTitle: teamActionModel ? teamActionModel.title : copy.actionTitle,
+    actionTitleTone: teamActionModel ? '' : copy.actionTitleTone,
     intro: teamActionModel ? teamActionModel.intro : copy.intro,
     statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
-    nextStep: teamActionModel ? teamActionModel.nextStep : emailContext.nextStepText,
-    nextStepLabel: teamActionModel ? teamActionModel.nextStepLabel : '',
-    nextStepTone: teamActionModel ? teamActionModel.nextStepTone : '',
-    actionStatusAfterAttachment: teamActionModel ? teamActionModel.statusAfterAttachment === true : false,
-    suppressActionCardCta: teamActionModel ? teamActionModel.suppressActionCardCta : false,
+    nextStep: teamActionModel ? teamActionModel.nextStep : (copy.nextStep || emailContext.nextStepText),
+    nextStepHtml: teamActionModel ? teamActionModel.nextStepHtml : copy.nextStepHtml,
+    nextStepLabel: teamActionModel ? teamActionModel.nextStepLabel : copy.nextStepLabel,
+    nextStepTone: teamActionModel ? teamActionModel.nextStepTone : copy.nextStepTone,
+    actionStatusAfterAttachment: teamActionModel ? teamActionModel.statusAfterAttachment === true : copy.actionStatusAfterAttachment === true,
+    suppressActionCardCta: teamActionModel ? teamActionModel.suppressActionCardCta : copy.suppressActionCardCta === true,
     attachmentNote: copy.attachmentNote,
+    recipientClass: isTeamAlert ? 'team' : 'client',
     blocks: sectionBlocks.concat([
       actionCtaBlock,
       buildLifecycleEmailFooter_()
@@ -29399,6 +29655,22 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
       !isCommunicationPaymentFailureActionState_(summary)) {
     return { skipped: true, skipReason: 'ach_failed_job_already_paid', invoiceInfo: null };
   }
+  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email &&
+      !shouldQueueAchLifecycleEmailForOrder_(orderInfo, baseJobType)) {
+    return { skipped: true, skipReason: 'ach_verification_reminder_not_eligible', invoiceInfo: null };
+  }
+  if (baseJobType === PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email) {
+    const latestOrderInfo = trimString_(summary.token)
+      ? getLatestPortalOrderByToken_(summary.token, { cfg: cfg, ss: ss, ordersSheet: infra.ordersSheet })
+      : null;
+    const latestSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized || {}) : null;
+    if (latestSummary &&
+        trimString_(summary.orderId) &&
+        trimString_(latestSummary.orderId) &&
+        trimString_(summary.orderId) !== trimString_(latestSummary.orderId)) {
+      return { skipped: true, skipReason: 'ach_verification_reminder_order_superseded', invoiceInfo: null };
+    }
+  }
   const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
   if (!recipients.toList.length) throw new Error('ACH email queue job has no recipients.');
   const invoiceInfo = resolveAchLifecycleInvoiceInfo_(orderInfo, jobType, {
@@ -29417,7 +29689,8 @@ function processAchLifecycleClientEmailQueueJob_(jobInfo, options) {
   const content = buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, {
     cfg: cfg,
     ss: ss,
-    infra: infra
+    infra: infra,
+    attachmentPresent: !!(attachmentResult.attachments && attachmentResult.attachments.length)
   });
   const emailResult = sendNotificationEmail_({
     toList: recipients.toList,
@@ -33179,6 +33452,39 @@ function sendEmailReviewStandardAchExamples_(results, fixture, recipients) {
     sendEmailReviewContent_(results, item.label, 'standard_ach', item.recipientClass, [item.to],
       buildAchLifecycleEmailContent_(item.jobType, verification, verificationInvoice, { cfg: fixture.cfg, ss: fixture.ss, infra: fixture.infra }),
       verificationAttachments);
+  });
+
+  const verificationReminderAnchor = addCalendarDaysForEmailReview_(-5, new Date());
+  const verificationReminderAnchorIso = verificationReminderAnchor ? verificationReminderAnchor.toISOString() : nowIso_();
+  const verificationReminder = cloneEmailReviewOrderInfo_(verification, {
+    paymentstate: PAYMENT_STATES.submitted,
+    currentpaymentstate: PAYMENT_STATES.submitted,
+    orderstate: ORDER_STATES.awaiting_payment_confirmation,
+    currentorderstate: ORDER_STATES.awaiting_payment_confirmation,
+    productionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    currentproductionauthorizationstate: PRODUCTION_AUTHORIZATION_STATES.not_authorized,
+    achverificationstatus: ACH_DETAIL_STATES.bank_verification_pending,
+    stripelatesteventtype: 'payment_intent.requires_action',
+    stripelatesteventat: verificationReminderAnchorIso,
+    lockedat: verificationReminderAnchorIso,
+    createdat: verificationReminderAnchorIso,
+    paidat: '',
+    authorizedtoproduceat: ''
+  });
+  const verificationReminderInvoice = buildEmailReviewInvoiceInfo_(fixture, verificationReminder, {});
+  const verificationReminderAttachments = buildEmailReviewAttachments_('standard_ach', PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email, verificationReminder, verificationReminderInvoice);
+  [
+    { label: 'Standard ACH verification 4-day reminder client', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_email, recipientClass: 'client', to: recipients.client },
+    { label: 'Standard ACH verification 4-day reminder team', jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.ach_bank_verification_reminder_team_alert_email, recipientClass: 'team', to: recipients.team }
+  ].forEach(function(item) {
+    sendEmailReviewContent_(results, item.label, 'standard_ach', item.recipientClass, [item.to],
+      buildAchLifecycleEmailContent_(item.jobType, verificationReminder, verificationReminderInvoice, {
+        cfg: fixture.cfg,
+        ss: fixture.ss,
+        infra: fixture.infra,
+        attachmentPresent: verificationReminderAttachments.length > 0
+      }),
+      verificationReminderAttachments);
   });
 
   const paid = buildEmailReviewPaidOrderInfo_(paidBase, PAYMENT_METHODS.ach, {

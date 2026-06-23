@@ -28,6 +28,14 @@ const REQUIRED_MATRIX = [
     artifactRequirement: 'required'
   },
   {
+    caseLabel: 'ach_verification_4_day_reminder',
+    recipientClass: 'client+team',
+    expectedCommunicationIntent: ['payment_verification_required'],
+    labels: ['Standard ACH verification 4-day reminder client', 'Standard ACH verification 4-day reminder team'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
     caseLabel: 'ach_failed',
     recipientClass: 'client+team',
     expectedCommunicationIntent: ['payment_issue'],
@@ -317,12 +325,13 @@ function parseArgs(argv) {
 
 function usage() {
   return [
-    'Usage: npm run email-review:matrix -- --input dry-run.json [--strict] [--json]',
+    'Usage: npm run email-review:matrix -- --input email-review.json [--strict] [--json]',
     '',
-    'Validates redacted headless email-review dry-run JSON against the lifecycle communication matrix.',
+    'Validates redacted headless email-review JSON against the lifecycle communication matrix.',
     'Use with: npm run email-review:suite -- --dry-run > /tmp/email-review-dry-run.json',
     '',
-    'Default behavior fails on failed cases or contradiction errors. --strict also fails missing/skipped matrix cases.'
+    'Default behavior fails on failed cases or contradiction errors. --strict also fails missing/skipped matrix cases.',
+    'Live suite receipts omit dry-run-only assertion rows; those assertion-only cases are classified as live_assertion_only_omitted.'
   ].join('\n');
 }
 
@@ -377,6 +386,7 @@ function summarizeResult(item) {
 
 function validateMatrix(input) {
   const results = Array.isArray(input.results) ? input.results.map(summarizeResult) : [];
+  const isLiveReceipt = input.dryRun === false;
   const byLabel = new Map(results.map((item) => [normalize(item.label), item]));
   const failedResults = results.filter((item) => item.ok === false);
   const contradictionErrors = results.filter((item) => item.contradictionErrorCount > 0);
@@ -386,13 +396,15 @@ function validateMatrix(input) {
     const matched = caseDef.labels.map((label) => byLabel.get(normalize(label))).filter(Boolean);
     const activeMatched = matched.filter((item) => !item.skipped);
     const assertionMatched = matched.filter((item) => item.assertionOnly);
-    const status = !caseDef.labels.length
+    const status = isLiveReceipt && caseDef.sendMode === 'assertion_only' && !matched.length
+      ? 'live_assertion_only_omitted'
+      : (!caseDef.labels.length
       ? 'assertion_only_missing'
       : (!matched.length
         ? 'missing'
         : (activeMatched.length
           ? 'covered'
-          : 'skipped_or_omitted'));
+          : 'skipped_or_omitted')));
     const intents = [...new Set(matched.map((item) => item.communicationIntent).filter(Boolean))];
     const missingIntent = activeMatched.length && caseDef.expectedCommunicationIntent.length
       ? !intents.some((intent) => caseDef.expectedCommunicationIntent.includes(intent))
@@ -413,10 +425,11 @@ function validateMatrix(input) {
     };
   });
   const missingCases = cases.filter((item) => item.status === 'missing' || item.status === 'assertion_only_missing');
-  const skippedCases = cases.filter((item) => item.status === 'skipped_or_omitted');
+  const skippedCases = cases.filter((item) => item.status === 'skipped_or_omitted' || item.status === 'live_assertion_only_omitted');
   const intentMismatches = cases.filter((item) => item.missingExpectedIntent);
   return {
     ok: failedResults.length === 0 && contradictionErrors.length === 0 && intentMismatches.length === 0,
+    inputOk: input.ok === true,
     dryRunOk: input.ok === true,
     redacted: true,
     resultCounts: {
@@ -450,7 +463,7 @@ function validateMatrix(input) {
 function printMarkdown(report) {
   console.log('# Email Communication Matrix Validation');
   console.log('');
-  console.log(`Dry-run ok: ${report.dryRunOk}`);
+  console.log(`Input ok: ${report.inputOk}`);
   console.log(`Results: total=${report.resultCounts.total}, skipped=${report.resultCounts.skipped}, failed=${report.resultCounts.failed}, attachmentFallback=${report.resultCounts.attachmentFallback}`);
   console.log(`Contradictions: errors=${report.resultCounts.contradictionErrors}, warnings=${report.resultCounts.contradictionWarnings}`);
   console.log(`Matrix: required=${report.matrixCounts.required}, covered=${report.matrixCounts.covered}, skippedOrOmitted=${report.matrixCounts.skippedOrOmitted}, missing=${report.matrixCounts.missing}, intentMismatches=${report.matrixCounts.intentMismatches}`);
