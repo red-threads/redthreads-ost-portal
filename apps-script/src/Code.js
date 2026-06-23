@@ -19113,6 +19113,8 @@ function buildPortalOrderSummary_(row) {
     poDocumentUrl: trimString_(order.podocumenturl || order.poDocumentUrl),
     poSubmittedBy: trimString_(order.posubmittedby || order.poSubmittedBy),
     poSubmittedAt: trimString_(order.posubmittedat || order.poSubmittedAt),
+    approvedPaymentTermsDays: Math.max(0, parseInt(String(order.approvedpaymenttermsdays || order.approvedPaymentTermsDays || 0), 10) || 0),
+    approvedPaymentTermsLabel: trimString_(order.approvedpaymenttermslabel || order.approvedPaymentTermsLabel),
     amountGrandTotal: roundMoney_(order.amountgrandtotal || order.amountGrandTotal || 0),
     amountTax: roundMoney_(order.amounttax || order.amountTax || 0),
     amountCardFee: roundMoney_(order.amountcardfee || order.amountCardFee || draft.amountCardFee || 0),
@@ -23246,7 +23248,9 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
       intro: copy.intro,
       statusCopy: copy.statusCopy,
       token: token,
-      teamAction: isApAchLifecycleFailureMilestone_(normalized) ? 'review_payment_issue' : ''
+      teamAction: isApAchLifecycleFailureMilestone_(normalized)
+        ? 'review_payment_issue'
+        : (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_confirmed ? 'move_through_production' : '')
     })
     : null;
   const sectionBlocks = buildLifecycleEmailSectionBlocks_(emailContext, {
@@ -25739,7 +25743,8 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     ? 'review_payment_issue'
     : ([
       PAYMENT_LIFECYCLE_EMAIL_MILESTONES.card_paid,
-      PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received
+      PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_received,
+      PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_received
     ].indexOf(normalized) >= 0 ? 'move_through_production' : '');
   const teamActionModel = useTeamActionModel
     ? resolveLifecycleTeamEmailActionModel_(emailContext, {
@@ -25747,6 +25752,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
       milestone: normalized,
       intro: copy.intro,
       statusCopy: copy.statusCopy,
+      nextStep: copy.nextStep,
       teamAction: teamActionOverride
     })
     : null;
@@ -25950,12 +25956,18 @@ function resolveLifecycleEmailProductionStartAt_(workflowContext, orderSummary) 
 function buildLifecycleEmailFallbackTimeline_(workflowContext, orderSummary) {
   const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
   const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const termsDays = Math.max(0, parseInt(String(ctx.approvedPaymentTermsDays || summary.approvedPaymentTermsDays || 0), 10) || 0);
+  const poSubmittedDate = normalizeDashboardCalendarDate_(ctx.poSubmittedAt || summary.poSubmittedAt);
+  const paymentDueDate = termsDays > 0 && poSubmittedDate ? addCalendarDaysForDashboard_(termsDays, poSubmittedDate) : null;
   return {
     orderPlacedDateLabel: buildLifecycleEmailDateLabel_(ctx.orderPlacedAt || summary.lockedAt || summary.createdAt),
     paidDateLabel: buildLifecycleEmailDateLabel_(ctx.paymentReceivedAt || summary.paidAt),
     printStartDateLabel: buildLifecycleEmailDateLabel_(resolveLifecycleEmailProductionStartAt_(ctx, summary)),
     completionDateLabel: buildLifecycleEmailDateLabel_(ctx.productionCompletionAt),
     poSubmittedDateLabel: buildLifecycleEmailDateLabel_(ctx.poSubmittedAt || summary.poSubmittedAt),
+    paymentDueDateValue: paymentDueDate ? paymentDueDate.getTime() : null,
+    paymentDueDateLabel: paymentDueDate ? formatDashboardShortDate_(paymentDueDate) : '',
+    paymentTermsLabel: trimString_(ctx.approvedPaymentTermsLabel || summary.approvedPaymentTermsLabel) || (termsDays > 0 ? ('Net ' + termsDays) : ''),
     paymentMethodLabel: 'ACH',
     poNumber: trimString_(ctx.poNumber || summary.poNumber)
   };
@@ -26231,6 +26243,46 @@ function isLifecycleEmailPaymentStep_(step) {
     label.indexOf('pay') >= 0;
 }
 
+function isLifecycleEmailOpenPoPaymentContext_(workflowContext, orderSummary) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const variant = trimString_(ctx.variant || summary.variant).toLowerCase();
+  const method = trimString_(ctx.paymentMethod || ctx.paymentMethodSelected || summary.paymentMethodSelected).toLowerCase();
+  const poSubmitted = ctx.poSubmitted === true ||
+    ctx.isPoSubmitted === true ||
+    !!trimString_(ctx.poSubmittedAt || summary.poSubmittedAt || ctx.poNumber || summary.poNumber);
+  return (variant === 'purchase_order' || method === PAYMENT_METHODS.purchase_order || poSubmitted) &&
+    !isPortalCommunicationPaymentReceived_(ctx, summary);
+}
+
+function resolveLifecycleEmailPoPaymentDueDateValue_(workflowContext, orderSummary, timeline) {
+  const ctx = (workflowContext && typeof workflowContext === 'object') ? workflowContext : {};
+  const summary = (orderSummary && typeof orderSummary === 'object') ? orderSummary : {};
+  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  if (Number.isFinite(Number(safeTimeline.paymentDueDateValue))) return Number(safeTimeline.paymentDueDateValue);
+  const timelineLabel = trimString_(safeTimeline.paymentDueDateLabel);
+  if (timelineLabel) return timelineLabel;
+  const termsDays = Math.max(0, parseInt(String(ctx.approvedPaymentTermsDays || summary.approvedPaymentTermsDays || 0), 10) || 0);
+  const poSubmittedDate = normalizeDashboardCalendarDate_(ctx.poSubmittedAt || summary.poSubmittedAt);
+  const paymentDueDate = termsDays > 0 && poSubmittedDate
+    ? addCalendarDaysForDashboard_(termsDays, poSubmittedDate)
+    : null;
+  return paymentDueDate ? paymentDueDate.getTime() : '';
+}
+
+function resolveLifecycleEmailPoPaymentDueDateLabel_(workflowContext, orderSummary, timeline) {
+  const safeTimeline = (timeline && typeof timeline === 'object') ? timeline : {};
+  const explicit = trimString_(safeTimeline.paymentDueDateLabel);
+  if (explicit) return explicit;
+  return buildLifecycleEmailDateLabel_(resolveLifecycleEmailPoPaymentDueDateValue_(workflowContext, orderSummary, safeTimeline));
+}
+
+function resolveLifecycleEmailPoPaymentDueMonthDayLabel_(workflowContext, orderSummary, timeline) {
+  return formatLifecycleEmailProgressMonthDayLabel_(
+    resolveLifecycleEmailPoPaymentDueDateValue_(workflowContext, orderSummary, timeline)
+  );
+}
+
 function resolveLifecycleEmailStepCompletedDate_(step, context) {
   const item = (step && typeof step === 'object') ? step : {};
   const ctx = (context && typeof context === 'object') ? context : {};
@@ -26298,7 +26350,10 @@ function resolveLifecycleEmailProgressStatusDisplay_(step, context) {
     status = completedMonthDay ? ('Completed ' + completedMonthDay) : 'Completed';
   } else if (state !== 'complete' && isLifecycleEmailPaymentStep_(item)) {
     label = 'Complete Payment';
-    status = state === 'current' ? 'Current action' : 'Next';
+    const poDueMonthDay = isLifecycleEmailOpenPoPaymentContext_(workflow, summary)
+      ? resolveLifecycleEmailPoPaymentDueMonthDayLabel_(workflow, summary, timeline)
+      : '';
+    status = poDueMonthDay ? ('Pay by ' + poDueMonthDay) : (state === 'current' ? 'Current action' : 'Next');
   } else if (state === 'current') {
     status = 'Current action';
   }
@@ -27682,6 +27737,7 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
   const action = resolveLifecycleTeamEmailActionKey_(ctx, opts);
   const intro = sanitizeLifecycleTeamIntroCopy_(opts.intro);
   const statusCopy = sanitizeLifecycleTeamStatusCopy_(opts.statusCopy);
+  const nextStepOverride = trimString_(opts.nextStep);
   const models = {
     review_payment_issue: {
       title: 'Team action required',
@@ -27772,6 +27828,7 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
     ctaUrl: ctaUrl,
     ctaAlign: 'center',
     teamModePassword: trimString_(ctx.teamModePassword),
+    nextStep: nextStepOverride || model.nextStep,
     nextStepLabel: trimString_(model.nextStepLabel),
     nextStepTone: trimString_(model.nextStepTone),
     statusAfterAttachment: model.statusAfterAttachment === true,
@@ -28552,10 +28609,10 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
           ? formatLifecycleEmailInvoiceSubject_('ACH bank verification needed', invoiceNumber, 'ACH bank verification needed')
           : formatLifecycleEmailInvoiceSubject_('Bank verification required before production begins', invoiceNumber, 'Bank verification required before production begins for your Red Threads invoice'),
         intro: isTeamAlert
-          ? clientFullName + ' placed their order in the portal and paid via ACH. Bank verification is needed before the ACH payment can clear, and the order can begin processing.'
+          ? clientFullName + ' placed their order in the portal, paid via ACH, and is linking their bank for the first time. Bank verification is needed before the ACH payment can clear, and the order can begin processing.'
           : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish. Order Production will begin as soon as payment is received.',
         statusCopy: isTeamAlert
-          ? clientVerificationSubject + ' will likely get a separate email from Stripe to confirm micro deposit values in their bank account and establish a connection with Red Threads\' Stripe payment portal. In addition, ACH payments can take several business days to confirm after verification is complete. If verification is not completed within 4 business days, the client and the Red Threads team will receive a notification that order production cannot continue.'
+          ? clientVerificationSubject + ' will likely get a separate email from Stripe to confirm micro deposit values in their bank account and establish a connection with Red Threads\' Stripe payment portal. Once their bank is verified, ACH payments can take several business days to clear. If verification is not completed within 4 business days, the client and the Red Threads team will receive a notification that order production cannot continue and needs attention.'
           : 'Stripe may send you a secure bank-verification email for a one-time ACH payment setup with Red Threads. Red Threads does not collect any banking or microdeposit values.',
         attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
       });
@@ -28640,9 +28697,9 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
       subject: isTeamAlert
         ? formatLifecycleEmailInvoiceSubject_('AP ACH payment received', invoiceNumber, 'AP ACH payment received')
         : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for a Red Threads project'),
-      intro: isTeamAlert ? 'Accounts Payable ACH payment has been received.' : 'Accounts Payable completed an ACH payment for this Red Threads project, and your order has been authorized for production. The invoice/receipt for the order is attached to this email.',
+      intro: isTeamAlert ? 'Accounts Payable ACH payment has been recorded as received.' : 'Accounts Payable completed an ACH payment for this Red Threads project, and your order has been authorized for production. The invoice/receipt for the order is attached to this email.',
       statusCopy: isTeamAlert
-        ? 'Payment is received. Continue production and update job completion when work is ready.'
+        ? (clientFullName + ' has been notified that Accounts Payable completed an ACH payment and that their order is officially placed and production has started.')
         : '',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : ''
     });
@@ -28826,6 +28883,16 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   const clientOrderPossessive = /^the client$/i.test(clientFullName)
     ? 'the client\'s'
     : (clientFullName + '\'s');
+  const poNumber = trimString_(
+    emailContext && emailContext.workflowContext && emailContext.workflowContext.poNumber ||
+    emailContext && emailContext.orderSummary && emailContext.orderSummary.poNumber
+  );
+  const poReference = poNumber ? ('Purchase Order #' + poNumber) : 'The submitted Purchase Order';
+  const poPaymentDueDateLabel = resolveLifecycleEmailPoPaymentDueDateLabel_(
+    emailContext && emailContext.workflowContext,
+    emailContext && emailContext.orderSummary,
+    emailContext && emailContext.timeline
+  ) || 'the due date';
   if (isScheduledPoPaymentReminderMilestone_(normalized)) {
     return buildPoPaymentReminderEmailCopy_(normalized, emailContext, opts);
   }
@@ -28857,7 +28924,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
         : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — Order Placed, Payment Required to Begin Production') : 'Red Threads order placed — payment required to begin production'),
       heading: isTeamAlert ? 'Physical payment pending' : 'Order Placed, Payment Required to Begin Production',
       intro: isTeamAlert ? 'An order was placed in the portal with physical payment (check/cash)' : 'Your Red Threads order has been placed.',
-      statusCopy: isTeamAlert ? 'Payment must be received before production can begin.' : 'Production begins after Red Threads records payment as received unless otherwise approved.',
+      statusCopy: isTeamAlert ? 'The portal has been locked and cannot be edited. It can be unlocked by Red Threads in Team Mode\nPayment must be received before production can begin.' : 'Production begins after Red Threads records payment as received unless otherwise approved.',
       attachmentNote: isTeamAlert ? ('The invoice/receipt for ' + clientOrderPossessive + ' order is attached.') : 'The invoice/receipt for your order is attached to this email.'
     });
   }
@@ -28874,11 +28941,12 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Purchase order submitted', invoiceNumber, 'Purchase order submitted')
+        ? formatLifecycleEmailInvoiceSubject_('Purchase Order received', invoiceNumber, 'Purchase Order received')
         : formatLifecycleEmailInvoiceSubject_('Purchase Order submitted, production started', invoiceNumber, 'Purchase Order submitted, production started for your Red Threads order'),
-      intro: isTeamAlert ? 'A purchase order has been submitted.' : 'Your purchase order was submitted successfully.',
-      statusCopy: isTeamAlert ? 'The order status is active under approved terms. Payment remains open until funds are recorded as received.' : 'Your order has been authorized for production.',
-      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
+      intro: isTeamAlert ? (poReference + ' has been received for ' + clientOrderPossessive + ' Project.') : 'Your purchase order was submitted successfully.',
+      statusCopy: isTeamAlert ? ('This order can begin production. Payment will be due on ' + poPaymentDueDateLabel + '.') : 'Your order has been authorized for production.',
+      nextStep: isTeamAlert ? 'Begin production of the project\'s job(s). If payment for this project is received outside of online portal payments, mark PO payment as received in Team Mode.' : '',
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the order is attached to this email.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
     });
   }
   return buildLifecycleEmailCopyModel_({
@@ -28886,7 +28954,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       ? formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received')
       : formatLifecycleEmailInvoiceSubject_('PO payment received', invoiceNumber, 'PO payment received for your Red Threads order'),
     intro: isTeamAlert ? 'Purchase order payment has been recorded as received.' : 'Your purchase order payment has been received.',
-    statusCopy: isTeamAlert ? 'The order payment is recorded as received.' : '',
+    statusCopy: isTeamAlert ? (clientFullName + ' has been notified that payment for their Purchase Order pathway order has been received and production is continuing. Payment was recorded as received through Team Mode.') : '',
     attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice/receipt is attached to this email and available in your portal.'
   });
 }
@@ -32142,7 +32210,6 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'tax exempt approved client': 'owner_reviewed_hidden',
   'tax exempt approved team': 'owner_reviewed_hidden',
   'tax exempt submitted team review': 'owner_reviewed_hidden',
-  'po payment received client': 'owner_reviewed_hidden',
   'manual payment received client': 'owner_reviewed_hidden',
   'card paid client': 'owner_reviewed_hidden',
   'card failed client': 'owner_reviewed_hidden',
@@ -32154,6 +32221,13 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'standard ach receipt client': 'owner_reviewed_hidden',
   'standard ach verification client': 'owner_reviewed_hidden',
   'standard ach pending client': 'owner_reviewed_hidden',
+  'standard ach pending team': 'owner_reviewed_hidden',
+  'standard ach verification team': 'owner_reviewed_hidden',
+  'standard ach receipt team': 'owner_reviewed_hidden',
+  'card paid team': 'owner_reviewed_hidden',
+  'manual payment pending team': 'owner_reviewed_hidden',
+  'manual payment received team': 'owner_reviewed_hidden',
+  'po payment 60-day escalation team': 'owner_reviewed_hidden',
   'production complete shipping po unpaid client': 'owner_reviewed_hidden',
   'po payment reminder 5 business days before due client': 'owner_reviewed_hidden',
   'po payment reminder 1 business day before due client': 'owner_reviewed_hidden',
