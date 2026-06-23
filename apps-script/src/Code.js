@@ -17879,6 +17879,7 @@ function normalizeLifecycleEmailTeamAction_(value) {
     po_payment: 'po_payment',
     mark_po_payment_received: 'po_payment',
     initiate_production: 'initiate_production',
+    optional_initiate_production: 'optional_initiate_production',
     move_through_production: 'move_through_production',
     mark_jobs_completed: 'mark_jobs_completed',
     mark_production_complete: 'mark_jobs_completed',
@@ -27066,7 +27067,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
   const teamStatusTitleColor = recipientClass === 'team'
     ? (/^(?:team\s+)?action required$/i.test(title)
       ? theme.currentAqua
-      : (/^(?:potential|optional) action required$/i.test(title)
+      : (/^(?:potential|optional) action(?: required)?$/i.test(title)
         ? theme.successGreen
         : (/^no(?: team)? action required$/i.test(title) ? theme.brandRedMid : '')))
     : '';
@@ -27079,7 +27080,7 @@ function buildLifecycleEmailActionCardHtml_(options) {
     : recipientClass === 'team'
     ? (/^action required$/i.test(title)
       ? theme.brandRedMid
-      : (/^(?:potential|optional) action required$/i.test(title)
+      : (/^(?:potential|optional) action(?: required)?$/i.test(title)
         ? theme.currentAqua
         : (/^no action required$/i.test(title) ? theme.successGreen : theme.brandRedMid)))
     : (/^(?:action required|team action required|monitor payment)$/i.test(title)
@@ -27716,11 +27717,11 @@ function resolveLifecycleTeamEmailActionModel_(emailContext, options) {
       teamAction: 'initiate_production'
     },
     optional_initiate_production: {
-      title: 'No action required',
+      title: 'Potential action',
       intro: intro,
       statusCopy: statusCopy,
       nextStep: 'Open portal link and initiate production only if manager approves starting production before payment settles.',
-      nextStepLabel: 'Optional action:',
+      nextStepLabel: 'Potential action:',
       nextStepTone: 'success_plain',
       ctaLabel: 'Open Team Mode',
       teamAction: 'initiate_production',
@@ -27792,7 +27793,7 @@ function resolveLifecycleTeamEmailActionStatusTitle_(action) {
     'optional_initiate_production',
     'mark_jobs_completed',
     'monitor_payment'
-  ].indexOf(key) >= 0) return 'Potential action required';
+  ].indexOf(key) >= 0) return 'Potential action';
   return 'No action required';
 }
 
@@ -32161,7 +32162,9 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'po late fee 7.5 client': 'owner_reviewed_hidden',
   'po late fee 12.5 client': 'owner_reviewed_hidden',
   'production complete shipping client': 'owner_reviewed_hidden',
-  'production complete pickup client': 'owner_reviewed_hidden'
+  'production complete pickup client': 'owner_reviewed_hidden',
+  'production complete shipping team': 'owner_reviewed_hidden',
+  'production complete pickup team': 'owner_reviewed_hidden'
 };
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {};
 let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
