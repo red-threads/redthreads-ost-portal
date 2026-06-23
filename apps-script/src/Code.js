@@ -9626,9 +9626,10 @@ function buildAchApPaymentLinkEmailContent_(ctx, orderSummary, options) {
     '</div>'
   ].filter(Boolean).join('\n');
   const content = {
-    subject: invoiceNumber
-      ? ('Red Threads ACH payment page — ' + invoiceNumber)
-      : 'Red Threads ACH payment page',
+    subject: buildPortalEmailSubject_(buildActionNeededSubject_('Complete payment'), {
+      projectNumber: dealNumber,
+      projectName: projectNameDisplay || projectName
+    }, { documentLabel: invoiceNumber }),
     body: bodyLines.join('\n'),
     htmlBody: buildPortalNativeEmailShellHtml_({
       heading: heading,
@@ -10733,7 +10734,7 @@ function buildDefaultAccountDocumentSubmissionNotificationPayload_(ctx, definiti
   const teamReviewUrl = buildAccountDocumentTeamReviewUrl_(definition.type, token, ctx.cfg) || portalUrl;
   const reviewerLabel = trimString_(submissionEntry.submittedByName || accountSummary.primaryContactName || accountSummary.billingContactName || 'A client');
   const orgLabel = trimString_(accountSummary.orgName || 'Unknown organization');
-  const subject = 'Red Threads Portal: ' + definition.teamReviewSubject + ' - ' + trimString_(orgLabel || reviewerLabel || 'Account');
+  const subject = buildTeamSubject_(definition.teamReviewSubject);
   const body = [
     definition.label + ' submission received.',
     '',
@@ -10845,7 +10846,7 @@ function buildCreditTermsSubmissionNotificationPayload_(ctx, definition, submiss
   }).filter(Boolean);
   return {
     to: DOCUMENT_REVIEW_EMAIL,
-    subject: 'Team review required — credit terms submitted',
+    subject: buildTeamSubject_('Review credit terms application'),
     body: [
       'A signed credit terms document is ready for team review.',
       '',
@@ -10878,7 +10879,7 @@ function buildTaxExemptSubmissionNotificationPayload_(ctx, definition, submissio
     : null;
   return {
     to: DOCUMENT_REVIEW_EMAIL,
-    subject: 'Team review required — tax exemption submitted',
+    subject: buildTeamSubject_('Review sales tax exemption form'),
     body: [
       'A Michigan sales tax exemption form is ready for team review.',
       '',
@@ -11091,7 +11092,7 @@ function sendCreditTermsDenialEmail_(ctx, submissionEntry, reason) {
     'there'
   );
   const cleanReason = trimString_(reason) || 'A correction is needed before this document can be approved.';
-  const subject = 'Update on your Red Threads credit terms submission';
+  const subject = buildActionNeededSubject_('Credit terms need attention');
   const body = [
     'Hi ' + submittedByName + ',',
     '',
@@ -11142,7 +11143,7 @@ function sendCreditTermsHardDenialEmail_(ctx, submissionEntry, reason) {
     'there'
   );
   const cleanReason = trimString_(reason) || 'This document could not be approved.';
-  const subject = 'Update on your Red Threads credit terms submission';
+  const subject = buildActionNeededSubject_('Credit terms need attention');
   const body = [
     'Hi ' + submittedByName + ',',
     '',
@@ -11264,7 +11265,7 @@ function sendTaxExemptDenialEmail_(ctx, submissionEntry, reason) {
     'there'
   );
   const cleanReason = trimString_(reason) || 'A correction is needed before this form can be approved.';
-  const subject = 'Update on your Michigan sales tax exemption form';
+  const subject = buildActionNeededSubject_('Sales tax exemption needs attention');
   const body = [
     'Hi ' + submittedByName + ',',
     '',
@@ -12079,7 +12080,7 @@ function emailTaxExemptSubmissionCopy_(payload) {
     ''
   );
   const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
-  const subject = 'Copy of your completed tax exemption form';
+  const subject = 'Copy of your sales tax exemption form';
   const body = [
     'Hi ' + firstName + ',',
     '',
@@ -12145,7 +12146,7 @@ function sendApprovedTaxExemptEmail_(ctx, submissionEntry) {
     ''
   );
   const firstName = trimString_(personName.split(/\s+/)[0]) || 'there';
-  const subject = 'Tax exemption form approved';
+  const subject = 'Sales tax exemption approved';
   const body = [
     'Hi ' + firstName + ',',
     '',
@@ -12687,11 +12688,15 @@ function adminResendLockedOrderLink_(payload) {
     const invoiceLabel = getCurrentInvoiceReferenceForOrder_(ctx.latestOrderInfo, ctx.latestOrderSummary, {
       documentKind: PORTAL_DOCUMENT_KINDS.invoice
     }).displayLabel;
+    const subjectSource = Object.assign({},
+      ctx.latestOrderInfo && ctx.latestOrderInfo.rowObjNormalized || {},
+      ctx.latestOrderSummary || {}
+    );
     sendNotificationEmail_({
       toList: recipients,
-      subject: invoiceLabel
-        ? ('Red Threads order confirmation — ' + invoiceLabel)
-        : 'Red Threads order confirmation',
+      subject: buildPortalEmailSubject_('Order confirmation', subjectSource, {
+        documentLabel: invoiceLabel
+      }),
       body: paymentEmail.body,
       htmlBody: paymentEmail.htmlBody,
       attachments: attachmentResult.attachments,
@@ -17344,8 +17349,8 @@ function getAccountDocumentDefinition_(documentType, cfg) {
       paymentTermsSetByEmailField: 'approvedPaymentTermsSetByEmail',
       supportsGuidedForm: false,
       uploadLabel: 'Upload signed terms document',
-      blankEmailSubject: 'Red Threads Credit Terms PDF',
-      teamReviewSubject: 'Credit terms document submitted'
+      blankEmailSubject: 'Credit terms application — Red Threads',
+      teamReviewSubject: 'Review credit terms application'
     };
   }
   if (type === ACCOUNT_DOCUMENT_TYPES.tax_exempt) {
@@ -17371,8 +17376,8 @@ function getAccountDocumentDefinition_(documentType, cfg) {
       expiresAtField: 'taxExemptExpiresAt',
       supportsGuidedForm: true,
       uploadLabel: 'Upload completed exemption document',
-      blankEmailSubject: 'Michigan Sales Tax Exemption PDF',
-      teamReviewSubject: 'Tax exemption document submitted'
+      blankEmailSubject: 'Sales tax exemption form — Red Threads',
+      teamReviewSubject: 'Review sales tax exemption form'
     };
   }
   return null;
@@ -21194,10 +21199,9 @@ function buildPortalDocumentFileName_(documentReference) {
 function buildPortalEstimateEmailSubject_(documentReference) {
   const ref = buildPortalDocumentReference_(documentReference);
   const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
-  if (projectNumber && projectNumber !== 'Project') {
-    return 'Red Threads - Project ' + projectNumber + ' - Estimate Copy';
-  }
-  return 'Red Threads - Estimate Copy';
+  return buildPortalEmailSubject_('Estimate copy', {
+    projectNumber: projectNumber
+  }, { documentLabel: ref.displayLabel });
 }
 
 function buildPortalEstimateEmailHeading_(documentReference) {
@@ -21938,9 +21942,14 @@ function sendLockedOrderConfirmationEmails_(ctx, orderSummary, options) {
   });
   assertRequiredEmailAttachment_(attachmentResult, LIFECYCLE_EMAIL_ATTACHMENT_SAFE_ERRORS.required_portal_rendered_invoice);
   const attachments = attachmentResult.attachments;
-  const subject = invoiceNumber
-    ? ('Red Threads order confirmation — ' + invoiceNumber)
-    : 'Red Threads order confirmation';
+  const subjectSource = Object.assign({},
+    opts.lifecycleOrderInfo && opts.lifecycleOrderInfo.rowObjNormalized || {},
+    opts.orderInfo && opts.orderInfo.rowObjNormalized || {},
+    summary
+  );
+  const subject = buildPortalEmailSubject_('Order confirmation', subjectSource, {
+    documentLabel: invoiceNumber
+  });
   const clientRecipients = normalizeEmailRecipients_([
     ctx && ctx.orderDraft && ctx.orderDraft.personEmail,
     ctx && ctx.accountInfo && ctx.accountInfo.summary && ctx.accountInfo.summary.primaryEmail,
@@ -22051,9 +22060,7 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
   }).displayLabel;
   const projectName = trimString_(opts.projectName);
   const resumeUrl = buildPurchaseOrderResumePortalUrl_(token, { stage: 'submit' });
-  const subject = invoiceNumber
-    ? ('Red Threads ' + invoiceNumber)
-    : 'Red Threads Invoice';
+  let subject = '';
   const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_({}, invoice, {
     family: 'purchase_order_invoice_email',
     recipientClass: 'client',
@@ -22067,6 +22074,10 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
   const lifecycleEmailContext = (lifecycleSections.emailContext && typeof lifecycleSections.emailContext === 'object')
     ? lifecycleSections.emailContext
     : {};
+  subject = buildPortalEmailSubject_(buildActionNeededSubject_('Submit your PO'), lifecycleEmailContext, {
+    projectName: projectName,
+    documentLabel: invoiceNumber
+  });
   const lifecycleText = lifecycleSections.blocks.map(function(block) {
     return trimString_(block && block.text);
   }).filter(Boolean).join('\n\n');
@@ -24364,7 +24375,13 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       ? 'A client submitted a credit terms application for Red Threads review. Open Team Mode to review the document and update the account status.'
       : 'A client submitted a Michigan sales tax exemption form for Red Threads review. Open Team Mode to review the document and update the account status.';
     return {
-      subject: isTeam ? ('Team review required — ' + documentLabel) : (labels.title + ' submitted'),
+      subject: isTeam
+        ? (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
+          ? buildTeamSubject_('Review credit terms application')
+          : buildTeamSubject_('Review sales tax exemption form'))
+        : (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
+          ? 'Credit terms application submitted'
+          : 'Sales tax exemption form submitted'),
       heading: isTeam ? ('Review ' + labels.submission) : clientIntro.replace(/[.]+$/g, ''),
       intro: isTeam
         ? (submittedTeamReview
@@ -24386,7 +24403,9 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const creditTermsClientApproved = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved;
     const paymentDueLabel = formatCreditTermsApprovedPaymentDueLabel_(paymentTermsLabel);
     return {
-      subject: isTeam ? (documentLabel + ' approved') : (labels.title + ' approved'),
+      subject: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
+        ? (isTeam ? buildTeamSubject_('Credit terms approved') : 'Credit terms approved')
+        : (isTeam ? buildTeamSubject_('Sales tax exemption approved') : 'Sales tax exemption approved'),
       heading: isTeam ? (labels.title + ' approved') : approvedIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? '' : approvedIntro,
       statusCopy: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved
@@ -24417,7 +24436,9 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const taxExemptClientDenied = !isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied;
     const accountDocumentClientDenied = creditTermsClientDenied || taxExemptClientDenied;
     return {
-      subject: isTeam ? (documentLabel + ' needs attention') : (labels.title + ' needs attention'),
+      subject: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied
+        ? (isTeam ? buildTeamSubject_('Credit terms need attention') : buildActionNeededSubject_('Credit terms need attention'))
+        : (isTeam ? buildTeamSubject_('Sales tax exemption needs attention') : buildActionNeededSubject_('Sales tax exemption needs attention')),
       heading: isTeam ? (labels.title + ' needs attention') : deniedIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? ('Red Threads reviewed the ' + labels.noun + ' associated with this account.') : deniedIntro,
       statusCopy: accountDocumentClientDenied
@@ -24441,7 +24462,9 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       ? 'Red Threads reset the credit terms associated with your account.'
       : 'Red Threads reset the tax exemption associated with your account.';
     return {
-      subject: isTeam ? (documentLabel + ' reset') : (labels.title + ' reset'),
+      subject: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset
+        ? (isTeam ? buildTeamSubject_('Credit terms reset') : buildActionNeededSubject_('Complete credit terms application'))
+        : (isTeam ? buildTeamSubject_('Sales tax exemption reset') : buildActionNeededSubject_('Complete sales tax exemption form')),
       heading: isTeam ? (labels.title + ' reset') : resetIntro.replace(/[.]+$/g, ''),
       intro: isTeam ? ('Red Threads reset the ' + labels.noun + ' associated with this account.') : resetIntro,
       statusCopy: isTeam
@@ -24528,7 +24551,7 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
   let suppressActionCardCta = false;
 
   if (method === FULFILLMENT_METHODS.shipping) {
-    subject = isTeam ? 'Project complete - ready to ship' : 'Your Red Threads order is complete and shipping is in progress';
+    subject = isTeam ? buildTeamSubject_('Order complete — ready to ship') : 'Order complete — shipping in progress';
     heading = isTeam ? 'Order complete, Shipping in progress' : 'Order complete, shipping in progress';
     if (isTeam) {
       intro = clientDisplayName + ' has been notified via email that their order is complete and will be shipping via UPS ground. No tracking has been provided.';
@@ -24554,7 +24577,7 @@ function buildProductionCompleteFulfillmentEmailCopy_(recipientClass, fulfillmen
       }
     }
   } else if (method === FULFILLMENT_METHODS.pickup) {
-    subject = isTeam ? 'Project complete - ready for pickup' : 'Your Red Threads project is ready for pickup';
+    subject = isTeam ? buildTeamSubject_('Order complete — ready for pickup') : 'Order ready for pickup';
     heading = isTeam ? 'Order complete, Ready for pickup' : 'Ready for pickup';
     if (isTeam) {
       intro = 'Client has been notified via email that their order is ready for pickup at Red Threads M-F 9-5.';
@@ -24758,10 +24781,14 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     statusCopy = 'Review the current project status below.';
   }
 
-  if (!accountDocumentMilestone && projectName) subjectParts.push(projectName);
-  if (!accountDocumentMilestone && invoiceNumber) subjectParts.push(invoiceNumber);
+  const baseSubject = subjectParts.filter(Boolean).join(' - ');
   return {
-    subject: subjectParts.filter(Boolean).join(' - '),
+    subject: accountDocumentMilestone
+      ? baseSubject
+      : buildLifecycleEmailSubject_(baseSubject, emailContext, {
+        projectName: projectName,
+        documentLabel: invoiceNumber
+      }),
     heading: heading,
     actionTitle: actionTitle,
     actionTitleTone: actionTitleTone,
@@ -28858,6 +28885,114 @@ function formatLifecycleEmailInvoiceSubject_(prefix, invoiceNumber, fallback) {
   return trimString_(fallback);
 }
 
+function isPortalEmailSubjectFixtureLabel_(value) {
+  const text = trimString_(value);
+  if (!text) return false;
+  return /emailreview/i.test(text) || /\bfixture\b/i.test(text);
+}
+
+function isPortalEmailSubjectUsefulProjectNumber_(value) {
+  const text = trimString_(value).replace(/^#+/, '');
+  if (!text) return false;
+  if (/^(project|invoice|estimate|receipt|emailreview)$/i.test(text)) return false;
+  if (isPortalEmailSubjectFixtureLabel_(text)) return false;
+  return /[0-9]/.test(text);
+}
+
+function extractProjectNumberForEmailSubject_(value) {
+  const text = trimString_(value);
+  if (!text || isPortalEmailSubjectFixtureLabel_(text)) return '';
+  const parsed = parsePortalDocumentReference_(text);
+  if (parsed && isPortalEmailSubjectUsefulProjectNumber_(parsed.projectNumber)) {
+    return trimString_(parsed.projectNumber);
+  }
+  const projectMatch = text.match(/\bProject\s*#?\s*([A-Za-z0-9_-]{2,})\b/i);
+  if (projectMatch && isPortalEmailSubjectUsefulProjectNumber_(projectMatch[1])) {
+    return trimString_(projectMatch[1]);
+  }
+  const documentMatch = text.match(/\b(?:Invoice|Estimate|Receipt(?:\s+for\s+Invoice)?)\s+([A-Za-z0-9_-]{2,})(?:[-\s]*v\d+)?\b/i);
+  if (documentMatch && isPortalEmailSubjectUsefulProjectNumber_(documentMatch[1])) {
+    return trimString_(documentMatch[1]);
+  }
+  return '';
+}
+
+function buildPortalEmailSubjectProjectName_(value) {
+  const text = trimString_(value);
+  if (!text || isPortalEmailSubjectFixtureLabel_(text)) return '';
+  if (/^(red threads project|project|invoice|estimate|receipt)$/i.test(text)) return '';
+  const withoutDocumentNoise = text
+    .replace(/\s+-\s+(?:Invoice|Estimate|Receipt(?: for Invoice)).*$/i, '')
+    .replace(/\s+—\s+(?:Invoice|Estimate|Receipt(?: for Invoice)).*$/i, '');
+  const clean = trimString_(withoutDocumentNoise);
+  if (!clean || clean.length > 48) return '';
+  return clean.length > 42 ? (clean.slice(0, 39).replace(/\s+\S*$/, '') + '...') : clean;
+}
+
+function buildProjectSubjectLabel_(source, options) {
+  const ctx = (source && typeof source === 'object') ? source : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const projectNumber = trimString_(
+    opts.projectNumber ||
+    ctx.projectNumber ||
+    ctx.projectnumber ||
+    ctx.dealNumber ||
+    ctx.dealnumber ||
+    getLifecycleEmailProjectNumberLabel_(ctx)
+  );
+  if (isPortalEmailSubjectUsefulProjectNumber_(projectNumber)) {
+    return 'Project #' + projectNumber.replace(/^#+/, '');
+  }
+  const documentProjectNumber = extractProjectNumberForEmailSubject_(
+    opts.documentLabel ||
+    opts.invoiceNumber ||
+    ctx.documentLabel ||
+    ctx.invoiceNumber ||
+    ctx.invoiceNumberLabel
+  );
+  if (documentProjectNumber) return 'Project #' + documentProjectNumber.replace(/^#+/, '');
+  const projectName = buildPortalEmailSubjectProjectName_(
+    opts.projectName ||
+    ctx.projectName ||
+    ctx.projectname ||
+    ctx.orderName ||
+    ctx.organizationName
+  );
+  if (projectName) return projectName;
+  const documentLabel = buildPortalEmailSubjectProjectName_(
+    opts.documentLabel ||
+    opts.invoiceNumber ||
+    ctx.documentLabel ||
+    ctx.invoiceNumber
+  );
+  return documentLabel;
+}
+
+function buildPortalEmailSubjectSuffix_(source, options) {
+  const label = buildProjectSubjectLabel_(source, options);
+  return label ? (' — ' + label) : '';
+}
+
+function buildPortalEmailSubject_(subject, source, options) {
+  const cleanSubject = trimString_(subject).replace(/\s+/g, ' ');
+  if (!cleanSubject) return '';
+  return cleanSubject + buildPortalEmailSubjectSuffix_(source, options);
+}
+
+function buildTeamSubject_(subject) {
+  const cleanSubject = trimString_(subject).replace(/^\[Team\]\s*/i, '');
+  return cleanSubject ? ('[Team] ' + cleanSubject) : '[Team]';
+}
+
+function buildActionNeededSubject_(subject) {
+  const cleanSubject = trimString_(subject).replace(/^Action needed:\s*/i, '');
+  return cleanSubject ? ('Action needed: ' + cleanSubject) : 'Action needed';
+}
+
+function buildLifecycleEmailSubject_(subject, emailContext, options) {
+  return buildPortalEmailSubject_(subject, emailContext, options);
+}
+
 function buildLifecycleEmailDocumentHeading_(documentReference, updateLabel, fallback) {
   const cleanDocument = buildClientFacingDocumentLabel_(documentReference);
   const cleanUpdate = trimString_(updateLabel).replace(/[.]+$/, '');
@@ -28935,7 +29070,11 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         escapeHtml_(teamPhoneText + ' to help them complete Stripe microdeposit verification.')
       : escapeHtml_(teamNextStep);
     return buildLifecycleEmailCopyModel_({
-      subject: formatLifecycleEmailInvoiceSubject_('ACH bank verification still needed', invoiceNumber, 'ACH bank verification still needed'),
+      subject: buildLifecycleEmailSubject_(
+        isTeamAlert ? buildTeamSubject_('ACH verification still pending') : 'Reminder: Verify your bank',
+        emailContext,
+        { documentLabel: invoiceNumber }
+      ),
       heading: 'ACH bank verification still needed',
       actionTitle: isTeamAlert ? 'Potential action' : 'Action required',
       actionTitleTone: isTeamAlert ? 'green' : 'blue',
@@ -28956,7 +29095,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         ? ''
         : (projectNumber ? ('View Project #' + projectNumber + ' in the portal') : 'View your project in the portal'),
       ctaAlign: 'center',
-      suppressActionCardCta: isTeamAlert,
+      suppressActionCardCta: true,
       suppressStandaloneCta: isTeamAlert
     });
   }
@@ -28964,8 +29103,8 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     if (verificationRequired) {
       return buildLifecycleEmailCopyModel_({
         subject: isTeamAlert
-          ? formatLifecycleEmailInvoiceSubject_('ACH bank verification needed', invoiceNumber, 'ACH bank verification needed')
-          : formatLifecycleEmailInvoiceSubject_('Bank verification required before production begins', invoiceNumber, 'Bank verification required before production begins for your Red Threads invoice'),
+          ? buildLifecycleEmailSubject_(buildTeamSubject_('ACH verification needed'), emailContext, { documentLabel: invoiceNumber })
+          : buildLifecycleEmailSubject_(buildActionNeededSubject_('Verify your bank'), emailContext, { documentLabel: invoiceNumber }),
         intro: isTeamAlert
           ? clientFullName + ' placed their order in the portal, paid via ACH, and is linking their bank for the first time. Bank verification is needed before the ACH payment can clear, and the order can begin processing.'
           : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish. Order Production will begin as soon as payment is received.',
@@ -28977,8 +29116,8 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('ACH payment pending', invoiceNumber, 'ACH payment pending')
-        : formatLifecycleEmailInvoiceSubject_('ACH payment pending, production not started', invoiceNumber, 'ACH payment pending, production not started'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('ACH payment pending'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('ACH payment pending', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert
         ? clientFullName + ' placed their order with an ACH payment at checkout.'
         : 'Your Red Threads order has been placed.',
@@ -28994,8 +29133,8 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     if (productionComplete) {
       return buildLifecycleEmailCopyModel_({
         subject: isTeamAlert
-          ? formatLifecycleEmailInvoiceSubject_('ACH payment received, order complete', invoiceNumber, 'ACH payment received, order complete')
-          : formatLifecycleEmailInvoiceSubject_('ACH payment received, order complete', invoiceNumber, 'ACH payment received, order complete for your Red Threads order'),
+          ? buildLifecycleEmailSubject_(buildTeamSubject_('ACH payment received — order complete'), emailContext, { documentLabel: invoiceNumber })
+          : buildLifecycleEmailSubject_('Payment received — order complete', emailContext, { documentLabel: invoiceNumber }),
         actionTitle: 'No action required',
         intro: isTeamAlert
           ? 'ACH payment has been recorded as received.'
@@ -29012,8 +29151,8 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
     }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('ACH payment received', invoiceNumber, 'ACH payment received')
-        : formatLifecycleEmailInvoiceSubject_('ACH payment received, production started', invoiceNumber, 'ACH payment received, production started for your Red Threads order'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('ACH payment received'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('Payment received — production started', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert
         ? 'ACH payment has been recorded as received.'
         : 'Your ACH payment has been received and your order will begin production.',
@@ -29036,7 +29175,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         escapeHtml_(' to offer assistance.')
       : escapeHtml_(achFailedTeamNextStep);
     return buildLifecycleEmailCopyModel_({
-      subject: formatLifecycleEmailInvoiceSubject_('ACH payment issue, production cannot proceed', invoiceNumber, 'ACH payment issue, production cannot proceed'),
+      subject: buildLifecycleEmailSubject_(buildTeamSubject_('ACH payment issue'), emailContext, { documentLabel: invoiceNumber }),
       actionTitle: 'Potential action',
       intro: achFailedTeamIntro,
       statusCopy: 'Review the portal ACH payment state or wait for the client to retry payment. A notification will be sent to client and team when payment succeeds.',
@@ -29052,8 +29191,8 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_('ACH payment issue, production cannot proceed', invoiceNumber, 'ACH payment issue, production cannot proceed')
-      : formatLifecycleEmailInvoiceSubject_('ACH payment issue, production cannot proceed', invoiceNumber, 'ACH payment issue, production cannot proceed'),
+      ? buildLifecycleEmailSubject_(buildTeamSubject_('ACH payment issue'), emailContext, { documentLabel: invoiceNumber })
+      : buildLifecycleEmailSubject_(buildActionNeededSubject_('ACH payment issue'), emailContext, { documentLabel: invoiceNumber }),
     intro: isTeamAlert
       ? 'A standard ACH payment needs review.'
       : 'Your ACH payment could not be completed or needs review.',
@@ -29085,8 +29224,8 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.checkout_started) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('AP ACH checkout started', invoiceNumber, 'AP ACH checkout started')
-        : formatLifecycleEmailInvoiceSubject_('AP ACH checkout started', invoiceNumber, 'AP ACH checkout started for a Red Threads invoice'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('AP ACH checkout started'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('AP ACH checkout started', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert ? 'Accounts Payable opened ACH checkout for this order.' : 'ACH checkout has started for this Red Threads invoice.',
       statusCopy: 'Payment is not received until the ACH debit is confirmed.',
       attachmentNote: ''
@@ -29095,8 +29234,8 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === AP_ACH_LIFECYCLE_EMAIL_MILESTONES.payment_submitted) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('AP ACH payment pending', invoiceNumber, 'AP ACH payment pending')
-        : formatLifecycleEmailInvoiceSubject_('ACH Payment Pending', invoiceNumber, 'ACH Payment Pending for a Red Threads project'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('AP ACH payment pending'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('ACH payment pending', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert ? 'Accounts Payable submitted ACH payment for ' + clientFullName + '\'s order.' : 'Accounts Payable has submitted ACH payment for this Red Threads project, and the payment is pending bank confirmation. The invoice for the order is attached to this email. ACH payments can take several business days to confirm. Order production will not begin until payment is received. ' + projectOwnerName + ' will be updated when payment is received and the production begins.',
       statusCopy: isTeamAlert
         ? 'The payment is pending bank confirmation. ACH payments can take several business days to confirm. You and the client will receive an email notification when payment clears, and the order can move into production.'
@@ -29108,8 +29247,8 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     if (productionComplete) {
       return buildLifecycleEmailCopyModel_({
         subject: isTeamAlert
-          ? formatLifecycleEmailInvoiceSubject_('AP ACH payment received, order complete', invoiceNumber, 'AP ACH payment received, order complete')
-          : formatLifecycleEmailInvoiceSubject_('Payment received, order complete', invoiceNumber, 'Payment received, order complete for a Red Threads project'),
+          ? buildLifecycleEmailSubject_(buildTeamSubject_('AP payment received — order complete'), emailContext, { documentLabel: invoiceNumber })
+          : buildLifecycleEmailSubject_('Payment received — order complete', emailContext, { documentLabel: invoiceNumber }),
         actionTitle: 'No action required',
         intro: isTeamAlert
           ? 'Accounts Payable ACH payment has been recorded as received.'
@@ -29126,8 +29265,8 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
     }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('AP ACH payment received', invoiceNumber, 'AP ACH payment received')
-        : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for a Red Threads project'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('AP payment received'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('Payment received — order started', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert ? 'Accounts Payable ACH payment has been recorded as received.' : 'Accounts Payable completed an ACH payment for this Red Threads project, and your order has been authorized for production. The invoice/receipt for the order is attached to this email.',
       statusCopy: isTeamAlert
         ? (clientFullName + ' has been notified that Accounts Payable completed an ACH payment and that their order is officially placed and production has started.')
@@ -29148,7 +29287,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
         escapeHtml_(' or their Accounts Payable (if known) to offer assistance.')
       : escapeHtml_(apFailedTeamNextStep);
     return buildLifecycleEmailCopyModel_({
-      subject: formatLifecycleEmailInvoiceSubject_('AP ACH payment issue, production cannot proceed', invoiceNumber, 'AP ACH payment issue, production cannot proceed'),
+      subject: buildLifecycleEmailSubject_(buildTeamSubject_('AP ACH payment issue'), emailContext, { documentLabel: invoiceNumber }),
       actionTitle: 'Potential action',
       intro: apFailedTeamIntro,
       statusCopy: 'Review the AP ACH payment state or wait for Accounts Payable to retry payment. A notification will be sent to ' + clientFullName + ', Accounts Payable, and the Red Threads team when payment succeeds.',
@@ -29164,8 +29303,8 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_('AP ACH payment issue, production cannot proceed', invoiceNumber, 'AP ACH payment issue, production cannot proceed')
-      : formatLifecycleEmailInvoiceSubject_('ACH Payment Issue, Order Paused', invoiceNumber, 'ACH Payment Issue, Order Paused for a Red Threads project'),
+      ? buildLifecycleEmailSubject_(buildTeamSubject_('AP ACH payment issue'), emailContext, { documentLabel: invoiceNumber })
+      : buildLifecycleEmailSubject_(buildActionNeededSubject_('ACH payment issue'), emailContext, { documentLabel: invoiceNumber }),
     intro: isTeamAlert ? 'An AP ACH payment needs review.' : 'The ACH payment made by Accounts Payable could not be completed by our payment processor, Stripe.',
     statusCopy: isTeamAlert
       ? 'Review the AP ACH payment issue before production begins or continues.'
@@ -29289,7 +29428,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_60_day_team_escalation) {
     const teamTermsPhrase = formatPoPaymentReminderTeamTermsPhrase_(meta.paymentTermsLabel);
     return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
-      subject: formatLifecycleEmailInvoiceSubject_(formatLifecycleEmailPoPaymentSubjectPrefix_(poNumber, 'payment 60-day escalation'), invoiceNumber, 'PO payment 60-day escalation'),
+      subject: buildLifecycleEmailSubject_(buildTeamSubject_('PO 60-day escalation'), ctx, { documentLabel: invoiceNumber }),
       heading: formatLifecycleEmailPoPaymentSubjectPrefix_(poNumber, 'payment 60-day escalation'),
       intro: 'Payment for ' + teamPoReference + ' is still open 60 calendar days after the due date.',
       statusCopy: uniqueTrimmedStrings_([
@@ -29307,7 +29446,13 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
       ? 'Payment reminder - due in 5 business days'
       : 'Payment reminder - due in 1 business day';
     return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
-      subject: formatLifecycleEmailInvoiceSubject_(formatLifecycleEmailPoPaymentSubjectPrefix_(poNumber, lead), invoiceNumber, lead + ' for your Red Threads order'),
+      subject: buildLifecycleEmailSubject_(
+        normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_due_5bd_before
+          ? 'Reminder: PO due in 5 business days'
+          : buildActionNeededSubject_('PO due tomorrow'),
+        ctx,
+        { documentLabel: invoiceNumber }
+      ),
       heading: 'Payment due soon',
       intro: 'Payment for ' + poReference + ' is coming due.',
       statusCopy: buildPoPaymentPreDueStatusCopy_(meta),
@@ -29316,7 +29461,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
   }
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_payment_past_due) {
     return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
-      subject: formatLifecycleEmailInvoiceSubject_(formatLifecycleEmailPoPaymentSubjectPrefix_(poNumber, 'payment past due'), invoiceNumber, 'PO payment past due for your Red Threads order'),
+      subject: buildLifecycleEmailSubject_(buildActionNeededSubject_('PO payment past due'), ctx, { documentLabel: invoiceNumber }),
       heading: 'Payment past due',
       intro: 'Payment for ' + poReference + ' is now past due.',
       statusCopy: buildPoPaymentPastDueStatusCopy_(meta),
@@ -29325,7 +29470,7 @@ function buildPoPaymentReminderEmailCopy_(milestone, emailContext, options) {
   }
   const lateFeeLine = buildPoPaymentLateFeeCopyLine_(meta);
   return buildLifecycleEmailCopyModel_(Object.assign({}, base, {
-    subject: formatLifecycleEmailInvoiceSubject_(formatLifecycleEmailPoPaymentSubjectPrefix_(poNumber, 'payment late-fee notice'), invoiceNumber, 'PO payment late-fee notice for your Red Threads order'),
+    subject: buildLifecycleEmailSubject_(buildActionNeededSubject_('PO late fee notice'), ctx, { documentLabel: invoiceNumber }),
     heading: 'Payment late-fee notice',
     intro: 'Payment for ' + poReference + ' remains past due.',
     statusCopy: uniqueTrimmedStrings_([
@@ -29373,8 +29518,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     if (productionComplete) {
       return buildLifecycleEmailCopyModel_({
         subject: isTeamAlert
-          ? formatLifecycleEmailInvoiceSubject_('Card payment received, order complete', invoiceNumber, 'Card payment received, order complete')
-          : formatLifecycleEmailInvoiceSubject_('Payment received, order complete', invoiceNumber, 'Payment received, order complete for your Red Threads order'),
+          ? buildLifecycleEmailSubject_(buildTeamSubject_('Card payment received — order complete'), emailContext, { documentLabel: invoiceNumber })
+          : buildLifecycleEmailSubject_('Payment received — order complete', emailContext, { documentLabel: invoiceNumber }),
         actionTitle: 'No action required',
         intro: isTeamAlert ? 'Card payment has been recorded as received.' : 'Your credit card payment has been received and your Red Threads order is complete.',
         statusCopy: isTeamAlert ? (clientFullName + ' has been notified that payment has been received. Production is already complete.') : 'Production is already complete.',
@@ -29387,8 +29532,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Card payment received', invoiceNumber, 'Card payment received')
-        : formatLifecycleEmailInvoiceSubject_('Payment Received, Production Started', invoiceNumber, 'Payment Received, Production Started for your Red Threads order'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('Card payment received'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('Payment received — production started', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert ? 'Card payment has been recorded as received.' : 'Your credit card payment has been received, and your order will begin production. The invoice/receipt for your order is attached to this email.',
       statusCopy: isTeamAlert ? (clientFullName + ' has been notified that their order is officially placed and production has started.') : '',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : ''
@@ -29408,8 +29553,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       : escapeHtml_(cardFailedTeamNextStep);
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Card payment issue, production cannot proceed', invoiceNumber, 'Card payment issue, production cannot proceed')
-        : formatLifecycleEmailInvoiceSubject_('Action needed — Credit card payment issue, production cannot proceed', invoiceNumber, 'Action needed — Credit card payment issue, production cannot proceed for your Red Threads order'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('Card payment issue'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_(buildActionNeededSubject_('Card payment issue'), emailContext, { documentLabel: invoiceNumber }),
       heading: isTeamAlert ? '' : 'Credit card payment issue, production cannot proceed',
       actionTitle: isTeamAlert ? 'Potential Action' : '',
       intro: isTeamAlert ? cardFailedTeamIntro : 'Your credit card payment could not be completed, order production cannot begin.',
@@ -29427,8 +29572,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.manual_pending) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Physical payment pending', invoiceNumber, 'Physical payment pending')
-        : (invoiceNumber ? ('Red Threads ' + buildClientFacingDocumentLabel_(invoiceNumber) + ' — Order Placed, Payment Required to Begin Production') : 'Red Threads order placed — payment required to begin production'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('Physical payment pending'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_(buildActionNeededSubject_('Payment needed'), emailContext, { documentLabel: invoiceNumber }),
       heading: isTeamAlert ? 'Physical payment pending' : 'Order Placed, Payment Required to Begin Production',
       intro: isTeamAlert ? 'An order was placed in the portal with physical payment (check/cash)' : 'Your Red Threads order has been placed.',
       statusCopy: isTeamAlert ? 'The portal has been locked and cannot be edited. It can be unlocked by Red Threads in Team Mode\nPayment must be received before production can begin.' : 'Production begins after Red Threads records payment as received unless otherwise approved.',
@@ -29439,8 +29584,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     if (productionComplete) {
       return buildLifecycleEmailCopyModel_({
         subject: isTeamAlert
-          ? formatLifecycleEmailInvoiceSubject_('Manual payment received, order complete', invoiceNumber, 'Manual payment received, order complete')
-          : formatLifecycleEmailInvoiceSubject_('Payment received, order complete', invoiceNumber, 'Payment received, order complete for your Red Threads order'),
+          ? buildLifecycleEmailSubject_(buildTeamSubject_('Manual payment received — order complete'), emailContext, { documentLabel: invoiceNumber })
+          : buildLifecycleEmailSubject_('Payment received — order complete', emailContext, { documentLabel: invoiceNumber }),
         actionTitle: 'No action required',
         intro: isTeamAlert ? 'Physical payment has been recorded as received.' : 'Your payment has been received and your Red Threads order is complete.',
         statusCopy: isTeamAlert ? (clientFullName + ' has been notified that payment has been received. Production is already complete.') : 'Production is already complete.',
@@ -29453,8 +29598,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
     }
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Manual payment received', invoiceNumber, 'Manual payment received')
-        : formatLifecycleEmailInvoiceSubject_('Payment received, production started', invoiceNumber, 'Payment received, production started for your Red Threads order'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('Manual payment received'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('Payment received — production started', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert ? 'Physical payment has been recorded as received.' : 'Your payment has been received and your order is authorized for production.',
       statusCopy: isTeamAlert ? (clientFullName + ' has been notified that their order is officially placed and production has started.') : '',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
@@ -29463,8 +29608,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (normalized === PAYMENT_LIFECYCLE_EMAIL_MILESTONES.po_submitted) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_(poNumber ? ('Purchase Order #' + poNumber + ' received') : 'Purchase Order received', invoiceNumber, 'Purchase Order received')
-        : formatLifecycleEmailInvoiceSubject_(poNumber ? ('Purchase Order #' + poNumber + ' submitted, production started') : 'Purchase Order submitted, production started', invoiceNumber, 'Purchase Order submitted, production started for your Red Threads order'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('Purchase order received'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('Purchase order received — production started', emailContext, { documentLabel: invoiceNumber }),
       intro: isTeamAlert ? (poReferenceSentence + ' has been received for ' + clientOrderPossessive + ' Project.') : (poReferenceSentence + ' was submitted successfully.'),
       statusCopy: isTeamAlert ? ('This order can begin production. Payment will be due on ' + poPaymentDueDateLabel + '.') : 'Your order has been authorized for production.',
       nextStep: isTeamAlert ? 'Begin production of the project\'s job(s). If payment for ' + poReference + ' is received outside of online portal payments, mark PO payment as received in Team Mode.' : '',
@@ -29474,8 +29619,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   if (productionComplete) {
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_(poPaymentSubjectPrefix + ', order complete', invoiceNumber, 'PO payment received, order complete')
-        : formatLifecycleEmailInvoiceSubject_(poPaymentSubjectPrefix + ', order complete', invoiceNumber, 'PO payment received, order complete for your Red Threads order'),
+        ? buildLifecycleEmailSubject_(buildTeamSubject_('PO payment received — order complete'), emailContext, { documentLabel: invoiceNumber })
+        : buildLifecycleEmailSubject_('PO payment received — order complete', emailContext, { documentLabel: invoiceNumber }),
       actionTitle: 'No action required',
       intro: isTeamAlert ? ('Payment has been recorded as received for ' + poReference + '.') : ('Payment has been received for ' + poReference + '.'),
       statusCopy: isTeamAlert
@@ -29490,8 +29635,8 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_(poPaymentSubjectPrefix, invoiceNumber, 'PO payment received')
-      : formatLifecycleEmailInvoiceSubject_(poPaymentSubjectPrefix, invoiceNumber, 'PO payment received for your Red Threads order'),
+      ? buildLifecycleEmailSubject_(buildTeamSubject_('PO payment received'), emailContext, { documentLabel: invoiceNumber })
+      : buildLifecycleEmailSubject_('PO payment received', emailContext, { documentLabel: invoiceNumber }),
     intro: isTeamAlert ? ('Payment has been recorded as received for ' + poReference + '.') : ('Payment has been received for ' + poReference + '.'),
     statusCopy: isTeamAlert ? (clientFullName + ' has been notified that payment for ' + poReference + ' has been received and production is continuing. Payment was recorded as received through Team Mode.') : '',
     attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice/receipt is attached to this email and available in your portal.'
@@ -31201,7 +31346,9 @@ function sendInvoiceEmailForOrder_(orderSummary, invoiceInfo, options) {
     documentKind: PORTAL_DOCUMENT_KINDS.invoice
   });
   const invoiceLabel = invoiceReference.displayLabel;
-  const subject = 'Red Threads ' + invoiceLabel;
+  const subject = buildPortalEmailSubject_(buildActionNeededSubject_('Payment needed'), order, {
+    documentLabel: invoiceLabel
+  });
   const body = [
     'Your Red Threads order invoice is ready.',
     '',
@@ -31256,13 +31403,9 @@ function sendPortalMessageNotificationEmail_(rowInfo, message, options) {
   const firstName = trimString_(clientName.split(/\s+/)[0]) || 'there';
   const portalUrl = buildExternalPortalUrl_(trimString_(opts.token || row.token));
   const projectName = trimString_(opts.projectName || deriveProjectNameForNotification_(row, safeJsonParse_(row.snapshotjson, null), opts));
-  const sentAt = new Date();
-  const subjectTimeLabel = Utilities.formatDate(sentAt, Session.getScriptTimeZone(), 'M/d/yyyy h:mm:ss a');
-  const subject = [
-    'New message from Red Threads',
-    projectName || '',
-    subjectTimeLabel
-  ].filter(Boolean).join(' — ');
+  const subject = buildPortalEmailSubject_('New portal message from Red Threads', {
+    projectName: projectName
+  });
   const body = [
     'Hi ' + firstName + ',',
     '',
@@ -31323,7 +31466,10 @@ function sendClientPortalMessageAlertEmail_(rowInfo, message, options) {
   const teamModePassword = cfg ? trimString_(cfg.teamModePassword) : '';
   const messageText = String(opts.messageText || (message && message.text) || '').trim();
   const clientEmail = normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER]);
-  const subject = 'New client portal message' + (projectName ? (' — ' + projectName) : '');
+  const subject = buildPortalEmailSubject_(buildTeamSubject_('New client portal message'), {
+    projectNumber: projectNumber,
+    projectName: projectName
+  });
   const body = [
     'A client sent a new portal message.',
     '',
@@ -31494,7 +31640,7 @@ function sendSummaryEstimatePdfEmail(payload) {
   }
   const subject = documentKind === PORTAL_DOCUMENT_KINDS.estimate
     ? buildPortalEstimateEmailSubject_(documentReference)
-    : ('Red Threads ' + documentReference.displayLabel);
+    : buildPortalEmailSubject_(buildActionNeededSubject_('Payment needed'), documentReference);
   let lifecycleSections = { blocks: [] };
   let senderName = trimString_(
     p.clientName ||
@@ -32802,68 +32948,7 @@ function buildEmailReviewAttachments_(family, milestone, orderInfo, invoiceInfo,
   return attachments;
 }
 
-const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
-  'password reset client': 'owner_reviewed_hidden',
-  'summary/invoice explicit send client': 'owner_reviewed_hidden',
-  'blank credit terms source client': 'owner_reviewed_hidden',
-  'blank tax document source client': 'owner_reviewed_hidden',
-  'explicit locked-order resend client': 'owner_reviewed_hidden',
-  'explicit locked-order resend team': 'owner_reviewed_hidden',
-  'po invoice prepared client': 'owner_reviewed_hidden',
-  'manual payment pending client': 'owner_reviewed_hidden',
-  'chat digest team to client': 'owner_reviewed_hidden',
-  'chat digest client to team': 'owner_reviewed_hidden',
-  'credit terms reset client': 'owner_reviewed_hidden',
-  'credit terms denied client': 'owner_reviewed_hidden',
-  'credit terms approved client': 'owner_reviewed_hidden',
-  'credit terms approved team': 'owner_reviewed_hidden',
-  'credit terms submitted team review': 'owner_reviewed_hidden',
-  'tax exempt reset client': 'owner_reviewed_hidden',
-  'tax exempt denied client': 'owner_reviewed_hidden',
-  'tax exempt approved client': 'owner_reviewed_hidden',
-  'tax exempt approved team': 'owner_reviewed_hidden',
-  'tax exempt submitted team review': 'owner_reviewed_hidden',
-  'po submitted client': 'owner_reviewed_hidden',
-  'po submitted team': 'owner_reviewed_hidden',
-  'po payment received client': 'owner_reviewed_hidden',
-  'po payment received production complete client': 'owner_reviewed_hidden',
-  'po payment received production complete team': 'owner_reviewed_hidden',
-  'manual payment received client': 'owner_reviewed_hidden',
-  'card paid client': 'owner_reviewed_hidden',
-  'card failed client': 'owner_reviewed_hidden',
-  'card failed team': 'owner_reviewed_hidden',
-  'ap ach failed ap': 'owner_reviewed_hidden',
-  'ap ach failed team': 'owner_reviewed_hidden',
-  'ap ach receipt ap': 'owner_reviewed_hidden',
-  'ap ach receipt team': 'owner_reviewed_hidden',
-  'ap ach pending ap': 'owner_reviewed_hidden',
-  'ap ach pending team': 'owner_reviewed_hidden',
-  'ap payment link sent': 'owner_reviewed_hidden',
-  'standard ach failed client': 'owner_reviewed_hidden',
-  'standard ach failed team': 'owner_reviewed_hidden',
-  'standard ach receipt client': 'owner_reviewed_hidden',
-  'standard ach verification client': 'owner_reviewed_hidden',
-  'standard ach pending client': 'owner_reviewed_hidden',
-  'standard ach pending team': 'owner_reviewed_hidden',
-  'standard ach verification team': 'owner_reviewed_hidden',
-  'standard ach receipt team': 'owner_reviewed_hidden',
-  'card paid team': 'owner_reviewed_hidden',
-  'manual payment pending team': 'owner_reviewed_hidden',
-  'manual payment received team': 'owner_reviewed_hidden',
-  'po payment received team': 'owner_reviewed_hidden',
-  'po payment 60-day escalation team': 'owner_reviewed_hidden',
-  'production complete shipping po unpaid client': 'owner_reviewed_hidden',
-  'po payment reminder 5 business days before due client': 'owner_reviewed_hidden',
-  'po payment reminder 1 business day before due client': 'owner_reviewed_hidden',
-  'po payment past due client': 'owner_reviewed_hidden',
-  'po late fee 2.5 client': 'owner_reviewed_hidden',
-  'po late fee 7.5 client': 'owner_reviewed_hidden',
-  'po late fee 12.5 client': 'owner_reviewed_hidden',
-  'production complete shipping client': 'owner_reviewed_hidden',
-  'production complete pickup client': 'owner_reviewed_hidden',
-  'production complete shipping team': 'owner_reviewed_hidden',
-  'production complete pickup team': 'owner_reviewed_hidden'
-};
+const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {};
 const EMAIL_REVIEW_SUITE_OMITTED_RECIPIENT_CLASSES_ = {};
 let EMAIL_REVIEW_SUITE_RENDER_ONLY_ = false;
 
@@ -33949,6 +34034,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
   const invoiceInfo = buildEmailReviewInvoiceInfo_(fixture, order, { fresh: true });
   const attachments = buildEmailReviewAttachments_('locked_order_confirmation', '', order, invoiceInfo);
   const summary = Object.assign({}, buildPortalOrderSummary_(order.rowObjNormalized), invoiceInfo);
+  const subjectSource = Object.assign({}, order.rowObjNormalized || {}, summary);
   const summaryInvoiceLabel = getCurrentInvoiceReferenceForOrder_(order, invoiceInfo, {
     documentKind: PORTAL_DOCUMENT_KINDS.invoice
   }).displayLabel;
@@ -33978,13 +34064,17 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
     poInvoiceContent,
     attachments);
   sendEmailReviewContent_(results, 'Explicit locked-order resend client', 'locked_order_resend', 'client', [recipients.client], {
-    subject: summaryInvoiceLabel ? ('Red Threads order confirmation — ' + summaryInvoiceLabel) : 'Red Threads order confirmation',
+    subject: buildPortalEmailSubject_('Order confirmation', subjectSource, {
+      documentLabel: summaryInvoiceLabel
+    }),
     body: lockedContent.body,
     htmlBody: lockedContent.htmlBody,
     communicationContract: lockedContent.communicationContract
   }, attachments);
   sendEmailReviewContent_(results, 'Explicit locked-order resend team', 'locked_order_resend', 'team', [recipients.team], {
-    subject: summaryInvoiceLabel ? ('Team operational resend review — ' + summaryInvoiceLabel) : 'Team operational resend review',
+    subject: buildPortalEmailSubject_(buildTeamSubject_('Order confirmation resent'), subjectSource, {
+      documentLabel: summaryInvoiceLabel
+    }),
     body: lockedTeamContent.body,
     htmlBody: lockedTeamContent.htmlBody,
     communicationContract: lockedTeamContent.communicationContract
@@ -34003,7 +34093,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
             family: 'summary_pdf',
             recipientClass: 'client',
             attachmentCount: 1,
-            subject: 'Red Threads estimate copy'
+            subject: buildPortalEmailSubject_('Estimate copy', subjectSource)
           }));
         } else {
           const estimateRow = findEmailReviewEstimateRow_(fixture);
@@ -34036,7 +34126,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
             transport: trimString_(summaryResult && summaryResult.transport),
             noReply: summaryResult && summaryResult.noReply === true
           }, {
-            subject: 'Red Threads estimate copy'
+            subject: buildPortalEmailSubject_('Estimate copy', subjectSource)
           }));
         }
       } else {
@@ -36063,10 +36153,6 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
   const portalUrl = isTeamDigest
     ? buildTeamSnapshotPortalUrl_(token)
     : buildExternalPortalUrl_(token);
-  const subjectPrefix = isTeamDigest
-    ? 'New client portal messages'
-    : 'New Red Threads portal messages';
-  const subject = subjectPrefix + ' (' + messageCount + ')' + (projectName ? (' - ' + projectName) : '');
   const lifecycleSections = buildDirectLifecycleEmailSectionBlocks_({ rowInfo: rowInfo }, null, {
     family: 'chat_message_digest',
     recipientClass: isTeamDigest ? 'team' : 'client',
@@ -36087,6 +36173,15 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     infra: opts.infra
   });
   const projectNumber = getChatDigestProjectNumberLabel_(projectName, lifecycleSections);
+  const subjectBase = isTeamDigest
+    ? buildTeamSubject_('New client portal messages (' + messageCount + ')')
+    : (messageCount === 1
+      ? 'New portal message from Red Threads'
+      : 'New portal messages from Red Threads (' + messageCount + ')');
+  const subject = buildPortalEmailSubject_(subjectBase, {
+    projectNumber: projectNumber,
+    projectName: projectName
+  });
   const projectNameDisplay = formatLifecycleEmailProjectNameValue_(projectName, projectNumber) || projectName;
   const ctaLabel = isTeamDigest ? buildChatDigestTeamCtaLabel_(projectNumber) : buildChatDigestClientCtaLabel_(projectNumber);
   const teamModePassword = isTeamDigest && opts.cfg ? trimString_(opts.cfg.teamModePassword) : '';
