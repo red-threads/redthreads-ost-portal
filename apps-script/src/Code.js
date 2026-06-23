@@ -27067,6 +27067,7 @@ function buildLifecycleEmailAttachmentActionSentence_(attachmentNote, heading, s
   if (!note) return '';
   if (note === 'The invoice/receipt for your order is attached to this email.' ||
       note === 'Your project invoice/receipt is attached to this email.' ||
+      note === 'The invoice/receipt for the order is attached to this email.' ||
       note === 'The invoice/receipt for the client\'s order is attached to this email.' ||
       note === 'The invoice for their order is attached to this email.' ||
       note === 'The invoice for their order is attached.' ||
@@ -28786,7 +28787,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
         escapeHtml_(' to offer assistance.')
       : escapeHtml_(achFailedTeamNextStep);
     return buildLifecycleEmailCopyModel_({
-      subject: formatLifecycleEmailInvoiceSubject_('ACH payment issue', invoiceNumber, 'ACH payment issue'),
+      subject: formatLifecycleEmailInvoiceSubject_('ACH payment issue, production cannot proceed', invoiceNumber, 'ACH payment issue, production cannot proceed'),
       actionTitle: 'Potential action',
       intro: achFailedTeamIntro,
       statusCopy: 'Review the portal ACH payment state or wait for the client to retry payment. A notification will be sent to client and team when payment succeeds.',
@@ -28802,8 +28803,8 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_('ACH payment issue', invoiceNumber, 'ACH payment issue')
-      : formatLifecycleEmailInvoiceSubject_('ACH payment issue, production not started', invoiceNumber, 'ACH payment issue, production not started'),
+      ? formatLifecycleEmailInvoiceSubject_('ACH payment issue, production cannot proceed', invoiceNumber, 'ACH payment issue, production cannot proceed')
+      : formatLifecycleEmailInvoiceSubject_('ACH payment issue, production cannot proceed', invoiceNumber, 'ACH payment issue, production cannot proceed'),
     intro: isTeamAlert
       ? 'A standard ACH payment needs review.'
       : 'Your ACH payment could not be completed or needs review.',
@@ -28887,21 +28888,21 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   }
   if (isTeamAlert) {
     const apFailedTeamIntro = /^the client$/i.test(clientFullName)
-      ? 'Accounts Payable submitted an ACH payment for the client\'s order, but it could not be completed. Accounts Payable has been notified of this via email just as you have.'
-      : 'Accounts Payable submitted an ACH payment for ' + clientFullName + '\'s order, but it could not be completed. Accounts Payable has been notified of this via email just as you have.';
+      ? 'Accounts Payable submitted an ACH payment for the client\'s order, but it could not be completed. The client has been notified of this via email just as you have.'
+      : 'Accounts Payable submitted an ACH payment for ' + clientFullName + '\'s order, but it could not be completed. ' + clientFullName + ' has been notified of this via email just as you have.';
     const apFailedTeamNextStep = clientEmail
-      ? 'Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' or their Accounts Payable contact via email: ' + clientEmail + ' to offer assistance.'
-      : 'Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' or their Accounts Payable contact to offer assistance.';
+      ? 'Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' via email: ' + clientEmail + ' or their Accounts Payable (if known) to offer assistance.'
+      : 'Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' or their Accounts Payable (if known) to offer assistance.';
     const apFailedTeamNextStepHtml = clientEmail
-      ? escapeHtml_('Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' or their Accounts Payable contact via email: ') +
+      ? escapeHtml_('Wait a little bit to give Accounts Payable time to retry payment. If you do not see any updates, reach out to ' + clientFullName + ' via email: ') +
         '<span style="color:' + getPortalNativeEmailTheme_().brandRedMid + ';">' + escapeHtml_(clientEmail) + '</span>' +
-        escapeHtml_(' to offer assistance.')
+        escapeHtml_(' or their Accounts Payable (if known) to offer assistance.')
       : escapeHtml_(apFailedTeamNextStep);
     return buildLifecycleEmailCopyModel_({
-      subject: formatLifecycleEmailInvoiceSubject_('AP ACH payment issue', invoiceNumber, 'AP ACH payment issue'),
+      subject: formatLifecycleEmailInvoiceSubject_('AP ACH payment issue, production cannot proceed', invoiceNumber, 'AP ACH payment issue, production cannot proceed'),
       actionTitle: 'Potential action',
       intro: apFailedTeamIntro,
-      statusCopy: 'Review the AP ACH payment state or wait for Accounts Payable to retry payment. A notification will be sent to Accounts Payable and the Red Threads team when payment succeeds.',
+      statusCopy: 'Review the AP ACH payment state or wait for Accounts Payable to retry payment. A notification will be sent to ' + clientFullName + ', Accounts Payable, and the Red Threads team when payment succeeds.',
       nextStep: apFailedTeamNextStep,
       nextStepHtml: apFailedTeamNextStepHtml,
       nextStepLabel: 'Potential action:',
@@ -28914,7 +28915,7 @@ function buildApAchLifecycleEmailCopy_(milestone, emailContext, options) {
   }
   return buildLifecycleEmailCopyModel_({
     subject: isTeamAlert
-      ? formatLifecycleEmailInvoiceSubject_('AP ACH payment issue', invoiceNumber, 'AP ACH payment issue')
+      ? formatLifecycleEmailInvoiceSubject_('AP ACH payment issue, production cannot proceed', invoiceNumber, 'AP ACH payment issue, production cannot proceed')
       : formatLifecycleEmailInvoiceSubject_('ACH Payment Issue, Order Paused', invoiceNumber, 'ACH Payment Issue, Order Paused for a Red Threads project'),
     intro: isTeamAlert ? 'An AP ACH payment needs review.' : 'The ACH payment made by Accounts Payable could not be completed by our payment processor, Stripe.',
     statusCopy: isTeamAlert
@@ -29158,9 +29159,9 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       : escapeHtml_(cardFailedTeamNextStep);
     return buildLifecycleEmailCopyModel_({
       subject: isTeamAlert
-        ? formatLifecycleEmailInvoiceSubject_('Card payment issue', invoiceNumber, 'Card payment issue')
-        : formatLifecycleEmailInvoiceSubject_('Action needed — Credit card payment issue', invoiceNumber, 'Action needed — Credit card payment issue for your Red Threads order'),
-      heading: isTeamAlert ? '' : 'Credit card payment issue',
+        ? formatLifecycleEmailInvoiceSubject_('Card payment issue, production cannot proceed', invoiceNumber, 'Card payment issue, production cannot proceed')
+        : formatLifecycleEmailInvoiceSubject_('Action needed — Credit card payment issue, production cannot proceed', invoiceNumber, 'Action needed — Credit card payment issue, production cannot proceed for your Red Threads order'),
+      heading: isTeamAlert ? '' : 'Credit card payment issue, production cannot proceed',
       actionTitle: isTeamAlert ? 'Potential Action' : '',
       intro: isTeamAlert ? cardFailedTeamIntro : 'Your credit card payment could not be completed, order production cannot begin.',
       statusCopy: isTeamAlert ? 'Review the portal payment state or wait for the client to retry payment. A notification will be sent to client and team when payment succeeds.' : 'Open your Red Threads portal/project to retry payment or contact Red Threads for help.',
@@ -29218,7 +29219,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       intro: isTeamAlert ? (poReferenceSentence + ' has been received for ' + clientOrderPossessive + ' Project.') : (poReferenceSentence + ' was submitted successfully.'),
       statusCopy: isTeamAlert ? ('This order can begin production. Payment will be due on ' + poPaymentDueDateLabel + '.') : 'Your order has been authorized for production.',
       nextStep: isTeamAlert ? 'Begin production of the project\'s job(s). If payment for ' + poReference + ' is received outside of online portal payments, mark PO payment as received in Team Mode.' : '',
-      attachmentNote: isTeamAlert ? 'The invoice/receipt for the order is attached to this email.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
+      attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email, and payment is still required.'
     });
   }
   if (productionComplete) {
@@ -29229,7 +29230,7 @@ function buildPaymentLifecycleEmailCopy_(milestone, emailContext, options) {
       actionTitle: 'No action required',
       intro: isTeamAlert ? ('Payment has been recorded as received for ' + poReference + '.') : ('Payment has been received for ' + poReference + '.'),
       statusCopy: isTeamAlert
-        ? (clientFullName + ' has been notified that payment for ' + poReference + ' has been received. Production is already complete. Payment was marked received in Team Mode.')
+        ? (clientFullName + ' has been notified that payment for ' + poReference + ' has been received. Production is already complete.')
         : 'Your Red Threads order is complete.',
       nextStep: isTeamAlert ? 'No team action is required right now.' : 'No action is needed right now.',
       attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'Your invoice/receipt is attached to this email and available in your portal.',
@@ -32550,16 +32551,23 @@ const EMAIL_REVIEW_SUITE_OMITTED_LABELS_ = {
   'tax exempt approved team': 'owner_reviewed_hidden',
   'tax exempt submitted team review': 'owner_reviewed_hidden',
   'po submitted client': 'owner_reviewed_hidden',
+  'po submitted team': 'owner_reviewed_hidden',
   'po payment received client': 'owner_reviewed_hidden',
+  'po payment received production complete client': 'owner_reviewed_hidden',
+  'po payment received production complete team': 'owner_reviewed_hidden',
   'manual payment received client': 'owner_reviewed_hidden',
   'card paid client': 'owner_reviewed_hidden',
   'card failed client': 'owner_reviewed_hidden',
+  'card failed team': 'owner_reviewed_hidden',
   'ap ach failed ap': 'owner_reviewed_hidden',
+  'ap ach failed team': 'owner_reviewed_hidden',
   'ap ach receipt ap': 'owner_reviewed_hidden',
+  'ap ach receipt team': 'owner_reviewed_hidden',
   'ap ach pending ap': 'owner_reviewed_hidden',
   'ap ach pending team': 'owner_reviewed_hidden',
   'ap payment link sent': 'owner_reviewed_hidden',
   'standard ach failed client': 'owner_reviewed_hidden',
+  'standard ach failed team': 'owner_reviewed_hidden',
   'standard ach receipt client': 'owner_reviewed_hidden',
   'standard ach verification client': 'owner_reviewed_hidden',
   'standard ach pending client': 'owner_reviewed_hidden',
