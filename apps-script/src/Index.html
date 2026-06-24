@@ -17004,7 +17004,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 151">151</div>
+  <div class="devRevisionBadge" aria-label="Development revision 152">152</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -45472,15 +45472,12 @@
     const themeName = String((jobData && jobData.themeName) || 'blue').trim().toLowerCase() === 'green' ? 'green' : 'blue';
     block.dataset.summaryTheme = themeName;
     const options = normalizeSummaryPageRenderOptions_(renderOptions);
-    const isDocumentRender = options.renderSurface === 'document' || options.allowEstimateViewRemoval === false;
 
     if (jobData && jobData.showInformationalOnlyBanner) {
       const notice = createEl('div', 'summaryEstimateJobNotice');
       const noticeText = createEl('div', 'summaryEstimateJobNoticeText');
       noticeText.appendChild(createEl('span', 'summaryEstimateJobNoticeLead', 'Job ' + jobData.printJobNumber + ' has no units entered. '));
-      noticeText.appendChild(document.createTextNode(isDocumentRender
-        ? 'Job costs & turn times are excluded from header totals.'
-        : 'Job costs & turn times are excluded from the totals in the header. Price breaks & job info are directly below.'));
+      noticeText.appendChild(document.createTextNode('Job costs & turn times are excluded from the totals in the header. Price breaks & job info are directly below.'));
       notice.appendChild(noticeText);
       if (options.allowEstimateViewRemoval) {
         const removeBtn = createEl('button', 'summaryEstimateJobNoticeBtn', 'Remove Job ' + jobData.printJobNumber + ' from estimate view');

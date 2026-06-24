@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Full No-Unit Estimate Warning On Version 1027
+
+- Mode: Full ship frontend Summary/Estimate document copy fix.
+- Branch/commit/PR: `main`, Apps Script version `1027`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: restore the full no-unit job warning sentence in rendered/downloaded/emailed estimate documents while keeping the interactive remove button hidden from non-interactive attachments.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `buildSummaryEstimateJobHeaderBlock_()` now uses the full no-unit warning copy for both interactive and document/export render surfaces: `Job X has no units entered. Job costs & turn times are excluded from the totals in the header. Price breaks & job info are directly below.` The `allowEstimateViewRemoval` gate remains unchanged, so document/export render paths still suppress `Remove Job X from estimate view` while the interactive portal estimate view keeps the button. `Index.html` shows development revision `152`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed. Source checks confirmed the shortened `excluded from header totals` copy is no longer emitted by the renderer.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Restore full no-unit estimate warning"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1027 - Restore full no-unit estimate warning`. Direct `/exec` returned HTTP `200` with `Development revision 152`, omitted stale revision `151`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted sensitive markers.
+- Runtime data state: no estimate email was sent from this shell, no email-review suite was run, no Sheet data was restored/reset/cleaned, `PORTAL_EMAIL_QUEUE` was not cleared, and no pricing, totals, turn-time exclusion, quantity, snapshot, recipient parsing, backend email routing, payment, tax, lifecycle, routing, token, or schema behavior was intentionally changed.
+- Follow-ups: owner should generate or send an estimate PDF with one active job and one no-unit job to visually confirm the attachment shows the full warning and still omits the remove button.
+
 ## 2026-06-24 - Dashboard ACH Setup Customer-Free Checkout On Version 1026
 
 - Mode: Full ship scoped Stripe/dashboard ACH setup hardening.
