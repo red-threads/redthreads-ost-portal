@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Dashboard And Project Peek Layout Fix On Version 1017
+
+- Mode: Full ship frontend layout/interaction fix.
+- Branch/commit/PR: `main`, Apps Script version `1017`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: keep long dashboard project names from pushing the progress/Open Project columns offscreen, keep long project peek titles from overlapping the Open Project button and close control, and allow the project peek to close when clicking anywhere outside the popover.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: the dashboard projects table remains fixed-layout, but the Project Details column is reduced from `430px` to `301px` and the table width from `1080px` to `951px`; project-name text now uses the fixed details-cell width with the existing two-line clamp and wrapping. The project peek header now reserves explicit title/action/close columns, caps the title area at `380px`, clamps long titles to two lines, and keeps the Open Project and close controls above title overflow. The old backdrop-target-only close behavior was replaced with a capture-phase document `pointerdown` outside-click handler while preserving the close button and Escape key close behavior. `Index.html` shows development revision `142`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed. Read-only `npm run email-review:status` reported `activeTabState: live_like`, `EXPORT_LOG` `20` rows, `PORTAL_ORDERS` `7`, `PORTAL_STRIPE_EVENTS` `7`, `PORTAL_EMAIL_QUEUE` unchanged at two `sent` rows, and scheduler trigger count `1`.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Fix dashboard peek layout"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1017 - Fix dashboard peek layout`. Direct `/exec` returned HTTP `200` with `Development revision 142` and the stable deployment ID; public `/portal` returned HTTP `200` and referenced the stable deployment ID. Targeted checks found no `client_secret`, `clientSecret`, or `hosted_verification_url` markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Active runtime tabs remained live-like, fixture-storage tabs were untouched, and `PORTAL_EMAIL_QUEUE` was not cleared. No review-suite emails were sent.
+- Follow-ups: owner should retry the dashboard and long-name project peek from `https://www.redthreads.com/portal` to visually confirm the Open Project column and close control remain visible at the production viewport size.
+
 ## 2026-06-24 - Dashboard Login Load-Time Hardening On Version 1016
 
 - Mode: Full ship runtime performance hardening after Phase 3 live runtime restoration.

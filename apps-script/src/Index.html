@@ -579,14 +579,14 @@
       min-height:0;
     }
     .authProjectsTable{
-      width:1080px;
-      min-width:1080px;
-      max-width:1080px;
+      width:951px;
+      min-width:951px;
+      max-width:951px;
       border-collapse:collapse;
       table-layout:fixed;
     }
     .authProjectsColThumb{width:58px}
-    .authProjectsColDetails{width:430px}
+    .authProjectsColDetails{width:301px}
     .authProjectsColStatus{width:430px}
     .authProjectsColAction{width:162px}
     .authProjectsTable th,
@@ -675,9 +675,9 @@
       max-width:58px;
     }
     .authProjectsDetailsCell{
-      width:430px;
-      min-width:430px;
-      max-width:430px;
+      width:301px;
+      min-width:301px;
+      max-width:301px;
     }
     .authProjectsDetails{
       display:flex;
@@ -712,11 +712,11 @@
       align-items:flex-start;
     }
     .authProjectsDetailsValue.isProjectName{
-      flex:0 1 42ch;
+      flex:1 1 auto;
       display:-webkit-box;
       -webkit-line-clamp:2;
       -webkit-box-orient:vertical;
-      max-width:42ch;
+      max-width:100%;
       white-space:normal;
       overflow:hidden;
       text-overflow:clip;
@@ -1201,7 +1201,7 @@
     .dashboardPeekHead{
       position:relative;
       display:grid;
-      grid-template-columns:auto minmax(0, 1fr) auto;
+      grid-template-columns:minmax(0, 380px) auto 32px;
       align-items:center;
       gap:10px;
       min-height:54px;
@@ -1220,7 +1220,8 @@
     }
     .dashboardPeekHeadCopy{
       min-width:0;
-      max-width:min(760px, 100%);
+      width:100%;
+      max-width:380px;
       padding-right:8px;
     }
     .dashboardPeekTitle{
@@ -1229,6 +1230,13 @@
       line-height:1.08;
       font-weight:900;
       letter-spacing:-0.02em;
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      max-width:100%;
+      overflow:hidden;
+      overflow-wrap:anywhere;
+      text-overflow:clip;
     }
     .dashboardPeekSub{
       margin:0;
@@ -1240,7 +1248,8 @@
       min-width:0;
       display:flex;
       align-items:center;
-      justify-content:center;
+      justify-content:flex-end;
+      justify-self:end;
       align-self:center;
     }
     .dashboardPeekOpenBtn{
@@ -1269,7 +1278,7 @@
       user-select:none;
       transition:background-color .16s ease, border-color .16s ease, transform .16s ease, box-shadow .16s ease;
       box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
-      z-index:1;
+      z-index:2;
     }
     .dashboardPeekOpenBtn *{
       -webkit-user-select:none;
@@ -1309,6 +1318,8 @@
       align-self:center;
       appearance:none;
       padding:0;
+      position:relative;
+      z-index:3;
     }
     .dashboardPeekClose:hover{
       background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
@@ -16959,7 +16970,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 141">141</div>
+  <div class="devRevisionBadge" aria-label="Development revision 142">142</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -27484,12 +27495,12 @@
       openProjectFromDashboard(token, dashboardPeekOpenBtn);
     });
   }
-  if (dashboardPeekBackdrop) {
-    dashboardPeekBackdrop.addEventListener('click', event => {
-      if (event.target !== dashboardPeekBackdrop) return;
-      closeDashboardProjectPeek();
-    });
-  }
+  document.addEventListener('pointerdown', event => {
+    if (!dashboardPeekBackdrop || dashboardPeekBackdrop.hidden || !dashboardPeekPopover) return;
+    const target = event && event.target;
+    if (target && dashboardPeekPopover.contains(target)) return;
+    closeDashboardProjectPeek();
+  }, true);
   window.addEventListener('resize', () => {
     if (!dashboardPeekBackdrop || dashboardPeekBackdrop.hidden) return;
     positionDashboardProjectPeek();
