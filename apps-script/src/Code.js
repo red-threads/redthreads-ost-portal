@@ -291,6 +291,7 @@ const PORTAL_LIFECYCLE_EMAIL_MILESTONES = {
   credit_terms_submitted: 'credit_terms_submitted',
   credit_terms_approved: 'credit_terms_approved',
   credit_terms_denied: 'credit_terms_denied',
+  credit_terms_removed: 'credit_terms_removed',
   credit_terms_reset: 'credit_terms_reset'
 };
 const AP_ACH_LIFECYCLE_EMAIL_MILESTONES = {
@@ -892,7 +893,6 @@ function buildPortalRequestRouteMeta_(e) {
   const setupResult = (rawSetupResult === 'success' || rawSetupResult === 'cancel')
     ? rawSetupResult
     : '';
-  const previousStatus = normalizeAccountDocumentStatus_(getAccountDocumentRowFieldValue_(row, definition.statusField));
   return {
     checkoutResult: checkoutResult,
     setupResult: setupResult,
@@ -13691,6 +13691,156 @@ function clearTaxExemptDocumentForReplacement(payload) {
   }
 }
 
+function buildCreditTermsReplacementArchiveEntry_(ctx, definition, accountRow, workflowNotes, clearedAt) {
+  const row = (accountRow && typeof accountRow === 'object') ? accountRow : {};
+  const notes = (workflowNotes && typeof workflowNotes === 'object' && !Array.isArray(workflowNotes)) ? workflowNotes : {};
+  const latestSubmission = notes.lastSubmission && typeof notes.lastSubmission === 'object'
+    ? cloneJsonValue_(notes.lastSubmission, {})
+    : null;
+  const artifactUrl = trimString_(getAccountDocumentRowFieldValue_(row, definition.artifactUrlField));
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const identity = ctx && ctx.identity ? ctx.identity : {};
+  const clearTime = trimString_(clearedAt) || nowIso_();
+  const previousStatus = normalizeAccountDocumentStatus_(getAccountDocumentRowFieldValue_(row, definition.statusField));
+  return {
+    eventType: 'client_clear_for_replacement',
+    eventKey: [
+      'credit_terms_removed',
+      trimString_(accountSummary.accountId || accountSummary.orgId),
+      clearTime
+    ].filter(Boolean).join('_'),
+    clearedAt: clearTime,
+    clearedByName: trimString_(accountSummary.billingContactName || accountSummary.primaryContactName || identity.personName),
+    clearedByEmail: normalizeEmail_(accountSummary.billingContactEmail || accountSummary.primaryEmail || identity.personEmail),
+    previousStatus: previousStatus,
+    previousApproved: boolFromCell_(getAccountDocumentRowFieldValue_(row, definition.approvedField)) || previousStatus === 'approved',
+    previousApprovedAt: trimString_(getAccountDocumentRowFieldValue_(row, definition.approvedAtField)),
+    previousApprovedByName: trimString_(getAccountDocumentRowFieldValue_(row, definition.approvedByNameField)),
+    previousApprovedByEmail: normalizeEmail_(getAccountDocumentRowFieldValue_(row, definition.approvedByEmailField)),
+    previousArtifactUrl: artifactUrl,
+    previousArtifactFileId: extractDriveFileIdFromUrl_(artifactUrl),
+    previousSubmittedAt: trimString_(getAccountDocumentRowFieldValue_(row, definition.submittedAtField)),
+    previousPaymentTermsCode: trimString_(getAccountDocumentRowFieldValue_(row, definition.paymentTermsCodeField)),
+    previousPaymentTermsLabel: trimString_(getAccountDocumentRowFieldValue_(row, definition.paymentTermsLabelField)),
+    previousPaymentTermsDays: Math.max(0, parseInt(String(getAccountDocumentRowFieldValue_(row, definition.paymentTermsDaysField) || 0), 10) || 0),
+    previousPaymentTermsNotes: trimString_(getAccountDocumentRowFieldValue_(row, definition.paymentTermsNotesField)),
+    previousPaymentTermsSetAt: trimString_(getAccountDocumentRowFieldValue_(row, definition.paymentTermsSetAtField)),
+    previousPaymentTermsSetByName: trimString_(getAccountDocumentRowFieldValue_(row, definition.paymentTermsSetByNameField)),
+    previousPaymentTermsSetByEmail: normalizeEmail_(getAccountDocumentRowFieldValue_(row, definition.paymentTermsSetByEmailField)),
+    lastSubmission: latestSubmission ? {
+      submittedAt: trimString_(latestSubmission.submittedAt),
+      submittedByName: trimString_(latestSubmission.submittedByName),
+      submittedByEmail: normalizeEmail_(latestSubmission.submittedByEmail),
+      submissionSource: trimString_(latestSubmission.submissionSource),
+      artifactFileId: trimString_(latestSubmission.artifactFileId),
+      artifactUrl: trimString_(latestSubmission.artifactUrl),
+      artifactName: trimString_(latestSubmission.artifactName),
+      artifactMimeType: trimString_(latestSubmission.artifactMimeType),
+      artifactSizeBytes: Math.max(0, parseInt(String(latestSubmission.artifactSizeBytes || 0), 10) || 0),
+      artifactFiles: normalizeAccountDocumentArtifactFiles_(latestSubmission.artifactFiles)
+    } : null
+  };
+}
+
+function buildCreditTermsReplacementClearRowUpdates_(definition) {
+  const updates = {};
+  updates[definition.statusField] = 'not_started';
+  updates[definition.approvedField] = false;
+  updates[definition.approvedAtField] = '';
+  updates[definition.approvedByNameField] = '';
+  updates[definition.approvedByEmailField] = '';
+  updates[definition.artifactUrlField] = '';
+  updates[definition.submittedAtField] = '';
+  if (definition.sourceUrlField) updates[definition.sourceUrlField] = trimString_(definition.sourceDocumentUrl);
+  updates[definition.paymentTermsCodeField] = '';
+  updates[definition.paymentTermsLabelField] = '';
+  updates[definition.paymentTermsDaysField] = 0;
+  updates[definition.paymentTermsNotesField] = '';
+  updates[definition.paymentTermsSetAtField] = '';
+  updates[definition.paymentTermsSetByNameField] = '';
+  updates[definition.paymentTermsSetByEmailField] = '';
+  return updates;
+}
+
+function clearCreditTermsDocumentForReplacement_(payload) {
+  const requestPayload = Object.assign({}, (payload && typeof payload === 'object') ? payload : {}, {
+    documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    requireExistingAccount: true
+  });
+  const ctx = buildAccountDocumentContext_(requestPayload);
+  if (!ctx || ctx.ok !== true) return ctx;
+  const accountInfo = ctx.accountInfo || {};
+  const rowInfo = accountInfo.rowInfo || null;
+  if (!rowInfo || !rowInfo.rowObjNormalized || !rowInfo.colMap || !ctx.infra || !ctx.infra.accountsSheet) {
+    return { ok: false, error: 'A saved portal account is required before a credit terms document can be replaced.' };
+  }
+  const definition = getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.credit_terms, ctx.cfg);
+  const accountRow = rowInfo.rowObjNormalized;
+  const status = normalizeAccountDocumentStatus_(getAccountDocumentRowFieldValue_(accountRow, definition.statusField));
+  const approved = boolFromCell_(getAccountDocumentRowFieldValue_(accountRow, definition.approvedField)) || status === 'approved';
+  const artifactUrl = trimString_(getAccountDocumentRowFieldValue_(accountRow, definition.artifactUrlField));
+  if (!approved && !artifactUrl) {
+    return { ok: false, error: 'No approved credit terms document is currently on file for this account.' };
+  }
+  const now = nowIso_();
+  const workflowNotes = getPortalAccountDocumentNotes_(accountRow, definition.type);
+  const archiveEntry = buildCreditTermsReplacementArchiveEntry_(ctx, definition, accountRow, workflowNotes, now);
+  const notesText = updatePortalAccountDocumentNotes_(accountRow, definition.type, function(current) {
+    const next = (current && typeof current === 'object' && !Array.isArray(current)) ? current : {};
+    const replacementHistory = Array.isArray(next.replacementHistory) ? next.replacementHistory.slice(0, 19) : [];
+    replacementHistory.unshift(archiveEntry);
+    next.replacementHistory = replacementHistory;
+    next.replacementPending = true;
+    next.replacementRequestedAt = now;
+    delete next.lastSubmission;
+    delete next.lastDecision;
+    return next;
+  });
+  const updates = buildCreditTermsReplacementClearRowUpdates_(definition);
+  updates.notes = notesText;
+  updates.updatedAt = now;
+  setRowValuesByHeaderMap_(
+    ctx.infra.accountsSheet,
+    rowInfo.row,
+    rowInfo.colMap,
+    updates
+  );
+  refreshAccountDocumentContextAccount_(ctx);
+  queueAccountDocumentLifecycleEmailSafely_(ctx, definition, null, 'removed', {
+    decision: 'removed',
+    eventKey: archiveEntry.eventKey,
+    decidedAt: archiveEntry.clearedAt,
+    clearedAt: archiveEntry.clearedAt,
+    clearedByName: archiveEntry.clearedByName,
+    clearedByEmail: archiveEntry.clearedByEmail,
+    previousStatus: archiveEntry.previousStatus,
+    previousSubmittedAt: archiveEntry.previousSubmittedAt,
+    paymentTermsLabel: archiveEntry.previousPaymentTermsLabel
+  });
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.credit_terms,
+    'Old credit terms document cleared. Upload a new document for Red Threads review.',
+    {
+      replacementCleared: true,
+      archivedDocument: {
+        clearedAt: now,
+        previousStatus: archiveEntry.previousStatus,
+        previousSubmittedAt: archiveEntry.previousSubmittedAt,
+        previousPaymentTermsLabel: archiveEntry.previousPaymentTermsLabel
+      }
+    }
+  );
+}
+
+function clearCreditTermsDocumentForReplacement(payload) {
+  try {
+    return clearCreditTermsDocumentForReplacement_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function resetAccountDocumentWorkflow_(payload, documentType) {
   const ctx = buildAccountDocumentContext_(payload);
   if (!ctx || ctx.ok !== true) return ctx;
@@ -24296,7 +24446,9 @@ function isPortalLifecycleAccountDocumentMilestone_(milestone) {
 }
 
 function isPortalLifecycleAccountOnlyMilestone_(milestone) {
-  return normalizePortalLifecycleEmailMilestone_(milestone) === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed;
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  return normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed;
 }
 
 function getPortalLifecycleEmailRecipientClass_(value) {
@@ -24683,6 +24835,7 @@ function getAccountDocumentPortalLifecycleMilestone_(documentType, eventName, op
     if (event === 'submitted') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted;
     if (event === 'approved') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved;
     if (event === 'denied' || hardDenied) return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied;
+    if (event === 'removed') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed;
     if (event === 'reset') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset;
   }
   return '';
@@ -24909,6 +25062,9 @@ function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
     return 'Complete New Credit Terms Application';
   }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed) {
+    return 'Upload New Credit Terms Document';
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
     return 'Complete Sales Tax Exemption Form';
   }
@@ -24943,6 +25099,7 @@ function buildPortalLifecycleAccountDocumentClientUrl_(ctx, meta, milestone) {
   if (labels.dashboardParam) params.accountDoc = labels.dashboardParam;
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
@@ -25017,9 +25174,12 @@ function buildAccountDocumentTeamIdentityDetails_(meta, emailContext) {
 }
 
 function shouldRenderPortalLifecycleEmailCta_(milestone, recipientClass) {
-  if (getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team' &&
-      normalizePortalLifecycleEmailMilestone_(milestone) === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed) {
-    return false;
+  if (getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team') {
+    const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+    if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
+        normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed) {
+      return false;
+    }
   }
   return !isAccountDocumentApprovedTeamMilestone_(milestone, recipientClass);
 }
@@ -25136,7 +25296,9 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       details: details
     };
   }
-  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed) {
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed) {
+    const creditTermsRemoved = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed;
     const clearedAtLabel = buildLifecycleEmailDateLabel_(trimString_(meta && meta.clearedAt));
     const clearedByName = trimString_(meta && meta.clearedByName);
     const clearedByEmail = normalizeEmail_(meta && meta.clearedByEmail);
@@ -25146,20 +25308,30 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     if (clearedByEmail) removedDetails.push('Removed by email: ' + clearedByEmail);
     return {
       subject: isTeam
-        ? buildTeamSubject_('Sales tax exemption document removed')
-        : buildActionNeededSubject_('Upload a new sales tax exemption document'),
+        ? buildTeamSubject_(creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
+        : buildActionNeededSubject_(creditTermsRemoved ? 'Upload a new credit terms document' : 'Upload a new sales tax exemption document'),
       heading: isTeam
-        ? 'Sales tax exemption document removed'
-        : 'Upload a new sales tax exemption document',
+        ? (creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
+        : (creditTermsRemoved ? 'Upload a new credit terms document' : 'Upload a new sales tax exemption document'),
       intro: isTeam
-        ? 'A client removed the sales tax exemption document that was on file for their Red Threads account.'
-        : 'The sales tax exemption document that was on file for your Red Threads account has been removed.',
+        ? (creditTermsRemoved
+          ? 'A client removed the credit terms document that was on file for their Red Threads account.'
+          : 'A client removed the sales tax exemption document that was on file for their Red Threads account.')
+        : (creditTermsRemoved
+          ? 'The credit terms document that was on file for your Red Threads account has been removed.'
+          : 'The sales tax exemption document that was on file for your Red Threads account has been removed.'),
       statusCopy: isTeam
         ? 'The client was directed to upload a replacement from the account dashboard. No review action is available until a replacement document is submitted.'
-        : 'Sales tax exemption cannot be applied again until a new document is submitted and approved.',
+        : (creditTermsRemoved
+          ? 'Account credit terms cannot be used until a new credit terms document is submitted and approved.'
+          : 'Sales tax exemption cannot be applied again until a new document is submitted and approved.'),
       nextStep: isTeam
-        ? 'Monitor for a new sales tax exemption submission.'
-        : 'Upload a new sales tax exemption document from your account dashboard.',
+        ? (creditTermsRemoved
+          ? 'Monitor for a new credit terms submission.'
+          : 'Monitor for a new sales tax exemption submission.')
+        : (creditTermsRemoved
+          ? 'Upload a new credit terms document from your account dashboard.'
+          : 'Upload a new sales tax exemption document from your account dashboard.'),
       details: removedDetails
     };
   }
@@ -25200,6 +25372,7 @@ function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
     return 'no_action_first';
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
@@ -25650,6 +25823,7 @@ function resolveAccountDocumentCommunicationIntent_(milestone) {
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
     return 'account_document_needs_attention';
   }
@@ -27711,6 +27885,7 @@ function isPortalLifecycleClientDocumentDecisionMilestone_(milestone) {
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed ||
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset;
 }
 
@@ -35339,6 +35514,8 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
     { label: 'Credit terms approved client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30' },
     { label: 'Credit terms approved team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30' },
     { label: 'Credit terms denied client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', reason: 'Review fixture correction requested.' },
+    { label: 'Credit terms removed client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30', clearedAt: '2026-06-24T12:00:00Z', clearedByName: 'Fixture Client', clearedByEmail: recipients.client },
+    { label: 'Credit terms removed team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30', clearedAt: '2026-06-24T12:00:00Z', clearedByName: 'Fixture Client', clearedByEmail: recipients.client },
     { label: 'Credit terms reset client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application' }
   ];
   metas.forEach(function(item) {

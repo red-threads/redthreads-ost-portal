@@ -281,6 +281,14 @@ const REQUIRED_MATRIX = [
     artifactRequirement: 'optional'
   },
   {
+    caseLabel: 'account_document_credit_terms_removed',
+    recipientClass: 'client+team',
+    expectedCommunicationIntent: ['account_document_needs_attention'],
+    labels: ['Credit terms removed client', 'Credit terms removed team'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
     caseLabel: 'password_reset',
     recipientClass: 'client',
     expectedCommunicationIntent: ['document_copy', 'no_action_status'],

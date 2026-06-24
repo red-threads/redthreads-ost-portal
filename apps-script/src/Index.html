@@ -9999,6 +9999,9 @@
       align-items:start;
       padding:0 26px 26px;
     }
+    .termsReviewModal.is-client-view-mode.has-terms-replacement-action .termsReviewShell{
+      grid-template-columns:minmax(0,780px) 320px;
+    }
     .termsReviewModal.is-client-view-mode .termsReviewRail{
       display:flex;
       max-height:calc(100vh - 152px);
@@ -10164,6 +10167,53 @@
     .termsReviewActionRow[hidden]{
       display:none !important;
     }
+    .termsReplacementSection{
+      border-color:rgba(251,113,133,.24);
+      background:linear-gradient(180deg,rgba(127,29,29,.26),rgba(15,23,42,.42));
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 34px rgba(0,0,0,.22);
+    }
+    .termsReplacementSection[hidden]{
+      display:none !important;
+    }
+    .termsReplacementTitle{
+      margin:0;
+      color:#ffffff;
+      font-size:14px;
+      font-weight:900;
+      line-height:1.25;
+    }
+    .termsReplacementCopy{
+      margin:0;
+      color:#fecdd3;
+      font-size:12px;
+      line-height:1.55;
+    }
+    .termsReplacementBtn{
+      width:100%;
+      min-height:44px;
+      padding:0 13px;
+      border-radius:13px;
+      border:1px solid rgba(251,113,133,.42);
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);
+      color:#ffffff;
+      font-size:12px;
+      font-weight:900;
+      line-height:1.2;
+      cursor:pointer;
+      box-shadow:0 12px 24px rgba(190,24,93,.24);
+      transition:transform .08s ease, border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+    }
+    .termsReplacementBtn:hover{
+      border-color:rgba(254,205,211,.72);
+      transform:translateY(-1px);
+      box-shadow:0 16px 28px rgba(190,24,93,.32);
+    }
+    .termsReplacementBtn[disabled]{
+      opacity:.68;
+      cursor:not-allowed;
+      transform:none;
+      box-shadow:none;
+    }
     .termsDocClientSection{
       gap:12px;
       padding:0;
@@ -10223,6 +10273,71 @@
     }
     .termsReviewDecisionBackdrop[hidden]{
       display:none !important;
+    }
+    .termsReplacementConfirmBackdrop{
+      position:fixed;
+      inset:0;
+      z-index:10116;
+      background:rgba(1,4,12,.72);
+      backdrop-filter:blur(6px);
+      -webkit-backdrop-filter:blur(6px);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+    .termsReplacementConfirmBackdrop[hidden]{
+      display:none !important;
+    }
+    .termsReplacementConfirmModal{
+      width:min(560px,100%);
+      border-radius:22px;
+      border:1px solid rgba(251,113,133,.22);
+      background:rgba(8,11,18,.96);
+      padding:22px;
+      box-shadow:0 28px 48px rgba(2,8,23,.42);
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      text-align:center;
+    }
+    .termsReplacementConfirmSpinner{
+      display:flex;
+      justify-content:center;
+      padding-top:2px;
+    }
+    .termsReplacementConfirmSpinner[hidden]{
+      display:none !important;
+    }
+    .termsReplacementConfirmTitle{
+      color:#fff;
+      font-size:28px;
+      font-weight:900;
+      line-height:1.1;
+    }
+    .termsReplacementConfirmBody{
+      color:#fecdd3;
+      font-size:14px;
+      font-weight:650;
+      line-height:1.6;
+    }
+    .termsReplacementConfirmMessage{
+      border:1px solid rgba(244,63,94,.24);
+      border-radius:14px;
+      background:rgba(127,29,29,.24);
+      color:#fecdd3;
+      padding:12px;
+      font-size:13px;
+      line-height:1.5;
+    }
+    .termsReplacementConfirmMessage[hidden]{
+      display:none !important;
+    }
+    .termsReplacementConfirmActions{
+      display:flex;
+      justify-content:center;
+      gap:10px;
+      flex-wrap:wrap;
     }
     .termsReviewDecisionModal{
       width:min(560px,100%);
@@ -17141,7 +17256,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 157">157</div>
+  <div class="devRevisionBadge" aria-label="Development revision 158">158</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17729,6 +17844,11 @@
               <a class="accountDocActionBtn" id="termsReviewDownloadBtn" href="#" target="_blank" rel="noopener noreferrer">Download Copy</a>
             </div>
           </div>
+          <div class="termsReviewSection termsReplacementSection" id="termsReplacementSection" hidden>
+            <div class="termsReplacementTitle">Clear Old Document and Add New One</div>
+            <p class="termsReplacementCopy">Clear the approved credit terms document on file, then upload a replacement for Red Threads review.</p>
+            <button class="termsReplacementBtn" id="termsReplacementBtn" type="button">Clear Old Document and Add New One</button>
+          </div>
           <div class="termsReviewSection" id="termsReviewApprovalSection">
             <div class="termsReviewSectionTitle">Assign Payment Terms</div>
             <div class="termsReviewSectionSub">Choose the approved payment terms that should be stored at the organization level.</div>
@@ -17741,6 +17861,22 @@
           </div>
           <div class="termsReviewMessage info" id="termsReviewMessage" hidden></div>
         </aside>
+      </div>
+    </div>
+  </div>
+  <div class="termsReplacementConfirmBackdrop" id="termsReplacementConfirmBackdrop" hidden>
+    <div class="termsReplacementConfirmModal" role="dialog" aria-modal="true" aria-labelledby="termsReplacementConfirmTitle">
+      <div class="termsReplacementConfirmSpinner" id="termsReplacementConfirmSpinner" hidden aria-hidden="true">
+        <div class="rt-spinner">
+          <img class="rt-spinner-icon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+        </div>
+      </div>
+      <div class="termsReplacementConfirmTitle" id="termsReplacementConfirmTitle">Clear credit terms document?</div>
+      <div class="termsReplacementConfirmBody" id="termsReplacementConfirmBody">When you clear this credit terms document, purchase-order checkout will be unavailable for this account until a new credit terms document is submitted and approved.</div>
+      <div class="termsReplacementConfirmMessage" id="termsReplacementConfirmMessage" hidden></div>
+      <div class="termsReplacementConfirmActions">
+        <button class="accountDocActionBtn" id="termsReplacementCancelBtn" type="button">Cancel</button>
+        <button class="accountDocActionBtn is-primary" id="termsReplacementConfirmBtn" type="button">Clear Document and Upload New One</button>
       </div>
     </div>
   </div>
@@ -19580,6 +19716,9 @@
   let TERMS_DOC_CLIENT_VIEW_ACCOUNT_SUMMARY = null;
   let TERMS_DOC_CLIENT_VIEW_WORKFLOW = null;
   let TERMS_DOC_CLIENT_VIEW_CACHE = Object.create(null);
+  let TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+  let TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+  let TERMS_DOC_REPLACEMENT_ERROR = '';
   let TERMS_DOC_SELECTED_FILES = [];
   let TERMS_DOC_EMAIL_PANEL_OPEN = false;
   let TERMS_DOC_UPLOAD_PANEL_OPEN = false;
@@ -20717,7 +20856,7 @@
 
   function getDashboardDocumentHoverLabel_(statusValue, documentType){
     const type = String(documentType || '').trim().toLowerCase();
-    if (statusValue === 'approved') return type === 'tax_exempt' ? 'View/Edit Document' : 'View Document';
+    if (statusValue === 'approved') return (type === 'tax_exempt' || type === 'credit_terms') ? 'View/Edit Document' : 'View Document';
     if (statusValue === 'under_review') return 'View Document';
     if (statusValue === 'rejected') return 'Complete Document';
     if (statusValue === 'denied') return 'View Status';
@@ -22218,6 +22357,15 @@
   const termsReviewActionRow = document.getElementById('termsReviewActionRow');
   const termsReviewOpenDriveBtn = document.getElementById('termsReviewOpenDriveBtn');
   const termsReviewDownloadBtn = document.getElementById('termsReviewDownloadBtn');
+  const termsReplacementSection = document.getElementById('termsReplacementSection');
+  const termsReplacementBtn = document.getElementById('termsReplacementBtn');
+  const termsReplacementConfirmBackdrop = document.getElementById('termsReplacementConfirmBackdrop');
+  const termsReplacementConfirmSpinner = document.getElementById('termsReplacementConfirmSpinner');
+  const termsReplacementConfirmTitle = document.getElementById('termsReplacementConfirmTitle');
+  const termsReplacementConfirmBody = document.getElementById('termsReplacementConfirmBody');
+  const termsReplacementConfirmMessage = document.getElementById('termsReplacementConfirmMessage');
+  const termsReplacementCancelBtn = document.getElementById('termsReplacementCancelBtn');
+  const termsReplacementConfirmBtn = document.getElementById('termsReplacementConfirmBtn');
   const termsReviewPaymentTermsSelect = document.getElementById('termsReviewPaymentTermsSelect');
   const termsReviewPaymentTermsNotes = document.getElementById('termsReviewPaymentTermsNotes');
   const termsReviewMessage = document.getElementById('termsReviewMessage');
@@ -30989,7 +31137,12 @@
     TERMS_DOC_CLIENT_VIEW_REASON = '';
     TERMS_DOC_CLIENT_VIEW_ACCOUNT_SUMMARY = null;
     TERMS_DOC_CLIENT_VIEW_WORKFLOW = null;
+    TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+    TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+    TERMS_DOC_REPLACEMENT_ERROR = '';
     if (termsReviewModal) termsReviewModal.classList.remove('is-review-mode', 'is-client-view-mode');
+    if (termsReviewModal) termsReviewModal.classList.remove('has-terms-replacement-action');
+    if (termsReplacementSection) termsReplacementSection.hidden = true;
     if (termsReviewImage) {
       termsReviewImage.hidden = true;
       termsReviewImage.removeAttribute('src');
@@ -31003,10 +31156,116 @@
       termsReviewClientPages.innerHTML = '';
     }
     if (termsReviewUnavailable) termsReviewUnavailable.hidden = true;
+    renderTermsReplacementConfirm_();
   }
 
   function isTermsClientViewMode_(){
     return TERMS_DOC_CLIENT_VIEW_MODE === true;
+  }
+
+  function isTermsReplacementActionAvailable_(){
+    if (ACCOUNT_DOC_MODAL_CONTEXT !== 'dashboard') return false;
+    if (!isTermsClientViewMode_()) return false;
+    const sourceSummary = normalizeAccountSummary(
+      TERMS_DOC_CLIENT_VIEW_ACCOUNT_SUMMARY || getActiveAccountSummaryForTermsWorkspace_()
+    );
+    const workflow = (((TERMS_DOC_CLIENT_VIEW_WORKFLOW && typeof TERMS_DOC_CLIENT_VIEW_WORKFLOW === 'object')
+      ? TERMS_DOC_CLIENT_VIEW_WORKFLOW
+      : getAccountDocumentWorkflowByType_('credit_terms', sourceSummary)) || {});
+    return getAccountDocumentStatusValue_(workflow) === 'approved';
+  }
+
+  function renderTermsReplacementConfirm_(){
+    const isOpen = TERMS_DOC_REPLACEMENT_CONFIRM_OPEN === true;
+    const isBusy = TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true;
+    const errorText = String(TERMS_DOC_REPLACEMENT_ERROR || '').trim();
+    if (termsReplacementConfirmBackdrop) termsReplacementConfirmBackdrop.hidden = !isOpen;
+    if (termsReplacementConfirmSpinner) termsReplacementConfirmSpinner.hidden = !isBusy;
+    if (termsReplacementConfirmTitle) {
+      termsReplacementConfirmTitle.textContent = isBusy ? 'Clearing document...' : 'Clear credit terms document?';
+    }
+    if (termsReplacementConfirmBody) {
+      termsReplacementConfirmBody.textContent = isBusy
+        ? 'Please wait while the current account credit terms approval is cleared.'
+        : 'When you clear this credit terms document, purchase-order checkout will be unavailable for this account until a new credit terms document is submitted and approved.';
+    }
+    if (termsReplacementConfirmMessage) {
+      termsReplacementConfirmMessage.textContent = errorText;
+      termsReplacementConfirmMessage.hidden = !errorText;
+    }
+    if (termsReplacementCancelBtn) termsReplacementCancelBtn.disabled = isBusy;
+    if (termsReplacementConfirmBtn) {
+      termsReplacementConfirmBtn.disabled = isBusy;
+      termsReplacementConfirmBtn.textContent = isBusy ? 'Clearing...' : 'Clear Document and Upload New One';
+    }
+  }
+
+  function renderTermsReplacementAction_(){
+    const showAction = isTermsReplacementActionAvailable_() && TERMS_DOC_CLIENT_VIEW_LOADING !== true;
+    if (termsReviewModal) termsReviewModal.classList.toggle('has-terms-replacement-action', showAction);
+    if (termsReplacementSection) termsReplacementSection.hidden = !showAction;
+    if (termsReplacementBtn) termsReplacementBtn.disabled = TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || !showAction;
+    if (!showAction && TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT !== true) {
+      TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+      TERMS_DOC_REPLACEMENT_ERROR = '';
+    }
+    renderTermsReplacementConfirm_();
+  }
+
+  function openTermsReplacementConfirm_(){
+    if (!isTermsReplacementActionAvailable_() || TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true) return;
+    TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = true;
+    TERMS_DOC_REPLACEMENT_ERROR = '';
+    renderTermsReplacementAction_();
+    requestAnimationFrame(() => {
+      if (termsReplacementConfirmBtn) termsReplacementConfirmBtn.focus();
+    });
+  }
+
+  function closeTermsReplacementConfirm_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true && opts.force !== true) return;
+    TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+    TERMS_DOC_REPLACEMENT_ERROR = '';
+    renderTermsReplacementAction_();
+    if (opts.restoreFocus !== false) {
+      requestAnimationFrame(() => {
+        if (termsReplacementBtn && !termsReplacementBtn.hidden) termsReplacementBtn.focus();
+      });
+    }
+  }
+
+  async function clearCreditTermsDocumentForReplacementFromViewer_(){
+    if (TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || !isTermsReplacementActionAvailable_()) return;
+    TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = true;
+    TERMS_DOC_REPLACEMENT_ERROR = '';
+    TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = true;
+    renderTermsReplacementAction_();
+    try {
+      const resp = await callServer('clearCreditTermsDocumentForReplacement', buildAccountDocumentRequestPayload_('credit_terms', {
+        requireExistingAccount: true
+      }));
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to clear the current credit terms document.'));
+      }
+      requireFreshDashboardHomeReturn_('credit_terms_replacement_clear');
+      TERMS_DOC_CLIENT_VIEW_CACHE = Object.create(null);
+      applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForTermsWorkspace_());
+      TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+      TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+      TERMS_DOC_REPLACEMENT_ERROR = '';
+      await openCreditTermsWorkspace_({
+        context: 'dashboard',
+        autoOpenUpload: true
+      });
+      setTermsDocMessage_(String(resp.message || 'Old credit terms document cleared. Upload a new document for Red Threads review.'), 'ok', {
+        timeoutMs: 7000
+      });
+    } catch (err) {
+      TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+      TERMS_DOC_REPLACEMENT_ERROR = String((err && err.message) || err || 'Unable to clear the current credit terms document.');
+      renderTermsReplacementAction_();
+    }
   }
 
   function handleTermsDocumentCloseRequest_(options){
@@ -31048,6 +31307,10 @@
     if (!termsReviewBackdrop || termsReviewBackdrop.hidden || !termsReviewBackdrop.classList.contains('open')) return;
     if (termsReviewDecisionBackdrop && !termsReviewDecisionBackdrop.hidden) return;
     if (typeof event.preventDefault === 'function') event.preventDefault();
+    if (TERMS_DOC_REPLACEMENT_CONFIRM_OPEN === true) {
+      closeTermsReplacementConfirm_();
+      return;
+    }
     handleTermsDocumentCloseRequest_({ immediate: true });
   }
 
@@ -31738,6 +32001,7 @@
       if (termsReviewSubmissionSection) termsReviewSubmissionSection.hidden = false;
       if (termsReviewActionRow) termsReviewActionRow.hidden = true;
       if (termsReviewApprovalSection) termsReviewApprovalSection.hidden = true;
+      renderTermsReplacementAction_();
       if (loadingTitleEl) loadingTitleEl.textContent = 'Your document is loading...';
       if (loadingSubEl) {
         loadingSubEl.textContent = '';
@@ -31804,6 +32068,9 @@
       if (termsReviewSubmissionSection) termsReviewSubmissionSection.hidden = true;
       if (termsReviewActionRow) termsReviewActionRow.hidden = true;
       if (termsReviewApprovalSection) termsReviewApprovalSection.hidden = true;
+      if (termsReviewModal) termsReviewModal.classList.remove('has-terms-replacement-action');
+      if (termsReplacementSection) termsReplacementSection.hidden = true;
+      renderTermsReplacementConfirm_();
       if (loadingTitleEl) loadingTitleEl.textContent = 'Loading credit terms document…';
       if (loadingSubEl) loadingSubEl.textContent = 'Please wait while we load the blank credit terms file.';
       if (unavailableBodyEl) {
@@ -31860,6 +32127,9 @@
     if (termsReviewSubmissionSection) termsReviewSubmissionSection.hidden = false;
     if (termsReviewActionRow) termsReviewActionRow.hidden = false;
     if (termsReviewApprovalSection) termsReviewApprovalSection.hidden = false;
+    if (termsReviewModal) termsReviewModal.classList.remove('has-terms-replacement-action');
+    if (termsReplacementSection) termsReplacementSection.hidden = true;
+    renderTermsReplacementConfirm_();
     if (loadingTitleEl) loadingTitleEl.textContent = 'Loading submitted document…';
     if (loadingSubEl) loadingSubEl.textContent = 'Please wait while we prepare the signed credit terms file for review.';
     if (unavailableBodyEl) unavailableBodyEl.textContent = 'The submitted credit terms document is unavailable right now. Please try again in a moment.';
@@ -47484,6 +47754,21 @@
         removeTermsDocSelectedFile_(btn.dataset.fileIndex);
       });
     }
+    if (termsReplacementSection) {
+      termsReplacementSection.addEventListener('click', event => {
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      });
+    }
+    if (termsReplacementBtn) termsReplacementBtn.addEventListener('click', openTermsReplacementConfirm_);
+    if (termsReplacementConfirmBackdrop) {
+      termsReplacementConfirmBackdrop.addEventListener('click', event => {
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        if (!event || event.target !== termsReplacementConfirmBackdrop) return;
+        closeTermsReplacementConfirm_();
+      });
+    }
+    if (termsReplacementCancelBtn) termsReplacementCancelBtn.addEventListener('click', () => closeTermsReplacementConfirm_());
+    if (termsReplacementConfirmBtn) termsReplacementConfirmBtn.addEventListener('click', clearCreditTermsDocumentForReplacementFromViewer_);
     if (termsDocEmailCancelBtn) termsDocEmailCancelBtn.addEventListener('click', closeTermsDocEmailPanel_);
     if (termsDocEmailSendBtn) termsDocEmailSendBtn.addEventListener('click', submitTermsDocEmail_);
     if (termsDocSubmitBtn) termsDocSubmitBtn.addEventListener('click', submitTermsDocUploadedDocument_);

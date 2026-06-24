@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Credit Terms Replacement Flow On Version 1032
+
+- Mode: Full ship runtime/account-document workflow and email enhancement.
+- Branch/commit/PR: `main`, Apps Script version `1032`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: apply the account-document replacement lifecycle to approved credit terms documents, including client-side replacement UI, account-row archive/clear behavior, and account-level client/team removal emails.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `tools/validate-email-communication-matrix.mjs`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added `credit_terms_removed` as an account-only portal lifecycle milestone. `clearCreditTermsDocumentForReplacement()` requires authenticated account/dashboard context, archives the current approved credit terms state in `PORTAL_ACCOUNTS.notes.documentWorkflow.credit_terms.replacementHistory`, preserves submissions and Drive artifacts, clears current approval/status/artifact/payment-terms fields, queues client/team removal emails after the row update succeeds, refreshes dashboard state, and opens the existing credit terms upload path. The approved credit terms dashboard card now hovers as `View/Edit Document`, and the approved viewer includes a right-rail replacement action, warning confirmation, loading state, and upload handoff. `Index.html` shows development revision `158`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/send-email-review-suite.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, targeted source safety checks, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add credit terms replacement flow"`, and deployment to the existing stable ID first created version `1031`; direct `/exec` smoke then exposed a render-path `row is not defined` error from an orphaned route-meta line. The stray line was removed, validation was rerun, `clasp version "Fix credit terms replacement render"` created version `1032`, and the existing stable deployment ID was updated at `@1032 - Fix credit terms replacement render`. Direct `/exec` returned HTTP `200`, contained `Development revision 158`, omitted stale revision `157`, referenced the stable deployment ID, included the credit-terms replacement UI markers, and had zero targeted secret/private-link markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained the portal wrapper marker, and had zero targeted secret/private-link markers.
+- Runtime data state: no Sheet data was mutated from this shell, no email-review suite was run, no queue rows were touched, no document was submitted, and no prior orders/snapshots, pricing, payment/ACH/Stripe behavior, Team Mode reset behavior, Sheet schemas, Script Properties, active tabs, or fixture tabs were intentionally changed.
+- Follow-ups: browser-smoke an approved-account credit terms replacement from the Tyler/Josiah dashboard when the owner is ready to intentionally test a live clear action; confirming the clear will mutate account document state and queue the two `credit_terms_removed` jobs.
+
 ## 2026-06-24 - Sales Tax Replacement Removal Emails
 
 - Mode: Produce final code, unshipped runtime/account-document email enhancement.
