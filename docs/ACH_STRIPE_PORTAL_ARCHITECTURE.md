@@ -82,7 +82,7 @@ Saved-bank scope rules:
 
 ## Stripe Customer Model
 
-ACH V1 uses Stripe Customers v1. The Apps Script runtime creates or retrieves a Customer for the portal account, then stores only the returned `cus_...` ID on `PORTAL_ACCOUNTS`.
+ACH V1 uses Stripe Customers v1. The Apps Script runtime may create or retrieve an account-level Customer for flows that explicitly need one, then stores only the returned `cus_...` ID on `PORTAL_ACCOUNTS`.
 
 Customer metadata is limited to portal identifiers:
 
@@ -91,7 +91,7 @@ Customer metadata is limited to portal identifiers:
 - `orgName`
 - `source=red_threads_portal`
 
-ACH payment Checkout Sessions are Customer-free by default so Stripe asks the payer to enter contact email on every payment attempt. Card checkout follows the same payer-email collection policy. Dashboard ACH setup still uses the portal account Stripe Customer because that flow is account readiness/setup, not payment initiation.
+ACH payment Checkout Sessions are Customer-free by default so Stripe asks the payer to enter contact email on every payment attempt. Card checkout follows the same payer-email collection policy. Dashboard ACH setup is also Customer-free at Session creation and uses `customer_creation=always`, so Stripe creates a setup Customer after the payer enters the bank-contact email. The resulting setup Customer is stored on the saved ACH method summary and is not used as the portal account identity.
 
 Order-scoped AP payment links do not attach a Customer to hosted ACH payment Checkout by default and do not write AP bank evidence to `PORTAL_ACCOUNTS`. This prevents Accounts Payable bank details from becoming dashboard-visible saved banks.
 
@@ -152,8 +152,10 @@ AP payment links use:
 Dashboard Account Settings can start hosted bank setup through `createAchSetupSession`:
 
 - `mode=setup`
-- `customer=<stripeCustomerId>`
-- the portal account Customer is preserved for saved-bank attachment, but its email is intentionally omitted or cleared before setup Checkout so Stripe can collect the payer/bank-contact email during the hosted setup flow
+- no `customer` and no `customer_email`, so Stripe collects an editable payer/bank-contact email
+- `customer_creation=always`, so Stripe creates the setup Customer when confirmation is attempted
+- setup completion maps back to the portal account through `client_reference_id`, Session metadata, and SetupIntent metadata; the Stripe-entered email is not used for portal account lookup
+- saved dashboard ACH methods preserve the setup-created `stripeCustomerId` in `achPaymentMethodsJson` for later verification matching; account-level `stripeCustomerId` is only backfilled if blank
 - `payment_method_types[0]=us_bank_account`
 - Financial Connections permission `payment_method`
 - Return parameters: `dashboard=1`, `setupResult`, `stripeSessionId`, and either `accountAccessToken` or `accountId`
@@ -166,7 +168,7 @@ The repo and live Squarespace wrappers forward `setupResult` and account-dashboa
 
 Setup cancel returns are intentionally silent. When a dashboard user backs out of Stripe-hosted bank setup, the portal hydrates the same account dashboard and cleans one-time setup return parameters without showing a cancellation banner, generic checkout-status notice, or bank-setup refresh message.
 
-If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient verification handoff through `getAchMicrodepositVerificationLink`. The client sends safe intent/session row identifiers for the clicked pending bank; a bare PaymentMethod ID is not enough to render the Verify with Stripe action. The server validates the authorized account context, retrieves the specific PaymentIntent or SetupIntent when possible, confirms the Stripe Customer/PaymentMethod matches the portal account row, and requires ACH evidence. When Stripe exposes a hosted verification URL, the runtime returns that URL only to the browser response for immediate navigation and never stores it. In `STRIPE_MODE=test` only, if Stripe does not expose a hosted URL but the same validated SetupIntent/PaymentIntent linkage is present, the runtime may complete verification server-side through Stripe's official `verify_microdeposits` endpoint using test-only amounts. Live mode never auto-verifies microdeposits. The portal never stores hosted verification URLs, routing/account numbers, client secrets, raw Stripe objects, or microdeposit values in Sheets or logs.
+If Stripe falls back to microdeposit verification, Dashboard Payment Methods can request a transient verification handoff through `getAchMicrodepositVerificationLink`. The client sends safe intent/session row identifiers for the clicked pending bank; a bare PaymentMethod ID is not enough to render the Verify with Stripe action. The server validates the authorized account context, retrieves the specific PaymentIntent or SetupIntent when possible, confirms the Stripe Customer/PaymentMethod matches the portal account row, the saved method's setup Customer, or trusted setup metadata, and requires ACH evidence. When Stripe exposes a hosted verification URL, the runtime returns that URL only to the browser response for immediate navigation and never stores it. In `STRIPE_MODE=test` only, if Stripe does not expose a hosted URL but the same validated SetupIntent/PaymentIntent linkage is present, the runtime may complete verification server-side through Stripe's official `verify_microdeposits` endpoint using test-only amounts. Live mode never auto-verifies microdeposits. The portal never stores hosted verification URLs, routing/account numbers, client secrets, raw Stripe objects, or microdeposit values in Sheets or logs.
 
 The top Dashboard summary renders one compact `ACH payment accounts` card, not one card per saved bank. The card body is limited to `Manage accounts` and acts as the single entry point to ACH management. It does not show readiness paragraphs, ready-state ACH bullets, bank counts, bank names, last4, or separate Manage/Add buttons.
 

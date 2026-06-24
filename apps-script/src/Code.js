@@ -6925,21 +6925,6 @@ function createAchSetupSession_(payload) {
     ss: ctx.ss,
     infra: ctx.infra
   }) || ctx.accountInfo;
-  const customerResult = ensureStripeCustomerForPortalAccount_(ctx, {
-    cfg: ctx.cfg,
-    ss: ctx.ss,
-    infra: ctx.infra,
-    accountInfo: ctx.accountInfo,
-    collectSetupEmailInCheckout: true
-  });
-  if (!customerResult || customerResult.ok !== true) {
-    return Object.assign({
-      ok: false,
-      code: trimString_(customerResult && customerResult.code) || 'ach_customer_unavailable',
-      error: trimString_(customerResult && customerResult.error) || 'Unable to prepare secure bank setup.'
-    }, customerResult || {});
-  }
-  ctx.accountInfo = customerResult.accountInfo || ctx.accountInfo;
   const token = resolveAccountDocumentPortalToken_(ctx) || trimString_(p.token);
   const setupAccountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const successUrl = buildStripeSetupReturnUrl_(token, {
@@ -6972,7 +6957,7 @@ function createAchSetupSession_(payload) {
   const accountSummary = ctx.accountInfo.summary || {};
   const params = {
     mode: 'setup',
-    customer: trimString_(customerResult.customerId),
+    customer_creation: 'always',
     success_url: successUrl,
     cancel_url: cancelUrl,
     'payment_method_types[0]': 'us_bank_account',
@@ -6995,6 +6980,8 @@ function createAchSetupSession_(payload) {
   permissions.forEach(function(permission, idx) {
     params['payment_method_options[us_bank_account][financial_connections][permissions][' + idx + ']'] = trimString_(permission);
   });
+  const dashboardSetupGuard = validateDashboardAchSetupCheckoutParams_(params);
+  if (!dashboardSetupGuard.ok) return dashboardSetupGuard;
 
   const stripeResult = stripeApiRequest_('/v1/checkout/sessions', params, {
     cfg: ctx.cfg,
@@ -7033,6 +7020,23 @@ function createAchSetupSession_(payload) {
       mode: ctx.cfg.stripeMode
     },
     accountSummary: buildPortalAccountSummary_(refreshed.rowObjNormalized, ctx.cfg)
+  };
+}
+
+function validateDashboardAchSetupCheckoutParams_(params) {
+  const p = (params && typeof params === 'object') ? params : {};
+  const hasCustomer = !!trimString_(p.customer);
+  const hasCustomerEmail = !!normalizeEmail_(p.customer_email || p.customerEmail);
+  if (!hasCustomer && !hasCustomerEmail) return { ok: true };
+  console.log('[RT-STRIPE-DASHBOARD-ACH-SETUP-GUARD] ' + JSON.stringify({
+    ok: false,
+    hasCustomer: hasCustomer,
+    hasCustomerEmail: hasCustomerEmail
+  }));
+  return {
+    ok: false,
+    code: 'dashboard_ach_setup_email_collection_blocked',
+    error: 'Secure bank setup could not start because payer email collection is not configured correctly.'
   };
 }
 
@@ -7402,12 +7406,37 @@ function verifyAchMicrodepositsInStripeTestMode_(candidate, ctx) {
   return normalizeVerifiedAchPaymentIntentCandidate_(c, context, result.body);
 }
 
-function isStripeIntentCustomerLinkedToPortalAccount_(intentObj, accountSummary) {
+function isStripeIntentCustomerLinkedToPortalAccount_(intentObj, accountSummary, achMethod) {
   const intent = (intentObj && typeof intentObj === 'object') ? intentObj : {};
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
   const intentCustomerId = stripeIdFromObject_(intent.customer);
   const accountCustomerId = trimString_(account.stripeCustomerId);
-  return !!(intentCustomerId && accountCustomerId && intentCustomerId === accountCustomerId);
+  const setupMethod = (achMethod && typeof achMethod === 'object') ? achMethod : {};
+  const setupMethodCustomerId = trimString_(setupMethod.stripeCustomerId || setupMethod.stripecustomerid);
+  const intentAccountId = extractStripeMetadataValue_(intent, 'accountId');
+  const accountId = trimString_(account.accountId);
+  if (intentAccountId && accountId && intentAccountId === accountId) return true;
+  return !!(intentCustomerId && (
+    (accountCustomerId && intentCustomerId === accountCustomerId) ||
+    (setupMethodCustomerId && intentCustomerId === setupMethodCustomerId)
+  ));
+}
+
+function isStripeSetupSessionCompatibleWithPortalAccount_(sessionObj, accountSummary, achMethod) {
+  const session = (sessionObj && typeof sessionObj === 'object') ? sessionObj : {};
+  const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const method = (achMethod && typeof achMethod === 'object') ? achMethod : {};
+  const sessionCustomerId = stripeIdFromObject_(session.customer);
+  const accountCustomerId = trimString_(account.stripeCustomerId);
+  const methodCustomerId = trimString_(method.stripeCustomerId || method.stripecustomerid);
+  const sessionAccountId = extractStripeMetadataValue_(session, 'accountId') || trimString_(session.client_reference_id);
+  const accountId = trimString_(account.accountId);
+  if (sessionAccountId && accountId && sessionAccountId === accountId) return true;
+  if (!sessionCustomerId) return true;
+  return !!(
+    (accountCustomerId && sessionCustomerId === accountCustomerId) ||
+    (methodCustomerId && sessionCustomerId === methodCustomerId)
+  );
 }
 
 function resolveSpecificAchSetupMicrodepositVerificationCandidate_(ctx, payload) {
@@ -7435,8 +7464,7 @@ function resolveSpecificAchSetupMicrodepositVerificationCandidate_(ctx, payload)
     const sessionResult = retrieveStripeCheckoutSession_(setupSessionId, { cfg: cfg });
     if (sessionResult && sessionResult.ok === true && sessionResult.body) {
       const session = sessionResult.body;
-      const sessionCustomerId = stripeIdFromObject_(session.customer);
-      if (sessionCustomerId && sessionCustomerId !== trimString_(accountSummary.stripeCustomerId)) return null;
+      if (!isStripeSetupSessionCompatibleWithPortalAccount_(session, accountSummary, requestedMethod)) return null;
       setupIntentId = stripeIdFromObject_(session.setup_intent);
     }
   }
@@ -7446,8 +7474,7 @@ function resolveSpecificAchSetupMicrodepositVerificationCandidate_(ctx, payload)
     const sessionResult = retrieveStripeCheckoutSession_(accountSummary.achSetupSessionId, { cfg: cfg });
     if (sessionResult && sessionResult.ok === true && sessionResult.body) {
       const session = sessionResult.body;
-      const sessionCustomerId = stripeIdFromObject_(session.customer);
-      if (sessionCustomerId && sessionCustomerId !== trimString_(accountSummary.stripeCustomerId)) return null;
+      if (!isStripeSetupSessionCompatibleWithPortalAccount_(session, accountSummary, requestedMethod)) return null;
       setupIntentId = stripeIdFromObject_(session.setup_intent);
     }
   }
@@ -7456,7 +7483,7 @@ function resolveSpecificAchSetupMicrodepositVerificationCandidate_(ctx, payload)
   const setupIntentResult = retrieveStripeSetupIntent_(setupIntentId, { cfg: cfg });
   if (!setupIntentResult || setupIntentResult.ok !== true || !setupIntentResult.body) return null;
   const setupIntent = setupIntentResult.body;
-  if (!isStripeIntentCustomerLinkedToPortalAccount_(setupIntent, accountSummary)) return null;
+  if (!isStripeIntentCustomerLinkedToPortalAccount_(setupIntent, accountSummary, requestedMethod)) return null;
   const intentPaymentMethodId = stripeIdFromObject_(setupIntent.payment_method);
   if (requestedPaymentMethodId && intentPaymentMethodId && intentPaymentMethodId !== requestedPaymentMethodId) return null;
   const achSummary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntent, {
@@ -13884,6 +13911,7 @@ function resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, options)
   const verificationStatus = deriveAchVerificationStatusFromStripeIntent_(setupIntent, opts.verificationStatus);
   return paymentMethod ? extractAchPaymentMethodSummaryFromStripe_(paymentMethod, {
     source: 'dashboard_setup',
+    stripeCustomerId: trimString_(opts.stripeCustomerId) || stripeIdFromObject_(setupIntent.customer),
     verificationStatus: verificationStatus,
     status: mapAchPaymentMethodStatusFromVerification_(verificationStatus, 'active'),
     setupIntentId: trimString_(opts.setupIntentId) || trimString_(setupIntent.id),
@@ -14184,10 +14212,12 @@ function handleCheckoutSetupSessionCompleted_(sessionObj, options) {
     const setupResult = retrieveStripeSetupIntent_(setupIntentId, { cfg: cfg });
     if (setupResult.ok) setupIntent = setupResult.body;
   }
+  const setupCustomerId = stripeIdFromObject_(session.customer || (setupIntent && setupIntent.customer));
   const achSummary = setupIntent ? resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntent, {
     cfg: cfg,
     setupIntentId: setupIntentId,
-    setupSessionId: trimString_(session.id)
+    setupSessionId: trimString_(session.id),
+    stripeCustomerId: setupCustomerId
   }) : null;
   const achEvidence = buildAchStripeEventEvidence_({
     eventType: 'checkout.session.completed',
@@ -14206,7 +14236,7 @@ function handleCheckoutSetupSessionCompleted_(sessionObj, options) {
   const accountId = extractStripeMetadataValue_(session, 'accountId') ||
     extractStripeMetadataValue_(setupIntent || {}, 'accountId') ||
     trimString_(session.client_reference_id);
-  const customerId = stripeIdFromObject_(session.customer || (setupIntent && setupIntent.customer));
+  const customerId = setupCustomerId;
   let accountInfo = accountId ? getPortalAccountByAccountId_(accountId, { cfg: cfg, ss: ss, infra: infra }) : null;
   if (!accountInfo && customerId) {
     accountInfo = getPortalAccountByStripeCustomerId_(customerId, { cfg: cfg, ss: ss, infra: infra });
@@ -14214,8 +14244,16 @@ function handleCheckoutSetupSessionCompleted_(sessionObj, options) {
   if (!accountInfo || !accountInfo.rowInfo) {
     return { ok: false, error: 'Portal account not found for ACH setup session.' };
   }
+  if (customerId) {
+    accountInfo = updatePortalAccountStripeCustomerIdIfBlank_(accountInfo, customerId, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
   if (achSummary) {
     accountInfo = upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, Object.assign({}, achSummary, {
+      stripeCustomerId: customerId,
       setupIntentId: setupIntentId,
       setupSessionId: trimString_(session.id),
       setupStatus: trimString_(setupIntent && setupIntent.status) || 'completed'
@@ -14905,7 +14943,8 @@ function handleSetupIntentSucceeded_(setupIntentObj) {
   if (!accountInfo) return { ok: false, error: 'Portal account not found for setup intent.' };
   const summary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, {
     cfg: cfg,
-    setupIntentId: trimString_(setupIntentObj && setupIntentObj.id)
+    setupIntentId: trimString_(setupIntentObj && setupIntentObj.id),
+    stripeCustomerId: customerId
   });
   const achEvidence = buildAchStripeEventEvidence_({
     eventType: 'setup_intent.succeeded',
@@ -14920,7 +14959,18 @@ function handleSetupIntentSucceeded_(setupIntentObj) {
       reason: 'non_ach_setup_intent'
     };
   }
-  if (summary) accountInfo = upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, summary, { cfg: cfg, ss: ss, infra: infra });
+  if (customerId) {
+    accountInfo = updatePortalAccountStripeCustomerIdIfBlank_(accountInfo, customerId, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+  if (summary) {
+    accountInfo = upsertDashboardSavedAchPaymentMethodOnPortalAccount_(accountInfo, Object.assign({}, summary, {
+      stripeCustomerId: customerId
+    }), { cfg: cfg, ss: ss, infra: infra });
+  }
   setRowValuesByHeaderMap_(infra.accountsSheet, accountInfo.rowInfo.row, accountInfo.rowInfo.colMap, {
     achSetupIntentId: trimString_(setupIntentObj && setupIntentObj.id),
     achSetupStatus: 'succeeded',
@@ -14942,7 +14992,10 @@ function handleSetupIntentFailed_(setupIntentObj) {
   let accountInfo = accountId ? getPortalAccountByAccountId_(accountId, { cfg: cfg, ss: ss, infra: infra }) : null;
   if (!accountInfo && customerId) accountInfo = getPortalAccountByStripeCustomerId_(customerId, { cfg: cfg, ss: ss, infra: infra });
   if (!accountInfo) return { ok: true, ignored: true, type: 'setup_intent.setup_failed' };
-  const summary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, { cfg: cfg });
+  const summary = resolveAchPaymentMethodSummaryFromSetupIntent_(setupIntentObj, {
+    cfg: cfg,
+    stripeCustomerId: customerId
+  });
   const achEvidence = buildAchStripeEventEvidence_({
     eventType: 'setup_intent.setup_failed',
     setupIntent: setupIntentObj,
@@ -16730,6 +16783,7 @@ function normalizeAchPaymentMethodSummary_(value) {
   const methodSource = normalizeAchPaymentSource_(source.source);
   return {
     paymentMethodId: paymentMethodId,
+    stripeCustomerId: trimString_(source.stripeCustomerId || source.stripecustomerid),
     bankName: trimString_(source.bankName || source.bankname),
     last4: trimString_(source.last4).slice(-4),
     accountHolderType: trimString_(source.accountHolderType || source.accountholdertype),
@@ -17035,6 +17089,15 @@ function updatePortalAccountStripeCustomerId_(accountInfo, stripeCustomerId, opt
   };
 }
 
+function updatePortalAccountStripeCustomerIdIfBlank_(accountInfo, stripeCustomerId, options) {
+  const info = (accountInfo && typeof accountInfo === 'object') ? accountInfo : {};
+  const customerId = trimString_(stripeCustomerId);
+  if (!customerId) return info;
+  const account = info.summary || {};
+  if (trimString_(account.stripeCustomerId)) return info;
+  return updatePortalAccountStripeCustomerId_(info, customerId, options);
+}
+
 function ensureStripeCustomerForPortalAccount_(ctxOrAccountSummary, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const source = (ctxOrAccountSummary && typeof ctxOrAccountSummary === 'object') ? ctxOrAccountSummary : {};
@@ -17116,6 +17179,7 @@ function extractAchPaymentMethodSummaryFromStripe_(paymentMethodObj, options) {
   const verificationStatus = normalizeAchSummaryVerificationStatus_(opts.verificationStatus, bankVerificationStatus);
   return normalizeAchPaymentMethodSummary_({
     paymentMethodId: paymentMethodId,
+    stripeCustomerId: trimString_(opts.stripeCustomerId) || stripeIdFromObject_(method.customer),
     bankName: bank.bank_name || bank.bankName || opts.bankName,
     last4: bank.last4 || opts.last4,
     accountHolderType: bank.account_holder_type || bank.accountHolderType || opts.accountHolderType,
@@ -17473,10 +17537,6 @@ function markMatchingDashboardSavedAchSetupMethodFailed_(accountInfo, setupInten
   const account = info.summary || buildPortalAccountSummary_(rowInfo.rowObjNormalized || {}, cfg);
   const customerId = stripeIdFromObject_(intent.customer);
   const accountCustomerId = trimString_(account.stripeCustomerId);
-  if (customerId && accountCustomerId && customerId !== accountCustomerId) {
-    return { matched: false, ambiguous: false, accountInfo: info };
-  }
-
   const setupIntentId = trimString_(intent.id);
   const paymentMethodId = stripeIdFromObject_(intent.payment_method);
   const accountSetupIntentId = trimString_(account.achSetupIntentId);
@@ -17484,6 +17544,12 @@ function markMatchingDashboardSavedAchSetupMethodFailed_(accountInfo, setupInten
     ? trimString_(account.achSetupSessionId)
     : '';
   const methods = normalizeAchPaymentMethodsJson_(account.achPaymentMethods);
+  const hasCompatibleCustomer = !customerId || (accountCustomerId && customerId === accountCustomerId) || methods.some(function(item) {
+    return trimString_(item.stripeCustomerId) === customerId;
+  });
+  if (!hasCompatibleCustomer) {
+    return { matched: false, ambiguous: false, accountInfo: info };
+  }
   const matches = methods.filter(function(item) {
     if (!item || !isDashboardSavedAchPaymentMethod_(item)) return false;
     if (setupIntentId && trimString_(item.setupIntentId) === setupIntentId) return true;
@@ -17517,6 +17583,7 @@ function markMatchingDashboardSavedAchSetupMethodFailed_(accountInfo, setupInten
       setupStatus: 'failed',
       setupIntentId: trimString_(item.setupIntentId) || setupIntentId,
       setupSessionId: trimString_(item.setupSessionId) || setupSessionId,
+      stripeCustomerId: trimString_(item.stripeCustomerId) || customerId,
       isDefault: false,
       updatedAt: now
     }));
