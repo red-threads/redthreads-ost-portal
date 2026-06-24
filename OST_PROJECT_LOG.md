@@ -17,6 +17,19 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Phase 3 Live Runtime Restoration On Version 1015
+
+- Mode: Full ship runtime restoration with controlled Sheet mutation and no live email sends.
+- Branch/commit/PR: `main`, Apps Script version `1015`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: pull the portal out of active fixture mode by restoring live runtime data from the private pre-fixture Drive backup.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added a protected `restore_live_runtime_from_backup_headless` route guarded by the existing email-review trigger secret plus `RESTORE_LIVE_RUNTIME_TABS` confirmation. The helper verifies active tabs are fixture-loaded, queue rows are terminal, the scheduler is installed once, backup headers match active headers, and backup rows do not contain fixture sentinels; it creates a rollback workbook copy, then copies values from the backup below preserved headers into only `EXPORT_LOG`, `PORTAL_ORDERS`, and `PORTAL_STRIPE_EVENTS`. `Index.html` shows development revision `140`.
+- Restoration: used private backup workbook title `CALC_EST_OST_EXPORT_LOG active reset backup 2026-06-19 20-10` with Drive IDs redacted. Restore copied `917` `EXPORT_LOG` rows, `7` `PORTAL_ORDERS` rows, and `7` `PORTAL_STRIPE_EVENTS` rows. It did not mutate `FIXTURE_*`, `PORTAL_EMAIL_QUEUE`, `USERS`, `USER_SESSIONS`, `PORTAL_ACCOUNTS`, Script Properties, Stripe config, Apps Script config, or deployment settings.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/send-email-review-suite.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `node --check tools/report-email-runtime-status.mjs`, `node --check tools/report-portal-email-queue-hygiene.mjs`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed. The no-mutation storage-source dry run returned `ok:true`, sent `0`, skipped `1`, failed `0`, attachment fallback `44`, contradiction warnings/errors `0`, parity failures `0`, `activeTabsMutated:false`, and `queueCleared:false`. Matrix validation returned `ok:true` with `37` required, `37` covered, `0` missing, and `0` intent mismatches.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add live runtime restore helper"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1015 - Add live runtime restore helper`. Direct `/exec` returned HTTP `200` with `Development revision 140` and the stable deployment ID. Public `/portal` returned HTTP `200` and referenced the stable deployment ID.
+- Current-state updates: post-restore `npm run email-review:status` reports `activeTabState: live_like`; `EXPORT_LOG`, `PORTAL_ORDERS`, and `PORTAL_STRIPE_EVENTS` all have fixture match mode `none`; `PORTAL_EMAIL_QUEUE` remains at two `sent` rows; the scheduler remains installed once at 9 AM America/Detroit. Bounded sentinel searches found `0` active `Fixture`/`EmailReview` matches across the restored tabs.
+- Follow-ups: keep future email reviews on `--fixture-source=storage` unless intentionally resetting active tabs. The scheduler is now active against restored live-like runtime data, so legitimate due PO/ACH reminder jobs may enqueue/send according to deployed lifecycle rules.
+
 ## 2026-06-23 - ACH Verification Reminder Emails On Version 1010
 
 - Mode: Full ship runtime enhancement plus owner-approved live email-review suite; email dry-runs intentionally skipped per owner instruction.

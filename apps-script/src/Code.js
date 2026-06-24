@@ -1872,6 +1872,9 @@ function doPost(e) {
     if (action === 'get_email_review_runtime_status_headless') {
       return jsonOutput_(getEmailReviewRuntimeStatusHeadless_(payload));
     }
+    if (action === 'restore_live_runtime_from_backup_headless') {
+      return jsonOutput_(restoreLiveRuntimeFromBackupHeadless_(payload));
+    }
     if (action === 'audit_email_review_artifacts') {
       return jsonOutput_(auditEmailReviewArtifacts(payload));
     }
@@ -32015,6 +32018,272 @@ function getEmailReviewRuntimeStatusHeadless_(payload) {
       error: normalizeEmailReviewError_(err)
     };
   }
+}
+
+function restoreLiveRuntimeFromBackupHeadless_(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const cfg = getConfig_();
+    const auth = validateEmailReviewTriggerSecret_(p.triggerSecret, cfg);
+    if (auth.ok !== true) {
+      return {
+        ok: false,
+        headless: true,
+        restored: false,
+        error: auth.error
+      };
+    }
+    const confirmation = trimString_(p.confirmation || p.confirm);
+    if (confirmation !== 'RESTORE_LIVE_RUNTIME_TABS') {
+      return {
+        ok: false,
+        headless: true,
+        restored: false,
+        error: 'restore_confirmation_required'
+      };
+    }
+    const backupSpreadsheetId = trimString_(p.backupSpreadsheetId || p.backup_spreadsheet_id || p.backupId);
+    if (!backupSpreadsheetId) {
+      return {
+        ok: false,
+        headless: true,
+        restored: false,
+        error: 'backup_spreadsheet_id_required'
+      };
+    }
+    if (backupSpreadsheetId === trimString_(cfg.sheetId)) {
+      return {
+        ok: false,
+        headless: true,
+        restored: false,
+        error: 'backup_must_not_be_active_workbook'
+      };
+    }
+    return runPortalRuntimeRestoreWithLock_(function() {
+      return restoreLiveRuntimeFromBackupCore_(cfg, backupSpreadsheetId);
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      headless: true,
+      restored: false,
+      error: normalizeEmailReviewError_(err)
+    };
+  }
+}
+
+function runPortalRuntimeRestoreWithLock_(runner) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return {
+      ok: false,
+      headless: true,
+      restored: false,
+      error: 'portal_runtime_restore_already_running'
+    };
+  }
+  try {
+    return runner();
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (_) {}
+  }
+}
+
+function restoreLiveRuntimeFromBackupCore_(cfg, backupSpreadsheetId) {
+  const active = SpreadsheetApp.openById(cfg.sheetId);
+  const backup = SpreadsheetApp.openById(backupSpreadsheetId);
+  const beforeStatus = buildEmailReviewRuntimeStatus_(active, cfg);
+  if (trimString_(beforeStatus.activeTabState) !== 'fixture_loaded') {
+    throw new Error('active_tabs_not_fixture_loaded');
+  }
+  assertPortalRuntimeRestoreQueueTerminal_(beforeStatus.queue);
+  assertPortalRuntimeRestoreSchedulerReady_(beforeStatus.scheduler);
+
+  const tabs = buildPortalRuntimeRestoreTabs_(cfg);
+  const verification = tabs.map(function(tab) {
+    return verifyPortalRuntimeBackupTab_(backup, active, tab);
+  });
+  const rollback = createPortalRuntimeRestoreRollbackCopy_(cfg);
+  const operations = tabs.map(function(tab) {
+    return restorePortalRuntimeBackupTab_(backup, active, tab);
+  });
+  SpreadsheetApp.flush();
+  const afterStatus = buildEmailReviewRuntimeStatus_(active, cfg);
+  if (trimString_(afterStatus.activeTabState) === 'fixture_loaded') {
+    throw new Error('active_tabs_still_fixture_loaded_after_restore');
+  }
+  return {
+    ok: true,
+    headless: true,
+    restored: true,
+    activeTabsMutated: true,
+    fixtureTabsMutated: false,
+    queueCleared: false,
+    protectedTabsTouched: false,
+    backupWorkbook: {
+      title: trimString_(backup.getName()),
+      idTail: buildRedactedDriveIdTail_(backupSpreadsheetId)
+    },
+    rollbackWorkbook: rollback,
+    before: summarizePortalRuntimeRestoreStatus_(beforeStatus),
+    verification: verification,
+    operations: operations,
+    after: summarizePortalRuntimeRestoreStatus_(afterStatus)
+  };
+}
+
+function buildPortalRuntimeRestoreTabs_(cfg) {
+  return [
+    { name: cfg.exportLogSheetName, columns: 47 },
+    { name: cfg.portalOrdersSheetName, columns: 68 },
+    { name: PORTAL_STRIPE_EVENTS_SHEET_NAME, columns: Math.max(PORTAL_STRIPE_EVENTS_HEADERS.length, 26) }
+  ];
+}
+
+function assertPortalRuntimeRestoreQueueTerminal_(queue) {
+  const counts = (queue && queue.countsByStatus && typeof queue.countsByStatus === 'object')
+    ? queue.countsByStatus
+    : {};
+  const terminal = {
+    sent: true,
+    skipped: true,
+    failed: true,
+    canceled: true,
+    cancelled: true
+  };
+  const statuses = Object.keys(counts);
+  for (let i = 0; i < statuses.length; i++) {
+    const status = trimString_(statuses[i]).toLowerCase();
+    const count = parseInt(String(counts[statuses[i]] || 0), 10) || 0;
+    if (count > 0 && !terminal[status]) {
+      throw new Error('portal_email_queue_non_terminal_rows');
+    }
+  }
+}
+
+function assertPortalRuntimeRestoreSchedulerReady_(scheduler) {
+  const info = (scheduler && typeof scheduler === 'object') ? scheduler : {};
+  if (info.installed !== true ||
+      parseInt(String(info.triggerCount || 0), 10) !== 1 ||
+      trimString_(info.handler) !== 'processPurchaseOrderPaymentReminderSchedule') {
+    throw new Error('scheduled_email_trigger_not_ready');
+  }
+}
+
+function verifyPortalRuntimeBackupTab_(backup, active, tab) {
+  const source = backup.getSheetByName(tab.name);
+  const target = active.getSheetByName(tab.name);
+  if (!source) throw new Error('backup_tab_missing_' + tab.name);
+  if (!target) throw new Error('active_tab_missing_' + tab.name);
+  const columns = Math.max(1, Math.min(tab.columns, source.getMaxColumns(), target.getMaxColumns()));
+  assertPortalRuntimeRestoreHeadersMatch_(source, target, columns);
+  const sourceRows = Math.max(1, source.getLastRow());
+  const sentinelRows = countPortalRuntimeRestoreSentinelRows_(source, columns);
+  if (sourceRows < 2) throw new Error('backup_tab_empty_' + tab.name);
+  if (sentinelRows > 0) throw new Error('backup_tab_appears_fixture_loaded_' + tab.name);
+  return {
+    tab: tab.name,
+    columns: columns,
+    backupDataRows: Math.max(0, sourceRows - 1),
+    headerCompatible: true,
+    fixtureSentinelRows: sentinelRows
+  };
+}
+
+function assertPortalRuntimeRestoreHeadersMatch_(source, target, columnCount) {
+  const cols = Math.max(1, parseInt(String(columnCount || 0), 10) || 0);
+  const sourceHeaders = source.getRange(1, 1, 1, cols).getValues()[0].map(function(value) {
+    return trimString_(value).toLowerCase();
+  });
+  const targetHeaders = target.getRange(1, 1, 1, cols).getValues()[0].map(function(value) {
+    return trimString_(value).toLowerCase();
+  });
+  for (let i = 0; i < cols; i++) {
+    if (sourceHeaders[i] !== targetHeaders[i]) throw new Error('restore_header_mismatch_' + source.getName());
+  }
+}
+
+function countPortalRuntimeRestoreSentinelRows_(sheet, columnCount) {
+  const rows = Math.max(1, sheet.getLastRow());
+  if (rows < 2) return 0;
+  const cols = Math.max(1, parseInt(String(columnCount || sheet.getLastColumn()), 10) || sheet.getLastColumn());
+  const values = sheet.getRange(2, 1, rows - 1, cols).getValues();
+  const sentinel = /(?:EmailReview|Email Review|EMAIL-REVIEW|Fixture)/i;
+  return values.filter(function(row) {
+    return row.some(function(value) {
+      return sentinel.test(trimString_(value));
+    });
+  }).length;
+}
+
+function createPortalRuntimeRestoreRollbackCopy_(cfg) {
+  const sourceFile = DriveApp.getFileById(cfg.sheetId);
+  const title = sourceFile.getName() + ' live restore rollback ' +
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Detroit', 'yyyy-MM-dd HH-mm');
+  const parents = sourceFile.getParents();
+  const copy = parents.hasNext()
+    ? sourceFile.makeCopy(title, parents.next())
+    : sourceFile.makeCopy(title);
+  return {
+    created: true,
+    title: title,
+    idTail: buildRedactedDriveIdTail_(copy.getId())
+  };
+}
+
+function restorePortalRuntimeBackupTab_(backup, active, tab) {
+  const source = backup.getSheetByName(tab.name);
+  const target = active.getSheetByName(tab.name);
+  if (!source || !target) throw new Error('restore_tab_missing_' + tab.name);
+  const columns = Math.max(1, Math.min(tab.columns, source.getMaxColumns(), target.getMaxColumns()));
+  assertPortalRuntimeRestoreHeadersMatch_(source, target, columns);
+  const sourceRows = Math.max(1, source.getLastRow());
+  const dataRows = Math.max(0, sourceRows - 1);
+  if (target.getMaxRows() < sourceRows) {
+    target.insertRowsAfter(target.getMaxRows(), sourceRows - target.getMaxRows());
+  }
+  if (target.getMaxColumns() < columns) {
+    target.insertColumnsAfter(target.getMaxColumns(), columns - target.getMaxColumns());
+  }
+  const rowsToClear = Math.max(0, target.getMaxRows() - 1);
+  if (rowsToClear > 0) {
+    target.getRange(2, 1, rowsToClear, columns).clearContent();
+  }
+  if (dataRows > 0) {
+    const values = source.getRange(2, 1, dataRows, columns).getValues();
+    target.getRange(2, 1, dataRows, columns).setValues(values);
+  }
+  return {
+    tab: tab.name,
+    rowsCopied: dataRows,
+    columnsCopied: columns,
+    rowsCleared: rowsToClear
+  };
+}
+
+function summarizePortalRuntimeRestoreStatus_(status) {
+  const source = (status && typeof status === 'object') ? status : {};
+  return {
+    activeTabState: trimString_(source.activeTabState),
+    activeTabs: Array.isArray(source.activeTabs) ? source.activeTabs.map(function(tab) {
+      return {
+        activeTab: trimString_(tab.activeTab),
+        status: trimString_(tab.status),
+        rowCount: tab.rowCount || 0,
+        columnCount: tab.columnCount || 0,
+        matchMode: trimString_(tab.matchMode)
+      };
+    }) : [],
+    queue: source.queue || {},
+    scheduler: source.scheduler || {}
+  };
+}
+
+function buildRedactedDriveIdTail_(value) {
+  const raw = trimString_(value);
+  return raw ? ('...' + raw.slice(-6)) : '';
 }
 
 function sendEmailReviewSuite_(payload) {
