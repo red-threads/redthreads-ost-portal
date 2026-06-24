@@ -11696,14 +11696,14 @@
       line-height:1.6;
     }
     .taxSignatureBackdrop{
-      position:absolute;
+      position:fixed;
       inset:0;
       display:flex;
       align-items:center;
       justify-content:center;
       padding:22px;
       background:rgba(2,6,23,.46);
-      z-index:20;
+      z-index:10126;
     }
     .taxSignatureBackdrop[hidden]{
       display:none !important;
@@ -17261,7 +17261,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 164">164</div>
+  <div class="devRevisionBadge" aria-label="Development revision 165">165</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -33297,12 +33297,194 @@
     handleTaxDocumentCloseRequest_({ immediate: true });
   }
 
+  function containTaxWorkspaceActionEvent_(event, options){
+    if (!event) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (opts.preventDefault !== false && typeof event.preventDefault === 'function') event.preventDefault();
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (opts.stopImmediate !== false && typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function isTaxWorkspaceActionSurfaceOpen_(){
+    return !!(taxDocBackdrop && !taxDocBackdrop.hidden && taxDocBackdrop.classList.contains('open'));
+  }
+
+  function handleTaxDocGuidedStartClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    if (isTaxClientViewMode_() || isTaxTeamReviewMode_()) return;
+    if (taxDocStartHeaderBtn && taxDocStartHeaderBtn.hidden) return;
+    containTaxWorkspaceActionEvent_(event);
+    closeTaxDocUploadPanel_({ clearFile: false });
+    closeTaxDocEmailPanel_();
+    setTaxDocMessage('', 'info');
+    startTaxFormGuidedMode_({ focusControl: true });
+  }
+
+  function handleTaxDocEmailToggleClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    if (TAX_DOC_EMAIL_PANEL_OPEN) {
+      closeTaxDocEmailPanel_();
+    } else {
+      openTaxDocEmailPanel_();
+    }
+  }
+
+  function handleTaxDocUploadToggleClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    if (TAX_DOC_UPLOAD_PANEL_OPEN) {
+      closeTaxDocUploadPanel_({ clearFile: false });
+    } else {
+      openTaxDocUploadPanel_();
+    }
+  }
+
+  function handleTaxReplacementActionClick_(event){
+    if (!event || !isTaxWorkspaceActionSurfaceOpen_()) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const action = target.closest('#taxDocReplacementBtn');
+    if (!action) return;
+    containTaxWorkspaceActionEvent_(event);
+    openTaxReplacementConfirm_();
+  }
+
+  function handleTaxReplacementConfirmBackdropClick_(event){
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (!event || event.target !== taxReplacementConfirmBackdrop) return;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    closeTaxReplacementConfirm_();
+  }
+
+  function handleTaxReplacementCancelClick_(event){
+    containTaxWorkspaceActionEvent_(event);
+    closeTaxReplacementConfirm_();
+  }
+
+  function handleTaxReplacementConfirmClick_(event){
+    containTaxWorkspaceActionEvent_(event);
+    clearTaxExemptDocumentForReplacementFromViewer_();
+  }
+
+  function handleTaxSignatureBackdropClick_(event){
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (!event || event.target !== taxSignatureBackdrop) return;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    closeTaxSignatureModal_();
+  }
+
+  function handleTaxWorkspaceActionClick_(event){
+    if (!event || !isTaxWorkspaceActionSurfaceOpen_()) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (taxSignatureBackdrop && !taxSignatureBackdrop.hidden && taxSignatureBackdrop.contains(target)) {
+      const closeAction = target.closest('#taxSignatureClose, #taxSignatureCancelBtn');
+      const clearAction = target.closest('#taxSignatureClearBtn');
+      const saveAction = target.closest('#taxSignatureSaveBtn');
+      if (closeAction) {
+        containTaxWorkspaceActionEvent_(event);
+        closeTaxSignatureModal_();
+        return;
+      }
+      if (clearAction) {
+        containTaxWorkspaceActionEvent_(event);
+        clearTaxSignatureModal_();
+        return;
+      }
+      if (saveAction) {
+        containTaxWorkspaceActionEvent_(event);
+        saveTaxSignatureModal_();
+        return;
+      }
+      if (event.target === taxSignatureBackdrop) {
+        handleTaxSignatureBackdropClick_(event);
+        return;
+      }
+      containTaxWorkspaceActionEvent_(event, { preventDefault: false });
+      return;
+    }
+    if (taxReplacementConfirmBackdrop && !taxReplacementConfirmBackdrop.hidden && taxReplacementConfirmBackdrop.contains(target)) {
+      if (target.closest('#taxReplacementCancelBtn')) {
+        handleTaxReplacementCancelClick_(event);
+        return;
+      }
+      if (target.closest('#taxReplacementConfirmBtn')) {
+        handleTaxReplacementConfirmClick_(event);
+        return;
+      }
+      if (event.target === taxReplacementConfirmBackdrop) {
+        handleTaxReplacementConfirmBackdropClick_(event);
+        return;
+      }
+      containTaxWorkspaceActionEvent_(event, { preventDefault: false });
+      return;
+    }
+    if (target.closest('#taxDocStartHeaderBtn')) {
+      handleTaxDocGuidedStartClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocDownloadBtn')) {
+      containTaxWorkspaceActionEvent_(event);
+      downloadTaxFormBlank_();
+      return;
+    }
+    if (target.closest('#taxDocEmailBtn')) {
+      handleTaxDocEmailToggleClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocUploadFocusBtn')) {
+      handleTaxDocUploadToggleClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocUploadChooseBtn')) {
+      containTaxWorkspaceActionEvent_(event);
+      openTaxDocUploadPicker_();
+      return;
+    }
+    if (target.closest('#taxDocEmailCancelBtn')) {
+      containTaxWorkspaceActionEvent_(event);
+      closeTaxDocEmailPanel_();
+      return;
+    }
+    if (target.closest('#taxDocReplacementBtn')) {
+      handleTaxReplacementActionClick_(event);
+      return;
+    }
+    if (taxDocReplacementRail && taxDocReplacementRail.contains(target)) {
+      containTaxWorkspaceActionEvent_(event, { preventDefault: false });
+    }
+  }
+
   function bindTaxDocumentWorkspaceEvents_(){
     if (bindTaxDocumentWorkspaceEvents_.isBound === true) return;
     bindTaxDocumentWorkspaceEvents_.isBound = true;
     if (taxDocClose) taxDocClose.addEventListener('click', () => handleTaxDocumentCloseRequest_());
     if (taxDocBackdrop) taxDocBackdrop.addEventListener('click', handleTaxDocumentBackdropClick_);
     document.addEventListener('keydown', handleTaxDocumentKeydown_);
+    document.addEventListener('click', handleTaxWorkspaceActionClick_, true);
+    if (taxReplacementConfirmBackdrop) taxReplacementConfirmBackdrop.addEventListener('click', handleTaxReplacementConfirmBackdropClick_);
+    if (taxReplacementCancelBtn) taxReplacementCancelBtn.addEventListener('click', handleTaxReplacementCancelClick_);
+    if (taxReplacementConfirmBtn) taxReplacementConfirmBtn.addEventListener('click', handleTaxReplacementConfirmClick_);
+    if (taxSignatureBackdrop) taxSignatureBackdrop.addEventListener('click', handleTaxSignatureBackdropClick_);
+    if (taxSignatureClose) taxSignatureClose.addEventListener('click', event => {
+      containTaxWorkspaceActionEvent_(event);
+      closeTaxSignatureModal_();
+    });
+    if (taxSignatureCancelBtn) taxSignatureCancelBtn.addEventListener('click', event => {
+      containTaxWorkspaceActionEvent_(event);
+      closeTaxSignatureModal_();
+    });
+    if (taxSignatureClearBtn) taxSignatureClearBtn.addEventListener('click', event => {
+      containTaxWorkspaceActionEvent_(event);
+      clearTaxSignatureModal_();
+    });
+    if (taxSignatureSaveBtn) taxSignatureSaveBtn.addEventListener('click', event => {
+      containTaxWorkspaceActionEvent_(event);
+      saveTaxSignatureModal_();
+    });
   }
 
   function setTaxClientViewerLoading_(isLoading){
