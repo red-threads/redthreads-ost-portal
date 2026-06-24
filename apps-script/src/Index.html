@@ -17276,7 +17276,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 168">168</div>
+  <div class="devRevisionBadge" aria-label="Development revision 169">169</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17865,9 +17865,9 @@
             </div>
           </div>
           <div class="termsReviewSection termsReplacementSection" id="termsReplacementSection" hidden>
-            <div class="termsReplacementTitle">Clear Old Document and Add New One</div>
-            <p class="termsReplacementCopy">Clear the approved credit terms document on file, then upload a replacement for Red Threads review.</p>
-            <button class="termsReplacementBtn" id="termsReplacementBtn" type="button">Clear Old Document and Add New One</button>
+            <div class="termsReplacementTitle">Remove Current Credit Terms</div>
+            <p class="termsReplacementCopy">Your current credit terms will be removed immediately. Purchase-order checkout will remain unavailable until a replacement credit terms document has been submitted and approved.</p>
+            <button class="termsReplacementBtn" id="termsReplacementBtn" type="button">Remove Existing Document</button>
           </div>
           <div class="termsReviewSection" id="termsReviewApprovalSection">
             <div class="termsReviewSectionTitle">Assign Payment Terms</div>
@@ -18058,9 +18058,9 @@
         </aside>
         <aside class="taxDocReplacementRail" id="taxDocReplacementRail" hidden>
           <div class="taxDocReplacementCard">
-            <div class="taxDocReplacementTitle">Clear Old Document and Add New One</div>
-            <p class="taxDocReplacementCopy">Clear the approved certificate on file, then upload a replacement for Red Threads review.</p>
-            <button class="taxDocReplacementBtn" id="taxDocReplacementBtn" type="button">Clear Old Document and Add New One</button>
+            <div class="taxDocReplacementTitle">Remove Document / Exemption from account</div>
+            <p class="taxDocReplacementCopy">Clear the approved certificate on file. Afterwards you will have the ability to upload a replacement for Red Threads review.</p>
+            <button class="taxDocReplacementBtn" id="taxDocReplacementBtn" type="button">Remove Document / Exemption from account</button>
           </div>
         </aside>
       </div>
@@ -18072,11 +18072,11 @@
             </div>
           </div>
           <div class="taxReplacementConfirmTitle" id="taxReplacementConfirmTitle">Clear tax exemption document?</div>
-          <div class="taxReplacementConfirmBody" id="taxReplacementConfirmBody">Hey when you clear this document, it's going to be cleared and you won't be able to toggle sales tax on and off orders until you submit a new document and it is approved.</div>
+          <div class="taxReplacementConfirmBody" id="taxReplacementConfirmBody">Removing this tax exemption certificate will disable the ability to apply tax-exempt purchases on future orders. Tax exemption cannot be re-enabled until a new certificate is submitted and approved.</div>
           <div class="taxReplacementConfirmMessage" id="taxReplacementConfirmMessage" hidden></div>
           <div class="taxReplacementConfirmActions">
             <button class="taxDocActionBtn" id="taxReplacementCancelBtn" type="button">Cancel</button>
-            <button class="taxDocPrimaryBtn" id="taxReplacementConfirmBtn" type="button">Clear Document and Upload New One</button>
+            <button class="taxDocPrimaryBtn" id="taxReplacementConfirmBtn" type="button">Remove Document</button>
           </div>
         </div>
       </div>
@@ -33246,7 +33246,7 @@
     if (taxReplacementConfirmBody) {
       taxReplacementConfirmBody.textContent = isBusy
         ? 'Please wait while the current account tax exemption approval is cleared.'
-        : "Hey when you clear this document, it's going to be cleared and you won't be able to toggle sales tax on and off orders until you submit a new document and it is approved.";
+        : 'Removing this tax exemption certificate will disable the ability to apply tax-exempt purchases on future orders. Tax exemption cannot be re-enabled until a new certificate is submitted and approved.';
     }
     if (taxReplacementConfirmMessage) {
       taxReplacementConfirmMessage.textContent = errorText;
@@ -33255,7 +33255,7 @@
     if (taxReplacementCancelBtn) taxReplacementCancelBtn.disabled = isBusy;
     if (taxReplacementConfirmBtn) {
       taxReplacementConfirmBtn.disabled = isBusy;
-      taxReplacementConfirmBtn.textContent = isBusy ? 'Clearing...' : 'Clear Document and Upload New One';
+      taxReplacementConfirmBtn.textContent = isBusy ? 'Clearing...' : 'Remove Document';
     }
   }
 
