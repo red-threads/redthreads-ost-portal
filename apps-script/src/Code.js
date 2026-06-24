@@ -25303,9 +25303,10 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const clearedByName = trimString_(meta && meta.clearedByName);
     const clearedByEmail = normalizeEmail_(meta && meta.clearedByEmail);
     const removedDetails = isTeam ? details.slice() : [];
+    const includeRemovedActorDetails = !isTeam || creditTermsRemoved;
     if (clearedAtLabel) removedDetails.push('Removed: ' + clearedAtLabel);
-    if (clearedByName) removedDetails.push('Removed by: ' + clearedByName);
-    if (clearedByEmail) removedDetails.push('Removed by email: ' + clearedByEmail);
+    if (includeRemovedActorDetails && clearedByName) removedDetails.push('Removed by: ' + clearedByName);
+    if (includeRemovedActorDetails && clearedByEmail) removedDetails.push('Removed by email: ' + clearedByEmail);
     return {
       subject: isTeam
         ? buildTeamSubject_(creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
@@ -25328,7 +25329,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       nextStep: isTeam
         ? (creditTermsRemoved
           ? 'Monitor for a new credit terms submission.'
-          : 'Monitor for a new sales tax exemption submission.')
+          : '')
         : (creditTermsRemoved
           ? 'Upload a new credit terms document from your account dashboard.'
           : 'Upload a new sales tax exemption document from your account dashboard.'),

@@ -3578,6 +3578,11 @@
       background:rgba(255,255,255,.05);
       padding:8px;
     }
+    .chatClassifierGate.isJobRequired{
+      background:linear-gradient(135deg,#f43f5e 0%, var(--rt-red) 58%, #be123c 100%);
+      border-color:rgba(255,255,255,.22);
+      box-shadow:0 8px 16px rgba(225,29,72,.26), inset 0 1px 0 rgba(255,255,255,.12);
+    }
     .chatClassifierGate[hidden]{
       display:none !important;
     }
@@ -3586,6 +3591,9 @@
       font-weight:700;
       color:var(--rt-red);
       line-height:1.3;
+    }
+    .chatClassifierGate.isJobRequired .chatClassifierLabel{
+      color:#000;
     }
     .chatClassifierSelect{
       display:none;
@@ -7716,7 +7724,7 @@
     .summaryEstimateJobStack.isInformationalOnly > .summaryEstimateJobBlock > .summaryEstimateJobTop,
     .summaryEstimateJobStack.isInformationalOnly > .summaryEstimateCompareBlock,
     .summaryEstimateJobStack.isInformationalOnly > .summaryEstimateSkuGroup{
-      opacity:.7;
+      opacity:.6;
     }
     .summaryEstimateJobTop{
       display:grid;
@@ -17261,7 +17269,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 165">165</div>
+  <div class="devRevisionBadge" aria-label="Development revision 166">166</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -22257,6 +22265,7 @@
   const chatPrefillChip = document.getElementById('chatPrefillChip');
   const chatPrefillChange = document.getElementById('chatPrefillChange');
   const chatClassifierGate = document.getElementById('chatClassifierGate');
+  const chatClassifierLabel = chatClassifierGate ? chatClassifierGate.querySelector('.chatClassifierLabel') : null;
   const chatClassifierButtons = document.getElementById('chatClassifierButtons');
   const chatClassifierSelect = document.getElementById('chatClassifierSelect');
   const chatClassifierHelp = document.getElementById('chatClassifierHelp');
@@ -29786,6 +29795,15 @@
     });
   }
 
+  function syncChatClassifierRequiredState(){
+    if (!chatClassifierGate) return;
+    const hasMultipleJobs = Array.isArray(CHAT_CLASSIFIER_JOBS) && CHAT_CLASSIFIER_JOBS.length > 1;
+    const selectedJob = hasMultipleJobs ? getSelectedChatClassificationJob() : null;
+    const requiresSelection = !chatClassifierGate.hidden && CHAT_HEADER_CLASSIFY_REQUIRED && hasMultipleJobs && !selectedJob;
+    chatClassifierGate.classList.toggle('isJobRequired', requiresSelection);
+    if (chatClassifierLabel) chatClassifierLabel.hidden = !requiresSelection;
+  }
+
   function populateChatClassifierSelect(){
     if (!chatClassifierSelect) return 0;
     CHAT_CLASSIFIER_JOBS = getHeaderChatClassificationJobs();
@@ -29811,6 +29829,7 @@
     chatClassifierSelect.value = '';
     chatClassifierSelect.disabled = CHAT_CLASSIFIER_JOBS.length === 0;
     setChatClassifierButtonSelectedIndex(null);
+    syncChatClassifierRequiredState();
     return CHAT_CLASSIFIER_JOBS.length;
   }
 
@@ -29825,6 +29844,7 @@
     const hasMultipleJobs = getHeaderChatClassificationJobs().length > 1;
     if (chatClassifierGate) chatClassifierGate.hidden = !hasMultipleJobs;
     if (chatClassifierHelp) chatClassifierHelp.hidden = true;
+    syncChatClassifierRequiredState();
     setChatComposerLocked(false);
     setChatPrefillPrefix(line, { source: 'header' });
     if (chatInput) chatInput.focus();
@@ -29871,6 +29891,7 @@
       chatClassifierHelp.hidden = true;
       chatClassifierHelp.textContent = '';
     }
+    syncChatClassifierRequiredState();
     setChatComposerLocked(false);
     setChatPrefillPrefix(buildHeaderChatClassifierLine(singleJob), { source: 'header' });
     return true;
@@ -29892,6 +29913,7 @@
           chatClassifierHelp.hidden = true;
           chatClassifierHelp.textContent = '';
         }
+        syncChatClassifierRequiredState();
         setChatComposerLocked(false);
       }
       return;
@@ -29904,6 +29926,7 @@
         ? ''
         : 'No print jobs are available for classification.';
     }
+    syncChatClassifierRequiredState();
     if (optionCount > 0 && chatClassifierButtons && chatClassifierButtons.firstElementChild) {
       requestAnimationFrame(() => chatClassifierButtons.firstElementChild.focus());
     }
@@ -29915,6 +29938,7 @@
     if (chatClassifierHelp) chatClassifierHelp.hidden = true;
     if (chatClassifierSelect) chatClassifierSelect.value = '';
     setChatClassifierButtonSelectedIndex(null);
+    syncChatClassifierRequiredState();
     setChatComposerLocked(false);
     setChatPrefillPrefix(prefixLine, { source: 'revision' });
   }
@@ -29941,6 +29965,7 @@
     CHAT_PREFILL_SOURCE = '';
     if (chatInput) chatInput.value = '';
     renderChatPrefill();
+    syncChatClassifierRequiredState();
     setChatSendEnabled();
   }
 
@@ -29953,6 +29978,7 @@
     const selectedJob = getSelectedChatClassificationJob();
     const requiresSelection = CHAT_HEADER_CLASSIFY_REQUIRED && !selectedJob;
     const hasJobSelection = !requiresSelection && !chatInput.disabled && !!selectedJob;
+    syncChatClassifierRequiredState();
     if (!hasJobSelection) {
       chatSend.disabled = true;
       return;
@@ -47673,6 +47699,7 @@
             chatClassifierHelp.hidden = true;
             chatClassifierHelp.textContent = '';
           }
+          syncChatClassifierRequiredState();
           return;
         }
         applyChatClassificationForPrintJob(CHAT_CLASSIFIER_JOBS[selectedIndex]);
