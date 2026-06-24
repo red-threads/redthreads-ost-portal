@@ -7082,6 +7082,14 @@
     .summaryEstimateInlineEmailStatus.isSuccess{
       color:#157347;
     }
+    .summaryEstimateShareSuccess{
+      margin:-4px 0 0;
+      color:#7dffc8;
+      font-size:11px;
+      font-weight:800;
+      line-height:1.3;
+      text-align:center;
+    }
     .summaryExportCaptureRoot{
       position:fixed;
       left:-200vw;
@@ -16976,7 +16984,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 145">145</div>
+  <div class="devRevisionBadge" aria-label="Development revision 146">146</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -22528,6 +22536,7 @@
   let SUMMARY_SHARE_STATUS = { tone: '', message: '' };
   let SUMMARY_SHARE_BUSY_ACTION = '';
   let SUMMARY_SHARE_SUCCESS_TIMER = 0;
+  let SUMMARY_SHARE_SUCCESS_MESSAGE = '';
   let SUMMARY_PENDING_FLOW_CANCEL_BUSY = false;
   let SUMMARY_PENDING_FLOW_CANCEL_KIND = '';
   let LAST_RENDERED_SUMMARY_DATA = null;
@@ -25611,6 +25620,7 @@
       clearTimeout(SUMMARY_SHARE_SUCCESS_TIMER);
       SUMMARY_SHARE_SUCCESS_TIMER = 0;
     }
+    SUMMARY_SHARE_SUCCESS_MESSAGE = '';
     SUMMARY_SHARE_EMAIL_OPEN = false;
     SUMMARY_SHARE_EMAIL_RECIPIENTS = '';
     SUMMARY_SHARE_STATUS = { tone: '', message: '' };
@@ -29646,6 +29656,23 @@
     SUMMARY_SHARE_SUCCESS_TIMER = 0;
   }
 
+  function clearSummaryShareSuccessMessage_(){
+    clearSummaryShareSuccessTimer_();
+    SUMMARY_SHARE_SUCCESS_MESSAGE = '';
+  }
+
+  function showSummaryShareSuccessMessage_(message){
+    clearSummaryShareSuccessTimer_();
+    SUMMARY_SHARE_SUCCESS_MESSAGE = String(message || '').trim();
+    rerenderSummaryEstimateControls_();
+    if (!SUMMARY_SHARE_SUCCESS_MESSAGE) return;
+    SUMMARY_SHARE_SUCCESS_TIMER = setTimeout(() => {
+      SUMMARY_SHARE_SUCCESS_MESSAGE = '';
+      SUMMARY_SHARE_SUCCESS_TIMER = 0;
+      rerenderSummaryEstimateControls_();
+    }, 3000);
+  }
+
   function rerenderSummaryEstimateControls_(){
     if (!summaryRoot || summaryRoot.hidden) return;
     const shell = summaryRoot.querySelector('.summaryEstimateShell');
@@ -29680,7 +29707,7 @@
   }
 
   function openSummaryShareEmailPanel_(){
-    clearSummaryShareSuccessTimer_();
+    clearSummaryShareSuccessMessage_();
     SUMMARY_SHARE_EMAIL_OPEN = true;
     SUMMARY_SHARE_STATUS = { tone: '', message: '' };
     rerenderSummaryEstimateControls_();
@@ -29689,7 +29716,7 @@
 
   function closeSummaryShareEmailPanel_(options){
     const opts = (options && typeof options === 'object') ? options : {};
-    clearSummaryShareSuccessTimer_();
+    clearSummaryShareSuccessMessage_();
     SUMMARY_SHARE_EMAIL_OPEN = false;
     if (!opts.preserveStatus) {
       SUMMARY_SHARE_STATUS = { tone: '', message: '' };
@@ -29698,6 +29725,7 @@
   }
 
   function setSummaryShareStatus_(tone, message){
+    clearSummaryShareSuccessMessage_();
     SUMMARY_SHARE_STATUS = {
       tone: String(tone || '').trim(),
       message: String(message || '').trim()
@@ -40280,15 +40308,10 @@
         );
       }
       SUMMARY_SHARE_EMAIL_RECIPIENTS = '';
-      SUMMARY_SHARE_STATUS = { tone: 'success', message: isLockedInvoice ? 'Invoice PDF sent successfully.' : 'Summary PDF sent successfully.' };
-      rerenderSummaryEstimateControls_();
-      clearSummaryShareSuccessTimer_();
-      SUMMARY_SHARE_SUCCESS_TIMER = setTimeout(() => {
-        SUMMARY_SHARE_EMAIL_OPEN = false;
-        SUMMARY_SHARE_STATUS = { tone: '', message: '' };
-        SUMMARY_SHARE_SUCCESS_TIMER = 0;
-        rerenderSummaryEstimateControls_();
-      }, 1400);
+      SUMMARY_SHARE_EMAIL_OPEN = false;
+      SUMMARY_SHARE_STATUS = { tone: '', message: '' };
+      SUMMARY_SHARE_BUSY_ACTION = '';
+      showSummaryShareSuccessMessage_('Email sent successfully');
     } catch (err) {
       if (estimateReferenceApplied) {
         PORTAL_STATE.documentReferences = clonePlainObject(PORTAL_STATE.documentReferences || {});
@@ -44944,20 +44967,27 @@
       && paymentMethodSelected !== PAYMENT_METHODS.cash)
       || (lifecycle.showManualPendingControls && lifecycle.paymentDue === true));
 
-    const emailBtn = createEl(
-      'button',
-      'summaryEstimateControlPrimary' + (SUMMARY_SHARE_EMAIL_OPEN ? ' isOpen' : ''),
-      SUMMARY_SHARE_BUSY_ACTION === 'email' ? 'Sending…' : emailActionLabel
-    );
-    emailBtn.type = 'button';
-    emailBtn.setAttribute('aria-pressed', SUMMARY_SHARE_EMAIL_OPEN ? 'true' : 'false');
-    emailBtn.disabled = isBusy;
-    emailBtn.addEventListener('click', () => {
-      if (isBusy) return;
-      if (SUMMARY_SHARE_EMAIL_OPEN) closeSummaryShareEmailPanel_();
-      else openSummaryShareEmailPanel_();
-    });
-    card.appendChild(emailBtn);
+    if (!SUMMARY_SHARE_EMAIL_OPEN) {
+      const emailBtn = createEl(
+        'button',
+        'summaryEstimateControlPrimary',
+        SUMMARY_SHARE_BUSY_ACTION === 'email' ? 'Sending…' : emailActionLabel
+      );
+      emailBtn.type = 'button';
+      emailBtn.setAttribute('aria-expanded', 'false');
+      emailBtn.disabled = isBusy;
+      emailBtn.addEventListener('click', () => {
+        if (isBusy) return;
+        openSummaryShareEmailPanel_();
+      });
+      card.appendChild(emailBtn);
+      if (SUMMARY_SHARE_SUCCESS_MESSAGE) {
+        const success = createEl('div', 'summaryEstimateShareSuccess', SUMMARY_SHARE_SUCCESS_MESSAGE);
+        success.setAttribute('role', 'status');
+        success.setAttribute('aria-live', 'polite');
+        card.appendChild(success);
+      }
+    }
 
     if (SUMMARY_SHARE_EMAIL_OPEN) {
       const panel = createEl('div', 'summaryEstimateInlineEmailPanel');

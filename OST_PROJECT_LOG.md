@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Estimate Share Panel Refinement On Version 1021
+
+- Mode: Full ship frontend estimate-tab interaction fix.
+- Branch/commit/PR: `main`, Apps Script version `1021`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: refine the client portal Summary/Estimate sidebar so the Share/Download button hides while the inline email panel is open and successful sends restore the button with a small external confirmation.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: the Summary/Estimate primary share/download button now renders only while the inline email panel is closed. Opening the panel hides the button; `Cancel` closes the panel and restores the at-rest button. Successful sends now immediately close the panel, clear the recipient input, restore the button, and show `Email sent successfully` directly under the button for about three seconds. Invalid email and send/PDF-generation errors still remain inside the panel. `Index.html` shows development revision `146`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine estimate share panel"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1021 - Refine estimate share panel`. Direct `/exec` returned HTTP `200` with `Development revision 146`, omitted stale revision `145`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and had zero targeted sensitive markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Fixture-storage tabs were untouched, `PORTAL_EMAIL_QUEUE` was not cleared, no email-review suite was run, and no estimate email was sent. No estimate pricing, snapshot data, recipient parsing, backend email sending, Stripe/payment, tax exemption, routing, token, lifecycle, or schema logic was changed.
+- Follow-ups: owner should visually test open panel, cancel, invalid recipient, and successful estimate send from a real project estimate tab.
+
 ## 2026-06-24 - Dashboard Peek Height Fix On Version 1020
 
 - Mode: Full ship frontend dashboard UX fix.
