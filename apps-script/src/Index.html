@@ -11795,14 +11795,14 @@
       box-shadow:0 12px 24px rgba(190,24,93,.24);
     }
     .taxSubmitSuccessBackdrop{
-      position:absolute;
+      position:fixed;
       inset:0;
       display:flex;
       align-items:center;
       justify-content:center;
       padding:22px;
-      background:rgba(2,6,23,.42);
-      z-index:22;
+      background:rgba(2,6,23,.52);
+      z-index:10127;
     }
     .taxSubmitSuccessBackdrop[hidden]{
       display:none !important;
@@ -17276,7 +17276,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 167">167</div>
+  <div class="devRevisionBadge" aria-label="Development revision 168">168</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19751,6 +19751,8 @@
   let TAX_FORM_LAST_SUBMISSION_ARTIFACT_FILE_ID = '';
   let TAX_FORM_FINAL_MODAL_MODE = '';
   let TAX_FORM_FINAL_MODAL_MESSAGE = '';
+  let TAX_FORM_FINAL_SUBMIT_STARTED_AT = '';
+  let TAX_FORM_FINAL_SUBMIT_RECONCILE_TIMER = 0;
   const TAX_FORM_DRAFT_STORAGE_PREFIX = 'rtTaxForm3372Draft';
   let TAX_FORM_MANIFEST = null;
   let TAX_FORM_INDEX = null;
@@ -31822,12 +31824,14 @@
   }
 
   function resetTaxFormSubmissionState_(){
+    clearTaxFormFinalSubmitReconcileTimer_();
     TAX_FORM_FINAL_SUBMIT_IN_FLIGHT = false;
     TAX_FORM_FINAL_EMAIL_IN_FLIGHT = false;
     TAX_FORM_FINAL_EMAIL_SENT = false;
     TAX_FORM_LAST_SUBMISSION_ARTIFACT_FILE_ID = '';
     TAX_FORM_FINAL_MODAL_MODE = '';
     TAX_FORM_FINAL_MODAL_MESSAGE = '';
+    TAX_FORM_FINAL_SUBMIT_STARTED_AT = '';
     if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = true;
     if (taxDocEmailCopyBtn) {
       taxDocEmailCopyBtn.disabled = false;
@@ -31838,6 +31842,72 @@
       taxDocCloseEntryBtn.disabled = false;
       taxDocCloseEntryBtn.textContent = 'Close form entry';
     }
+  }
+
+  function clearTaxFormFinalSubmitReconcileTimer_(){
+    if (!TAX_FORM_FINAL_SUBMIT_RECONCILE_TIMER) return;
+    window.clearTimeout(TAX_FORM_FINAL_SUBMIT_RECONCILE_TIMER);
+    TAX_FORM_FINAL_SUBMIT_RECONCILE_TIMER = 0;
+  }
+
+  function getTaxFormWorkflowSubmittedAt_(workflow){
+    const safeWorkflow = (workflow && typeof workflow === 'object') ? workflow : {};
+    const meta = (safeWorkflow.clientMeta && typeof safeWorkflow.clientMeta === 'object') ? safeWorkflow.clientMeta : {};
+    const lastSubmission = (meta.lastSubmission && typeof meta.lastSubmission === 'object') ? meta.lastSubmission : {};
+    return String(safeWorkflow.submittedAt || lastSubmission.submittedAt || '').trim();
+  }
+
+  function hasTaxFormSubmissionAcceptedSince_(summary, startedAt){
+    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', summary) || {};
+    if (getAccountDocumentStatusValue_(workflow) !== 'under_review') return false;
+    if (!hasPendingAccountDocumentSubmission_(workflow)) return false;
+    const startedMs = getAccountDocumentWorkflowMomentMs_(startedAt);
+    if (!startedMs) return true;
+    const submittedMs = getAccountDocumentWorkflowMomentMs_(getTaxFormWorkflowSubmittedAt_(workflow));
+    return !!(submittedMs && submittedMs >= (startedMs - 3000));
+  }
+
+  function showTaxFormFinalSubmitSuccessFromSummary_(summary){
+    clearTaxFormFinalSubmitReconcileTimer_();
+    const nextSummary = applyReturnedAccountSummary_(summary || getActiveAccountSummaryForTaxWorkspace_());
+    requireFreshDashboardHomeReturn_('account_document_submission');
+    TAX_FORM_FINAL_SUBMIT_IN_FLIGHT = false;
+    TAX_FORM_FINAL_MODAL_MODE = 'success';
+    TAX_FORM_FINAL_MODAL_MESSAGE = '';
+    TAX_FORM_FINAL_EMAIL_SENT = false;
+    if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = false;
+    updateTaxFormWorkspaceMeta_();
+    renderTaxFormSuccessModal_();
+    setTaxDocMessage('', 'info');
+    return nextSummary;
+  }
+
+  async function reconcileTaxFormFinalSubmitFromAccountStatus_(startedAt){
+    try {
+      const resp = await callServer('getAccountStatus', getTaxWorkspaceDocumentRequestPayload_());
+      if (!resp || resp.ok !== true) return false;
+      const nextSummary = normalizeAccountSummary(resp.accountSummary || {});
+      if (!hasTaxFormSubmissionAcceptedSince_(nextSummary, startedAt)) return false;
+      showTaxFormFinalSubmitSuccessFromSummary_(nextSummary);
+      return true;
+    } catch (err) {
+      try {
+        console.warn('Tax form submission status reconciliation failed.', err);
+      } catch (_) {}
+      return false;
+    }
+  }
+
+  function scheduleTaxFormFinalSubmitReconcile_(){
+    clearTaxFormFinalSubmitReconcileTimer_();
+    const submitStartedAt = String(TAX_FORM_FINAL_SUBMIT_STARTED_AT || '').trim();
+    TAX_FORM_FINAL_SUBMIT_RECONCILE_TIMER = window.setTimeout(async () => {
+      TAX_FORM_FINAL_SUBMIT_RECONCILE_TIMER = 0;
+      if (!TAX_FORM_FINAL_SUBMIT_IN_FLIGHT) return;
+      if (String(TAX_FORM_FINAL_MODAL_MODE || '').trim() !== 'submitting') return;
+      if (!taxDocBackdrop || taxDocBackdrop.hidden) return;
+      await reconcileTaxFormFinalSubmitFromAccountStatus_(submitStartedAt);
+    }, 12000);
   }
 
   function renderTaxFormSuccessModal_(){
@@ -33878,13 +33948,16 @@
 
   async function submitTaxFormFinalDocument_(){
     if (TAX_FORM_FINAL_SUBMIT_IN_FLIGHT || !isTaxFormReadyForReview_()) return;
+    clearTaxFormFinalSubmitReconcileTimer_();
     TAX_FORM_FINAL_SUBMIT_IN_FLIGHT = true;
+    TAX_FORM_FINAL_SUBMIT_STARTED_AT = new Date().toISOString();
     TAX_FORM_FINAL_MODAL_MODE = 'submitting';
     TAX_FORM_FINAL_MODAL_MESSAGE = '';
     if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = false;
     renderTaxFormSuccessModal_();
     updateTaxFormWorkspaceMeta_();
     setTaxDocMessage('', 'info');
+    scheduleTaxFormFinalSubmitReconcile_();
     try {
       const renderedArtifact = await captureTaxFormReviewArtifact_();
       const resp = await callServer('submitTaxExemptGuidedSubmission', getTaxWorkspaceDocumentRequestPayload_({
@@ -33896,19 +33969,24 @@
       }
       requireFreshDashboardHomeReturn_('account_document_submission');
       TAX_FORM_LAST_SUBMISSION_ARTIFACT_FILE_ID = String((resp && resp.artifactFileId) || '').trim();
-      TAX_FORM_FINAL_MODAL_MODE = 'success';
-      TAX_FORM_FINAL_MODAL_MESSAGE = '';
-      TAX_FORM_FINAL_EMAIL_SENT = false;
-      renderTaxFormSuccessModal_();
       try {
-        applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForTaxWorkspace_());
+        showTaxFormFinalSubmitSuccessFromSummary_(resp.accountSummary || getActiveAccountSummaryForTaxWorkspace_());
       } catch (syncErr) {
         try {
           console.warn('Tax form submission post-submit refresh failed.', syncErr);
         } catch (_) {}
+        TAX_FORM_FINAL_SUBMIT_IN_FLIGHT = false;
+        TAX_FORM_FINAL_MODAL_MODE = 'success';
+        TAX_FORM_FINAL_MODAL_MESSAGE = '';
+        TAX_FORM_FINAL_EMAIL_SENT = false;
+        if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = false;
+        renderTaxFormSuccessModal_();
       }
       setTaxDocMessage('', 'info');
     } catch (err) {
+      clearTaxFormFinalSubmitReconcileTimer_();
+      if (String(TAX_FORM_FINAL_MODAL_MODE || '').trim() === 'success') return;
+      if (await reconcileTaxFormFinalSubmitFromAccountStatus_(TAX_FORM_FINAL_SUBMIT_STARTED_AT)) return;
       TAX_FORM_FINAL_MODAL_MODE = 'error';
       TAX_FORM_FINAL_MODAL_MESSAGE = String((err && err.message) || err || 'Unable to submit the completed document.');
       if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = false;
