@@ -10171,6 +10171,7 @@
       border-color:rgba(251,113,133,.24);
       background:linear-gradient(180deg,rgba(127,29,29,.26),rgba(15,23,42,.42));
       box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 34px rgba(0,0,0,.22);
+      cursor:pointer;
     }
     .termsReplacementSection[hidden]{
       display:none !important;
@@ -10288,6 +10289,10 @@
     }
     .termsReplacementConfirmBackdrop[hidden]{
       display:none !important;
+    }
+    .termsReviewBackdrop > .termsReplacementConfirmBackdrop{
+      position:absolute;
+      z-index:4;
     }
     .termsReplacementConfirmModal{
       width:min(560px,100%);
@@ -17256,7 +17261,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 158">158</div>
+  <div class="devRevisionBadge" aria-label="Development revision 164">164</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17862,21 +17867,21 @@
           <div class="termsReviewMessage info" id="termsReviewMessage" hidden></div>
         </aside>
       </div>
-    </div>
-  </div>
-  <div class="termsReplacementConfirmBackdrop" id="termsReplacementConfirmBackdrop" hidden>
-    <div class="termsReplacementConfirmModal" role="dialog" aria-modal="true" aria-labelledby="termsReplacementConfirmTitle">
-      <div class="termsReplacementConfirmSpinner" id="termsReplacementConfirmSpinner" hidden aria-hidden="true">
-        <div class="rt-spinner">
-          <img class="rt-spinner-icon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+      <div class="termsReplacementConfirmBackdrop" id="termsReplacementConfirmBackdrop" hidden>
+        <div class="termsReplacementConfirmModal" role="dialog" aria-modal="true" aria-labelledby="termsReplacementConfirmTitle">
+          <div class="termsReplacementConfirmSpinner" id="termsReplacementConfirmSpinner" hidden aria-hidden="true">
+            <div class="rt-spinner">
+              <img class="rt-spinner-icon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+            </div>
+          </div>
+          <div class="termsReplacementConfirmTitle" id="termsReplacementConfirmTitle">Clear credit terms document?</div>
+          <div class="termsReplacementConfirmBody" id="termsReplacementConfirmBody">When you clear this credit terms document, purchase-order checkout will be unavailable for this account until a new credit terms document is submitted and approved.</div>
+          <div class="termsReplacementConfirmMessage" id="termsReplacementConfirmMessage" hidden></div>
+          <div class="termsReplacementConfirmActions">
+            <button class="accountDocActionBtn" id="termsReplacementCancelBtn" type="button">Cancel</button>
+            <button class="accountDocActionBtn is-primary" id="termsReplacementConfirmBtn" type="button">Clear Document and Upload New One</button>
+          </div>
         </div>
-      </div>
-      <div class="termsReplacementConfirmTitle" id="termsReplacementConfirmTitle">Clear credit terms document?</div>
-      <div class="termsReplacementConfirmBody" id="termsReplacementConfirmBody">When you clear this credit terms document, purchase-order checkout will be unavailable for this account until a new credit terms document is submitted and approved.</div>
-      <div class="termsReplacementConfirmMessage" id="termsReplacementConfirmMessage" hidden></div>
-      <div class="termsReplacementConfirmActions">
-        <button class="accountDocActionBtn" id="termsReplacementCancelBtn" type="button">Cancel</button>
-        <button class="accountDocActionBtn is-primary" id="termsReplacementConfirmBtn" type="button">Clear Document and Upload New One</button>
       </div>
     </div>
   </div>
@@ -31175,6 +31180,12 @@
     return getAccountDocumentStatusValue_(workflow) === 'approved';
   }
 
+  function isVisibleTermsReplacementAction_(){
+    if (!termsReplacementSection || termsReplacementSection.hidden) return false;
+    if (termsReplacementBtn && termsReplacementBtn.disabled) return false;
+    return TERMS_DOC_CLIENT_VIEW_LOADING !== true;
+  }
+
   function renderTermsReplacementConfirm_(){
     const isOpen = TERMS_DOC_REPLACEMENT_CONFIRM_OPEN === true;
     const isBusy = TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true;
@@ -31212,11 +31223,13 @@
     renderTermsReplacementConfirm_();
   }
 
-  function openTermsReplacementConfirm_(){
-    if (!isTermsReplacementActionAvailable_() || TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true) return;
+  function openTermsReplacementConfirm_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const canOpenFromVisibleAction = opts.fromVisibleAction === true && isVisibleTermsReplacementAction_();
+    if ((!canOpenFromVisibleAction && !isTermsReplacementActionAvailable_()) || TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true) return;
     TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = true;
     TERMS_DOC_REPLACEMENT_ERROR = '';
-    renderTermsReplacementAction_();
+    renderTermsReplacementConfirm_();
     requestAnimationFrame(() => {
       if (termsReplacementConfirmBtn) termsReplacementConfirmBtn.focus();
     });
@@ -31235,8 +31248,39 @@
     }
   }
 
+  function handleTermsReplacementActionClick_(event){
+    if (!event || !isTermsClientViewMode_()) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const action = target.closest('#termsReplacementBtn, #termsReplacementSection');
+    if (!action) return;
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    openTermsReplacementConfirm_({ fromVisibleAction: true });
+  }
+
+  function handleTermsReplacementConfirmBackdropClick_(event){
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (!event || event.target !== termsReplacementConfirmBackdrop) return;
+    closeTermsReplacementConfirm_();
+  }
+
+  function handleTermsReplacementCancelClick_(event){
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    closeTermsReplacementConfirm_();
+  }
+
+  function handleTermsReplacementConfirmClick_(event){
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    clearCreditTermsDocumentForReplacementFromViewer_();
+  }
+
   async function clearCreditTermsDocumentForReplacementFromViewer_(){
-    if (TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || !isTermsReplacementActionAvailable_()) return;
+    const canClearFromVisibleConfirm = TERMS_DOC_REPLACEMENT_CONFIRM_OPEN === true && isVisibleTermsReplacementAction_();
+    if (TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || (!canClearFromVisibleConfirm && !isTermsReplacementActionAvailable_())) return;
     TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = true;
     TERMS_DOC_REPLACEMENT_ERROR = '';
     TERMS_DOC_REPLACEMENT_CONFIRM_OPEN = true;
@@ -31280,6 +31324,7 @@
   function isTermsDocumentOutsideCloseTarget_(target){
     if (!termsReviewBackdrop || termsReviewBackdrop.hidden) return false;
     if (typeof Node !== 'undefined' && target instanceof Node) {
+      if (termsReplacementConfirmBackdrop && termsReplacementConfirmBackdrop.contains(target)) return false;
       if (termsReviewClose && termsReviewClose.contains(target)) return false;
       if (termsReviewModal && !termsReviewModal.contains(target)) return true;
       if (termsReviewModal && termsReviewModal.contains(target) && isTermsClientViewMode_()) {
@@ -31320,6 +31365,10 @@
     if (termsReviewClose) termsReviewClose.addEventListener('click', () => handleTermsDocumentCloseRequest_());
     if (termsReviewBackdrop) termsReviewBackdrop.addEventListener('click', handleTermsDocumentBackdropClick_);
     document.addEventListener('keydown', handleTermsDocumentKeydown_);
+    document.addEventListener('click', handleTermsReplacementActionClick_, true);
+    if (termsReplacementConfirmBackdrop) termsReplacementConfirmBackdrop.addEventListener('click', handleTermsReplacementConfirmBackdropClick_);
+    if (termsReplacementCancelBtn) termsReplacementCancelBtn.addEventListener('click', handleTermsReplacementCancelClick_);
+    if (termsReplacementConfirmBtn) termsReplacementConfirmBtn.addEventListener('click', handleTermsReplacementConfirmClick_);
   }
 
   function setTermsClientViewerLoading_(isLoading){
@@ -47756,19 +47805,18 @@
     }
     if (termsReplacementSection) {
       termsReplacementSection.addEventListener('click', event => {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        openTermsReplacementConfirm_({ fromVisibleAction: true });
       });
     }
-    if (termsReplacementBtn) termsReplacementBtn.addEventListener('click', openTermsReplacementConfirm_);
-    if (termsReplacementConfirmBackdrop) {
-      termsReplacementConfirmBackdrop.addEventListener('click', event => {
+    if (termsReplacementBtn) {
+      termsReplacementBtn.addEventListener('click', event => {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-        if (!event || event.target !== termsReplacementConfirmBackdrop) return;
-        closeTermsReplacementConfirm_();
+        openTermsReplacementConfirm_({ fromVisibleAction: true });
       });
     }
-    if (termsReplacementCancelBtn) termsReplacementCancelBtn.addEventListener('click', () => closeTermsReplacementConfirm_());
-    if (termsReplacementConfirmBtn) termsReplacementConfirmBtn.addEventListener('click', clearCreditTermsDocumentForReplacementFromViewer_);
     if (termsDocEmailCancelBtn) termsDocEmailCancelBtn.addEventListener('click', closeTermsDocEmailPanel_);
     if (termsDocEmailSendBtn) termsDocEmailSendBtn.addEventListener('click', submitTermsDocEmail_);
     if (termsDocSubmitBtn) termsDocSubmitBtn.addEventListener('click', submitTermsDocUploadedDocument_);
