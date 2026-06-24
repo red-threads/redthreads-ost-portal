@@ -1209,9 +1209,9 @@
     .dashboardPeekHead{
       position:relative;
       display:grid;
-      grid-template-columns:minmax(0, 380px) auto 32px;
+      grid-template-columns:minmax(0, 1fr) minmax(190px, 220px) 32px;
       align-items:center;
-      gap:10px;
+      column-gap:22px;
       min-height:54px;
       padding:0 16px 4px 24px;
       box-sizing:border-box;
@@ -1234,6 +1234,7 @@
     }
     .dashboardPeekTitle{
       margin:0;
+      color:#f8fafc;
       font-size:22px;
       line-height:1.08;
       font-weight:900;
@@ -1245,6 +1246,7 @@
       overflow:hidden;
       overflow-wrap:anywhere;
       text-overflow:clip;
+      text-shadow:0 1px 14px rgba(0,0,0,.42);
     }
     .dashboardPeekSub{
       margin:0;
@@ -1256,8 +1258,8 @@
       min-width:0;
       display:flex;
       align-items:center;
-      justify-content:flex-end;
-      justify-self:end;
+      justify-content:center;
+      justify-self:stretch;
       align-self:center;
     }
     .dashboardPeekOpenBtn{
@@ -1288,16 +1290,25 @@
       box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
       z-index:2;
     }
+    .dashboardPeekOpenBtn:visited{
+      color:#46efc4;
+    }
     .dashboardPeekOpenBtn *{
       -webkit-user-select:none;
       -moz-user-select:none;
       -ms-user-select:none;
       user-select:none;
     }
-    .dashboardPeekOpenBtn:hover{
-      background:rgba(70,239,196,.12);
-      border-color:rgba(70,239,196,.92);
+    .dashboardPeekOpenBtn:hover,
+    .dashboardPeekOpenBtn:focus-visible{
+      background:linear-gradient(180deg, rgba(112,255,211,.98) 0%, rgba(60,232,171,.96) 100%);
+      border-color:rgba(120,255,214,.96);
+      color:#04100a;
       transform:translateY(-1px);
+      box-shadow:0 14px 28px rgba(46,216,155,.22), inset 0 1px 0 rgba(255,255,255,.24);
+    }
+    .dashboardPeekOpenBtn:focus-visible{
+      outline:none;
     }
     .dashboardPeekOpenBtn svg{
       width:15px;
@@ -2692,10 +2703,14 @@
       color:var(--rt-text);
     }
     #dashboardView .dashboardPeekTitle{
-      color:var(--rt-text);
+      color:#f8fafc;
     }
     #dashboardView .dashboardPeekOpenBtn{
       color:#46efc4;
+    }
+    #dashboardView .dashboardPeekOpenBtn:hover,
+    #dashboardView .dashboardPeekOpenBtn:focus-visible{
+      color:#04100a;
     }
     #dashboardView .dashboardPeekLoading,
     #dashboardView .dashboardPeekEmpty{
@@ -16989,7 +17004,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 147">147</div>
+  <div class="devRevisionBadge" aria-label="Development revision 148">148</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">

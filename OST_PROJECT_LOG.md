@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Project Peek Header Styling On Version 1023
+
+- Mode: Full ship frontend dashboard Project Peek UI refinement.
+- Branch/commit/PR: `main`, Apps Script version `1023`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: make the Project Peek title readable, separate the `Open Project` button from the red close control, and align the `Open Project` hover/focus treatment with the portal green action language.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: the Project Peek header now reserves a wider centered action region for the `Open Project` button, increases the gap before the close control, renders the title in strong white with subtle text shadow, and changes the Project Peek `Open Project` hover/focus state to a green/teal fill with dark text/icon. The close button remains red/destructive, and dashboard row `Open Project` buttons are not intentionally restyled. `Index.html` shows development revision `148`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine project peek header"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1023 - Refine project peek header`. Direct `/exec` returned HTTP `200` with `Development revision 148`, omitted stale revision `147`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and had zero targeted sensitive markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Fixture-storage tabs were untouched, `PORTAL_EMAIL_QUEUE` was not cleared, and no email-review suite was run. No project routing, token behavior, dashboard data loading, project peek data parsing, lifecycle/payment/ACH/email logic, Sheet schema, or backend contract changed.
+- Follow-ups: owner should visually inspect Project Peek with both short and long project titles to confirm spacing and hover/focus states match the intended dashboard design.
+
 ## 2026-06-24 - No-Unit Estimate Job Treatment On Version 1022
 
 - Mode: Full ship frontend Summary/Estimate UI refinement.
