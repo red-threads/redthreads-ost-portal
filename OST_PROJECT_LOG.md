@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Sales Tax Replacement Removal Emails
+
+- Mode: Produce final code, unshipped runtime/account-document email enhancement.
+- Branch/commit/PR: `main`, local runtime source only at implementation time; Apps Script stable deployment remains version `1030` until a separate Full ship.
+- Goal: send account-level client and team emails when a client clears the sales-tax exemption document on file before uploading a replacement.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `tools/validate-email-communication-matrix.mjs`, `docs/EMAIL_REVIEW_FIXTURE_MATRIX.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added `tax_exempt_removed` as a portal lifecycle account-document milestone. `clearTaxExemptDocumentForReplacement()` now queues the removal event after the account row update and replacement-history archive succeed. The queue metadata and idempotency include safe account identity plus the replacement clear event key, and the portal lifecycle processor can render this account-only milestone without project/order context. The client email uses the account dashboard tax-exemption resubmit deep link with CTA `Upload New Sales Tax Exemption Document`; the team email is a status alert with no Team Mode review CTA. The existing tax submitted/approved/denied/reset paths remain unchanged. `Index.html` shows development revision `157`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `node --check tools/validate-email-communication-matrix.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, targeted source safety checks, and `git diff --check` passed.
+- Runtime data state: no Apps Script deploy was run, no Sheet data was mutated from this shell, no email-review suite was run, no queue rows were touched, no document was submitted, and no prior orders/snapshots, pricing, payment/ACH/Stripe behavior, Team Mode reset behavior, Sheet schemas, Script Properties, active tabs, or fixture tabs were intentionally changed.
+- Follow-ups: Full ship the combined tax replacement/runtime email source to the existing stable deployment ID, then smoke the approved-account clear flow and verify the two queued `tax_exempt_removed` jobs plus the client upload CTA.
+
 ## 2026-06-24 - Account Tax Exemption Replacement Implementation
 
 - Mode: Produce final code, unshipped runtime/account-document workflow enhancement.

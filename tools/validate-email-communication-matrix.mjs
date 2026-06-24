@@ -249,6 +249,14 @@ const REQUIRED_MATRIX = [
     artifactRequirement: 'optional'
   },
   {
+    caseLabel: 'account_document_tax_removed',
+    recipientClass: 'client+team',
+    expectedCommunicationIntent: ['account_document_needs_attention'],
+    labels: ['Tax exempt removed client', 'Tax exempt removed team'],
+    sendMode: 'sendable',
+    artifactRequirement: 'optional'
+  },
+  {
     caseLabel: 'account_document_credit_terms_submitted',
     recipientClass: 'team',
     expectedCommunicationIntent: ['account_document_review_required'],

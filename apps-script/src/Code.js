@@ -286,6 +286,7 @@ const PORTAL_LIFECYCLE_EMAIL_MILESTONES = {
   tax_exempt_submitted: 'tax_exempt_submitted',
   tax_exempt_approved: 'tax_exempt_approved',
   tax_exempt_denied: 'tax_exempt_denied',
+  tax_exempt_removed: 'tax_exempt_removed',
   tax_exempt_reset: 'tax_exempt_reset',
   credit_terms_submitted: 'credit_terms_submitted',
   credit_terms_approved: 'credit_terms_approved',
@@ -13559,9 +13560,16 @@ function buildTaxExemptReplacementArchiveEntry_(ctx, definition, accountRow, wor
   const artifactUrl = trimString_(getAccountDocumentRowFieldValue_(row, definition.artifactUrlField));
   const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
   const identity = ctx && ctx.identity ? ctx.identity : {};
+  const clearTime = trimString_(clearedAt) || nowIso_();
+  const previousStatus = normalizeAccountDocumentStatus_(getAccountDocumentRowFieldValue_(row, definition.statusField));
   return {
     eventType: 'client_clear_for_replacement',
-    clearedAt: trimString_(clearedAt) || nowIso_(),
+    eventKey: [
+      'tax_exempt_removed',
+      trimString_(accountSummary.accountId || accountSummary.orgId),
+      clearTime
+    ].filter(Boolean).join('_'),
+    clearedAt: clearTime,
     clearedByName: trimString_(accountSummary.billingContactName || accountSummary.primaryContactName || identity.personName),
     clearedByEmail: normalizeEmail_(accountSummary.billingContactEmail || accountSummary.primaryEmail || identity.personEmail),
     previousStatus: previousStatus,
@@ -13648,6 +13656,17 @@ function clearTaxExemptDocumentForReplacement_(payload) {
     updates
   );
   refreshAccountDocumentContextAccount_(ctx);
+  queueAccountDocumentLifecycleEmailSafely_(ctx, definition, null, 'removed', {
+    decision: 'removed',
+    eventKey: archiveEntry.eventKey,
+    decidedAt: archiveEntry.clearedAt,
+    clearedAt: archiveEntry.clearedAt,
+    clearedByName: archiveEntry.clearedByName,
+    clearedByEmail: archiveEntry.clearedByEmail,
+    previousStatus: archiveEntry.previousStatus,
+    previousSubmittedAt: archiveEntry.previousSubmittedAt,
+    previousExpiresAt: archiveEntry.previousExpiresAt
+  });
   return buildAccountDocumentWorkflowResponse_(
     ctx,
     ACCOUNT_DOCUMENT_TYPES.tax_exempt,
@@ -24276,6 +24295,10 @@ function isPortalLifecycleAccountDocumentMilestone_(milestone) {
   return normalized.indexOf('tax_exempt_') === 0 || normalized.indexOf('credit_terms_') === 0;
 }
 
+function isPortalLifecycleAccountOnlyMilestone_(milestone) {
+  return normalizePortalLifecycleEmailMilestone_(milestone) === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed;
+}
+
 function getPortalLifecycleEmailRecipientClass_(value) {
   const recipientClass = trimString_(value).toLowerCase();
   return recipientClass === 'team' ? 'team' : 'client';
@@ -24353,6 +24376,38 @@ function resolvePortalLifecycleEmailContext_(source, options) {
     });
   }
   let accountInfo = opts.accountInfo || src.accountInfo || sourceCtx.accountInfo || null;
+  const accountAccessToken = trimString_(
+    opts.accountAccessToken ||
+    src.accountAccessToken ||
+    sourceCtx.accountAccessToken
+  );
+  const accountId = trimString_(
+    opts.accountId ||
+    src.accountId ||
+    sourceCtx.accountId
+  );
+  if (!accountInfo && accountAccessToken) {
+    try {
+      accountInfo = getPortalAccountByAccessToken_(accountAccessToken, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } catch (_) {
+      accountInfo = null;
+    }
+  }
+  if (!accountInfo && accountId) {
+    try {
+      accountInfo = getPortalAccountByAccountId_(accountId, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra
+      });
+    } catch (_) {
+      accountInfo = null;
+    }
+  }
   if (!accountInfo && orderInfo) {
     try {
       accountInfo = getPortalAccountInfoForOrder_(orderInfo, {
@@ -24437,6 +24492,7 @@ function buildPortalLifecycleEmailClientRecipients_(ctx, meta) {
 function buildPortalLifecycleEmailIdempotencyKey_(milestone, recipientClass, ctx, recipients, meta) {
   const safeCtx = (ctx && typeof ctx === 'object') ? ctx : {};
   const orderSummary = safeCtx.orderInfo ? buildPortalOrderSummary_(safeCtx.orderInfo.rowObjNormalized) : {};
+  const accountSummary = safeCtx.accountInfo && safeCtx.accountInfo.summary ? safeCtx.accountInfo.summary : {};
   const safeRecipients = (recipients && typeof recipients === 'object') ? recipients : {};
   const safeMeta = (meta && typeof meta === 'object') ? meta : {};
   return buildPortalEmailQueueIdempotencyKeyForSource_({
@@ -24445,6 +24501,9 @@ function buildPortalLifecycleEmailIdempotencyKey_(milestone, recipientClass, ctx
     recipientClass: getPortalLifecycleEmailRecipientClass_(recipientClass),
     token: trimString_(safeCtx.token),
     orderId: trimString_(orderSummary.orderId),
+    accountId: trimString_(safeMeta.accountId || accountSummary.accountId),
+    accountOrgId: trimString_(safeMeta.accountOrgId || accountSummary.orgId),
+    accountEmail: normalizeEmail_(safeMeta.clientEmail || accountSummary.billingContactEmail || accountSummary.primaryEmail),
     eventKey: trimString_(safeMeta.eventKey),
     printJobIndex: trimString_(safeMeta.printJobIndex),
     documentType: trimString_(safeMeta.documentType),
@@ -24500,6 +24559,7 @@ function queuePortalLifecycleEmailJobSafely_(source, milestone, options) {
   try {
     const ctx = resolvePortalLifecycleEmailContext_(source, opts);
     const orderSummary = ctx.orderInfo ? buildPortalOrderSummary_(ctx.orderInfo.rowObjNormalized) : {};
+    const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
     if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.project_completed &&
         recipientClass === 'client') {
       meta = mergePortalLifecycleAttachmentMeta_(
@@ -24529,7 +24589,9 @@ function queuePortalLifecycleEmailJobSafely_(source, milestone, options) {
     const recipients = recipientClass === 'team'
       ? buildPortalLifecycleEmailTeamRecipients_()
       : buildPortalLifecycleEmailClientRecipients_(ctx, meta);
-    if (!ctx.token && !trimString_(orderSummary.orderId)) {
+    const hasAccountOnlyContext = isPortalLifecycleAccountOnlyMilestone_(normalized) &&
+      hasPortalAccountDashboardIdentity_(accountSummary);
+    if (!ctx.token && !trimString_(orderSummary.orderId) && !hasAccountOnlyContext) {
       logPortalLifecycleEmailQueueEvent_('not_queued', {
         ok: false,
         reason: 'missing_context',
@@ -24559,6 +24621,9 @@ function queuePortalLifecycleEmailJobSafely_(source, milestone, options) {
       portalStateJson: JSON.stringify(Object.assign({}, meta, {
         jobType: PORTAL_EMAIL_QUEUE_JOB_TYPES.portal_lifecycle_email,
         token: ctx.token,
+        accountId: trimString_(meta.accountId || accountSummary.accountId),
+        accountOrgId: trimString_(meta.accountOrgId || accountSummary.orgId),
+        accountOrgName: trimString_(meta.accountOrgName || accountSummary.orgName),
         orderId: trimString_(orderSummary.orderId),
         queuedFromEventType: trimString_(opts.eventType),
         queuedAt: nowIso_()
@@ -24611,6 +24676,7 @@ function getAccountDocumentPortalLifecycleMilestone_(documentType, eventName, op
     if (event === 'submitted') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted;
     if (event === 'approved') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved;
     if (event === 'denied') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied;
+    if (event === 'removed') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed;
     if (event === 'reset') return PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset;
   }
   if (type === ACCOUNT_DOCUMENT_TYPES.credit_terms) {
@@ -24644,14 +24710,18 @@ function buildAccountDocumentLifecycleMeta_(ctx, definition, submissionEntry, op
   const attachmentMeta = buildAccountDocumentLifecycleAttachmentMeta_(submissionEntry);
   const submittedAt = trimString_(submissionEntry && submissionEntry.submittedAt);
   const decidedAt = trimString_(opts.decidedAt);
+  const eventKey = trimString_(opts.eventKey) || [
+    trimString_(definition && definition.type),
+    trimString_(opts.eventName),
+    submittedAt,
+    decidedAt,
+    decision
+  ].filter(Boolean).join('_');
   return Object.assign({}, attachmentMeta, {
-    eventKey: [
-      trimString_(definition && definition.type),
-      trimString_(opts.eventName),
-      submittedAt,
-      decidedAt,
-      decision
-    ].filter(Boolean).join('_'),
+    eventKey: eventKey,
+    accountId: trimString_(accountSummary.accountId),
+    accountOrgId: trimString_(accountSummary.orgId),
+    accountOrgName: trimString_(accountSummary.orgName),
     documentType: trimString_(definition && definition.type),
     documentLabel: trimString_(definition && definition.label || definition && definition.shortLabel),
     submittedByEmail: normalizeEmail_(submissionEntry && submissionEntry.submittedByEmail),
@@ -24667,6 +24737,12 @@ function buildAccountDocumentLifecycleMeta_(ctx, definition, submissionEntry, op
     reason: trimString_(opts.reason),
     hardDenied: opts.hardDenied === true ? 'true' : '',
     paymentTermsLabel: trimString_(opts.paymentTermsLabel),
+    clearedAt: trimString_(opts.clearedAt),
+    clearedByName: trimString_(opts.clearedByName),
+    clearedByEmail: normalizeEmail_(opts.clearedByEmail),
+    previousStatus: trimString_(opts.previousStatus),
+    previousSubmittedAt: trimString_(opts.previousSubmittedAt),
+    previousExpiresAt: trimString_(opts.previousExpiresAt),
     attachmentRequired: opts.attachmentRequired === true
   });
 }
@@ -24836,6 +24912,9 @@ function getPortalLifecycleAccountDocumentCtaLabel_(milestone, meta) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
     return 'Complete Sales Tax Exemption Form';
   }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed) {
+    return 'Upload New Sales Tax Exemption Document';
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
     return 'Resubmit Credit Terms Document';
   }
@@ -24866,6 +24945,7 @@ function buildPortalLifecycleAccountDocumentClientUrl_(ctx, meta, milestone) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
     params.accountDocAction = 'resubmit';
   }
@@ -24937,6 +25017,10 @@ function buildAccountDocumentTeamIdentityDetails_(meta, emailContext) {
 }
 
 function shouldRenderPortalLifecycleEmailCta_(milestone, recipientClass) {
+  if (getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team' &&
+      normalizePortalLifecycleEmailMilestone_(milestone) === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed) {
+    return false;
+  }
   return !isAccountDocumentApprovedTeamMilestone_(milestone, recipientClass);
 }
 
@@ -25052,6 +25136,33 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       details: details
     };
   }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed) {
+    const clearedAtLabel = buildLifecycleEmailDateLabel_(trimString_(meta && meta.clearedAt));
+    const clearedByName = trimString_(meta && meta.clearedByName);
+    const clearedByEmail = normalizeEmail_(meta && meta.clearedByEmail);
+    const removedDetails = isTeam ? details.slice() : [];
+    if (clearedAtLabel) removedDetails.push('Removed: ' + clearedAtLabel);
+    if (clearedByName) removedDetails.push('Removed by: ' + clearedByName);
+    if (clearedByEmail) removedDetails.push('Removed by email: ' + clearedByEmail);
+    return {
+      subject: isTeam
+        ? buildTeamSubject_('Sales tax exemption document removed')
+        : buildActionNeededSubject_('Upload a new sales tax exemption document'),
+      heading: isTeam
+        ? 'Sales tax exemption document removed'
+        : 'Upload a new sales tax exemption document',
+      intro: isTeam
+        ? 'A client removed the sales tax exemption document that was on file for their Red Threads account.'
+        : 'The sales tax exemption document that was on file for your Red Threads account has been removed.',
+      statusCopy: isTeam
+        ? 'The client was directed to upload a replacement from the account dashboard. No review action is available until a replacement document is submitted.'
+        : 'Sales tax exemption cannot be applied again until a new document is submitted and approved.',
+      nextStep: isTeam
+        ? 'Monitor for a new sales tax exemption submission.'
+        : 'Upload a new sales tax exemption document from your account dashboard.',
+      details: removedDetails
+    };
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
     const resetIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset
@@ -25091,6 +25202,7 @@ function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
     return 'next_step_first';
   }
@@ -25427,6 +25539,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
   const cta = getPortalLifecycleEmailCta_(normalized, recipientClass, ctx, meta);
   const emailContext = buildLifecycleEmailContextForOrder_(orderInfo, null, Object.assign({}, opts, {
     recipientClass: recipientClass,
+    accountInfo: ctx.accountInfo,
     ctaLabel: cta.label
   }));
   emailContext.ctaUrl = trimString_(cta.url);
@@ -25534,6 +25647,7 @@ function resolveAccountDocumentCommunicationIntent_(milestone) {
     return 'account_document_approved';
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset) {
@@ -25561,7 +25675,9 @@ function processPortalLifecycleEmailQueueJob_(jobInfo, options) {
     return { skipped: true, skipReason: COMMUNICATION_POLICY_DISABLED_REASON, invoiceInfo: null };
   }
   const lifecycleContext = resolvePortalLifecycleEmailContext_({
-    token: trimString_(row.token || meta.token)
+    token: trimString_(row.token || meta.token),
+    accountId: trimString_(meta.accountId),
+    accountAccessToken: trimString_(meta.accountAccessToken)
   }, {
     cfg: cfg,
     ss: ss,
@@ -25572,7 +25688,12 @@ function processPortalLifecycleEmailQueueJob_(jobInfo, options) {
     ss: ss,
     infra: infra
   });
-  if (!orderInfo) return { skipped: true, skipReason: 'missing_project_context', invoiceInfo: null };
+  const accountOnlyMilestone = isPortalLifecycleAccountOnlyMilestone_(milestone);
+  if (!orderInfo && !accountOnlyMilestone) return { skipped: true, skipReason: 'missing_project_context', invoiceInfo: null };
+  if (!orderInfo && accountOnlyMilestone &&
+      !hasPortalAccountDashboardIdentity_(lifecycleContext.accountInfo && lifecycleContext.accountInfo.summary)) {
+    return { skipped: true, skipReason: 'missing_account_context', invoiceInfo: null };
+  }
   const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
   if (!recipients.toList.length) return { skipped: true, skipReason: 'missing_recipients', invoiceInfo: null };
   const attachments = buildPortalLifecycleEmailAttachments_(meta);
@@ -25600,7 +25721,7 @@ function processPortalLifecycleEmailQueueJob_(jobInfo, options) {
   if (!emailResult || emailResult.ok !== true) {
     throw new Error(trimString_(emailResult && emailResult.error) || 'Portal lifecycle email could not be sent.');
   }
-  const summary = buildPortalOrderSummary_(orderInfo.rowObjNormalized);
+  const summary = orderInfo ? buildPortalOrderSummary_(orderInfo.rowObjNormalized) : {};
   logPortalLifecycleEmailQueueEvent_('sent', {
     ok: true,
     milestone: milestone,
@@ -27586,6 +27707,7 @@ function isPortalLifecycleClientDocumentDecisionMilestone_(milestone) {
   const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
   return normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved ||
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
+    normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset ||
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved ||
     normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied ||
@@ -35210,6 +35332,8 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
     { label: 'Tax exempt approved client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
     { label: 'Tax exempt approved team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
     { label: 'Tax exempt denied client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', reason: 'Review fixture correction requested.' },
+    { label: 'Tax exempt removed client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', clearedAt: '2026-06-24T12:00:00Z', clearedByName: 'Fixture Client', clearedByEmail: recipients.client },
+    { label: 'Tax exempt removed team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', clearedAt: '2026-06-24T12:00:00Z', clearedByName: 'Fixture Client', clearedByEmail: recipients.client },
     { label: 'Tax exempt reset client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
     { label: 'Credit terms submitted team review', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', attachmentRequired: false },
     { label: 'Credit terms approved client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30' },
@@ -35223,6 +35347,9 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
       documentLabel: item.documentLabel,
       reason: item.reason || '',
       paymentTermsLabel: item.paymentTermsLabel || '',
+      clearedAt: item.clearedAt || '',
+      clearedByName: item.clearedByName || '',
+      clearedByEmail: item.clearedByEmail || '',
       attachmentRequired: item.attachmentRequired === true
     };
     const attachments = buildPortalLifecycleEmailAttachments_(meta);
