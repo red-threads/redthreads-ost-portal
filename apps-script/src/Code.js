@@ -2123,24 +2123,27 @@ function loginUser(payload) {
     if (sessionUpdates && Object.keys(sessionUpdates).length) {
       setRowValuesByHeaderMap_(sessionsSheet, sessionsSheet.getLastRow(), buildColumnMap_(sessionsSheet.getRange(1, 1, 1, sessionsSheet.getLastColumn()).getValues()[0]), sessionUpdates);
     }
+    const skipDashboardHomeData = p.skipDashboardHomeData === true;
     let dashboardHomeData = null;
     const dashboardStart = Date.now();
-    try {
-      const builtDashboardHomeData = buildDashboardHomeData_({
-        email: email,
-        cfg: cfg,
-        ss: ss,
-        infra: infra,
-        userCtx: {
-          ok: true,
+    if (!skipDashboardHomeData) {
+      try {
+        const builtDashboardHomeData = buildDashboardHomeData_({
           email: email,
-          user: user
+          cfg: cfg,
+          ss: ss,
+          infra: infra,
+          userCtx: {
+            ok: true,
+            email: email,
+            user: user
+          }
+        });
+        if (builtDashboardHomeData && builtDashboardHomeData.ok === true) {
+          dashboardHomeData = builtDashboardHomeData;
         }
-      });
-      if (builtDashboardHomeData && builtDashboardHomeData.ok === true) {
-        dashboardHomeData = builtDashboardHomeData;
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     const userUpdates = {
       lastloginat: nowIso_(),
       status: 'active'
@@ -2219,14 +2222,113 @@ function authSessionCheck(payload) {
   return validateSession(payload);
 }
 
+function normalizeDashboardHomeProfile_(valueOrOptions) {
+  const source = (valueOrOptions && typeof valueOrOptions === 'object')
+    ? (
+        valueOrOptions.dashboardHomeProfile ||
+        valueOrOptions.homeProfile ||
+        valueOrOptions.profile ||
+        (valueOrOptions.lightweight === true ? 'summary' : '')
+      )
+    : valueOrOptions;
+  const clean = trimString_(source).toLowerCase();
+  return (clean === 'summary' || clean === 'lightweight' || clean === 'metadata')
+    ? 'summary'
+    : 'full';
+}
+
+function isDashboardHomeSummaryProfile_(valueOrOptions) {
+  return normalizeDashboardHomeProfile_(valueOrOptions) === 'summary';
+}
+
+function isRenderableDashboardExportRow_(rowState, token) {
+  const row = (rowState && typeof rowState === 'object') ? rowState : {};
+  const cleanToken = trimString_(token || row.token);
+  if (!cleanToken || cleanToken.toLowerCase() === 'token') return false;
+  if (trimString_(row.dealnumber).toLowerCase() === 'dealnumber') return false;
+  if (trimString_(row.dealtitle || row.dealname || row.projectname).toLowerCase() === 'dealtitle') return false;
+  const rowEmail = trimString_(
+    row[EXPORT_LOG_PERSON_EMAIL_HEADER] ||
+    row.personemail ||
+    row.personEmail ||
+    row.primaryemail ||
+    row.primaryEmail
+  ).toLowerCase();
+  if (rowEmail === 'personemail' || rowEmail === 'email') return false;
+  return true;
+}
+
+function compareDashboardProjectEntriesByRecency_(a, b) {
+  const left = (a && typeof a === 'object') ? a : {};
+  const right = (b && typeof b === 'object') ? b : {};
+  const da = Date.parse(trimString_(left.exportedAt || left.createdAt || ''));
+  const db = Date.parse(trimString_(right.exportedAt || right.createdAt || ''));
+  if (!isNaN(da) && !isNaN(db) && da !== db) return db - da;
+  if (!isNaN(db) && isNaN(da)) return 1;
+  if (!isNaN(da) && isNaN(db)) return -1;
+  return Number((right.rowInfo && right.rowInfo.row) || right.row || 0) - Number((left.rowInfo && left.rowInfo.row) || left.row || 0);
+}
+
+function normalizeDashboardProjectEntries_(projectEntries) {
+  const entries = Array.isArray(projectEntries) ? projectEntries.slice() : [];
+  entries.sort(compareDashboardProjectEntriesByRecency_);
+  const seen = {};
+  const normalized = [];
+  entries.forEach(function(entry) {
+    const token = trimString_(entry && entry.token);
+    if (!token || seen[token]) return;
+    seen[token] = true;
+    normalized.push(entry);
+  });
+  return normalized;
+}
+
+function buildDashboardProjectHomeSummaryMetaFromRowInfo_(rowInfo) {
+  const info = (rowInfo && typeof rowInfo === 'object') ? rowInfo : {};
+  const row = (info.rowObjNormalized && typeof info.rowObjNormalized === 'object')
+    ? info.rowObjNormalized
+    : {};
+  const exportedAt = trimString_(row.exportedat || row.createdat);
+  const createdAt = trimString_(row.createdat || row.exportedat);
+  const dealTitle = trimString_(
+    row.projectname ||
+    row.dealtitle ||
+    row.dealname ||
+    row.name ||
+    row.dealnumber
+  );
+  return {
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    dashboardHomeProfile: 'summary',
+    sourceMode: 'summary',
+    jobSource: 'deferred',
+    peekInline: false,
+    peekPreview: null,
+    token: trimString_(row.token),
+    dealNumber: trimString_(row.dealnumber),
+    dealTitle: dealTitle,
+    orgName: trimString_(row.orgname),
+    personName: trimString_(row.personname),
+    exportedAt: exportedAt,
+    createdAt: createdAt,
+    status: derivePortalDisplayOrderStatus_(row, row.status),
+    statusSeed: null,
+    previewImageUrl: '',
+    previewImageCandidates: [],
+    previewImageAlt: ''
+  };
+}
+
 function listProjectsForEmail_(exportSheet, email, options) {
   const opts = (options && typeof options === 'object') ? options : {};
+  const dashboardHomeProfile = normalizeDashboardHomeProfile_(opts);
+  const summaryProfile = isDashboardHomeSummaryProfile_(dashboardHomeProfile);
   const normalizedEmail = normalizeEmail_(email);
   if (!exportSheet) throw new Error('Auth configuration is incomplete.');
   if (!normalizedEmail) return [];
 
   const cache = CacheService.getScriptCache();
-  const cacheKey = buildProjectsCacheKey_(normalizedEmail);
+  const cacheKey = buildProjectsCacheKey_(normalizedEmail, dashboardHomeProfile);
   const cached = cache.get(cacheKey);
   if (cached) {
     const parsedCached = safeJsonParse_(cached, null);
@@ -2275,27 +2377,32 @@ function listProjectsForEmail_(exportSheet, email, options) {
     if (!personEmail || personEmail !== normalizedEmail) continue;
 
     const token = String(rowVals[tokenIdx] || '').trim();
-    if (!token) continue;
+    if (!isRenderableDashboardExportRow_(rowState, token)) continue;
     projectEntries.push({
       token: token,
       rowInfo: rowInfo,
       rowState: rowState,
-      runtimeMeta: buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState),
-      includeLatestOrderSummary: shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState),
+      runtimeMeta: summaryProfile ? null : buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState),
+      includeLatestOrderSummary: summaryProfile ? false : shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState),
       exportedAt: trimString_(rowState.exportedat || rowState.createdat),
       createdAt: trimString_(rowState.createdat || rowState.exportedat)
     });
   }
 
-  projectEntries.sort((a, b) => {
-    const da = Date.parse(a && (a.exportedAt || a.createdAt || ''));
-    const db = Date.parse(b && (b.exportedAt || b.createdAt || ''));
-    if (!isNaN(da) && !isNaN(db)) return db - da;
-    return 0;
-  });
+  const normalizedProjectEntries = normalizeDashboardProjectEntries_(projectEntries);
+
+  if (summaryProfile) {
+    const summaryProjects = normalizedProjectEntries.map(function(entry) {
+      return buildDashboardProjectHomeSummaryMetaFromRowInfo_(entry.rowInfo);
+    });
+    try {
+      cache.put(cacheKey, JSON.stringify({ projects: summaryProjects }), AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+    } catch (_) {}
+    return summaryProjects;
+  }
 
   const latestOrderMapByToken = buildLatestPortalOrderInfoMapByToken_(
-    projectEntries
+    normalizedProjectEntries
       .filter(function(entry) { return entry && entry.includeLatestOrderSummary === true; })
       .map(function(entry) { return entry.token; }),
     {
@@ -2305,7 +2412,7 @@ function listProjectsForEmail_(exportSheet, email, options) {
     }
   );
 
-  const projects = projectEntries.map(function(entry, index) {
+  const projects = normalizedProjectEntries.map(function(entry, index) {
     const latestOrderInfo = latestOrderMapByToken[entry.token] || null;
     const latestOrderSummary = latestOrderInfo
       ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized)
@@ -2361,6 +2468,8 @@ function isExportRowVisibleForAccount_(rowState, accountSummary) {
 
 function listProjectsForAccount_(exportSheet, accountSummary, options) {
   const opts = (options && typeof options === 'object') ? options : {};
+  const dashboardHomeProfile = normalizeDashboardHomeProfile_(opts);
+  const summaryProfile = isDashboardHomeSummaryProfile_(dashboardHomeProfile);
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
   if (!exportSheet) throw new Error('Auth configuration is incomplete.');
   if (!trimString_(account.accountId) && !trimString_(account.orgId) && !normalizeEmail_(account.primaryEmail || account.billingContactEmail)) {
@@ -2368,7 +2477,7 @@ function listProjectsForAccount_(exportSheet, accountSummary, options) {
   }
 
   const cache = CacheService.getScriptCache();
-  const cacheKey = buildAccountProjectsCacheKey_(account);
+  const cacheKey = buildAccountProjectsCacheKey_(account, dashboardHomeProfile);
   const cached = cache.get(cacheKey);
   if (cached) {
     const parsedCached = safeJsonParse_(cached, null);
@@ -2412,27 +2521,32 @@ function listProjectsForAccount_(exportSheet, accountSummary, options) {
     if (!isExportRowVisibleForAccount_(rowState, account)) continue;
 
     const token = String(rowVals[tokenIdx] || '').trim();
-    if (!token) continue;
+    if (!isRenderableDashboardExportRow_(rowState, token)) continue;
     projectEntries.push({
       token: token,
       rowInfo: rowInfo,
       rowState: rowState,
-      runtimeMeta: buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState),
-      includeLatestOrderSummary: shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState),
+      runtimeMeta: summaryProfile ? null : buildDashboardProjectSnapshotRuntimeMetaFromRow_(rowState),
+      includeLatestOrderSummary: summaryProfile ? false : shouldIncludeLatestOrderSummaryForDashboardProjection_(rowState),
       exportedAt: trimString_(rowState.exportedat || rowState.createdat),
       createdAt: trimString_(rowState.createdat || rowState.exportedat)
     });
   }
 
-  projectEntries.sort((a, b) => {
-    const da = Date.parse(a && (a.exportedAt || a.createdAt || ''));
-    const db = Date.parse(b && (b.exportedAt || b.createdAt || ''));
-    if (!isNaN(da) && !isNaN(db)) return db - da;
-    return 0;
-  });
+  const normalizedProjectEntries = normalizeDashboardProjectEntries_(projectEntries);
+
+  if (summaryProfile) {
+    const summaryProjects = normalizedProjectEntries.map(function(entry) {
+      return buildDashboardProjectHomeSummaryMetaFromRowInfo_(entry.rowInfo);
+    });
+    try {
+      cache.put(cacheKey, JSON.stringify({ projects: summaryProjects }), AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+    } catch (_) {}
+    return summaryProjects;
+  }
 
   const latestOrderMapByToken = buildLatestPortalOrderInfoMapByToken_(
-    projectEntries
+    normalizedProjectEntries
       .filter(function(entry) { return entry && entry.includeLatestOrderSummary === true; })
       .map(function(entry) { return entry.token; }),
     {
@@ -2442,7 +2556,7 @@ function listProjectsForAccount_(exportSheet, accountSummary, options) {
     }
   );
 
-  const projects = projectEntries.map(function(entry, index) {
+  const projects = normalizedProjectEntries.map(function(entry, index) {
     const latestOrderInfo = latestOrderMapByToken[entry.token] || null;
     const latestOrderSummary = latestOrderInfo
       ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized)
@@ -2727,6 +2841,9 @@ function isValidDashboardHomeProjectPayload_(project) {
   );
   if (!safeProject || !hasPeekInlineFlag) return false;
   if (trimString_(safeProject.projectionVersion) !== getDashboardProjectProjectionVersion_()) return false;
+  if (normalizeDashboardHomeProfile_(safeProject.dashboardHomeProfile) === 'summary') {
+    return !!trimString_(safeProject.token) && safeProject.peekInline === false;
+  }
   if (!isValidDashboardStatusSeedPayload_(safeProject.statusSeed)) return false;
   if (safeProject.peekInline === true) {
     return isValidDashboardPeekPayload_(safeProject.peekPreview);
@@ -2750,6 +2867,7 @@ function buildDashboardProjectHomeMetaFromProjectionContext_(context, options) {
     : null;
   return {
     projectionVersion: getDashboardProjectProjectionVersion_(),
+    dashboardHomeProfile: 'full',
     sourceMode: sourceMode,
     jobSource: sourceMode === 'editable' ? 'portal_state' : 'selected_jobs',
     peekInline: peekInline,
@@ -3752,6 +3870,7 @@ function buildDashboardHomeData_(options) {
   const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
   const exportSheet = infra.exportSheet;
   const cacheMeta = (opts.cacheMeta && typeof opts.cacheMeta === 'object') ? opts.cacheMeta : null;
+  const dashboardHomeProfile = normalizeDashboardHomeProfile_(opts);
   if (!exportSheet) {
     return { ok: false, error: 'Auth configuration is incomplete.' };
   }
@@ -3774,10 +3893,12 @@ function buildDashboardHomeData_(options) {
       ss: ss,
       infra: infra,
       accountSummary: accountSummary,
-      cacheMeta: cacheMeta
+      cacheMeta: cacheMeta,
+      dashboardHomeProfile: dashboardHomeProfile
     });
     return {
       ok: true,
+      dashboardHomeProfile: dashboardHomeProfile,
       email: accountEmail,
       accessMode: 'account',
       projects: projects,
@@ -3838,7 +3959,8 @@ function buildDashboardHomeData_(options) {
     ss: ss,
     infra: infra,
     accountSummary: accountSummary,
-    cacheMeta: cacheMeta
+    cacheMeta: cacheMeta,
+    dashboardHomeProfile: dashboardHomeProfile
   });
   if (token) {
     const tokenRowInfo = findRowByToken_(exportSheet, token);
@@ -3847,6 +3969,7 @@ function buildDashboardHomeData_(options) {
 
   return {
     ok: true,
+    dashboardHomeProfile: dashboardHomeProfile,
     email: email,
     projects: projects,
     accountSummary: accountSummary,
@@ -19611,7 +19734,9 @@ function invalidateDashboardProjectsCacheForEmail_(email) {
   bumpDashboardProjectsCacheEpoch_();
   if (!normalizedEmail) return;
   try {
-    CacheService.getScriptCache().remove(buildProjectsCacheKey_(normalizedEmail));
+    const cache = CacheService.getScriptCache();
+    cache.remove(buildProjectsCacheKey_(normalizedEmail, 'summary'));
+    cache.remove(buildProjectsCacheKey_(normalizedEmail, 'full'));
   } catch (_) {}
 }
 
@@ -37144,11 +37269,15 @@ function bumpDashboardProjectsCacheEpoch_() {
   } catch (_) {}
 }
 
-function buildProjectsCacheKey_(email) {
-  return 'rt:projects:v13:' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(normalizeEmail_(email));
+function buildDashboardProjectsCacheProfileSegment_(profile) {
+  return normalizeDashboardHomeProfile_(profile) === 'summary' ? 'summary' : 'full';
 }
 
-function buildAccountProjectsCacheKey_(accountSummary) {
+function buildProjectsCacheKey_(email, profile) {
+  return 'rt:projects:v14:' + buildDashboardProjectsCacheProfileSegment_(profile) + ':' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(normalizeEmail_(email));
+}
+
+function buildAccountProjectsCacheKey_(accountSummary, profile) {
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
   const identity = {
     accountId: trimString_(account.accountId),
@@ -37160,7 +37289,7 @@ function buildAccountProjectsCacheKey_(accountSummary) {
     termsStatus: trimString_(account.documentWorkflows && account.documentWorkflows.creditTerms && account.documentWorkflows.creditTerms.status),
     taxExemptStatus: trimString_(account.documentWorkflows && account.documentWorkflows.taxExempt && account.documentWorkflows.taxExempt.status)
   };
-  return DASHBOARD_ACCOUNT_PROJECT_CACHE_PREFIX + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(JSON.stringify(identity));
+  return DASHBOARD_ACCOUNT_PROJECT_CACHE_PREFIX + 'v14:' + buildDashboardProjectsCacheProfileSegment_(profile) + ':' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(JSON.stringify(identity));
 }
 
 function parseIsoDateMs_(value) {

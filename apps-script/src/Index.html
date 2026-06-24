@@ -16959,7 +16959,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 140">140</div>
+  <div class="devRevisionBadge" aria-label="Development revision 141">141</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -23113,6 +23113,24 @@
     return '';
   }
 
+  function getDashboardHomeProfile_(payload){
+    const req = (payload && typeof payload === 'object') ? payload : {};
+    const profile = String(req.dashboardHomeProfile || req.homeProfile || '').trim().toLowerCase();
+    return (profile === 'summary' || profile === 'metadata' || profile === 'lightweight') ? 'summary' : 'full';
+  }
+
+  function buildDashboardHomeSummaryPayload_(requestPayload){
+    if (!requestPayload || typeof requestPayload !== 'object') return null;
+    return Object.assign({}, requestPayload, {
+      dashboardHomeProfile: 'summary'
+    });
+  }
+
+  function getDashboardHomeResponseCacheKey_(requestPayload){
+    const contextKey = getDashboardContextKey_(requestPayload);
+    return contextKey ? (contextKey + ':profile:' + getDashboardHomeProfile_(requestPayload)) : '';
+  }
+
   function getDashboardRouteTokenForBoot_(){
     return String(CURRENT_TOKEN || DASHBOARD_ROUTE_TOKEN_PARAM || INITIAL_TOKEN || (VM && VM.token) || '').trim();
   }
@@ -23264,7 +23282,7 @@
   }
 
   function getDashboardHomeCacheEntry_(requestPayload){
-    const requestKey = getDashboardContextKey_(requestPayload);
+    const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
     if (!requestKey) return null;
     const entry = DASHBOARD_HOME_RESPONSE_CACHE.get(requestKey) || null;
     if (!entry || !entry.data || Date.now() - Number(entry.storedAt || 0) > DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS) {
@@ -23276,7 +23294,7 @@
 
   function rememberDashboardHomeResponse_(requestPayload, response, cacheSeq){
     if (typeof cacheSeq === 'number' && cacheSeq !== DASHBOARD_HOME_RESPONSE_CACHE_SEQ) return false;
-    const requestKey = getDashboardContextKey_(requestPayload);
+    const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
     if (!requestKey || !response || response.ok !== true) return false;
     DASHBOARD_HOME_RESPONSE_CACHE.set(requestKey, {
       storedAt: Date.now(),
@@ -25130,11 +25148,12 @@
   }
 
   function startDashboardHomeBackgroundLoad_(requestPayload, reason, options){
-    const payload = (requestPayload && typeof requestPayload === 'object')
-      ? Object.assign({}, requestPayload)
-      : (getDashboardContextRequestPayload_() || null);
+    const payload = buildDashboardHomeSummaryPayload_((requestPayload && typeof requestPayload === 'object')
+      ? requestPayload
+      : (getDashboardContextRequestPayload_() || null));
     const requestKey = getDashboardContextKey_(payload);
     if (!requestKey) return Promise.resolve(null);
+    const responseCacheKey = getDashboardHomeResponseCacheKey_(payload);
     const opts = (options && typeof options === 'object') ? options : {};
     if (opts.showPlaceholder === true && !hasDashboardProjectRows_()) {
       showDashboardProjectsLoadingPlaceholder_();
@@ -25148,7 +25167,7 @@
         return Promise.resolve(cachedResp);
       }
     }
-    const existing = DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(requestKey);
+    const existing = DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(responseCacheKey);
     if (existing) return existing;
     const backgroundSeq = DASHBOARD_HOME_BACKGROUND_SEQ;
     const requestReason = String(reason || 'dashboard_background').trim();
@@ -25190,11 +25209,11 @@
         return null;
       })
       .finally(() => {
-        if (DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(requestKey) === pending) {
-          DASHBOARD_HOME_BACKGROUND_INFLIGHT.delete(requestKey);
+        if (DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(responseCacheKey) === pending) {
+          DASHBOARD_HOME_BACKGROUND_INFLIGHT.delete(responseCacheKey);
         }
       });
-    DASHBOARD_HOME_BACKGROUND_INFLIGHT.set(requestKey, pending);
+    DASHBOARD_HOME_BACKGROUND_INFLIGHT.set(responseCacheKey, pending);
     return pending;
   }
 
@@ -25962,9 +25981,10 @@
       });
   }
 
-  function startDashboardProjectPeekPrefetch_(projects){
+  function startDashboardProjectPeekPrefetch_(projects, options){
     clearDashboardProjectPeekPrefetch_();
     const seq = DASHBOARD_PROJECT_PEEK_PREFETCH_SEQ;
+    const opts = (options && typeof options === 'object') ? options : {};
     const list = Array.isArray(projects) ? projects : [];
     DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE = list
       .map(project => {
@@ -25974,10 +25994,15 @@
         return token;
       })
       .filter(Boolean);
+    const maxInitial = Number(opts.maxInitial || 0);
+    if (maxInitial > 0) {
+      DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE = DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE.slice(0, Math.floor(maxInitial));
+    }
+    const initialDelayMs = Math.max(120, Number(opts.initialDelayMs || 120));
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (seq !== DASHBOARD_PROJECT_PEEK_PREFETCH_SEQ) return;
-        scheduleDashboardProjectPeekPrefetchDrain_(seq, 120);
+        scheduleDashboardProjectPeekPrefetchDrain_(seq, initialDelayMs);
       });
     });
   }
@@ -27610,12 +27635,65 @@
     });
   }
 
+  function getDashboardProjectsNeedingStatusHydration_(projects){
+    const list = Array.isArray(projects) ? projects : [];
+    const seen = new Set();
+    const tokens = [];
+    list.forEach(project => {
+      const token = String(project && project.token || '').trim();
+      const statusSeed = project && project.statusSeed && typeof project.statusSeed === 'object'
+        ? project.statusSeed
+        : null;
+      if (!token || statusSeed || seen.has(token)) return;
+      seen.add(token);
+      tokens.push(token);
+    });
+    return tokens;
+  }
+
+  function hydrateDashboardProjectStatuses_(projects){
+    const tokens = getDashboardProjectsNeedingStatusHydration_(projects);
+    if (!tokens.length) return Promise.resolve(null);
+    const requestPayload = getDashboardContextRequestPayload_();
+    const requestKey = getDashboardContextKey_(requestPayload);
+    if (!requestKey) return Promise.resolve(null);
+    const payload = Object.assign({}, requestPayload, { tokens: tokens });
+    return callServer('getDashboardProjectStatusBatch', payload)
+      .then(resp => {
+        if (getDashboardContextKey_(getDashboardContextRequestPayload_()) !== requestKey) return null;
+        if (!resp || resp.ok !== true || !Array.isArray(resp.projects)) {
+          tokens.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
+          return resp || null;
+        }
+        const returned = new Set();
+        resp.projects.forEach(projectStatus => {
+          const token = String(projectStatus && projectStatus.token || '').trim();
+          if (!token) return;
+          returned.add(token);
+          if (projectStatus.ok === true && Array.isArray(projectStatus.steps) && projectStatus.steps.length) {
+            renderDashboardProjectStatusIntoRow_(token, projectStatus);
+          } else {
+            renderDashboardProjectStatusFallback_(token, String(projectStatus && projectStatus.fallbackStatus || ''));
+          }
+        });
+        tokens.forEach(token => {
+          if (!returned.has(token)) renderDashboardProjectStatusFallback_(token, '');
+        });
+        return resp;
+      })
+      .catch(() => {
+        tokens.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
+        return null;
+      });
+  }
+
   async function loadProjectsForHome(options){
     const opts = (options && typeof options === 'object') ? options : {};
     const requestPayload = (opts.requestPayload && typeof opts.requestPayload === 'object')
       ? opts.requestPayload
       : getDashboardContextRequestPayload_();
-    const requestKey = getDashboardContextKey_(requestPayload);
+    const dashboardHomePayload = buildDashboardHomeSummaryPayload_(requestPayload);
+    const requestKey = getDashboardContextKey_(dashboardHomePayload);
     if (!requestKey) {
       resetDashboardHomeTransientState_();
       clearDashboardProjectRows();
@@ -27627,8 +27705,7 @@
       setAuthMessage('Loading dashboard...', false, { view: VIEW_DASHBOARD });
     }
     try {
-      // Dashboard load keeps the row view fast and includes inline peek data for the first visible projects.
-      const resp = await fetchDashboardHomeDataForRequest_(requestPayload);
+      const resp = await fetchDashboardHomeDataForRequest_(dashboardHomePayload);
       if (!resp) {
         clearDashboardProjectRows();
         return null;
@@ -27702,7 +27779,14 @@
     renderProjectRows(projects);
     syncDashboardAccountContextFromSummary_(payload.accountSummary || {});
     renderDashboardAccountStatus(payload.accountSummary || {});
-    startDashboardProjectPeekPrefetch_(projects);
+    hydrateDashboardProjectStatuses_(projects)
+      .catch(() => null)
+      .finally(() => {
+        startDashboardProjectPeekPrefetch_(projects, {
+          maxInitial: 3,
+          initialDelayMs: 1200
+        });
+      });
     return payload;
   }
 
@@ -27854,8 +27938,11 @@
         setButtonBusy(authLoginBtn, true, 'Logging in...', 'Log in');
         setAuthMessage('', false);
         try {
-          // Login returns session info and a lightweight dashboard bootstrap when available.
-          const resp = await callServer('loginUser', { email: email, password: password });
+          const resp = await callServer('loginUser', {
+            email: email,
+            password: password,
+            skipDashboardHomeData: true
+          });
           if (resp && resp.needsReset === true) {
             if (authForgotEmail) authForgotEmail.value = email;
             if (authResetEmail) authResetEmail.value = email;
@@ -27875,7 +27962,7 @@
           writeStoredSessionId(AUTH_SESSION_ID);
           if (authLoginPassword) authLoginPassword.value = '';
           setLoginPasswordVisibility(false);
-        rtShowLoader('Loading your dashboard', 'One moment…');
+          rtShowLoader('Loading your dashboard', 'One moment…');
           const dashboardHomeData = resp && resp.dashboardHomeData && resp.dashboardHomeData.ok === true
             ? resp.dashboardHomeData
             : null;
@@ -28165,7 +28252,7 @@
     const trace = createPortalClientLoadTimingTrace_('project_to_dashboard');
     try {
       if (!AUTH_SESSION_ID) AUTH_SESSION_ID = readStoredSessionId();
-      const dashboardRequestPayload = getDashboardContextRequestPayload_();
+      const dashboardRequestPayload = buildDashboardHomeSummaryPayload_(getDashboardContextRequestPayload_());
       if (!dashboardRequestPayload) {
         teardownProjectView();
         applyAuthShellRuntimeState();

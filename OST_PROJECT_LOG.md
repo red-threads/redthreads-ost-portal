@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Dashboard Login Load-Time Hardening On Version 1016
+
+- Mode: Full ship runtime performance hardening after Phase 3 live runtime restoration.
+- Branch/commit/PR: `main`, Apps Script version `1016`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: speed up client dashboard login from `/portal` and prevent duplicate/header `EXPORT_LOG` rows from creating repeated dashboard cards.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `loginUser` now supports `skipDashboardHomeData:true`; the login UI uses that flag so auth/session creation returns before dashboard home data is built, restoring the visible handoff from `Logging you in` to `Loading your dashboard`. Dashboard home loads now request `dashboardHomeProfile: summary`, which returns metadata-only project rows, skips embedded header/blank-token rows, deduplicates by token, keeps the newest row by exported/created timestamp with row tie-break, and avoids snapshot/order-draft/progress/peek parsing before first paint. The frontend hydrates visible-row progress through `getDashboardProjectStatusBatch` after render, delays peek prefetch until after hydration, and caps background peek prefetch to the first three projects. Dashboard response caches now include the response profile. `Index.html` shows development revision `141`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed. Read-only `npm run email-review:status` reported `activeTabState: live_like`, `EXPORT_LOG` `20` rows, `PORTAL_ORDERS` `7`, `PORTAL_STRIPE_EVENTS` `7`, `PORTAL_EMAIL_QUEUE` unchanged at two `sent` rows, and scheduler trigger count `1`.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Harden dashboard login load"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1016 - Harden dashboard login load`. Direct `/exec` returned HTTP `200` with `Development revision 141` and the stable deployment ID; public `/portal` returned HTTP `200` and referenced the stable deployment ID. Targeted checks found no `client_secret`, `clientSecret`, or `hosted_verification_url` markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Active runtime tabs remained live-like, fixture-storage tabs were untouched, and `PORTAL_EMAIL_QUEUE` was not cleared. No review-suite emails were sent.
+- Follow-ups: owner should retry login from `https://www.redthreads.com/portal`; first paint should show unique live projects with temporary skeleton progress bars, then hydrated lifecycle progress bars shortly after.
+
 ## 2026-06-24 - Phase 3 Live Runtime Restoration On Version 1015
 
 - Mode: Full ship runtime restoration with controlled Sheet mutation and no live email sends.
