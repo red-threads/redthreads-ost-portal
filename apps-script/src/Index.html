@@ -17004,7 +17004,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 148">148</div>
+  <div class="devRevisionBadge" aria-label="Development revision 149">149</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -37857,7 +37857,10 @@
     let lastSignature = '';
     let paginator = null;
     for (let pass = 0; pass < 6; pass += 1) {
-      paginator = populateSummaryPages_(pagesHost, exportData);
+      paginator = populateSummaryPages_(pagesHost, exportData, {
+        allowEstimateViewRemoval: false,
+        renderSurface: 'document'
+      });
       await settleSummaryExportLayout_();
       const signature = buildSummaryPaginatorSignature_(paginator);
       const hasOverflow = summaryPaginatorHasOverflow_(paginator);
@@ -39827,7 +39830,10 @@
     let lastSignature = '';
     let paginator = null;
     for (let pass = 0; pass < 6; pass += 1) {
-      paginator = populateSummaryPages_(pagesHost, exportData);
+      paginator = populateSummaryPages_(pagesHost, exportData, {
+        allowEstimateViewRemoval: false,
+        renderSurface: 'document'
+      });
       await settleSummaryExportLayout_();
       const signature = buildSummaryPaginatorSignature_(paginator);
       const hasOverflow = summaryPaginatorHasOverflow_(paginator);
@@ -45453,21 +45459,35 @@
     });
   }
 
-  function buildSummaryEstimateJobHeaderBlock_(jobData){
+  function normalizeSummaryPageRenderOptions_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    return {
+      allowEstimateViewRemoval: opts.allowEstimateViewRemoval !== false,
+      renderSurface: String(opts.renderSurface || '').trim().toLowerCase()
+    };
+  }
+
+  function buildSummaryEstimateJobHeaderBlock_(jobData, renderOptions){
     const block = createEl('section', 'summaryPageBlock summaryEstimateJobBlock');
     const themeName = String((jobData && jobData.themeName) || 'blue').trim().toLowerCase() === 'green' ? 'green' : 'blue';
     block.dataset.summaryTheme = themeName;
+    const options = normalizeSummaryPageRenderOptions_(renderOptions);
+    const isDocumentRender = options.renderSurface === 'document' || options.allowEstimateViewRemoval === false;
 
     if (jobData && jobData.showInformationalOnlyBanner) {
       const notice = createEl('div', 'summaryEstimateJobNotice');
       const noticeText = createEl('div', 'summaryEstimateJobNoticeText');
       noticeText.appendChild(createEl('span', 'summaryEstimateJobNoticeLead', 'Job ' + jobData.printJobNumber + ' has no units entered. '));
-      noticeText.appendChild(document.createTextNode('Job costs & turn times are excluded from the totals in the header. Price breaks & job info are directly below.'));
+      noticeText.appendChild(document.createTextNode(isDocumentRender
+        ? 'Job costs & turn times are excluded from header totals.'
+        : 'Job costs & turn times are excluded from the totals in the header. Price breaks & job info are directly below.'));
       notice.appendChild(noticeText);
-      const removeBtn = createEl('button', 'summaryEstimateJobNoticeBtn', 'Remove Job ' + jobData.printJobNumber + ' from estimate view');
-      removeBtn.type = 'button';
-      removeBtn.addEventListener('click', () => hidePrintJob(jobData.job && jobData.job.printJobId));
-      notice.appendChild(removeBtn);
+      if (options.allowEstimateViewRemoval) {
+        const removeBtn = createEl('button', 'summaryEstimateJobNoticeBtn', 'Remove Job ' + jobData.printJobNumber + ' from estimate view');
+        removeBtn.type = 'button';
+        removeBtn.addEventListener('click', () => hidePrintJob(jobData.job && jobData.job.printJobId));
+        notice.appendChild(removeBtn);
+      }
       block.appendChild(notice);
     }
 
@@ -45663,13 +45683,13 @@
     return block;
   }
 
-  function buildSummaryEstimateJobContainerBlock_(jobData, isFirst){
+  function buildSummaryEstimateJobContainerBlock_(jobData, isFirst, renderOptions){
     const block = createEl('section', 'summaryPageBlock summaryEstimateJobStack');
     block.dataset.summaryTheme = String((jobData && jobData.themeName) || 'blue').trim().toLowerCase() === 'green' ? 'green' : 'blue';
     block.dataset.printJobNumber = String((jobData && jobData.printJobNumber) || '');
     block.dataset.jobName = String((jobData && jobData.jobName) || (jobData && jobData.job && jobData.job.printJobName) || '').trim();
     if (jobData && jobData.showInformationalOnlyBanner) block.classList.add('isInformationalOnly');
-    const jobHeaderBlock = buildSummaryEstimateJobHeaderBlock_(jobData);
+    const jobHeaderBlock = buildSummaryEstimateJobHeaderBlock_(jobData, renderOptions);
     if (isFirst) jobHeaderBlock.classList.add('isFirstEstimateJob');
     block.appendChild(jobHeaderBlock);
     if (jobData && jobData.showCompareTable !== false && jobData.compareTable) {
@@ -45993,7 +46013,7 @@
     };
   }
 
-  function populateSummaryPages_(pagesHost, data){
+  function populateSummaryPages_(pagesHost, data, renderOptions){
     if (!pagesHost) return null;
     pagesHost.innerHTML = '';
     const paginator = createSummaryPaginator_(pagesHost);
@@ -46003,7 +46023,7 @@
       paginator.placeBlock(createEl('div', 'summaryPageBlock summaryEmptyState', 'No visible print jobs are currently included in this estimate.'));
     } else {
       data.jobs.forEach((jobData, idx) => {
-        paginator.placeBlock(buildSummaryEstimateJobContainerBlock_(jobData, idx === 0));
+        paginator.placeBlock(buildSummaryEstimateJobContainerBlock_(jobData, idx === 0, renderOptions));
       });
     }
     if (String(data && data.shipToPlacement || '').trim() === 'after_jobs') {
@@ -46037,7 +46057,10 @@
     const originalData = LAST_RENDERED_SUMMARY_DATA;
     const exportData = cloneSummaryDataForExport_(originalData);
     summaryRoot.classList.add('isExporting');
-    if (exportData) populateSummaryPages_(pagesHost, exportData);
+    if (exportData) populateSummaryPages_(pagesHost, exportData, {
+      allowEstimateViewRemoval: false,
+      renderSurface: 'document'
+    });
     return () => {
       summaryRoot.classList.remove('isExporting');
       if (originalData) populateSummaryPages_(pagesHost, originalData);

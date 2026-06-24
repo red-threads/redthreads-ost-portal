@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - No-Unit Estimate Document Render Cleanup On Version 1024
+
+- Mode: Full ship frontend Summary/Estimate document-render cleanup.
+- Branch/commit/PR: `main`, Apps Script version `1024`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: keep the no-unit job warning in rendered/downloaded/emailed estimate documents while removing the interactive `Remove Job X from estimate view` control from non-interactive documents.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: the shared Summary page renderer now accepts render options. Interactive portal Summary/Estimate rendering defaults to `allowEstimateViewRemoval:true`, preserving the remove button and current long warning copy. Document/export render paths pass `allowEstimateViewRemoval:false` and `renderSurface:'document'`, suppressing the remove button and using the shorter one-line-friendly warning copy while preserving no-unit job visibility and the existing inactive-job dimming. `Index.html` shows development revision `149`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Clean no-unit estimate document render"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1024 - Clean no-unit estimate document render`. Direct `/exec` returned HTTP `200` with `Development revision 149`, omitted stale revision `148`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and had zero targeted sensitive markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Fixture-storage tabs were untouched, `PORTAL_EMAIL_QUEUE` was not cleared, no email-review suite was run, and no estimate email was sent from this shell. No pricing, totals, turn-time exclusion, quantity, snapshot, email recipient parsing, backend email routing, payment, tax, lifecycle, routing, token, or schema behavior was changed.
+- Follow-ups: owner should generate or send an estimate PDF with one active job and one no-unit job to visually confirm the document omits the remove button while the interactive portal estimate still shows it.
+
 ## 2026-06-24 - Project Peek Header Styling On Version 1023
 
 - Mode: Full ship frontend dashboard Project Peek UI refinement.
