@@ -10467,6 +10467,10 @@
       grid-template-columns:minmax(0,1fr);
       padding:0 26px 26px;
     }
+    .taxDocModal.is-client-view-mode.has-tax-replacement-action .taxDocShell{
+      grid-template-columns:minmax(0,980px) minmax(260px,320px);
+      align-items:start;
+    }
     .taxDocModal.is-client-view-mode .taxDocStage{
       display:block;
       overflow:auto;
@@ -10487,6 +10491,63 @@
       width:min(100%,980px);
       aspect-ratio:auto;
       min-height:min(82vh,1120px);
+    }
+    .taxDocReplacementRail{
+      min-width:0;
+      align-self:start;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .taxDocReplacementRail[hidden]{
+      display:none !important;
+    }
+    .taxDocReplacementCard{
+      border:1px solid rgba(251,113,133,.24);
+      border-radius:16px;
+      background:linear-gradient(180deg,rgba(127,29,29,.28),rgba(15,23,42,.42));
+      padding:14px;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 34px rgba(0,0,0,.24);
+      color:#f8fafc;
+    }
+    .taxDocReplacementTitle{
+      margin:0 0 8px;
+      color:#ffffff;
+      font-size:14px;
+      font-weight:900;
+      line-height:1.25;
+    }
+    .taxDocReplacementCopy{
+      margin:0 0 12px;
+      color:#fecdd3;
+      font-size:12px;
+      line-height:1.55;
+    }
+    .taxDocReplacementBtn{
+      width:100%;
+      min-height:44px;
+      padding:0 13px;
+      border-radius:13px;
+      border:1px solid rgba(251,113,133,.42);
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 55%, #be123c 100%);
+      color:#ffffff;
+      font-size:12px;
+      font-weight:900;
+      line-height:1.2;
+      cursor:pointer;
+      box-shadow:0 12px 24px rgba(190,24,93,.24);
+      transition:transform .08s ease, border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+    }
+    .taxDocReplacementBtn:hover{
+      border-color:rgba(254,205,211,.72);
+      transform:translateY(-1px);
+      box-shadow:0 16px 28px rgba(190,24,93,.32);
+    }
+    .taxDocReplacementBtn[disabled]{
+      opacity:.68;
+      cursor:not-allowed;
+      transform:none;
+      box-shadow:none;
     }
     .taxDocHeadBtn{
       min-height:42px;
@@ -11757,6 +11818,76 @@
       gap:10px;
       flex-wrap:wrap;
     }
+    .taxReplacementConfirmBackdrop{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:22px;
+      background:rgba(2,6,23,.56);
+      z-index:10125;
+    }
+    .taxReplacementConfirmBackdrop[hidden]{
+      display:none !important;
+    }
+    .taxReplacementConfirmCard{
+      width:min(560px, calc(100vw - 48px));
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      padding:22px;
+      border-radius:22px;
+      border:1px solid rgba(251,113,133,.22);
+      background:rgba(10,14,24,.98);
+      box-shadow:0 30px 60px rgba(0,0,0,.46);
+      color:#f8fafc;
+    }
+    .taxReplacementConfirmSpinner{
+      display:flex;
+      justify-content:center;
+      padding-top:2px;
+    }
+    .taxReplacementConfirmSpinner[hidden]{
+      display:none !important;
+    }
+    .taxReplacementConfirmTitle{
+      color:#ffffff;
+      font-size:26px;
+      font-weight:900;
+      line-height:1.15;
+      text-align:center;
+    }
+    .taxReplacementConfirmBody{
+      color:#fecdd3;
+      font-size:15px;
+      font-weight:650;
+      line-height:1.6;
+      text-align:center;
+    }
+    .taxReplacementConfirmMessage{
+      border:1px solid rgba(244,63,94,.24);
+      border-radius:14px;
+      background:rgba(127,29,29,.24);
+      color:#fecdd3;
+      padding:12px;
+      font-size:13px;
+      line-height:1.5;
+      text-align:center;
+    }
+    .taxReplacementConfirmMessage[hidden]{
+      display:none !important;
+    }
+    .taxReplacementConfirmActions{
+      display:flex;
+      justify-content:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .taxReplacementConfirmActions .taxDocActionBtn,
+    .taxReplacementConfirmActions .taxDocPrimaryBtn{
+      margin-top:0;
+    }
     .taxFormEditorEmpty{
       color:#cbd5e1;
       font-size:13px;
@@ -12040,8 +12171,14 @@
         grid-template-columns:1fr;
         justify-content:stretch;
       }
+      .taxDocModal.is-client-view-mode.has-tax-replacement-action .taxDocShell{
+        grid-template-columns:1fr;
+      }
       .taxDocRail{
         overflow:visible;
+      }
+      .taxDocReplacementRail{
+        width:100%;
       }
     }
     @media (max-width: 760px){
@@ -17004,7 +17141,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 155">155</div>
+  <div class="devRevisionBadge" aria-label="Development revision 156">156</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17763,6 +17900,29 @@
             <div class="taxDocMessage info" id="taxDocMessage" hidden></div>
           </div>
         </aside>
+        <aside class="taxDocReplacementRail" id="taxDocReplacementRail" hidden>
+          <div class="taxDocReplacementCard">
+            <div class="taxDocReplacementTitle">Clear Old Document and Add New One</div>
+            <p class="taxDocReplacementCopy">Clear the approved certificate on file, then upload a replacement for Red Threads review.</p>
+            <button class="taxDocReplacementBtn" id="taxDocReplacementBtn" type="button">Clear Old Document and Add New One</button>
+          </div>
+        </aside>
+      </div>
+      <div class="taxReplacementConfirmBackdrop" id="taxReplacementConfirmBackdrop" hidden>
+        <div class="taxReplacementConfirmCard" role="dialog" aria-modal="true" aria-labelledby="taxReplacementConfirmTitle">
+          <div class="taxReplacementConfirmSpinner" id="taxReplacementConfirmSpinner" hidden aria-hidden="true">
+            <div class="rt-spinner">
+              <img class="rt-spinner-icon" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="">
+            </div>
+          </div>
+          <div class="taxReplacementConfirmTitle" id="taxReplacementConfirmTitle">Clear tax exemption document?</div>
+          <div class="taxReplacementConfirmBody" id="taxReplacementConfirmBody">Hey when you clear this document, it's going to be cleared and you won't be able to toggle sales tax on and off orders until you submit a new document and it is approved.</div>
+          <div class="taxReplacementConfirmMessage" id="taxReplacementConfirmMessage" hidden></div>
+          <div class="taxReplacementConfirmActions">
+            <button class="taxDocActionBtn" id="taxReplacementCancelBtn" type="button">Cancel</button>
+            <button class="taxDocPrimaryBtn" id="taxReplacementConfirmBtn" type="button">Clear Document and Upload New One</button>
+          </div>
+        </div>
       </div>
       <div class="taxSignatureBackdrop" id="taxSignatureBackdrop" hidden>
         <div class="taxSignatureModal" role="dialog" aria-modal="true" aria-labelledby="taxSignatureTitle">
@@ -19394,6 +19554,9 @@
   let TAX_DOC_CLIENT_VIEW_LOADING = false;
   let TAX_DOC_CLIENT_VIEW_ARTIFACT = null;
   let TAX_DOC_CLIENT_VIEW_CACHE = Object.create(null);
+  let TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+  let TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+  let TAX_DOC_REPLACEMENT_ERROR = '';
   let TAX_DOC_TEAM_ACTION_IN_FLIGHT = false;
   let TERMS_DOC_TEAM_REVIEW_MODE = false;
   let TERMS_DOC_TEAM_REVIEW_LOADING = false;
@@ -20552,8 +20715,9 @@
     return value === 'approved' || value === 'under_review' || value === 'denied';
   }
 
-  function getDashboardDocumentHoverLabel_(statusValue){
-    if (statusValue === 'approved') return 'View Document';
+  function getDashboardDocumentHoverLabel_(statusValue, documentType){
+    const type = String(documentType || '').trim().toLowerCase();
+    if (statusValue === 'approved') return type === 'tax_exempt' ? 'View/Edit Document' : 'View Document';
     if (statusValue === 'under_review') return 'View Document';
     if (statusValue === 'rejected') return 'Complete Document';
     if (statusValue === 'denied') return 'View Status';
@@ -21337,7 +21501,7 @@
       {
         interactive: true,
         documentType: 'credit_terms',
-        hoverValue: getDashboardDocumentHoverLabel_(getAccountDocumentStatusValue_(termsWorkflow)),
+        hoverValue: getDashboardDocumentHoverLabel_(getAccountDocumentStatusValue_(termsWorkflow), 'credit_terms'),
         stateClass: getDashboardDocumentCardTone_(termsWorkflow),
         ariaLabel: 'Credit Terms'
       }
@@ -21348,7 +21512,7 @@
       {
         interactive: true,
         documentType: 'tax_exempt',
-        hoverValue: getDashboardDocumentHoverLabel_(getAccountDocumentStatusValue_(taxWorkflow)),
+        hoverValue: getDashboardDocumentHoverLabel_(getAccountDocumentStatusValue_(taxWorkflow), 'tax_exempt'),
         stateClass: getDashboardDocumentCardTone_(taxWorkflow),
         ariaLabel: 'Tax Exemption'
       }
@@ -21402,7 +21566,8 @@
       taxDocBackdrop,
       taxSignatureBackdrop,
       taxSubmitSuccessBackdrop,
-      taxTeamDecisionBackdrop
+      taxTeamDecisionBackdrop,
+      taxReplacementConfirmBackdrop
     ].forEach(mountOverlayToBody_);
   }
 
@@ -22114,6 +22279,15 @@
   const taxDocApprovedViewerLoading = document.getElementById('taxDocApprovedViewerLoading');
   const taxDocApprovedViewerImage = document.getElementById('taxDocApprovedViewerImage');
   const taxDocApprovedViewerFrame = document.getElementById('taxDocApprovedViewerFrame');
+  const taxDocReplacementRail = document.getElementById('taxDocReplacementRail');
+  const taxDocReplacementBtn = document.getElementById('taxDocReplacementBtn');
+  const taxReplacementConfirmBackdrop = document.getElementById('taxReplacementConfirmBackdrop');
+  const taxReplacementConfirmSpinner = document.getElementById('taxReplacementConfirmSpinner');
+  const taxReplacementConfirmTitle = document.getElementById('taxReplacementConfirmTitle');
+  const taxReplacementConfirmBody = document.getElementById('taxReplacementConfirmBody');
+  const taxReplacementConfirmMessage = document.getElementById('taxReplacementConfirmMessage');
+  const taxReplacementCancelBtn = document.getElementById('taxReplacementCancelBtn');
+  const taxReplacementConfirmBtn = document.getElementById('taxReplacementConfirmBtn');
   const taxFormPages = document.getElementById('taxFormPages');
   const taxFormPage1Card = document.getElementById('taxFormPage1Card');
   const taxFormPage2Card = document.getElementById('taxFormPage2Card');
@@ -32631,12 +32805,118 @@
     return TAX_DOC_TEAM_REVIEW_MODE === true;
   }
 
+  function isTaxReplacementActionAvailable_(){
+    if (TAX_DOC_MODAL_CONTEXT !== 'dashboard') return false;
+    if (!isTaxClientViewMode_()) return false;
+    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', getActiveAccountSummaryForTaxWorkspace_()) || {};
+    return getAccountDocumentStatusValue_(workflow) === 'approved';
+  }
+
+  function renderTaxReplacementConfirm_(){
+    const isOpen = TAX_DOC_REPLACEMENT_CONFIRM_OPEN === true;
+    const isBusy = TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true;
+    const errorText = String(TAX_DOC_REPLACEMENT_ERROR || '').trim();
+    if (taxReplacementConfirmBackdrop) taxReplacementConfirmBackdrop.hidden = !isOpen;
+    if (taxReplacementConfirmSpinner) taxReplacementConfirmSpinner.hidden = !isBusy;
+    if (taxReplacementConfirmTitle) {
+      taxReplacementConfirmTitle.textContent = isBusy ? 'Clearing document...' : 'Clear tax exemption document?';
+    }
+    if (taxReplacementConfirmBody) {
+      taxReplacementConfirmBody.textContent = isBusy
+        ? 'Please wait while the current account tax exemption approval is cleared.'
+        : "Hey when you clear this document, it's going to be cleared and you won't be able to toggle sales tax on and off orders until you submit a new document and it is approved.";
+    }
+    if (taxReplacementConfirmMessage) {
+      taxReplacementConfirmMessage.textContent = errorText;
+      taxReplacementConfirmMessage.hidden = !errorText;
+    }
+    if (taxReplacementCancelBtn) taxReplacementCancelBtn.disabled = isBusy;
+    if (taxReplacementConfirmBtn) {
+      taxReplacementConfirmBtn.disabled = isBusy;
+      taxReplacementConfirmBtn.textContent = isBusy ? 'Clearing...' : 'Clear Document and Upload New One';
+    }
+  }
+
+  function renderTaxReplacementAction_(){
+    const showAction = isTaxReplacementActionAvailable_() && TAX_DOC_CLIENT_VIEW_LOADING !== true;
+    if (taxDocModal) taxDocModal.classList.toggle('has-tax-replacement-action', showAction);
+    if (taxDocReplacementRail) taxDocReplacementRail.hidden = !showAction;
+    if (taxDocReplacementBtn) taxDocReplacementBtn.disabled = TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || !showAction;
+    if (!showAction && TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT !== true) {
+      TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+      TAX_DOC_REPLACEMENT_ERROR = '';
+    }
+    renderTaxReplacementConfirm_();
+  }
+
+  function openTaxReplacementConfirm_(){
+    if (!isTaxReplacementActionAvailable_() || TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true) return;
+    TAX_DOC_REPLACEMENT_CONFIRM_OPEN = true;
+    TAX_DOC_REPLACEMENT_ERROR = '';
+    renderTaxReplacementAction_();
+    requestAnimationFrame(() => {
+      if (taxReplacementConfirmBtn) taxReplacementConfirmBtn.focus();
+    });
+  }
+
+  function closeTaxReplacementConfirm_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true && opts.force !== true) return;
+    TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+    TAX_DOC_REPLACEMENT_ERROR = '';
+    renderTaxReplacementAction_();
+    if (opts.restoreFocus !== false) {
+      requestAnimationFrame(() => {
+        if (taxDocReplacementBtn && !taxDocReplacementBtn.hidden) taxDocReplacementBtn.focus();
+      });
+    }
+  }
+
+  async function clearTaxExemptDocumentForReplacementFromViewer_(){
+    if (TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || !isTaxReplacementActionAvailable_()) return;
+    TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = true;
+    TAX_DOC_REPLACEMENT_ERROR = '';
+    TAX_DOC_REPLACEMENT_CONFIRM_OPEN = true;
+    renderTaxReplacementAction_();
+    try {
+      const resp = await callServer('clearTaxExemptDocumentForReplacement', getTaxWorkspaceDocumentRequestPayload_({
+        requireExistingAccount: true
+      }));
+      if (!resp || resp.ok !== true) {
+        throw new Error(String((resp && resp.error) || 'Unable to clear the current tax exemption document.'));
+      }
+      requireFreshDashboardHomeReturn_('tax_exempt_replacement_clear');
+      TAX_DOC_CLIENT_VIEW_CACHE = Object.create(null);
+      applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForTaxWorkspace_());
+      TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+      TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+      TAX_DOC_REPLACEMENT_ERROR = '';
+      await openTaxExemptWorkspace_({
+        context: 'dashboard',
+        autoOpenUpload: true
+      });
+      setTaxDocMessage(String(resp.message || 'Old tax exemption document cleared. Upload a new document for Red Threads review.'), 'ok', {
+        timeoutMs: 7000
+      });
+    } catch (err) {
+      TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+      TAX_DOC_REPLACEMENT_ERROR = String((err && err.message) || err || 'Unable to clear the current tax exemption document.');
+      renderTaxReplacementAction_();
+    }
+  }
+
   function resetTaxClientViewState_(){
     TAX_DOC_CLIENT_VIEW_MODE = false;
     TAX_DOC_CLIENT_VIEW_LOADING = false;
     TAX_DOC_CLIENT_VIEW_ARTIFACT = null;
+    TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
+    TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
+    TAX_DOC_REPLACEMENT_ERROR = '';
     if (taxDocModal) taxDocModal.classList.remove('is-review-mode', 'is-client-view-mode');
+    if (taxDocModal) taxDocModal.classList.remove('has-tax-replacement-action');
     if (taxDocApprovedViewer) taxDocApprovedViewer.hidden = true;
+    if (taxDocReplacementRail) taxDocReplacementRail.hidden = true;
+    renderTaxReplacementConfirm_();
     if (taxDocApprovedViewerCard) {
       taxDocApprovedViewerCard.classList.remove('is-frame', 'is-loading');
     }
@@ -32672,6 +32952,8 @@
       if (taxDocModal && !taxDocModal.contains(target)) return true;
       if (taxDocModal && taxDocModal.contains(target) && isTaxClientViewMode_()) {
         if (taxDocApprovedViewerCard && taxDocApprovedViewerCard.contains(target)) return false;
+        if (taxDocReplacementRail && taxDocReplacementRail.contains(target)) return false;
+        if (taxReplacementConfirmBackdrop && taxReplacementConfirmBackdrop.contains(target)) return false;
         if (taxDocModal.querySelector('.taxDocHeadActions') && taxDocModal.querySelector('.taxDocHeadActions').contains(target)) return false;
         return true;
       }
@@ -32689,6 +32971,10 @@
     if (!event || event.key !== 'Escape') return;
     if (!taxDocBackdrop || taxDocBackdrop.hidden || !taxDocBackdrop.classList.contains('open')) return;
     if (typeof event.preventDefault === 'function') event.preventDefault();
+    if (TAX_DOC_REPLACEMENT_CONFIRM_OPEN === true) {
+      closeTaxReplacementConfirm_();
+      return;
+    }
     handleTaxDocumentCloseRequest_({ immediate: true });
   }
 
@@ -32925,7 +33211,7 @@
     const artifact = (TAX_DOC_CLIENT_VIEW_ARTIFACT && typeof TAX_DOC_CLIENT_VIEW_ARTIFACT === 'object')
       ? TAX_DOC_CLIENT_VIEW_ARTIFACT
       : {};
-    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', ACCOUNT_SUMMARY) || {};
+    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', getActiveAccountSummaryForTaxWorkspace_()) || {};
     const statusLabel = getAccountDocumentStatusLabel_(workflow);
     const mimeType = String(artifact.mimeType || '').trim().toLowerCase();
     const isImage = /^image\//i.test(mimeType);
@@ -32990,6 +33276,7 @@
         taxDocApprovedViewerFrame.removeAttribute('src');
       }
     }
+    renderTaxReplacementAction_();
   }
 
   function closeTaxTeamReviewAndReturn_(options){
@@ -47242,6 +47529,21 @@
         renderTaxDocUploadPanel_();
       });
     }
+    if (taxDocReplacementRail) {
+      taxDocReplacementRail.addEventListener('click', event => {
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      });
+    }
+    if (taxDocReplacementBtn) taxDocReplacementBtn.addEventListener('click', openTaxReplacementConfirm_);
+    if (taxReplacementConfirmBackdrop) {
+      taxReplacementConfirmBackdrop.addEventListener('click', event => {
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        if (!event || event.target !== taxReplacementConfirmBackdrop) return;
+        closeTaxReplacementConfirm_();
+      });
+    }
+    if (taxReplacementCancelBtn) taxReplacementCancelBtn.addEventListener('click', () => closeTaxReplacementConfirm_());
+    if (taxReplacementConfirmBtn) taxReplacementConfirmBtn.addEventListener('click', clearTaxExemptDocumentForReplacementFromViewer_);
     if (taxDocEmailCancelBtn) taxDocEmailCancelBtn.addEventListener('click', closeTaxDocEmailPanel_);
     if (taxDocEmailSendBtn) taxDocEmailSendBtn.addEventListener('click', submitTaxDocEmail_);
     if (taxDocSubmitBtn) taxDocSubmitBtn.addEventListener('click', submitTaxDocUploadedDocument_);

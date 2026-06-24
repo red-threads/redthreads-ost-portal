@@ -17,6 +17,17 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Account Tax Exemption Replacement Implementation
+
+- Mode: Produce final code, unshipped runtime/account-document workflow enhancement.
+- Branch/commit/PR: `main`, local runtime source only at implementation time; Apps Script stable deployment remains version `1030` until a separate Full ship.
+- Goal: let account-dashboard clients replace an approved sales-tax exemption document while preserving old artifact history and disabling future-order sales-tax toggling until a new document is submitted and approved.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added `clearTaxExemptDocumentForReplacement()` for account/dashboard tax exemption replacement. It requires an existing account context, archives the current approved tax exemption metadata in `PORTAL_ACCOUNTS.notes.documentWorkflow.tax_exempt.replacementHistory`, preserves existing submissions, does not trash Drive artifacts, clears only current tax-exemption approval/status/artifact fields, and returns the existing account-document workflow response shape. The dashboard tax card now hovers as `View/Edit Document` only for approved tax exemptions. The approved tax viewer shows a dashboard-only right-side replacement card, warning confirmation, loading state, and success route into the existing Form 3372 upload panel. `Index.html` shows development revision `156`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed. Source review confirmed the new clear path does not call `resetAccountDocumentWorkflow_()`, `moveDriveFileToTrashSafe_()`, or `queueAccountDocumentLifecycleEmailSafely_()`.
+- Runtime data state: no Apps Script deploy was run, no Sheet data was mutated from this shell, no email-review suite was run, no queue rows were touched, no document was submitted, and no prior orders/snapshots, pricing, lifecycle/email policy, Stripe/ACH, routing/token access, Team Mode reset behavior, Sheet schemas, Script Properties, active tabs, or fixture tabs were intentionally changed.
+- Follow-ups: Full ship this runtime change to the existing stable deployment ID, then browser-smoke an approved account tax exemption from the Tyler/Josiah dashboard: hover label, approved viewer rail, cancel confirmation, clear confirmation, upload panel handoff, future-order tax toggle disabled after clear, and old artifact history preserved.
+
 ## 2026-06-24 - Full No-Unit Estimate Warning On Version 1027
 
 - Mode: Full ship frontend Summary/Estimate document copy fix.

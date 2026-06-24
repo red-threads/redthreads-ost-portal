@@ -891,6 +891,7 @@ function buildPortalRequestRouteMeta_(e) {
   const setupResult = (rawSetupResult === 'success' || rawSetupResult === 'cancel')
     ? rawSetupResult
     : '';
+  const previousStatus = normalizeAccountDocumentStatus_(getAccountDocumentRowFieldValue_(row, definition.statusField));
   return {
     checkoutResult: checkoutResult,
     setupResult: setupResult,
@@ -10309,7 +10310,7 @@ function buildAccountDocumentContext_(payload) {
     cfg: cfg,
     ss: ss,
     infra: infra,
-    createIfMissing: true
+    createIfMissing: p.requireExistingAccount === true ? false : true
   })) || {
     summary: buildEphemeralAccountSummary_(identity, cfg),
     rowInfo: null
@@ -13540,6 +13541,135 @@ function buildAccountDocumentResetRowUpdates_(definition) {
   if (definition.paymentTermsSetByNameField) updates[definition.paymentTermsSetByNameField] = '';
   if (definition.paymentTermsSetByEmailField) updates[definition.paymentTermsSetByEmailField] = '';
   return updates;
+}
+
+function getAccountDocumentRowFieldValue_(row, fieldName) {
+  const source = (row && typeof row === 'object') ? row : {};
+  const field = trimString_(fieldName);
+  if (!field) return '';
+  return source[normalizeHeaderKey_(field)] || source[field] || '';
+}
+
+function buildTaxExemptReplacementArchiveEntry_(ctx, definition, accountRow, workflowNotes, clearedAt) {
+  const row = (accountRow && typeof accountRow === 'object') ? accountRow : {};
+  const notes = (workflowNotes && typeof workflowNotes === 'object' && !Array.isArray(workflowNotes)) ? workflowNotes : {};
+  const latestSubmission = notes.lastSubmission && typeof notes.lastSubmission === 'object'
+    ? cloneJsonValue_(notes.lastSubmission, {})
+    : null;
+  const artifactUrl = trimString_(getAccountDocumentRowFieldValue_(row, definition.artifactUrlField));
+  const accountSummary = ctx && ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
+  const identity = ctx && ctx.identity ? ctx.identity : {};
+  return {
+    eventType: 'client_clear_for_replacement',
+    clearedAt: trimString_(clearedAt) || nowIso_(),
+    clearedByName: trimString_(accountSummary.billingContactName || accountSummary.primaryContactName || identity.personName),
+    clearedByEmail: normalizeEmail_(accountSummary.billingContactEmail || accountSummary.primaryEmail || identity.personEmail),
+    previousStatus: previousStatus,
+    previousApproved: boolFromCell_(getAccountDocumentRowFieldValue_(row, definition.approvedField)) || previousStatus === 'approved',
+    previousApprovedAt: trimString_(getAccountDocumentRowFieldValue_(row, definition.approvedAtField)),
+    previousApprovedByName: trimString_(getAccountDocumentRowFieldValue_(row, definition.approvedByNameField)),
+    previousApprovedByEmail: normalizeEmail_(getAccountDocumentRowFieldValue_(row, definition.approvedByEmailField)),
+    previousArtifactUrl: artifactUrl,
+    previousArtifactFileId: extractDriveFileIdFromUrl_(artifactUrl),
+    previousSubmittedAt: trimString_(getAccountDocumentRowFieldValue_(row, definition.submittedAtField)),
+    previousCertificateNumber: trimString_(getAccountDocumentRowFieldValue_(row, definition.certificateNumberField)),
+    previousExpiresAt: trimString_(getAccountDocumentRowFieldValue_(row, definition.expiresAtField)),
+    lastSubmission: latestSubmission ? {
+      submittedAt: trimString_(latestSubmission.submittedAt),
+      submittedByName: trimString_(latestSubmission.submittedByName),
+      submittedByEmail: normalizeEmail_(latestSubmission.submittedByEmail),
+      submissionSource: trimString_(latestSubmission.submissionSource),
+      artifactFileId: trimString_(latestSubmission.artifactFileId),
+      artifactUrl: trimString_(latestSubmission.artifactUrl),
+      artifactName: trimString_(latestSubmission.artifactName),
+      artifactMimeType: trimString_(latestSubmission.artifactMimeType),
+      artifactSizeBytes: Math.max(0, parseInt(String(latestSubmission.artifactSizeBytes || 0), 10) || 0),
+      artifactFiles: normalizeAccountDocumentArtifactFiles_(latestSubmission.artifactFiles),
+      certificateNumber: trimString_(latestSubmission.certificateNumber)
+    } : null
+  };
+}
+
+function buildTaxExemptReplacementClearRowUpdates_(definition) {
+  const updates = {};
+  updates[definition.statusField] = 'not_started';
+  updates[definition.approvedField] = false;
+  updates[definition.approvedAtField] = '';
+  updates[definition.approvedByNameField] = '';
+  updates[definition.approvedByEmailField] = '';
+  updates[definition.artifactUrlField] = '';
+  updates[definition.submittedAtField] = '';
+  updates[definition.certificateNumberField] = '';
+  updates[definition.expiresAtField] = '';
+  return updates;
+}
+
+function clearTaxExemptDocumentForReplacement_(payload) {
+  const requestPayload = Object.assign({}, (payload && typeof payload === 'object') ? payload : {}, {
+    documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    requireExistingAccount: true
+  });
+  const ctx = buildAccountDocumentContext_(requestPayload);
+  if (!ctx || ctx.ok !== true) return ctx;
+  const accountInfo = ctx.accountInfo || {};
+  const rowInfo = accountInfo.rowInfo || null;
+  if (!rowInfo || !rowInfo.rowObjNormalized || !rowInfo.colMap || !ctx.infra || !ctx.infra.accountsSheet) {
+    return { ok: false, error: 'A saved portal account is required before a tax exemption document can be replaced.' };
+  }
+  const definition = getRequiredAccountDocumentDefinition_(ACCOUNT_DOCUMENT_TYPES.tax_exempt, ctx.cfg);
+  const accountRow = rowInfo.rowObjNormalized;
+  const status = normalizeAccountDocumentStatus_(getAccountDocumentRowFieldValue_(accountRow, definition.statusField));
+  const approved = boolFromCell_(getAccountDocumentRowFieldValue_(accountRow, definition.approvedField)) || status === 'approved';
+  const artifactUrl = trimString_(getAccountDocumentRowFieldValue_(accountRow, definition.artifactUrlField));
+  if (!approved && !artifactUrl) {
+    return { ok: false, error: 'No approved tax exemption document is currently on file for this account.' };
+  }
+  const now = nowIso_();
+  const workflowNotes = getPortalAccountDocumentNotes_(accountRow, definition.type);
+  const archiveEntry = buildTaxExemptReplacementArchiveEntry_(ctx, definition, accountRow, workflowNotes, now);
+  const notesText = updatePortalAccountDocumentNotes_(accountRow, definition.type, function(current) {
+    const next = (current && typeof current === 'object' && !Array.isArray(current)) ? current : {};
+    const replacementHistory = Array.isArray(next.replacementHistory) ? next.replacementHistory.slice(0, 19) : [];
+    replacementHistory.unshift(archiveEntry);
+    next.replacementHistory = replacementHistory;
+    next.replacementPending = true;
+    next.replacementRequestedAt = now;
+    delete next.lastSubmission;
+    delete next.lastDecision;
+    return next;
+  });
+  const updates = buildTaxExemptReplacementClearRowUpdates_(definition);
+  updates.notes = notesText;
+  updates.updatedAt = now;
+  setRowValuesByHeaderMap_(
+    ctx.infra.accountsSheet,
+    rowInfo.row,
+    rowInfo.colMap,
+    updates
+  );
+  refreshAccountDocumentContextAccount_(ctx);
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Old tax exemption document cleared. Upload a new document for Red Threads review.',
+    {
+      replacementCleared: true,
+      archivedDocument: {
+        clearedAt: now,
+        previousStatus: archiveEntry.previousStatus,
+        previousSubmittedAt: archiveEntry.previousSubmittedAt,
+        previousExpiresAt: archiveEntry.previousExpiresAt
+      }
+    }
+  );
+}
+
+function clearTaxExemptDocumentForReplacement(payload) {
+  try {
+    return clearTaxExemptDocumentForReplacement_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 }
 
 function resetAccountDocumentWorkflow_(payload, documentType) {
