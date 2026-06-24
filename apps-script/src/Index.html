@@ -17004,7 +17004,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 153">153</div>
+  <div class="devRevisionBadge" aria-label="Development revision 154">154</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -35142,10 +35142,12 @@
     closeTaxSignatureModal_();
     closeTaxDocEmailPanel_();
     setTaxDocMessage('', 'info');
+    showAccountDocumentLoader_();
     try {
       await ensureTaxFormManifestLoaded_();
       hydrateTaxFormFoundation_();
     } catch (err) {
+      rtHideLoader();
       const message = String((err && err.message) || err || 'Unable to load the tax form.');
       setTaxDocMessage(message, 'err');
       if (CURRENT_VIEW === VIEW_DASHBOARD) {
@@ -35155,7 +35157,6 @@
       }
       return;
     }
-    showAccountDocumentLoader_();
     try {
       if (uploadFirst) {
         TAX_DOC_EMAIL_PANEL_OPEN = false;
