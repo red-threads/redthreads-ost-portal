@@ -2288,6 +2288,7 @@ function buildDashboardProjectHomeSummaryMetaFromRowInfo_(rowInfo) {
   const row = (info.rowObjNormalized && typeof info.rowObjNormalized === 'object')
     ? info.rowObjNormalized
     : {};
+  const preview = buildDashboardProjectHomeSummaryPreviewMetaFromRow_(row);
   const exportedAt = trimString_(row.exportedat || row.createdat);
   const createdAt = trimString_(row.createdat || row.exportedat);
   const dealTitle = trimString_(
@@ -2313,10 +2314,35 @@ function buildDashboardProjectHomeSummaryMetaFromRowInfo_(rowInfo) {
     createdAt: createdAt,
     status: derivePortalDisplayOrderStatus_(row, row.status),
     statusSeed: null,
-    previewImageUrl: '',
-    previewImageCandidates: [],
-    previewImageAlt: ''
+    previewImageUrl: trimString_(preview && preview.url),
+    previewImageCandidates: Array.isArray(preview && preview.candidates)
+      ? preview.candidates.map(function(url) { return trimString_(url); }).filter(Boolean)
+      : [],
+    previewImageAlt: trimString_(preview && preview.alt)
   };
+}
+
+function buildDashboardProjectHomeSummaryPreviewMetaFromRow_(rowState) {
+  const row = (rowState && typeof rowState === 'object') ? rowState : {};
+  const runtimeMeta = buildDashboardProjectSnapshotRuntimeMetaFromRow_(row);
+  const snapshot = runtimeMeta && typeof runtimeMeta === 'object' ? runtimeMeta.snapshot : null;
+  const printJobs = Array.isArray(runtimeMeta && runtimeMeta.printJobs) ? runtimeMeta.printJobs : [];
+  if (!snapshot || !printJobs.length) {
+    return { url: '', candidates: [], alt: '' };
+  }
+
+  const stateSource = safeJsonParse_(row.submittedstatejson || row.portalstatejson, {}) || {};
+  const portalState = normalizePortalStateForOrder_(stateSource, printJobs);
+  const visibleContexts = buildDashboardPeekEditableJobContexts_(
+    printJobs,
+    portalState,
+    normalizeSummaryOptionsForOrderDraft_(stateSource.summaryOptions)
+  );
+  const firstVisibleJob = visibleContexts.length ? visibleContexts[0].job : null;
+  const job = firstVisibleJob || printJobs[0];
+  return buildDashboardPeekPreviewMetaForJob_(job, {
+    preferArtMockup: true
+  });
 }
 
 function listProjectsForEmail_(exportSheet, email, options) {
@@ -3096,8 +3122,9 @@ function buildDashboardPeekLockedJobContexts_(lockedDraft, printJobs) {
     .filter(Boolean);
 }
 
-function buildDashboardPeekPreviewMetaForJob_(job) {
+function buildDashboardPeekPreviewMetaForJob_(job, options) {
   const normalizedJob = (job && typeof job === 'object') ? job : {};
+  const opts = (options && typeof options === 'object') ? options : {};
   const candidates = [];
   const overrideBySlot = (normalizedJob.artworkOverridesBySlot && typeof normalizedJob.artworkOverridesBySlot === 'object')
     ? normalizedJob.artworkOverridesBySlot
@@ -3108,7 +3135,9 @@ function buildDashboardPeekPreviewMetaForJob_(job) {
       candidates.push(url);
     });
   }
-  buildDashboardProjectPreviewCandidatesFromMockups_(normalizedJob.mockups).forEach(function(url) {
+  buildDashboardProjectPreviewCandidatesFromMockups_(normalizedJob.mockups, {
+    preferArtMockup: opts.preferArtMockup === true
+  }).forEach(function(url) {
     candidates.push(url);
   });
   const resolvedUrl = chooseDashboardProjectPreviewCandidate_(candidates);
@@ -3784,34 +3813,40 @@ function buildDashboardProjectPreviewCandidatesFromOverride_(overrideEntry) {
   return uniqueTrimmedStrings_(candidates);
 }
 
-function buildDashboardProjectPreviewCandidatesFromMockups_(mockups) {
+function buildDashboardProjectPreviewCandidatesFromMockups_(mockups, options) {
   const raw = (mockups && typeof mockups === 'object') ? mockups : {};
+  const opts = (options && typeof options === 'object') ? options : {};
   const candidates = [];
-  const previewMockupFileId = trimString_(raw.previewMockupFileId);
-  if (previewMockupFileId) {
-    buildDriveFilePublicImageCandidates_(previewMockupFileId).forEach(function(url) {
+  const appendDriveCandidates = function(fileId) {
+    const cleanFileId = trimString_(fileId);
+    if (!cleanFileId) return;
+    buildDriveFilePublicImageCandidates_(cleanFileId).forEach(function(url) {
       candidates.push(url);
     });
-  }
-  const previewUrl = trimString_(raw.previewUrl);
-  if (previewUrl) {
-    const previewFileId = extractDriveFileIdFromUrl_(previewUrl);
+  };
+  const appendPreviewUrlCandidates = function(previewUrl) {
+    const cleanPreviewUrl = trimString_(previewUrl);
+    if (!cleanPreviewUrl) return;
+    const previewFileId = extractDriveFileIdFromUrl_(cleanPreviewUrl);
     if (previewFileId) {
       buildDriveFilePublicImageCandidates_(previewFileId).forEach(function(url) {
         candidates.push(url);
       });
     }
-    const safeHostedUrl = normalizeStripeHostedImageUrl_(previewUrl);
+    const safeHostedUrl = normalizeStripeHostedImageUrl_(cleanPreviewUrl);
     if (safeHostedUrl) candidates.push(safeHostedUrl);
+  };
+  if (opts.preferArtMockup === true) {
+    appendDriveCandidates(raw.artMockupFileId);
+    appendDriveCandidates(raw.previewMockupFileId);
+    appendPreviewUrlCandidates(raw.previewUrl);
+    appendDriveCandidates(raw.garmentMockupFileId);
+  } else {
+    appendDriveCandidates(raw.previewMockupFileId);
+    appendPreviewUrlCandidates(raw.previewUrl);
+    appendDriveCandidates(raw.artMockupFileId);
+    appendDriveCandidates(raw.garmentMockupFileId);
   }
-  [
-    trimString_(raw.artMockupFileId),
-    trimString_(raw.garmentMockupFileId)
-  ].forEach(function(fileId) {
-    buildDriveFilePublicImageCandidates_(fileId).forEach(function(url) {
-      candidates.push(url);
-    });
-  });
   return uniqueTrimmedStrings_(candidates);
 }
 
@@ -4078,11 +4113,84 @@ function getDashboardProjectPeek(payload) {
 }
 
 function getDashboardProjectStatusBatch(payload) {
+  const timing = createPortalLoadTimingTrace_('getDashboardProjectStatusBatch');
   try {
-    return buildDashboardProjectStatusBatch_(payload);
+    const tokenCount = payload && Array.isArray(payload.tokens) ? payload.tokens.length : 0;
+    markPortalLoadTiming_(timing, 'request_received', {
+      routeType: 'dashboard_status',
+      tokenCount: tokenCount,
+      batchSize: tokenCount,
+      hasSession: !!(payload && payload.sessionId),
+      hasToken: !!(payload && payload.token)
+    });
+    const resp = buildDashboardProjectStatusBatch_(payload);
+    markPortalLoadTiming_(timing, 'response_ready', {
+      routeType: 'dashboard_status',
+      ok: !!(resp && resp.ok === true),
+      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0,
+      batchSize: tokenCount
+    });
+    return attachPortalLoadTiming_(resp, timing, {
+      routeType: 'dashboard_status',
+      ok: !!(resp && resp.ok === true),
+      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0,
+      batchSize: tokenCount
+    });
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    return attachPortalLoadTiming_({ ok: false, error: String((err && err.message) || err) }, timing, {
+      routeType: 'dashboard_status',
+      ok: false
+    });
   }
+}
+
+function buildDashboardExportRowInfoMapForTokens_(exportSheet, tokens) {
+  const cleanTokens = uniqueTrimmedStrings_(tokens);
+  if (!exportSheet || !cleanTokens.length) return {};
+  const tokenSet = cleanTokens.reduce(function(map, token) {
+    map[token] = true;
+    return map;
+  }, {});
+  const entriesByToken = {};
+  listSheetRowInfos_(exportSheet).forEach(function(info) {
+    const row = (info && info.rowObjNormalized && typeof info.rowObjNormalized === 'object')
+      ? info.rowObjNormalized
+      : {};
+    const token = trimString_(row.token);
+    if (!token || !tokenSet[token] || !isRenderableDashboardExportRow_(row, token)) return;
+    const entry = {
+      token: token,
+      rowInfo: info,
+      rowState: row,
+      exportedAt: trimString_(row.exportedat || row.createdat),
+      createdAt: trimString_(row.createdat || row.exportedat)
+    };
+    const current = entriesByToken[token] || null;
+    if (!current || compareDashboardProjectEntriesByRecency_(entry, current) < 0) {
+      entriesByToken[token] = entry;
+    }
+  });
+  return cleanTokens.reduce(function(map, token) {
+    if (entriesByToken[token] && entriesByToken[token].rowInfo) {
+      map[token] = entriesByToken[token].rowInfo;
+    }
+    return map;
+  }, {});
+}
+
+function buildDashboardStatusAccountSummaryForEmail_(exportSheet, email, options) {
+  const normalizedEmail = normalizeEmail_(email);
+  if (!exportSheet || !normalizedEmail) return null;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const identity = resolveClientIdentityFromExportLog_(exportSheet, {
+    personEmail: normalizedEmail
+  });
+  const accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
+    cfg: opts.cfg,
+    ss: opts.ss,
+    infra: opts.infra
+  }));
+  return accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(identity, opts.cfg || {});
 }
 
 function buildDashboardProjectStatusBatch_(options) {
@@ -4112,6 +4220,11 @@ function buildDashboardProjectStatusBatch_(options) {
       return userCtx || { ok: false, error: 'Missing session.' };
     }
     authorizedEmail = normalizeEmail_(userCtx.email);
+    authorizedAccountSummary = buildDashboardStatusAccountSummaryForEmail_(exportSheet, authorizedEmail, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
   } else if (hasPortalAccountDirectAccessPayload_(opts)) {
     const directAccount = resolvePortalAccountDirectAccess_(opts, { cfg: cfg, ss: ss, infra: infra });
     if (!directAccount || directAccount.ok !== true) return directAccount;
@@ -4120,14 +4233,40 @@ function buildDashboardProjectStatusBatch_(options) {
     const dashboardRowInfo = findRowByToken_(exportSheet, dashboardToken);
     if (!dashboardRowInfo) return { ok: false, error: 'Link not found.' };
     authorizedEmail = normalizeEmail_(dashboardRowInfo.rowObjNormalized && dashboardRowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+    authorizedAccountSummary = buildDashboardStatusAccountSummaryForEmail_(exportSheet, authorizedEmail, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
   }
 
   if (!authorizedEmail && !authorizedAccountSummary) {
     return { ok: false, error: 'Missing session.' };
   }
 
+  const rowInfoMapByToken = buildDashboardExportRowInfoMapForTokens_(exportSheet, tokens);
+  const authorizedTokens = [];
+  const authorizedByToken = {};
+  tokens.forEach(function(projectToken) {
+    const rowInfo = rowInfoMapByToken[projectToken] || null;
+    if (!rowInfo) return;
+    const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+    const accountAuthorized = authorizedAccountSummary
+      ? isExportRowVisibleForAccount_(rowInfo.rowObjNormalized, authorizedAccountSummary)
+      : false;
+    if (accountAuthorized || (rowEmail && rowEmail === authorizedEmail)) {
+      authorizedByToken[projectToken] = true;
+      authorizedTokens.push(projectToken);
+    }
+  });
+  const latestOrderMapByToken = buildLatestPortalOrderInfoMapByToken_(authorizedTokens, {
+    cfg: cfg,
+    ss: ss,
+    ordersSheet: infra.ordersSheet
+  });
+
   const projects = tokens.map(function(projectToken) {
-    const rowInfo = findRowByToken_(exportSheet, projectToken);
+    const rowInfo = rowInfoMapByToken[projectToken] || null;
     if (!rowInfo) {
       return {
         token: projectToken,
@@ -4135,11 +4274,7 @@ function buildDashboardProjectStatusBatch_(options) {
         error: 'Link not found.'
       };
     }
-    const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
-    const accountAuthorized = authorizedAccountSummary
-      ? isExportRowVisibleForAccount_(rowInfo.rowObjNormalized, authorizedAccountSummary)
-      : false;
-    if (!accountAuthorized && (!rowEmail || rowEmail !== authorizedEmail)) {
+    if (authorizedByToken[projectToken] !== true) {
       return {
         token: projectToken,
         ok: false,
@@ -4147,12 +4282,18 @@ function buildDashboardProjectStatusBatch_(options) {
       };
     }
     try {
+      const latestOrderInfo = latestOrderMapByToken[projectToken] || null;
+      const latestOrderSummary = latestOrderInfo ? buildPortalOrderSummary_(latestOrderInfo.rowObjNormalized) : null;
       return buildDashboardProjectStatusMetaForToken_(projectToken, {
         cfg: cfg,
         ss: ss,
         infra: infra,
         exportSheet: exportSheet,
-        rowInfo: rowInfo
+        rowInfo: rowInfo,
+        accountSummary: authorizedAccountSummary,
+        latestOrderInfo: latestOrderInfo,
+        latestOrderSummary: latestOrderSummary,
+        includeLatestOrderSummary: !!latestOrderSummary
       });
     } catch (err) {
       return {
@@ -4188,6 +4329,9 @@ function buildDashboardProjectStatusMetaForToken_(token, options) {
         }));
         return accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(deriveOrgContextFromRow_(row), cfg);
       })();
+  const includeLatestOrderSummary = Object.prototype.hasOwnProperty.call(opts, 'includeLatestOrderSummary')
+    ? opts.includeLatestOrderSummary === true
+    : true;
   const runtimeMeta = buildDashboardProjectSnapshotRuntimeMetaFromRow_(row);
   const projectionContext = buildDashboardProjectProjectionContext_(rowInfo || row, {
     rowInfo: rowInfo,
@@ -4196,7 +4340,9 @@ function buildDashboardProjectStatusMetaForToken_(token, options) {
     ss: ss,
     infra: infra,
     accountSummary: accountSummary,
-    includeLatestOrderSummary: true
+    latestOrderInfo: opts.latestOrderInfo || null,
+    latestOrderSummary: opts.latestOrderSummary || null,
+    includeLatestOrderSummary: includeLatestOrderSummary
   });
   return buildDashboardProjectStatusMetaFromProjectionContext_(projectionContext);
 }
@@ -7819,7 +7965,11 @@ function buildPortalLoadTimingExtra_(extra) {
   [
     'payloadBytes',
     'projectCount',
-    'printJobsCount'
+    'printJobsCount',
+    'tokenCount',
+    'batchSize',
+    'requestedCount',
+    'visibleCount'
   ].forEach(function(key) {
     if (!Object.prototype.hasOwnProperty.call(source, key)) return;
     const n = Number(source[key]);
@@ -37274,7 +37424,7 @@ function buildDashboardProjectsCacheProfileSegment_(profile) {
 }
 
 function buildProjectsCacheKey_(email, profile) {
-  return 'rt:projects:v14:' + buildDashboardProjectsCacheProfileSegment_(profile) + ':' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(normalizeEmail_(email));
+  return 'rt:projects:v15:' + buildDashboardProjectsCacheProfileSegment_(profile) + ':' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(normalizeEmail_(email));
 }
 
 function buildAccountProjectsCacheKey_(accountSummary, profile) {
@@ -37289,7 +37439,7 @@ function buildAccountProjectsCacheKey_(accountSummary, profile) {
     termsStatus: trimString_(account.documentWorkflows && account.documentWorkflows.creditTerms && account.documentWorkflows.creditTerms.status),
     taxExemptStatus: trimString_(account.documentWorkflows && account.documentWorkflows.taxExempt && account.documentWorkflows.taxExempt.status)
   };
-  return DASHBOARD_ACCOUNT_PROJECT_CACHE_PREFIX + 'v14:' + buildDashboardProjectsCacheProfileSegment_(profile) + ':' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(JSON.stringify(identity));
+  return DASHBOARD_ACCOUNT_PROJECT_CACHE_PREFIX + 'v15:' + buildDashboardProjectsCacheProfileSegment_(profile) + ':' + getDashboardProjectsCacheEpoch_() + ':' + buildCacheDigestSegment_(JSON.stringify(identity));
 }
 
 function parseIsoDateMs_(value) {

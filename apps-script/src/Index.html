@@ -16970,7 +16970,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 142">142</div>
+  <div class="devRevisionBadge" aria-label="Development revision 143">143</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -22555,9 +22555,12 @@
   let DASHBOARD_PROJECT_PEEK_PREFETCH_HANDLE = 0;
   let DASHBOARD_PROJECT_PEEK_PREFETCH_HANDLE_KIND = '';
   let DASHBOARD_PROJECT_PEEK_DOC_PREWARMED = false;
+  let DASHBOARD_STATUS_HYDRATION_SEQ = 0;
   const DASHBOARD_OPEN_ARM_WINDOW_MS = 1500;
   const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_TTL_MS = 30000;
   const DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS = 60000;
+  const DASHBOARD_STATUS_VISIBLE_BATCH_SIZE = 8;
+  const DASHBOARD_STATUS_BACKGROUND_BATCH_SIZE = 4;
   let DASHBOARD_BOOTSTRAP_INTENT_CONSUMED = false;
   let SUMMARY_BOOTSTRAP_INTENT_CONSUMED = false;
   let PORTAL_CLIENT_BOOT_TRACE = null;
@@ -23247,6 +23250,7 @@
   function resetDashboardHomeTransientState_(){
     DASHBOARD_PROJECT_PEEK_CACHE.clear();
     DASHBOARD_PROJECT_PEEK_INFLIGHT.clear();
+    DASHBOARD_STATUS_HYDRATION_SEQ += 1;
     clearDashboardProjectPayloadPrefetch_();
     clearDashboardProjectPeekPrefetch_();
     closeDashboardProjectPeek();
@@ -24400,7 +24404,7 @@
     ['ok', 'hasToken', 'hasSession', 'cacheHit', 'prefetchHit', 'prefetchInflight', 'embedded'].forEach(key => {
       if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key] === true;
     });
-    ['projectCount', 'payloadBytes', 'serverTotalMs'].forEach(key => {
+    ['projectCount', 'payloadBytes', 'serverTotalMs', 'tokenCount', 'batchSize', 'requestedCount', 'visibleCount'].forEach(key => {
       if (!Object.prototype.hasOwnProperty.call(source, key)) return;
       const n = Number(source[key]);
       if (isFinite(n)) out[key] = Math.max(0, Math.round(n));
@@ -25984,20 +25988,19 @@
       scheduleDashboardProjectPeekPrefetchDrain_(seq, 80);
       return;
     }
-    fetchDashboardProjectPeek_(token)
+    fetchDashboardProjectPeek_(token, {
+      source: 'prefetch'
+    })
       .catch(() => null)
       .finally(() => {
         if (seq !== DASHBOARD_PROJECT_PEEK_PREFETCH_SEQ) return;
-        scheduleDashboardProjectPeekPrefetchDrain_(seq, 80);
+        scheduleDashboardProjectPeekPrefetchDrain_(seq, 220);
       });
   }
 
-  function startDashboardProjectPeekPrefetch_(projects, options){
-    clearDashboardProjectPeekPrefetch_();
-    const seq = DASHBOARD_PROJECT_PEEK_PREFETCH_SEQ;
-    const opts = (options && typeof options === 'object') ? options : {};
+  function buildDashboardProjectPeekPrefetchQueue_(projects){
     const list = Array.isArray(projects) ? projects : [];
-    DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE = list
+    const tokens = list
       .map(project => {
         const token = String(project && project.token || '').trim();
         const hasInlinePeek = project && project.peekInline === true && isDashboardProjectPeekPayload_(project.peekPreview);
@@ -26005,6 +26008,14 @@
         return token;
       })
       .filter(Boolean);
+    return orderDashboardStatusHydrationTokens_(tokens);
+  }
+
+  function startDashboardProjectPeekPrefetch_(projects, options){
+    clearDashboardProjectPeekPrefetch_();
+    const seq = DASHBOARD_PROJECT_PEEK_PREFETCH_SEQ;
+    const opts = (options && typeof options === 'object') ? options : {};
+    DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE = buildDashboardProjectPeekPrefetchQueue_(projects);
     const maxInitial = Number(opts.maxInitial || 0);
     if (maxInitial > 0) {
       DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE = DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE.slice(0, Math.floor(maxInitial));
@@ -26016,6 +26027,19 @@
         scheduleDashboardProjectPeekPrefetchDrain_(seq, initialDelayMs);
       });
     });
+  }
+
+  function promoteDashboardProjectPeekPrefetch_(token, options){
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken || DASHBOARD_PROJECT_PEEK_CACHE.has(cleanToken)) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE = DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE
+      .filter(item => String(item || '').trim() !== cleanToken);
+    DASHBOARD_PROJECT_PEEK_PREFETCH_QUEUE.unshift(cleanToken);
+    scheduleDashboardProjectPeekPrefetchDrain_(
+      DASHBOARD_PROJECT_PEEK_PREFETCH_SEQ,
+      opts.immediate === true ? 40 : 120
+    );
   }
 
   function renderDashboardProjectStatusFallback_(token, fallbackStatus){
@@ -26948,8 +26972,10 @@
     }
   }
 
-  function fetchDashboardProjectPeek_(projectToken){
+  function fetchDashboardProjectPeek_(projectToken, options){
     const token = String(projectToken || '').trim();
+    const opts = (options && typeof options === 'object') ? options : {};
+    const source = String(opts.source || 'background').trim() || 'background';
     if (!token) return Promise.reject(new Error('Missing project token.'));
     if (DASHBOARD_PROJECT_PEEK_CACHE.has(token)) {
       return Promise.resolve(DASHBOARD_PROJECT_PEEK_CACHE.get(token));
@@ -26957,14 +26983,37 @@
     if (DASHBOARD_PROJECT_PEEK_INFLIGHT.has(token)) {
       return DASHBOARD_PROJECT_PEEK_INFLIGHT.get(token);
     }
+    const trace = createPortalClientLoadTimingTrace_('dashboard_peek_fetch');
+    markPortalClientLoadTiming_(trace, 'request_start', {
+      routeType: 'dashboard_peek',
+      source: source
+    });
     const request = callServer('getDashboardProjectPeek', buildDashboardProjectPeekRequestPayload_(token))
       .then(resp => {
+        markPortalClientLoadTiming_(trace, 'response_received', {
+          routeType: 'dashboard_peek',
+          source: source,
+          ok: !!(resp && resp.ok === true)
+        });
         if (!resp || resp.ok !== true) {
           throw new Error(String((resp && resp.error) || 'Unable to load project details.'));
         }
         DASHBOARD_PROJECT_PEEK_CACHE.set(token, resp);
         prewarmDashboardPeekPayloadImages_(resp);
+        logPortalClientLoadTiming_(trace, 'complete', {
+          routeType: 'dashboard_peek',
+          source: source,
+          ok: true
+        });
         return resp;
+      })
+      .catch(err => {
+        logPortalClientLoadTiming_(trace, 'failed', {
+          routeType: 'dashboard_peek',
+          source: source,
+          ok: false
+        });
+        throw err;
       })
       .finally(() => {
         DASHBOARD_PROJECT_PEEK_INFLIGHT.delete(token);
@@ -27437,7 +27486,9 @@
     }
     showDashboardProjectPeekLoading(project);
     try {
-      const resp = await fetchDashboardProjectPeek_(token);
+      const resp = await fetchDashboardProjectPeek_(token, {
+        source: 'open'
+      });
       if (requestSeq !== DASHBOARD_PROJECT_PEEK_REQUEST_SEQ || DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN !== token) return;
       renderDashboardProjectPeek(resp);
     } catch (err) {
@@ -27555,9 +27606,25 @@
       thumbBtn.appendChild(thumbWrap);
       thumbBtn.appendChild(previewOverlay);
       thumbBtn.appendChild(createEl('span', 'authProjectsPreviewHover', 'Expand\nProject\nDetails'));
+      thumbBtn.addEventListener('pointerenter', () => {
+        promoteDashboardProjectPeekPrefetch_(projectToken, {
+          immediate: true,
+          source: 'thumb-hover'
+        });
+      });
+      thumbBtn.addEventListener('focus', () => {
+        promoteDashboardProjectPeekPrefetch_(projectToken, {
+          immediate: true,
+          source: 'thumb-focus'
+        });
+      });
       thumbBtn.addEventListener('click', event => {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        promoteDashboardProjectPeekPrefetch_(projectToken, {
+          immediate: true,
+          source: 'thumb-open'
+        });
         openDashboardProjectPeek(project, thumbBtn);
       });
       previewCell.appendChild(thumbBtn);
@@ -27662,40 +27729,155 @@
     return tokens;
   }
 
-  function hydrateDashboardProjectStatuses_(projects){
+  function getDashboardProjectRowForToken_(token){
+    if (!authProjectsBody) return null;
+    const selector = 'tr[data-project-token="' + escapeDashboardProjectTokenSelector_(token) + '"]';
+    const row = authProjectsBody.querySelector(selector);
+    return row instanceof HTMLElement ? row : null;
+  }
+
+  function orderDashboardStatusHydrationTokens_(tokens){
+    const list = Array.isArray(tokens) ? tokens.map(token => String(token || '').trim()).filter(Boolean) : [];
+    if (!list.length || typeof window === 'undefined') return list;
+    const viewportHeight = Math.max(1, Number(window.innerHeight || document.documentElement.clientHeight || 0) || 0);
+    const bufferPx = Math.max(160, Math.round(viewportHeight * 0.35));
+    const visible = [];
+    const pending = [];
+    list.forEach((token, index) => {
+      const row = getDashboardProjectRowForToken_(token);
+      if (!row || typeof row.getBoundingClientRect !== 'function') {
+        pending.push({ token: token, top: Number.MAX_SAFE_INTEGER, index: index });
+        return;
+      }
+      const rect = row.getBoundingClientRect();
+      const isVisible = rect.bottom >= -bufferPx && rect.top <= viewportHeight + bufferPx;
+      const entry = { token: token, top: Number(rect.top || 0), index: index };
+      if (isVisible) visible.push(entry);
+      else pending.push(entry);
+    });
+    const sortByPosition = (a, b) => {
+      if (a.top !== b.top) return a.top - b.top;
+      return a.index - b.index;
+    };
+    return visible.sort(sortByPosition).concat(pending.sort(sortByPosition)).map(entry => entry.token);
+  }
+
+  function buildDashboardStatusHydrationBatches_(tokens){
+    const ordered = orderDashboardStatusHydrationTokens_(tokens);
+    const batches = [];
+    if (!ordered.length) return batches;
+    const firstSize = Math.max(1, DASHBOARD_STATUS_VISIBLE_BATCH_SIZE);
+    const backgroundSize = Math.max(1, DASHBOARD_STATUS_BACKGROUND_BATCH_SIZE);
+    batches.push(ordered.slice(0, firstSize));
+    for (let i = firstSize; i < ordered.length; i += backgroundSize) {
+      batches.push(ordered.slice(i, i + backgroundSize));
+    }
+    return batches.filter(batch => batch.length);
+  }
+
+  function waitForDashboardBackgroundHydrationTurn_(delayMs){
+    const delay = Math.max(80, Number(delayMs || 160) || 160);
+    return new Promise(resolve => {
+      const done = () => resolve();
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(done, { timeout: Math.max(250, delay + 180) });
+        return;
+      }
+      window.setTimeout(done, delay);
+    });
+  }
+
+  function applyDashboardProjectStatusBatchResponse_(tokens, resp){
+    const batchTokens = Array.isArray(tokens) ? tokens : [];
+    if (!resp || resp.ok !== true || !Array.isArray(resp.projects)) {
+      batchTokens.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
+      return;
+    }
+    const returned = new Set();
+    resp.projects.forEach(projectStatus => {
+      const token = String(projectStatus && projectStatus.token || '').trim();
+      if (!token) return;
+      returned.add(token);
+      if (projectStatus.ok === true && Array.isArray(projectStatus.steps) && projectStatus.steps.length) {
+        renderDashboardProjectStatusIntoRow_(token, projectStatus);
+      } else {
+        renderDashboardProjectStatusFallback_(token, String(projectStatus && projectStatus.fallbackStatus || ''));
+      }
+    });
+    batchTokens.forEach(token => {
+      if (!returned.has(token)) renderDashboardProjectStatusFallback_(token, '');
+    });
+  }
+
+  async function hydrateDashboardProjectStatuses_(projects, options){
+    const opts = (options && typeof options === 'object') ? options : {};
     const tokens = getDashboardProjectsNeedingStatusHydration_(projects);
-    if (!tokens.length) return Promise.resolve(null);
+    if (!tokens.length) return null;
     const requestPayload = getDashboardContextRequestPayload_();
     const requestKey = getDashboardContextKey_(requestPayload);
-    if (!requestKey) return Promise.resolve(null);
-    const payload = Object.assign({}, requestPayload, { tokens: tokens });
-    return callServer('getDashboardProjectStatusBatch', payload)
-      .then(resp => {
-        if (getDashboardContextKey_(getDashboardContextRequestPayload_()) !== requestKey) return null;
-        if (!resp || resp.ok !== true || !Array.isArray(resp.projects)) {
-          tokens.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
-          return resp || null;
-        }
-        const returned = new Set();
-        resp.projects.forEach(projectStatus => {
-          const token = String(projectStatus && projectStatus.token || '').trim();
-          if (!token) return;
-          returned.add(token);
-          if (projectStatus.ok === true && Array.isArray(projectStatus.steps) && projectStatus.steps.length) {
-            renderDashboardProjectStatusIntoRow_(token, projectStatus);
-          } else {
-            renderDashboardProjectStatusFallback_(token, String(projectStatus && projectStatus.fallbackStatus || ''));
-          }
-        });
-        tokens.forEach(token => {
-          if (!returned.has(token)) renderDashboardProjectStatusFallback_(token, '');
-        });
-        return resp;
-      })
-      .catch(() => {
-        tokens.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
+    if (!requestKey) return null;
+    const seq = ++DASHBOARD_STATUS_HYDRATION_SEQ;
+    const batches = buildDashboardStatusHydrationBatches_(tokens);
+    const trace = createPortalClientLoadTimingTrace_('dashboard_status_hydration');
+    markPortalClientLoadTiming_(trace, 'start', {
+      routeType: 'dashboard_status',
+      tokenCount: tokens.length,
+      batchSize: batches.length ? batches[0].length : 0,
+      visibleCount: batches.length ? batches[0].length : 0
+    });
+    let firstBatchCompleted = false;
+    for (let i = 0; i < batches.length; i += 1) {
+      const batch = batches[i];
+      if (seq !== DASHBOARD_STATUS_HYDRATION_SEQ || getDashboardContextKey_(getDashboardContextRequestPayload_()) !== requestKey) {
         return null;
+      }
+      if (i > 0) await waitForDashboardBackgroundHydrationTurn_(180);
+      const payload = Object.assign({}, requestPayload, { tokens: batch });
+      markPortalClientLoadTiming_(trace, 'batch_request', {
+        routeType: 'dashboard_status',
+        batchSize: batch.length,
+        tokenCount: batch.length,
+        requestedCount: tokens.length,
+        stage: i === 0 ? 'visible' : 'background'
       });
+      try {
+        const resp = await callServer('getDashboardProjectStatusBatch', payload);
+        if (seq !== DASHBOARD_STATUS_HYDRATION_SEQ || getDashboardContextKey_(getDashboardContextRequestPayload_()) !== requestKey) {
+          return null;
+        }
+        const serverTiming = getServerPortalLoadTimingSummary_(resp);
+        markPortalClientLoadTiming_(trace, 'batch_response', Object.assign({
+          routeType: 'dashboard_status',
+          ok: !!(resp && resp.ok === true),
+          batchSize: batch.length,
+          projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0,
+          stage: i === 0 ? 'visible' : 'background'
+        }, serverTiming || {}));
+        applyDashboardProjectStatusBatchResponse_(batch, resp);
+      } catch (_) {
+        if (seq !== DASHBOARD_STATUS_HYDRATION_SEQ) return null;
+        batch.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
+        markPortalClientLoadTiming_(trace, 'batch_failed', {
+          routeType: 'dashboard_status',
+          ok: false,
+          batchSize: batch.length,
+          stage: i === 0 ? 'visible' : 'background'
+        });
+      }
+      if (!firstBatchCompleted) {
+        firstBatchCompleted = true;
+        if (typeof opts.onFirstBatchComplete === 'function') {
+          try { opts.onFirstBatchComplete(); } catch (_) {}
+        }
+      }
+    }
+    logPortalClientLoadTiming_(trace, 'complete', {
+      routeType: 'dashboard_status',
+      ok: true,
+      tokenCount: tokens.length,
+      projectCount: tokens.length
+    });
+    return null;
   }
 
   async function loadProjectsForHome(options){
@@ -27790,14 +27972,17 @@
     renderProjectRows(projects);
     syncDashboardAccountContextFromSummary_(payload.accountSummary || {});
     renderDashboardAccountStatus(payload.accountSummary || {});
-    hydrateDashboardProjectStatuses_(projects)
-      .catch(() => null)
-      .finally(() => {
-        startDashboardProjectPeekPrefetch_(projects, {
-          maxInitial: 3,
-          initialDelayMs: 1200
-        });
+    let peekPrefetchStarted = false;
+    const startPeekPrefetchOnce = () => {
+      if (peekPrefetchStarted) return;
+      peekPrefetchStarted = true;
+      startDashboardProjectPeekPrefetch_(projects, {
+        initialDelayMs: 240
       });
+    };
+    hydrateDashboardProjectStatuses_(projects, {
+      onFirstBatchComplete: startPeekPrefetchOnce
+    }).catch(() => null).finally(startPeekPrefetchOnce);
     return payload;
   }
 
