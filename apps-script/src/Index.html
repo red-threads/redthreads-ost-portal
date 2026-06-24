@@ -17004,7 +17004,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 154">154</div>
+  <div class="devRevisionBadge" aria-label="Development revision 155">155</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21109,8 +21109,9 @@
     card.setAttribute('aria-label', 'Manage or set up ACH payment accounts.');
     card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH payment accounts'));
     const wrap = createEl('div', 'dashboardAccountCardValueWrap');
+    const hasDashboardAchAccounts = Array.isArray(summary.visibleMethods) && summary.visibleMethods.length > 0;
     wrap.appendChild(createEl('span', 'dashboardAccountCardValue', 'Manage accounts'));
-    wrap.appendChild(createEl('span', 'dashboardAccountCardHoverValue', 'Set up an account'));
+    wrap.appendChild(createEl('span', 'dashboardAccountCardHoverValue', hasDashboardAchAccounts ? 'Edit/Add accounts' : 'Set up an account'));
     card.appendChild(wrap);
     card.addEventListener('click', openDashboardAchManageModal_);
     card.addEventListener('keydown', evt => {
