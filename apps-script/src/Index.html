@@ -17004,7 +17004,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 152">152</div>
+  <div class="devRevisionBadge" aria-label="Development revision 153">153</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -34572,22 +34572,28 @@
     goToTaxFormStep_(steps[idx - 1].id, { focusControl: true });
   }
 
+  function containTaxFormInteractionEvent_(event, options){
+    if (!event) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (opts.preventDefault === true && typeof event.preventDefault === 'function') event.preventDefault();
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+  }
+
   function bindTaxFormLocalNavAction_(btn, handler){
     if (!btn || typeof handler !== 'function') return;
     let pointerHandledAt = 0;
     btn.addEventListener('pointerdown', evt => {
       if (evt.button != null && evt.button !== 0) return;
       pointerHandledAt = Date.now();
-      evt.preventDefault();
-      evt.stopPropagation();
+      containTaxFormInteractionEvent_(evt, { preventDefault: true });
       handler();
     });
     btn.addEventListener('click', evt => {
       if (pointerHandledAt && (Date.now() - pointerHandledAt) < 700) {
-        evt.preventDefault();
-        evt.stopPropagation();
+        containTaxFormInteractionEvent_(evt, { preventDefault: true });
         return;
       }
+      containTaxFormInteractionEvent_(evt, { preventDefault: true });
       handler();
     });
   }
@@ -34597,6 +34603,8 @@
     wrap.dataset.taxFormFieldId = field.id;
     applyTaxFormOverlayCoords_(wrap, field.coords || {});
     wrap.style.setProperty('--font-scale', getTaxFormFieldFontScale_(field.coords || {}, field));
+    wrap.addEventListener('pointerdown', event => containTaxFormInteractionEvent_(event));
+    wrap.addEventListener('click', event => containTaxFormInteractionEvent_(event));
     const setActive = () => {
       TAX_FORM_ACTIVE_FIELD_ID = field.id;
       setTaxDocMessage('', 'info');
@@ -34622,6 +34630,7 @@
       });
       select.addEventListener('pointerdown', event => {
         if (event.button != null && event.button !== 0) return;
+        containTaxFormInteractionEvent_(event);
         markTaxFormPendingNativeSelectInteraction_(field.id);
         setActive();
       });
@@ -34632,11 +34641,16 @@
       select.addEventListener('blur', () => {
         requestAnimationFrame(() => clearTaxFormPendingNativeSelectInteraction_(field.id));
       });
-      select.addEventListener('change', () => {
-        clearTaxFormPendingNativeSelectInteraction_(field.id);
-        TAX_FORM_ACTIVE_FIELD_ID = field.id;
-        updateTaxFormValue_(field.id, select.value, { preserveMessage: false });
-        maybeAutoAdvanceTaxFormStep_(field.id);
+      select.addEventListener('change', event => {
+        containTaxFormInteractionEvent_(event);
+        const nextValue = select.value;
+        markTaxFormPendingNativeSelectInteraction_(field.id);
+        window.setTimeout(() => {
+          clearTaxFormPendingNativeSelectInteraction_(field.id);
+          TAX_FORM_ACTIVE_FIELD_ID = field.id;
+          updateTaxFormValue_(field.id, nextValue, { preserveMessage: false });
+          maybeAutoAdvanceTaxFormStep_(field.id);
+        }, 0);
       });
       wrap.appendChild(select);
       return wrap;
@@ -34884,7 +34898,8 @@
           if (String(TAX_FORM_VALUES[field.id] || '') === String(option.value || '')) btn.classList.add('is-selected');
           if (TAX_FORM_FIELD_STATE && TAX_FORM_FIELD_STATE.requiredById[field.id] === true) btn.classList.add('is-required');
           if (isTaxFormFieldCompleted_(field)) btn.classList.add('is-filled');
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', event => {
+            containTaxFormInteractionEvent_(event, { preventDefault: true });
             if (reviewJumpOnly) {
               setTaxFormActiveField_(field.id, { stepId: fieldStepId || currentStep.id, focusControl: false });
               requestAnimationFrame(scrollTaxFormCurrentStepIntoView_);
@@ -34909,7 +34924,8 @@
         applyTaxFormOverlayCoords_(btn, getTaxFormActionCoords_(field, null) || field.coords || {});
         if (TAX_FORM_VALUES[field.id] === true) btn.classList.add('is-selected', 'is-filled');
         if (TAX_FORM_FIELD_STATE && TAX_FORM_FIELD_STATE.requiredById[field.id] === true) btn.classList.add('is-required');
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', event => {
+          containTaxFormInteractionEvent_(event, { preventDefault: true });
           if (reviewJumpOnly) {
             setTaxFormActiveField_(field.id, { stepId: fieldStepId || currentStep.id, focusControl: false });
             requestAnimationFrame(scrollTaxFormCurrentStepIntoView_);
@@ -34998,20 +35014,22 @@
         btn.addEventListener('pointerdown', evt => {
           if (evt.button != null && evt.button !== 0) return;
           pointerHandledAt = Date.now();
-          evt.preventDefault();
-          evt.stopPropagation();
+          containTaxFormInteractionEvent_(evt, { preventDefault: true });
           activateField();
         });
         btn.addEventListener('click', evt => {
           if (pointerHandledAt && (Date.now() - pointerHandledAt) < 700) {
-            evt.preventDefault();
-            evt.stopPropagation();
+            containTaxFormInteractionEvent_(evt, { preventDefault: true });
             return;
           }
+          containTaxFormInteractionEvent_(evt, { preventDefault: true });
           activateField();
         });
       } else {
-        btn.addEventListener('click', activateField);
+        btn.addEventListener('click', event => {
+          containTaxFormInteractionEvent_(event, { preventDefault: true });
+          activateField();
+        });
       }
       taxDocOverlayLayer.appendChild(btn);
     });

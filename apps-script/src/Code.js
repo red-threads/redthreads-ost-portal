@@ -1002,17 +1002,21 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(String(filename || '').trim()).getContent();
 }
 
+function readTaxForm3372Manifest_() {
+  const raw = include('TaxForm3372Manifest');
+  const match = String(raw || '').match(/<script[^>]*id=["']taxForm3372ManifestData["'][^>]*>([\s\S]*?)<\/script>/i);
+  const json = trimString_(match && match[1]);
+  if (!json) throw new Error('Tax form manifest is unavailable.');
+  const manifest = safeJsonParse_(json, null);
+  if (!manifest || typeof manifest !== 'object') {
+    throw new Error('Tax form manifest is invalid.');
+  }
+  return manifest;
+}
+
 function getTaxForm3372Manifest() {
   try {
-    const raw = include('TaxForm3372Manifest');
-    const match = String(raw || '').match(/<script[^>]*id=["']taxForm3372ManifestData["'][^>]*>([\s\S]*?)<\/script>/i);
-    const json = trimString_(match && match[1]);
-    if (!json) return { ok: false, error: 'Tax form manifest is unavailable.' };
-    const manifest = safeJsonParse_(json, null);
-    if (!manifest || typeof manifest !== 'object') {
-      return { ok: false, error: 'Tax form manifest is invalid.' };
-    }
-    return { ok: true, manifest: manifest };
+    return { ok: true, manifest: readTaxForm3372Manifest_() };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -10435,7 +10439,61 @@ function buildDriveBinaryDataPayload_(fileId, fallbackName, fallbackMimeType) {
   };
 }
 
-function buildTaxFormViewerAssetsPayload_() {
+function isPngByteArray_(bytes) {
+  const expected = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (!bytes || bytes.length < expected.length) return false;
+  for (let idx = 0; idx < expected.length; idx++) {
+    const value = ((Number(bytes[idx]) || 0) + 256) % 256;
+    if (value !== expected[idx]) return false;
+  }
+  return true;
+}
+
+function normalizeTaxFormViewerPagePayload_(pageNumber, payload, fallbackFileName, source) {
+  const page = Number(pageNumber);
+  const raw = (payload && typeof payload === 'object') ? payload : {};
+  const base64Data = trimString_(raw.base64Data).replace(/\s+/g, '');
+  if (!page || !base64Data) {
+    throw new Error('Tax form page ' + page + ' image data is missing.');
+  }
+  let bytes = [];
+  try {
+    bytes = Utilities.base64Decode(base64Data);
+  } catch (err) {
+    throw new Error('Tax form page ' + page + ' image data could not be decoded.');
+  }
+  if (!isPngByteArray_(bytes)) {
+    throw new Error('Tax form page ' + page + ' image data is not a PNG.');
+  }
+  return {
+    page: page,
+    fileName: sanitizeUploadedDocumentName_(raw.fileName, fallbackFileName || ('mi-tax-form-3372-page-' + page + '.png')),
+    mimeType: 'image/png',
+    sizeBytes: bytes.length,
+    base64Data: base64Data,
+    assetSource: trimString_(source)
+  };
+}
+
+function buildTaxFormEmbeddedFallbackByPage_(manifest) {
+  const pageDefs = manifest
+    && manifest.source
+    && Array.isArray(manifest.source.pageImages)
+      ? manifest.source.pageImages
+      : [];
+  const out = {};
+  pageDefs.forEach(function(pageDef) {
+    const page = Number(pageDef && pageDef.page);
+    const fallback = pageDef && pageDef.embeddedFallback && typeof pageDef.embeddedFallback === 'object'
+      ? pageDef.embeddedFallback
+      : null;
+    if (!page || !fallback) return;
+    out[page] = fallback;
+  });
+  return out;
+}
+
+function buildTaxFormViewerAssetsResult_() {
   const pageAssets = [
     {
       page: 1,
@@ -10448,16 +10506,64 @@ function buildTaxFormViewerAssetsPayload_() {
       fileName: 'mi-tax-form-3372-page-2.png'
     }
   ];
-  return pageAssets.map(function(asset) {
-    const payload = buildDriveBinaryDataPayload_(asset.fileId, asset.fileName, 'image/png');
-    return {
-      page: asset.page,
-      fileName: payload.fileName,
-      mimeType: payload.mimeType,
-      sizeBytes: payload.sizeBytes,
-      base64Data: payload.base64Data
-    };
+  const manifest = readTaxForm3372Manifest_();
+  const embeddedFallbackByPage = buildTaxFormEmbeddedFallbackByPage_(manifest);
+  const pageImages = [];
+  const pageImageWarnings = [];
+
+  pageAssets.forEach(function(asset) {
+    try {
+      const payload = buildDriveBinaryDataPayload_(asset.fileId, asset.fileName, 'image/png');
+      pageImages.push(normalizeTaxFormViewerPagePayload_(asset.page, payload, asset.fileName, 'drive'));
+      return;
+    } catch (err) {
+      const fallback = embeddedFallbackByPage[asset.page];
+      if (fallback) {
+        pageImages.push(normalizeTaxFormViewerPagePayload_(
+          asset.page,
+          fallback,
+          'mi-tax-form-3372-page-' + asset.page + '-fallback.png',
+          'embeddedFallback'
+        ));
+        pageImageWarnings.push({
+          page: asset.page,
+          code: 'drive_asset_unavailable',
+          message: 'Drive tax form page asset could not be loaded; embedded fallback was used.'
+        });
+        return;
+      }
+      pageImageWarnings.push({
+        page: asset.page,
+        code: 'page_asset_unavailable',
+        message: 'Tax form page asset could not be loaded.'
+      });
+    }
   });
+
+  const missingPages = pageAssets
+    .filter(function(asset) {
+      return !pageImages.some(function(pageImage) {
+        return Number(pageImage && pageImage.page) === Number(asset.page);
+      });
+    })
+    .map(function(asset) {
+      return asset.page;
+    });
+  if (missingPages.length) {
+    throw new Error('Tax form page image asset unavailable for page ' + missingPages.join(', ') + '.');
+  }
+
+  pageImages.sort(function(a, b) {
+    return Number(a.page || 0) - Number(b.page || 0);
+  });
+  return {
+    pageImages: pageImages,
+    pageImageWarnings: pageImageWarnings
+  };
+}
+
+function buildTaxFormViewerAssetsPayload_() {
+  return buildTaxFormViewerAssetsResult_().pageImages;
 }
 
 function buildCreditTermsViewerAssetsPayload_() {
@@ -12178,12 +12284,14 @@ function getApprovedCreditTermsViewer(payload) {
 function getTaxFormViewerAssets_(payload) {
   const ctx = buildAccountDocumentContext_(payload);
   if (!ctx || ctx.ok === false) return ctx;
+  const assets = buildTaxFormViewerAssetsResult_();
   return buildAccountDocumentWorkflowResponse_(
     ctx,
     ACCOUNT_DOCUMENT_TYPES.tax_exempt,
     'Tax form viewer assets ready.',
     {
-      pageImages: buildTaxFormViewerAssetsPayload_()
+      pageImages: assets.pageImages,
+      pageImageWarnings: assets.pageImageWarnings
     }
   );
 }
