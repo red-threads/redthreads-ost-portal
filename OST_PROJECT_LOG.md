@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Dashboard ACH Setup Email Entry On Version 1025
+
+- Mode: Full ship scoped Stripe/dashboard ACH setup fix.
+- Branch/commit/PR: `main`, Apps Script version `1025`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: let the dashboard ACH bank-account setup flow collect the payer/bank-contact email in Stripe Checkout instead of locking the portal account primary email.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/ACH_STRIPE_PORTAL_ARCHITECTURE.md`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `createAchSetupSession_()` now calls `ensureStripeCustomerForPortalAccount_()` with a dashboard setup email-collection policy. The Stripe Customer remains attached to the setup-mode Checkout Session for saved-bank association, but new dashboard setup Customers omit account email and existing Customer email is cleared before Checkout so Stripe can collect the payer email. Customer name and metadata remain refreshed; default Customer refresh behavior is unchanged for other callers. `Index.html` shows development revision `150`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Allow ACH setup email entry"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1025 - Allow ACH setup email entry`. Direct `/exec` returned HTTP `200` with `Development revision 150`, omitted stale revision `149`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted sensitive markers.
+- Runtime data state: no live Stripe setup session was created from this shell, no bank setup was completed, no Sheet data was restored/reset/cleaned, `PORTAL_EMAIL_QUEUE` was not cleared, and no email-review suite was run. Order payment Checkout, AP ACH payment links, portal account primary email, notification routing, webhook mapping, saved-bank display, ACH verification, lifecycle behavior, Stripe config, and Sheet schemas were not intentionally changed.
+- Follow-ups: owner should start dashboard ACH setup from an authenticated dashboard and confirm Stripe Checkout allows entering the payer email; then complete a Stripe test bank setup to confirm the saved bank appears under ACH Payment Accounts.
+
 ## 2026-06-24 - No-Unit Estimate Document Render Cleanup On Version 1024
 
 - Mode: Full ship frontend Summary/Estimate document-render cleanup.

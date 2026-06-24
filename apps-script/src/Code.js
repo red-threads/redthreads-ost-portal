@@ -6929,7 +6929,8 @@ function createAchSetupSession_(payload) {
     cfg: ctx.cfg,
     ss: ctx.ss,
     infra: ctx.infra,
-    accountInfo: ctx.accountInfo
+    accountInfo: ctx.accountInfo,
+    collectSetupEmailInCheckout: true
   });
   if (!customerResult || customerResult.ok !== true) {
     return Object.assign({
@@ -16859,8 +16860,13 @@ function refreshStripeCustomerSafeProfile_(stripeCustomerId, accountSummary, opt
   const opts = (options && typeof options === 'object') ? options : {};
   const current = (opts.customer && typeof opts.customer === 'object') ? opts.customer : {};
   const profile = buildStripeCustomerSafeProfile_(accountSummary);
+  const collectSetupEmailInCheckout = opts.collectSetupEmailInCheckout === true;
   const params = {};
-  if (profile.email && normalizeEmail_(current.email) !== profile.email) params.email = profile.email;
+  if (collectSetupEmailInCheckout) {
+    if (normalizeEmail_(current.email)) params.email = '';
+  } else if (profile.email && normalizeEmail_(current.email) !== profile.email) {
+    params.email = profile.email;
+  }
   if (profile.name && trimString_(current.name) !== profile.name) params.name = profile.name;
   if (!Object.keys(params).length) {
     return {
@@ -16978,8 +16984,9 @@ function retrieveStripeCharge_(chargeId, options) {
 
 function createStripeCustomer_(accountSummary, options) {
   const account = (accountSummary && typeof accountSummary === 'object') ? accountSummary : {};
+  const opts = (options && typeof options === 'object') ? options : {};
   const profile = buildStripeCustomerSafeProfile_(account);
-  const email = profile.email;
+  const email = opts.collectSetupEmailInCheckout === true ? '' : profile.email;
   const name = profile.name;
   const params = {
     'metadata[source]': 'red_threads_portal'
@@ -16990,7 +16997,7 @@ function createStripeCustomer_(accountSummary, options) {
   if (trimString_(account.orgId)) params['metadata[orgId]'] = trimString_(account.orgId);
   if (trimString_(account.orgName)) params['metadata[orgName]'] = trimString_(account.orgName);
 
-  const result = stripeApiRequest_('/v1/customers', params, Object.assign({}, options || {}, {
+  const result = stripeApiRequest_('/v1/customers', params, Object.assign({}, opts, {
     method: 'post'
   }));
   if (!result.ok) return result;

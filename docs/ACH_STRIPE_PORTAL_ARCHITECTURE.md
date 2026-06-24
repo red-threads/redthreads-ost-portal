@@ -153,6 +153,7 @@ Dashboard Account Settings can start hosted bank setup through `createAchSetupSe
 
 - `mode=setup`
 - `customer=<stripeCustomerId>`
+- the portal account Customer is preserved for saved-bank attachment, but its email is intentionally omitted or cleared before setup Checkout so Stripe can collect the payer/bank-contact email during the hosted setup flow
 - `payment_method_types[0]=us_bank_account`
 - Financial Connections permission `payment_method`
 - Return parameters: `dashboard=1`, `setupResult`, `stripeSessionId`, and either `accountAccessToken` or `accountId`
