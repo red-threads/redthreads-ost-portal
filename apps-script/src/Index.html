@@ -1173,14 +1173,16 @@
     }
     .dashboardPeekBackdrop{
       --dashboard-peek-gap:clamp(40px, 4.5vw, 72px);
-      position:absolute;
+      position:fixed;
       inset:0;
       z-index:10080;
-      border-radius:inherit;
-      overflow:hidden;
+      border-radius:0;
+      overflow:auto;
       padding:var(--dashboard-peek-gap);
       box-sizing:border-box;
       display:flex;
+      align-items:center;
+      justify-content:center;
       background:rgba(2,6,23,.72);
     }
     .dashboardPeekBackdrop[hidden]{
@@ -1188,15 +1190,18 @@
     }
     .dashboardPeekPopover{
       --dashboard-peek-rail-width:72px;
+      --dashboard-peek-height:min(760px, calc(100vh - (var(--dashboard-peek-gap) * 2)));
+      --dashboard-peek-height:min(760px, calc(100dvh - (var(--dashboard-peek-gap) * 2)));
       position:relative;
       z-index:10081;
-      width:100%;
-      height:100%;
-      flex:1 1 auto;
+      width:min(100%, 1040px);
+      height:var(--dashboard-peek-height);
+      max-height:var(--dashboard-peek-height);
+      flex:0 1 1040px;
       min-width:0;
       min-height:0;
       overflow:hidden;
-      border-radius:inherit;
+      border-radius:18px;
       display:flex;
       flex-direction:column;
       box-shadow:0 24px 48px rgba(0,0,0,.34);
@@ -1336,6 +1341,8 @@
     }
     .dashboardPeekBody{
       padding:4px 24px 16px;
+      flex:1 1 auto;
+      min-height:0;
       overflow:auto;
       display:flex;
       flex-direction:column;
@@ -2270,7 +2277,7 @@
       display:block;
     }
     .dashboardAchReadinessCard{
-      gap:10px;
+      gap:0;
       cursor:pointer;
       user-select:none;
     }
@@ -2278,12 +2285,6 @@
       cursor:pointer;
     }
     .dashboardAchReadinessCard .dashboardAccountCardValueWrap{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    }
-    .dashboardAccountCard.dashboardAchReadinessCard:hover .dashboardAccountCardValue,
-    .dashboardAccountCard.dashboardAchReadinessCard:focus-within .dashboardAccountCardValue{
       display:block;
     }
     .dashboardAchReadinessBody{
@@ -16975,7 +16976,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 144">144</div>
+  <div class="devRevisionBadge" aria-label="Development revision 145">145</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21077,10 +21078,11 @@
     card.className = 'dashboardAccountCard dashboardAchReadinessCard isInteractive ' + summary.stateClass;
     card.setAttribute('role', 'button');
     card.setAttribute('tabindex', '0');
-    card.setAttribute('aria-label', 'Manage ACH payment accounts.');
+    card.setAttribute('aria-label', 'Manage or set up ACH payment accounts.');
     card.appendChild(createEl('span', 'dashboardAccountCardKey', 'ACH payment accounts'));
     const wrap = createEl('div', 'dashboardAccountCardValueWrap');
     wrap.appendChild(createEl('span', 'dashboardAccountCardValue', 'Manage accounts'));
+    wrap.appendChild(createEl('span', 'dashboardAccountCardHoverValue', 'Set up an account'));
     card.appendChild(wrap);
     card.addEventListener('click', openDashboardAchManageModal_);
     card.addEventListener('keydown', evt => {
@@ -21348,10 +21350,9 @@
       const achReadiness = getDashboardAchReadinessSummary_(account);
       if (achReadiness.state === 'action_needed') {
         appendBullet('ACH bank payments need attention. Use Manage ACH banks to verify, retry setup, or connect another bank.');
-      } else if (achReadiness.state !== 'ready') {
-        appendBullet('Connect a bank account to prepare ACH payments through Stripe. Red Threads never sees or stores your full bank account number.');
       }
     }
+    dashboardAccountBullets.hidden = dashboardAccountBullets.children.length === 0;
 
   }
 
@@ -27054,6 +27055,13 @@
     if (dashboardCard) dashboardCard.classList.remove('isPeekOpen');
   }
 
+  function ensureDashboardPeekBackdropMounted_(){
+    if (!dashboardPeekBackdrop || !document.body) return;
+    if (dashboardPeekBackdrop.parentNode !== document.body) {
+      document.body.appendChild(dashboardPeekBackdrop);
+    }
+  }
+
   function positionDashboardProjectPeek(){
     if (!dashboardPeekBackdrop || dashboardPeekBackdrop.hidden || !dashboardPeekPopover) return;
     dashboardPeekPopover.style.width = '';
@@ -27245,6 +27253,7 @@
 
   function showDashboardProjectPeekLoading(project){
     if (!dashboardPeekBackdrop || !dashboardPeekBody || !dashboardPeekTitle || !dashboardPeekSub) return;
+    ensureDashboardPeekBackdropMounted_();
     dashboardPeekBackdrop.hidden = false;
     if (dashboardCard) dashboardCard.classList.add('isPeekOpen');
     setDashboardProjectPeekHeader_(project);
@@ -27416,6 +27425,7 @@
     const payload = (data && typeof data === 'object') ? data : {};
     const project = (payload.project && typeof payload.project === 'object') ? payload.project : {};
     const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+    ensureDashboardPeekBackdropMounted_();
     dashboardPeekBackdrop.hidden = false;
     if (dashboardCard) dashboardCard.classList.add('isPeekOpen');
     setDashboardProjectPeekHeader_(project);

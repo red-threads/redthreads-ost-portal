@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Dashboard Peek Height Fix On Version 1020
+
+- Mode: Full ship frontend dashboard UX fix.
+- Branch/commit/PR: `main`, Apps Script version `1020`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: keep compact one/few-project dashboards compact while allowing the project peek card to open at its intended expanded height, and ship the pending dashboard ACH card polish.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: the dashboard project peek backdrop now mounts to `document.body`, uses viewport-level fixed positioning, and centers a popover constrained to the existing intended `760px` expanded height with viewport gutters; the peek body remains the internal scroll region. The existing document outside-click and Escape close handlers remain in place. The ACH Payment Accounts dashboard card now aligns its value with the other account cards, shows `Manage accounts` by default, changes to `Set up an account` on hover/focus, and no longer emits the generic green ACH helper bullet when there is no ACH attention state. `Index.html` shows development revision `145`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Fix dashboard peek height"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1020 - Fix dashboard peek height`. Direct `/exec` returned HTTP `200` with `Development revision 145`, omitted stale revision `144`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and had zero targeted sensitive markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Fixture-storage tabs were untouched, `PORTAL_EMAIL_QUEUE` was not cleared, and no email-review suite was run. No lifecycle, status, payment, ACH, Stripe, email, routing, schema, or token logic was changed.
+- Follow-ups: owner should visually retry a one-project dashboard peek and a many-project dashboard peek to confirm the compact dashboard remains compact while the peek opens at expanded height.
+
 ## 2026-06-24 - Estimate PDF Export Hardening On Version 1019
 
 - Mode: Full ship runtime export hardening plus dashboard action-column alignment.
