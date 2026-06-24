@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - Estimate PDF Export Hardening On Version 1019
+
+- Mode: Full ship runtime export hardening plus dashboard action-column alignment.
+- Branch/commit/PR: `main`, Apps Script version `1019`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: prevent browser-local Summary/Estimate PDF render failures from blocking estimate share/download, while also shipping the already-local dashboard Open Project action-column alignment.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: Summary/Estimate PDF export now renders from a fresh offscreen sanitized host instead of mutating/capturing the live `summaryRoot`. The host uses the same canonical Summary data and `populateSummaryPages_()` path, removes hidden restore-job blocks through the existing export clone, waits for fonts/layout/images, preserves image proxy/placeholder/html2canvas fallback handling, and performs one full host rebuild retry after render/package failure. Redacted diagnostics now report export stages without logging tokens, emails, URLs, snapshot JSON, portal state, or PDF base64; `RED_THREADS_BUILD_SUMMARY_EXPORT_PDF()` provides a non-sending browser smoke hook. Summary share UI now separates PDF-generation failures from server-send failures. The dashboard projects table now fills the dashboard container while keeping thumbnail, Project Details, and Order Progress widths fixed; only the Open Project action column absorbs remaining width, with its button centered. `Index.html` shows development revision `144`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and an additional main browser-script parse check passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Harden estimate PDF export"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1019 - Harden estimate PDF export`. Direct `/exec` returned HTTP `200` with `Development revision 144`, omitted stale revision `143`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and had zero targeted sensitive markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Fixture-storage tabs were untouched, `PORTAL_EMAIL_QUEUE` was not cleared, and no email-review suite or estimate email send was run. The read-only status command was not run in this shell because its trigger secret was not present in the environment.
+- Follow-ups: run a live browser non-sending probe on Project 2003 from the Summary/Estimate tab with `window.RED_THREADS_BUILD_SUMMARY_EXPORT_PDF()` before sending another test estimate email; if that passes, retry the multi-recipient estimate share flow.
+
 ## 2026-06-24 - Dashboard And Project Peek Layout Fix On Version 1017
 
 - Mode: Full ship frontend layout/interaction fix.

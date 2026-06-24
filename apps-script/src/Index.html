@@ -579,16 +579,16 @@
       min-height:0;
     }
     .authProjectsTable{
-      width:951px;
+      width:100%;
       min-width:951px;
-      max-width:951px;
+      max-width:none;
       border-collapse:collapse;
       table-layout:fixed;
     }
     .authProjectsColThumb{width:58px}
     .authProjectsColDetails{width:301px}
     .authProjectsColStatus{width:430px}
-    .authProjectsColAction{width:162px}
+    .authProjectsColAction{width:auto}
     .authProjectsTable th,
     .authProjectsTable td{
       padding:8px 10px;
@@ -849,12 +849,15 @@
       padding-right:8px;
     }
     .authProjectsActionCell{
-      width:162px;
+      width:auto;
       min-width:162px;
-      max-width:162px;
+      max-width:none;
       text-align:center;
       padding-left:2px;
       padding-right:4px;
+    }
+    .authProjectsTable td.authProjectsActionCell{
+      text-align:center;
     }
     .authProjectsStatusHost{
       min-height:44px;
@@ -7085,6 +7088,8 @@
       z-index:-1;
       pointer-events:none;
       opacity:1;
+      width:860px;
+      background:#ffffff;
     }
     /* Legacy summary estimate stylesheet retired. Current template geometry lives below. */
     .summaryEstimateContinuationBlock,
@@ -16970,7 +16975,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 143">143</div>
+  <div class="devRevisionBadge" aria-label="Development revision 144">144</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -39580,6 +39585,117 @@
     return text;
   }
 
+  const SUMMARY_EXPORT_DIAGNOSTICS_MAX_ = 30;
+
+  function sanitizeSummaryExportText_(value){
+    return String(value || '')
+      .replace(/https?:\/\/\S+/gi, '[url]')
+      .replace(/\b(?:t|token|accountAccessToken|teamAccess|checkout|session)=\S+/gi, '$1=[redacted]')
+      .replace(/[A-Za-z0-9_-]{48,}/g, '[redacted]');
+  }
+
+  function sanitizeSummaryExportDiagnosticDetail_(detail){
+    const source = (detail && typeof detail === 'object') ? detail : {};
+    const allowed = [
+      'stage',
+      'attempt',
+      'retryCount',
+      'pageCount',
+      'pageIndex',
+      'imageCount',
+      'renderer',
+      'elapsedMs',
+      'byteSize',
+      'success',
+      'retrying'
+    ];
+    return allowed.reduce((acc, key) => {
+      if (!(key in source)) return acc;
+      const value = source[key];
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        acc[key] = value;
+      } else if (value != null) {
+        acc[key] = sanitizeSummaryExportText_(value).slice(0, 120);
+      }
+      return acc;
+    }, {});
+  }
+
+  function normalizeSummaryExportStage_(stage){
+    const clean = String(stage || '').trim().toLowerCase();
+    return [
+      'library_load',
+      'page_collect',
+      'image_proxy',
+      'image_wait',
+      'canvas_render',
+      'pdf_package',
+      'server_send'
+    ].includes(clean) ? clean : 'pdf_package';
+  }
+
+  function logSummaryExportDiagnostic_(level, message, detail){
+    const entry = Object.assign({
+      message: sanitizeSummaryExportText_(message || 'Summary export diagnostic.')
+    }, sanitizeSummaryExportDiagnosticDetail_(detail));
+    try {
+      window.RED_THREADS_SUMMARY_EXPORT_DIAGNOSTICS = Array.isArray(window.RED_THREADS_SUMMARY_EXPORT_DIAGNOSTICS)
+        ? window.RED_THREADS_SUMMARY_EXPORT_DIAGNOSTICS.slice(-SUMMARY_EXPORT_DIAGNOSTICS_MAX_ + 1)
+        : [];
+      window.RED_THREADS_SUMMARY_EXPORT_DIAGNOSTICS.push(Object.assign({ at: Date.now() }, entry));
+    } catch (_) {}
+    const method = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log';
+    try {
+      console[method]('Summary export diagnostic', entry);
+    } catch (_) {}
+  }
+
+  function createSummaryExportError_(stage, message, cause, detail){
+    const error = new Error(String(message || 'Unable to generate the Summary PDF. Please try again.'));
+    error.name = 'SummaryExportError';
+    error.summaryExportStage = normalizeSummaryExportStage_(stage);
+    error.summaryExportDetail = sanitizeSummaryExportDiagnosticDetail_(detail);
+    if (cause) {
+      error.summaryExportCause = sanitizeSummaryExportText_(normalizeUiErrorMessage_(cause, 'Summary export failed.')).slice(0, 180);
+    }
+    return error;
+  }
+
+  function wrapSummaryExportError_(stage, message, cause, detail){
+    if (cause && cause.summaryExportStage) return cause;
+    return createSummaryExportError_(stage, message, cause, detail);
+  }
+
+  function getSummaryExportErrorStage_(err){
+    return normalizeSummaryExportStage_(err && err.summaryExportStage ? err.summaryExportStage : '');
+  }
+
+  function getSummaryExportGenerationMessage_(isLockedInvoice){
+    return isLockedInvoice
+      ? 'Unable to generate the invoice PDF. Please try again.'
+      : 'Unable to generate the Summary PDF. Please try again.';
+  }
+
+  function getSummaryExportEmailFailureMessage_(err, isLockedInvoice){
+    const stage = getSummaryExportErrorStage_(err);
+    if (stage === 'server_send') {
+      return isLockedInvoice
+        ? 'Unable to email the invoice PDF. Please try again.'
+        : 'Unable to email the Summary PDF. Please try again.';
+    }
+    return getSummaryExportGenerationMessage_(isLockedInvoice);
+  }
+
+  function getSummaryExportDownloadFailureMessage_(err, isLockedInvoice){
+    const stage = getSummaryExportErrorStage_(err);
+    if (stage === 'server_send') {
+      return isLockedInvoice
+        ? 'Unable to download the invoice PDF.'
+        : 'Unable to download the Summary PDF.';
+    }
+    return getSummaryExportGenerationMessage_(isLockedInvoice);
+  }
+
   function settleSummaryExportLayout_(){
     return new Promise(resolve => {
       requestAnimationFrame(() => {
@@ -39610,6 +39726,66 @@
         seen.add(src);
         return true;
       });
+  }
+
+  function waitForSummaryExportFonts_(){
+    if (!document.fonts || !document.fonts.ready || typeof document.fonts.ready.then !== 'function') {
+      return Promise.resolve();
+    }
+    return Promise.race([
+      document.fonts.ready.catch(() => {}),
+      new Promise(resolve => setTimeout(resolve, 900))
+    ]).then(() => undefined);
+  }
+
+  async function createSummaryExportHost_(data){
+    const exportData = cloneSummaryDataForExport_(data || LAST_RENDERED_SUMMARY_DATA);
+    if (!exportData) {
+      throw createSummaryExportError_(
+        'page_collect',
+        'Summary pages are not ready yet. Please try again in a moment.',
+        null,
+        { stage: 'page_collect' }
+      );
+    }
+    const host = document.createElement('div');
+    host.className = 'summaryExportCaptureRoot';
+    host.setAttribute('aria-hidden', 'true');
+    host.style.position = 'fixed';
+    host.style.left = '-10000px';
+    host.style.top = '0';
+    host.style.width = '860px';
+    host.style.pointerEvents = 'none';
+    host.style.zIndex = '0';
+    host.style.background = '#ffffff';
+
+    const pagesHost = document.createElement('div');
+    pagesHost.className = 'summaryPages summaryExportCapturePages';
+    pagesHost.style.width = '860px';
+    host.appendChild(pagesHost);
+    document.body.appendChild(host);
+
+    await waitForSummaryExportFonts_();
+    let lastSignature = '';
+    let paginator = null;
+    for (let pass = 0; pass < 6; pass += 1) {
+      paginator = populateSummaryPages_(pagesHost, exportData);
+      await settleSummaryExportLayout_();
+      const signature = buildSummaryPaginatorSignature_(paginator);
+      const hasOverflow = summaryPaginatorHasOverflow_(paginator);
+      const hasLayoutShift = !!lastSignature && signature !== lastSignature;
+      lastSignature = signature;
+      if (!hasOverflow && signature && !hasLayoutShift) break;
+    }
+    await settleSummaryExportLayout_();
+
+    return {
+      host: host,
+      pagesHost: pagesHost,
+      destroy: function(){
+        try { host.remove(); } catch (_) {}
+      }
+    };
   }
 
   function getSummaryExportImageSourceCandidates_(img){
@@ -39721,6 +39897,8 @@
   async function renderSummaryExportCanvas_(libs, page, rect, options){
     const opts = (options && typeof options === 'object') ? options : {};
     const root = opts.root || page;
+    const pageIndex = Number.isFinite(opts.pageIndex) ? opts.pageIndex : 0;
+    const recordRenderer = typeof opts.recordRenderer === 'function' ? opts.recordRenderer : function(){};
     const toCanvasOptions = {
       backgroundColor: '#ffffff',
       cacheBust: true,
@@ -39744,26 +39922,55 @@
       imageTimeout: 1800
     };
     try {
-      return await libs.htmlToImage.toCanvas(page, toCanvasOptions);
+      const canvas = await libs.htmlToImage.toCanvas(page, toCanvasOptions);
+      recordRenderer('html_to_image');
+      return canvas;
     } catch (err) {
-      console.warn('Summary export canvas render retrying with placeholders.', err);
+      logSummaryExportDiagnostic_('warn', 'Summary export canvas render retrying with placeholders.', {
+        stage: 'canvas_render',
+        renderer: 'html_to_image',
+        pageIndex: pageIndex,
+        retrying: true
+      });
       replaceAllSummaryExportImagesWithPlaceholders_(root);
       const restoreDecorations = stripSummaryExportUrlDecorations_(root);
       await waitForSummaryExportImages_(root);
       await settleSummaryExportLayout_();
       try {
-        return await libs.htmlToImage.toCanvas(page, toCanvasOptions);
+        const canvas = await libs.htmlToImage.toCanvas(page, toCanvasOptions);
+        recordRenderer('html_to_image_placeholders');
+        return canvas;
       } catch (retryErr) {
-        console.warn('Summary export canvas render retrying with html2canvas fallback.', retryErr);
+        logSummaryExportDiagnostic_('warn', 'Summary export canvas render retrying with html2canvas fallback.', {
+          stage: 'canvas_render',
+          renderer: 'html2canvas',
+          pageIndex: pageIndex,
+          retrying: true
+        });
         try {
           if (libs && typeof libs.html2canvas === 'function') {
-            return await libs.html2canvas(page, html2CanvasOptions);
+            const canvas = await libs.html2canvas(page, html2CanvasOptions);
+            recordRenderer('html2canvas');
+            return canvas;
           }
         } catch (html2CanvasErr) {
-          console.error('Summary export canvas render failed after html2canvas fallback.', html2CanvasErr);
+          logSummaryExportDiagnostic_('error', 'Summary export canvas render failed after html2canvas fallback.', {
+            stage: 'canvas_render',
+            renderer: 'html2canvas',
+            pageIndex: pageIndex
+          });
         }
-        console.error('Summary export canvas render failed after placeholder retry.', retryErr);
-        throw new Error(String(opts.fallbackMessage || 'Unable to generate the invoice PDF for email. Please try again.'));
+        logSummaryExportDiagnostic_('error', 'Summary export canvas render failed after placeholder retry.', {
+          stage: 'canvas_render',
+          renderer: 'html_to_image_placeholders',
+          pageIndex: pageIndex
+        });
+        throw createSummaryExportError_(
+          'canvas_render',
+          String(opts.fallbackMessage || 'Unable to generate the invoice PDF for email. Please try again.'),
+          retryErr,
+          { stage: 'canvas_render', renderer: 'html_to_image_placeholders', pageIndex: pageIndex }
+        );
       } finally {
         restoreDecorations();
       }
@@ -39783,7 +39990,10 @@
         return map;
       }, {});
     } catch (err) {
-      console.warn('Summary export image proxy failed.', err);
+      logSummaryExportDiagnostic_('warn', 'Summary export image proxy failed.', {
+        stage: 'image_proxy',
+        imageCount: safeUrls.length
+      });
       return {};
     }
   }
@@ -39822,21 +40032,54 @@
 
   async function buildSummaryExportPdf_(options){
     const opts = (options && typeof options === 'object') ? options : {};
-    const libs = await ensureSummaryExportLibraries_();
-    const fileName = String(opts.fileName || buildSummaryExportFileName_()).trim() || buildSummaryExportFileName_();
-    const restoreExportPresentation = prepareSummaryExportPresentation_();
+    const fallbackMessage = String(opts.fallbackMessage || (isLockedSummaryInvoiceMode_()
+      ? 'Unable to generate the invoice PDF for email. Please try again.'
+      : 'Unable to generate the Summary PDF. Please try again.'));
+    let libs = null;
     try {
-      const pages = collectSummaryExportPageElements_();
-      const pagesRoot = pages[0] ? pages[0].parentElement : null;
-      await settleSummaryExportLayout_();
-      const imageMap = await fetchSummaryExportImageMap_(collectSummaryExportImageUrls_(pagesRoot || summaryRoot));
-      const restoreImages = prepareSummaryExportLiveImages_(pagesRoot || summaryRoot, imageMap);
+      libs = await ensureSummaryExportLibraries_();
+    } catch (err) {
+      throw createSummaryExportError_('library_load', fallbackMessage, err, { stage: 'library_load' });
+    }
+    const fileName = String(opts.fileName || buildSummaryExportFileName_()).trim() || buildSummaryExportFileName_();
+    let lastError = null;
+    const startedAt = Date.now();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let exportHost = null;
       try {
-        await waitForSummaryExportImages_(pagesRoot || summaryRoot);
-        replaceBrokenSummaryExportImages_(pagesRoot || summaryRoot);
-        await waitForSummaryExportImages_(pagesRoot || summaryRoot);
+        exportHost = await createSummaryExportHost_(opts.data);
+        const pagesRoot = exportHost.pagesHost;
+        const pages = Array.from(pagesRoot.querySelectorAll('.summaryPaper.summaryPaperPage'));
+        if (!pages.length) {
+          throw createSummaryExportError_('page_collect', fallbackMessage, null, {
+            stage: 'page_collect',
+            attempt: attempt + 1
+          });
+        }
+        const imageUrls = collectSummaryExportImageUrls_(pagesRoot);
+        const imageMap = await fetchSummaryExportImageMap_(imageUrls);
+        const restoreImages = prepareSummaryExportLiveImages_(pagesRoot, imageMap);
+        try {
+          try {
+            await waitForSummaryExportImages_(pagesRoot);
+            replaceBrokenSummaryExportImages_(pagesRoot);
+            await waitForSummaryExportImages_(pagesRoot);
+          } catch (imageErr) {
+            throw createSummaryExportError_('image_wait', fallbackMessage, imageErr, {
+              stage: 'image_wait',
+              imageCount: imageUrls.length,
+              attempt: attempt + 1
+            });
+          }
         await settleSummaryExportLayout_();
         const firstRect = pages[0].getBoundingClientRect();
+        if (!firstRect || firstRect.width <= 0 || firstRect.height <= 0) {
+          throw createSummaryExportError_('page_collect', fallbackMessage, null, {
+            stage: 'page_collect',
+            pageCount: pages.length,
+            attempt: attempt + 1
+          });
+        }
         const firstWidthPt = Math.max(36, firstRect.width * 0.75);
         const firstHeightPt = Math.max(36, firstRect.height * 0.75);
         const pdf = new libs.jsPDF({
@@ -39846,6 +40089,7 @@
           compress: true
         });
 
+        const renderers = [];
         for (let idx = 0; idx < pages.length; idx += 1) {
           const page = pages[idx];
           const rect = page.getBoundingClientRect();
@@ -39855,25 +40099,78 @@
             pdf.addPage([pageWidthPt, pageHeightPt], pageWidthPt > pageHeightPt ? 'landscape' : 'portrait');
           }
           const canvas = await renderSummaryExportCanvas_(libs, page, rect, {
-            root: pagesRoot || summaryRoot,
-            fallbackMessage: String(opts.fallbackMessage || (isLockedSummaryInvoiceMode_()
-              ? 'Unable to generate the invoice PDF for email. Please try again.'
-              : 'Unable to generate the Summary PDF. Please try again.'))
+            root: pagesRoot,
+            pageIndex: idx,
+            fallbackMessage: fallbackMessage,
+            recordRenderer: renderer => {
+              if (renderer) renderers.push(renderer);
+            }
           });
-          const imageData = canvas.toDataURL('image/png');
-          pdf.addImage(imageData, 'PNG', 0, 0, pageWidthPt, pageHeightPt, undefined, 'FAST');
+          try {
+            const imageData = canvas.toDataURL('image/png');
+            pdf.addImage(imageData, 'PNG', 0, 0, pageWidthPt, pageHeightPt, undefined, 'FAST');
+          } catch (packageErr) {
+            throw createSummaryExportError_('pdf_package', fallbackMessage, packageErr, {
+              stage: 'pdf_package',
+              pageIndex: idx,
+              attempt: attempt + 1
+            });
+          }
         }
 
+        const blob = pdf.output('blob');
+        if (!blob || !blob.size) {
+          throw createSummaryExportError_('pdf_package', fallbackMessage, null, {
+            stage: 'pdf_package',
+            pageCount: pages.length,
+            attempt: attempt + 1
+          });
+        }
+        logSummaryExportDiagnostic_('log', 'Summary export PDF generated.', {
+          stage: 'pdf_package',
+          attempt: attempt + 1,
+          retryCount: attempt,
+          pageCount: pages.length,
+          imageCount: imageUrls.length,
+          renderer: renderers.filter(Boolean).join(',') || 'unknown',
+          elapsedMs: Date.now() - startedAt,
+          byteSize: blob.size,
+          success: true
+        });
         return {
-          blob: pdf.output('blob'),
-          fileName: fileName
+          blob: blob,
+          fileName: fileName,
+          diagnostics: {
+            pageCount: pages.length,
+            imageCount: imageUrls.length,
+            retryCount: attempt,
+            renderer: renderers.filter(Boolean).join(',') || 'unknown',
+            byteSize: blob.size
+          }
         };
       } finally {
         restoreImages();
       }
-    } finally {
-      restoreExportPresentation();
+      } catch (err) {
+        lastError = wrapSummaryExportError_(
+          getSummaryExportErrorStage_(err),
+          fallbackMessage,
+          err,
+          { attempt: attempt + 1 }
+        );
+        const retrying = attempt === 0;
+        logSummaryExportDiagnostic_(retrying ? 'warn' : 'error', 'Summary export attempt failed.', {
+          stage: getSummaryExportErrorStage_(lastError),
+          attempt: attempt + 1,
+          retrying: retrying
+        });
+        if (!retrying) throw lastError;
+        await settleSummaryExportLayout_();
+      } finally {
+        if (exportHost) exportHost.destroy();
+      }
     }
+    throw lastError || createSummaryExportError_('pdf_package', fallbackMessage, null, { stage: 'pdf_package' });
   }
 
   function triggerSummaryExportDownload_(blob, fileName){
@@ -39899,7 +40196,7 @@
     } catch (err) {
       console.error('Summary PDF download failed.', err);
       showNotice(
-        String((err && err.message) || err || (isLockedInvoice ? 'Unable to download the invoice PDF.' : 'Unable to download the Summary PDF.')),
+        getSummaryExportDownloadFailureMessage_(err, isLockedInvoice),
         'err'
       );
     } finally {
@@ -39935,8 +40232,14 @@
       }
       const result = await buildSummaryExportPdf_({ fileName: documentReference.fileName });
       const base64Data = await readBlobAsBase64_(result.blob);
-      if (!base64Data) throw new Error('Unable to package the Summary PDF for email.');
-      const resp = await callServer('sendSummaryEstimatePdfEmail', {
+      if (!base64Data) {
+        throw createSummaryExportError_('pdf_package', 'Unable to package the Summary PDF for email.', null, {
+          stage: 'pdf_package'
+        });
+      }
+      let resp = null;
+      try {
+        resp = await callServer('sendSummaryEstimatePdfEmail', {
         recipients: recipients,
         fileName: result.fileName,
         mimeType: 'application/pdf',
@@ -39950,8 +40253,21 @@
         projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || '',
         clientName: getClientName()
       });
+      } catch (sendErr) {
+        throw createSummaryExportError_(
+          'server_send',
+          isLockedInvoice ? 'Unable to email the invoice PDF. Please try again.' : 'Unable to email the Summary PDF. Please try again.',
+          sendErr,
+          { stage: 'server_send' }
+        );
+      }
       if (!resp || resp.ok !== true) {
-        throw new Error(String((resp && resp.error) || 'Unable to email the Summary PDF.'));
+        throw createSummaryExportError_(
+          'server_send',
+          isLockedInvoice ? 'Unable to email the invoice PDF. Please try again.' : 'Unable to email the Summary PDF. Please try again.',
+          resp && (resp.error || resp.message),
+          { stage: 'server_send' }
+        );
       }
       SUMMARY_SHARE_EMAIL_RECIPIENTS = '';
       SUMMARY_SHARE_STATUS = { tone: 'success', message: isLockedInvoice ? 'Invoice PDF sent successfully.' : 'Summary PDF sent successfully.' };
@@ -39973,7 +40289,7 @@
       console.error('Summary PDF email failed.', err);
       setSummaryShareStatus_(
         'error',
-        String((err && err.message) || err || (isLockedInvoice ? 'Unable to email the invoice PDF.' : 'Unable to email the Summary PDF.'))
+        getSummaryExportEmailFailureMessage_(err, isLockedInvoice)
       );
       focusSummaryShareEmailInput_();
     } finally {
@@ -40029,6 +40345,15 @@
 
   window.RED_THREADS_BUILD_EMAIL_REVIEW_ARTIFACT = buildEmailReviewSuitePortalRenderedArtifact_;
   window.RED_THREADS_SEND_EMAIL_REVIEW_SUITE = sendEmailReviewSuiteFromPortal_;
+  window.RED_THREADS_BUILD_SUMMARY_EXPORT_PDF = async function(options){
+    const result = await buildSummaryExportPdf_(options);
+    return {
+      fileName: result.fileName,
+      mimeType: 'application/pdf',
+      byteSize: result.blob && result.blob.size ? result.blob.size : 0,
+      diagnostics: result.diagnostics || null
+    };
+  };
 
   function setQuantityMapValue(jobId, skuId, colorway, size, qty){
     if (!PORTAL_STATE.quantities || typeof PORTAL_STATE.quantities !== 'object') PORTAL_STATE.quantities = {};
