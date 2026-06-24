@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-24 - No-Unit Estimate Job Treatment On Version 1022
+
+- Mode: Full ship frontend Summary/Estimate UI refinement.
+- Branch/commit/PR: `main`, Apps Script version `1022`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: visually de-emphasize no-unit jobs in the estimate summary while keeping the no-units warning and remove button prominent.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: no-unit estimate jobs already marked `isInformationalOnly` now dim the job body, price-breaks block, and SKU/price rows to `70%` opacity without dimming the warning row or remove button. The remove button label now reads `Remove Job X from estimate view` with the dynamic job number, preserving the existing hide/remove behavior. `Index.html` shows development revision `147`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine no-unit estimate jobs"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1022 - Refine no-unit estimate jobs`. Direct `/exec` returned HTTP `200` with `Development revision 147`, omitted stale revision `146`, referenced the stable deployment ID, and had zero targeted sensitive markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained route markers, and had zero targeted sensitive markers.
+- Runtime data state: no Sheet data was restored, reset, or cleaned in this pass. Fixture-storage tabs were untouched, `PORTAL_EMAIL_QUEUE` was not cleared, no email-review suite was run, and no estimate email was sent. No pricing, totals, turn-time exclusion, quantity, snapshot, rendered artifact, email/PDF generation, payment, tax, lifecycle, routing, token, or schema behavior was changed.
+- Follow-ups: owner should visually inspect an estimate with at least one active job and one no-unit job to confirm the inactive job body is de-emphasized and the warning/remove controls remain full opacity.
+
 ## 2026-06-24 - Estimate Share Panel Refinement On Version 1021
 
 - Mode: Full ship frontend estimate-tab interaction fix.

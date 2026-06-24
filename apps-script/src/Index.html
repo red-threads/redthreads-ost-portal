@@ -7698,6 +7698,11 @@
     .summaryEstimateJobStack.isInformationalOnly{
       --summary-job-outer-gap:2px;
     }
+    .summaryEstimateJobStack.isInformationalOnly > .summaryEstimateJobBlock > .summaryEstimateJobTop,
+    .summaryEstimateJobStack.isInformationalOnly > .summaryEstimateCompareBlock,
+    .summaryEstimateJobStack.isInformationalOnly > .summaryEstimateSkuGroup{
+      opacity:.7;
+    }
     .summaryEstimateJobTop{
       display:grid;
       grid-template-columns:var(--summary-job-preview) minmax(0, 1fr);
@@ -16984,7 +16989,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 146">146</div>
+  <div class="devRevisionBadge" aria-label="Development revision 147">147</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -45444,7 +45449,7 @@
       noticeText.appendChild(createEl('span', 'summaryEstimateJobNoticeLead', 'Job ' + jobData.printJobNumber + ' has no units entered. '));
       noticeText.appendChild(document.createTextNode('Job costs & turn times are excluded from the totals in the header. Price breaks & job info are directly below.'));
       notice.appendChild(noticeText);
-      const removeBtn = createEl('button', 'summaryEstimateJobNoticeBtn', 'Remove Job ' + jobData.printJobNumber + ' from Estimate');
+      const removeBtn = createEl('button', 'summaryEstimateJobNoticeBtn', 'Remove Job ' + jobData.printJobNumber + ' from estimate view');
       removeBtn.type = 'button';
       removeBtn.addEventListener('click', () => hidePrintJob(jobData.job && jobData.job.printJobId));
       notice.appendChild(removeBtn);
