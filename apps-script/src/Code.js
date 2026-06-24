@@ -1869,6 +1869,9 @@ function doPost(e) {
     if (action === 'get_po_payment_reminder_schedule_status_headless') {
       return jsonOutput_(getPurchaseOrderPaymentReminderScheduleStatusHeadless(payload));
     }
+    if (action === 'get_email_review_runtime_status_headless') {
+      return jsonOutput_(getEmailReviewRuntimeStatusHeadless_(payload));
+    }
     if (action === 'audit_email_review_artifacts') {
       return jsonOutput_(auditEmailReviewArtifacts(payload));
     }
@@ -21672,6 +21675,7 @@ function buildLockedOrderPaymentEmailContent_(ctx, orderSummary, options) {
     body: shell.body,
     htmlBody: shell.htmlBody,
     links: links,
+    reviewSurface: shell.reviewSurface,
     communicationContract: communicationContract
   };
 }
@@ -22127,6 +22131,7 @@ function buildPurchaseOrderInvoiceEmailContent_(token, invoiceInfo, options) {
     subject: subject,
     body: shell.body,
     htmlBody: shell.htmlBody,
+    reviewSurface: shell.reviewSurface,
     communicationContract: communicationContract
   };
 }
@@ -23354,6 +23359,7 @@ function buildApAchLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, opt
     subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody,
+    reviewSurface: shell.reviewSurface,
     communicationContract: communicationContract
   };
 }
@@ -24922,6 +24928,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody,
+    reviewSurface: shell.reviewSurface,
     communicationContract: communicationContract
   };
 }
@@ -26041,6 +26048,7 @@ function buildPaymentLifecycleEmailContent_(milestone, orderInfo, invoiceInfo, o
     subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody,
+    reviewSurface: shell.reviewSurface,
     communicationContract: communicationContract
   };
 }
@@ -27640,7 +27648,90 @@ function buildLifecycleEmailShell_(options) {
       headingAccentLabel: shouldAppendTeamRushHeaderLabel ? teamRushHeaderLabel : '',
       subheading: headerDisplay.subheading,
       bodyHtml: htmlInnerParts.filter(Boolean).join('\n')
-    })
+    }),
+    reviewSurface: buildLifecycleEmailReviewSurface_(blocks)
+  };
+}
+
+function normalizeLifecycleEmailReviewSurfaceLine_(value) {
+  return trimString_(value)
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[email]')
+    .replace(/https?:\/\/\S+/g, '[url]')
+    .replace(/[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}/g, '[id]')
+    .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '[token]')
+    .replace(/\$[0-9][0-9,]*(?:\.[0-9]{2})?/g, '[amount]')
+    .replace(/\b(?:Purchase Order|PO)\s*#[A-Za-z0-9._-]+/gi, 'Purchase Order #[po]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeLifecycleEmailReviewSurfaceLines_(lines) {
+  return uniqueTrimmedStrings_(Array.isArray(lines) ? lines : []).map(function(line) {
+    return normalizeLifecycleEmailReviewSurfaceLine_(line);
+  }).filter(Boolean);
+}
+
+function extractLifecycleEmailProgressSurfaceLines_(block) {
+  const item = (block && typeof block === 'object') ? block : {};
+  const lines = [];
+  trimString_(item.text).split(/\r?\n/).forEach(function(line) {
+    const clean = trimString_(line);
+    if (!clean || /^CURRENT ORDER PROGRESS:?$/i.test(clean)) return;
+    lines.push(clean);
+  });
+  return normalizeLifecycleEmailReviewSurfaceLines_(lines);
+}
+
+function extractLifecycleEmailProjectTimingSurfaceLines_(block) {
+  const item = (block && typeof block === 'object') ? block : {};
+  const timingLabels = {
+    'production time': true,
+    'payment date': true,
+    'order placed': true,
+    'production authorized': true,
+    'production complete': true,
+    'estimated production completion': true,
+    'estimated turnaround': true,
+    'payment due': true
+  };
+  return normalizeLifecycleEmailReviewSurfaceLines_((Array.isArray(item.fields) ? item.fields : []).map(function(field) {
+    const source = (field && typeof field === 'object') ? field : {};
+    const label = trimString_(source.label);
+    if (!timingLabels[label.toLowerCase()]) return '';
+    const value = trimString_(source.value);
+    return label && value ? (label + ': ' + value) : '';
+  }).filter(Boolean));
+}
+
+function buildLifecycleEmailReviewSurface_(blocks) {
+  const progress = [];
+  const projectTimingFields = [];
+  const history = [];
+  (Array.isArray(blocks) ? blocks : []).forEach(function(block) {
+    const item = (block && typeof block === 'object') ? block : {};
+    const kind = trimString_(item.kind).toLowerCase();
+    if (kind === 'progress') {
+      extractLifecycleEmailProgressSurfaceLines_(item).forEach(function(line) {
+        progress.push(line);
+      });
+    } else if (kind === 'project_details') {
+      extractLifecycleEmailProjectTimingSurfaceLines_(item).forEach(function(line) {
+        projectTimingFields.push(line);
+      });
+      normalizeLifecycleEmailReviewSurfaceLines_(item.lines).forEach(function(line) {
+        history.push(line);
+      });
+    } else if (kind === 'history') {
+      normalizeLifecycleEmailReviewSurfaceLines_(item.lines).forEach(function(line) {
+        history.push(line);
+      });
+    }
+  });
+  return {
+    progress: uniqueTrimmedStrings_(progress),
+    projectTimingFields: uniqueTrimmedStrings_(projectTimingFields),
+    history: uniqueTrimmedStrings_(history)
   };
 }
 
@@ -29109,7 +29200,7 @@ function buildAchLifecycleEmailCopy_(jobType, emailContext, options) {
           ? clientFullName + ' placed their order in the portal, paid via ACH, and is linking their bank for the first time. Bank verification is needed before the ACH payment can clear, and the order can begin processing.'
           : 'Your Red Threads order has been placed, and bank verification is needed before the ACH payment can finish. Order Production will begin as soon as payment is received.',
         statusCopy: isTeamAlert
-          ? clientVerificationSubject + ' will likely get a separate email from Stripe to confirm micro deposit values in their bank account and establish a connection with Red Threads\' Stripe payment portal. Once their bank is verified, ACH payments can take several business days to clear. If verification is not completed within 4 business days, the client and the Red Threads team will receive a notification that order production cannot continue and needs attention.'
+          ? clientVerificationSubject + ' will likely get a separate email from Stripe to confirm micro deposit values in their bank account and establish a connection with Red Threads\' Stripe payment portal. Once their bank is verified, ACH payments can take several business days to clear. If verification is not completed within 4 days, the client and the Red Threads team will receive a notification that order production cannot continue and needs attention.'
           : 'Stripe may send you a secure bank-verification email for a one-time ACH payment setup with Red Threads. Red Threads does not collect any banking or microdeposit values.',
         attachmentNote: isTeamAlert ? 'The invoice/receipt for the client\'s order is attached to this email.' : 'The invoice/receipt for your order is attached to this email.'
       });
@@ -29757,6 +29848,7 @@ function buildAchLifecycleEmailContent_(jobType, orderInfo, invoiceInfo, options
     subject: copy.subject,
     body: shell.body,
     htmlBody: shell.htmlBody,
+    reviewSurface: shell.reviewSurface,
     communicationContract: communicationContract
   };
 }
@@ -31898,6 +31990,33 @@ function getPurchaseOrderPaymentReminderScheduleStatusHeadless(payload) {
   }
 }
 
+function getEmailReviewRuntimeStatusHeadless_(payload) {
+  try {
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const cfg = getConfig_();
+    const auth = validateEmailReviewTriggerSecret_(p.triggerSecret, cfg);
+    if (auth.ok !== true) {
+      return {
+        ok: false,
+        headless: true,
+        readOnly: true,
+        error: auth.error
+      };
+    }
+    const ss = SpreadsheetApp.openById(cfg.sheetId);
+    const result = buildEmailReviewRuntimeStatus_(ss, cfg);
+    result.headless = true;
+    return result;
+  } catch (err) {
+    return {
+      ok: false,
+      headless: true,
+      readOnly: true,
+      error: normalizeEmailReviewError_(err)
+    };
+  }
+}
+
 function sendEmailReviewSuite_(payload) {
   const p = (payload && typeof payload === 'object') ? payload : {};
   const cfg = getConfig_();
@@ -31951,16 +32070,22 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
   const opts = (options && typeof options === 'object') ? options : {};
   const dryRun = opts.dryRun === true;
   const recipients = buildEmailReviewRecipients_(p);
-  const resetSummary = p.resetFixtures === false
-    ? null
-    : (dryRun ? dryRunEmailReviewFixtureReset_(ss, cfg) : resetEmailReviewFixtures_(ss, cfg));
+  const fixtureSource = normalizeEmailReviewFixtureSource_(p.fixtureSource || p.fixture_source);
+  const storageFixtureSource = fixtureSource === 'storage';
+  const resetSummary = storageFixtureSource
+    ? checkEmailReviewStorageFixtureSource_(ss, cfg, { dryRun: dryRun })
+    : (p.resetFixtures === false
+      ? null
+      : (dryRun ? dryRunEmailReviewFixtureReset_(ss, cfg) : resetEmailReviewFixtures_(ss, cfg)));
   const artifactSelectionSummary = {
     ok: true,
     mode: 'order_specific_first',
     fallbackAvailable: !!(reviewInvoiceArtifact && trimString_(reviewInvoiceArtifact.invoicePdfUrl || reviewInvoiceArtifact.invoiceFileId)),
     dryRun: dryRun
   };
-  const infra = ensurePortalInfrastructure_(ss, cfg);
+  const infra = storageFixtureSource
+    ? buildEmailReviewStorageFixtureInfrastructure_(ss, cfg)
+    : ensurePortalInfrastructure_(ss, cfg);
   const fixture = buildEmailReviewFixtureContext_(ss, cfg, infra);
   fixture.reviewInvoiceFallbackArtifact = reviewInvoiceArtifact;
   fixture.reviewInvoiceArtifact = reviewInvoiceArtifact;
@@ -31977,6 +32102,7 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
     sendEmailReviewUtilityExamples_(results, fixture, recipients);
     if (dryRun) {
       appendEmailReviewCommunicationAssertionCases_(results);
+      appendEmailReviewParityAssertionCases_(results);
     }
   } finally {
     EMAIL_REVIEW_SUITE_RENDER_ONLY_ = previousRenderOnly;
@@ -31992,8 +32118,11 @@ function runEmailReviewSuiteCore_(ss, cfg, payload, reviewInvoiceArtifact, optio
     review: true,
     headless: opts.headless === true,
     dryRun: dryRun,
+    fixtureSource: fixtureSource,
     portalRenderedInvoiceArtifact: true,
-    resetFixtures: !!resetSummary,
+    resetFixtures: !!(resetSummary && resetSummary.activeReset === true),
+    activeTabsMutated: !!(resetSummary && resetSummary.mutatesActiveTabs === true),
+    queueCleared: !!(resetSummary && resetSummary.clearsQueue === true),
     resetSummary: resetSummary,
     artifactSelectionSummary: artifactSelectionSummary,
     artifactRefreshSummary: {
@@ -32160,6 +32289,10 @@ function resetEmailReviewFixtures_(ss, cfg) {
   SpreadsheetApp.flush();
   return {
     ok: true,
+    fixtureSource: 'active',
+    activeReset: true,
+    mutatesActiveTabs: true,
+    clearsQueue: true,
     operations: operations
   };
 }
@@ -32182,6 +32315,65 @@ function dryRunEmailReviewFixtureReset_(ss, cfg) {
   return {
     ok: operations.every(function(op) { return op && op.ok !== false; }),
     dryRun: true,
+    fixtureSource: 'active',
+    activeReset: false,
+    mutatesActiveTabs: false,
+    clearsQueue: false,
+    wouldMutateActiveTabs: true,
+    wouldClearQueue: true,
+    operations: operations
+  };
+}
+
+function normalizeEmailReviewFixtureSource_(value) {
+  const raw = trimString_(value).toLowerCase();
+  if (raw === 'storage' || raw === 'fixture_storage' || raw === 'fixture-storage' || raw === 'fixtures') return 'storage';
+  return 'active';
+}
+
+function getEmailReviewRequiredSheet_(ss, sheetName) {
+  const name = trimString_(sheetName);
+  const sheet = ss && ss.getSheetByName(name);
+  if (!sheet) throw new Error('Required review sheet missing: ' + name);
+  return sheet;
+}
+
+function buildEmailReviewStorageFixtureInfrastructure_(ss, cfg) {
+  return {
+    exportSheet: getEmailReviewRequiredSheet_(ss, 'FIXTURE_EXPORT'),
+    usersSheet: getEmailReviewRequiredSheet_(ss, AUTH_SHEETS.USERS),
+    sessionsSheet: getEmailReviewRequiredSheet_(ss, AUTH_SHEETS.USER_SESSIONS),
+    ordersSheet: getEmailReviewRequiredSheet_(ss, 'FIXTURE_PORTAL_ORDERS'),
+    accountsSheet: getEmailReviewRequiredSheet_(ss, cfg.portalAccountsSheetName),
+    stripeEventsSheet: getEmailReviewRequiredSheet_(ss, 'FIXTURE_STRIPE_EVENTS')
+  };
+}
+
+function checkEmailReviewStorageFixtureSource_(ss, cfg, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const operations = [];
+  operations.push(checkEmailReviewFixtureSheet_(ss, 'FIXTURE_EXPORT', cfg.exportLogSheetName));
+  operations.push(checkEmailReviewFixtureSheet_(ss, 'FIXTURE_PORTAL_ORDERS', cfg.portalOrdersSheetName));
+  operations.push(checkEmailReviewFixtureSheet_(ss, 'FIXTURE_STRIPE_EVENTS', PORTAL_STRIPE_EVENTS_SHEET_NAME, {
+    columnCount: PORTAL_STRIPE_EVENTS_HEADERS.length
+  }));
+  operations.push({
+    source: PORTAL_EMAIL_QUEUE_SHEET_NAME,
+    target: PORTAL_EMAIL_QUEUE_SHEET_NAME,
+    dryRun: opts.dryRun === true,
+    fixtureSource: 'storage',
+    skipped: true,
+    reason: 'storage_fixture_source_no_queue_clear',
+    rowsCleared: 0,
+    columns: 0
+  });
+  return {
+    ok: operations.every(function(op) { return op && op.ok !== false; }),
+    dryRun: opts.dryRun === true,
+    fixtureSource: 'storage',
+    activeReset: false,
+    mutatesActiveTabs: false,
+    clearsQueue: false,
     operations: operations
   };
 }
@@ -32265,6 +32457,192 @@ function clearEmailReviewQueueRows_(queueSheet) {
     target: PORTAL_EMAIL_QUEUE_SHEET_NAME,
     rowsCleared: Math.max(0, queueSheet.getMaxRows() - 1),
     columns: lastCol
+  };
+}
+
+function getEmailReviewSheetValuesForCompare_(sheet, columnCount) {
+  if (!sheet) return null;
+  const rows = Math.max(1, sheet.getLastRow());
+  const cols = Math.max(1, Math.min(
+    Math.max(1, parseInt(String(columnCount || sheet.getLastColumn()), 10) || sheet.getLastColumn()),
+    sheet.getLastColumn()
+  ));
+  return sheet.getRange(1, 1, rows, cols).getValues().map(function(row) {
+    return row.map(function(value) {
+      return trimString_(value);
+    });
+  });
+}
+
+function emailReviewSheetValuesEqual_(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length) return false;
+  for (let r = 0; r < left.length; r++) {
+    const leftRow = Array.isArray(left[r]) ? left[r] : [];
+    const rightRow = Array.isArray(right[r]) ? right[r] : [];
+    if (leftRow.length !== rightRow.length) return false;
+    for (let c = 0; c < leftRow.length; c++) {
+      if (trimString_(leftRow[c]) !== trimString_(rightRow[c])) return false;
+    }
+  }
+  return true;
+}
+
+function getEmailReviewSheetIdentityRows_(sheet, columnCount) {
+  if (!sheet) return [];
+  const values = getEmailReviewSheetValuesForCompare_(sheet, columnCount);
+  if (!Array.isArray(values) || values.length < 2) return [];
+  const headers = values[0].map(function(value) {
+    return trimString_(value).toLowerCase();
+  });
+  const identityNames = {
+    token: true,
+    orderid: true,
+    order_id: true,
+    idempotencykey: true,
+    stripeeventid: true,
+    eventid: true,
+    id: true
+  };
+  const indexes = [];
+  headers.forEach(function(header, index) {
+    if (identityNames[header]) indexes.push(index);
+  });
+  if (!indexes.length) indexes.push(0);
+  return values.slice(1).map(function(row) {
+    return indexes.map(function(index) {
+      return trimString_(row[index]);
+    }).join('|');
+  }).filter(function(value) {
+    return trimString_(value);
+  }).sort();
+}
+
+function emailReviewSheetIdentityRowsEqual_(source, target, columnCount) {
+  const sourceIds = getEmailReviewSheetIdentityRows_(source, columnCount);
+  const targetIds = getEmailReviewSheetIdentityRows_(target, columnCount);
+  return sourceIds.length > 0 &&
+    sourceIds.length === targetIds.length &&
+    JSON.stringify(sourceIds) === JSON.stringify(targetIds);
+}
+
+function buildEmailReviewActiveTabStatus_(ss, sourceName, targetName, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const source = ss && ss.getSheetByName(sourceName);
+  const target = ss && ss.getSheetByName(targetName);
+  const result = {
+    activeTab: targetName,
+    fixtureTab: sourceName,
+    status: 'unknown',
+    headerCompatible: false,
+    rowCount: target ? Math.max(0, target.getLastRow() - 1) : 0,
+    columnCount: target ? target.getLastColumn() : 0,
+    fixtureRowCount: source ? Math.max(0, source.getLastRow() - 1) : 0
+  };
+  if (!source || !target) {
+    result.status = 'unknown';
+    result.error = source ? 'active_tab_missing' : 'fixture_tab_missing';
+    return result;
+  }
+  const columnCount = Math.max(1, Math.min(
+    Math.max(1, parseInt(String(opts.columnCount || source.getLastColumn()), 10) || source.getLastColumn()),
+    source.getLastColumn()
+  ));
+  try {
+    assertEmailReviewFixtureHeadersMatch_(source, target, columnCount);
+    result.headerCompatible = true;
+  } catch (err) {
+    result.status = 'unknown';
+    result.error = 'fixture_header_mismatch';
+    return result;
+  }
+  const sourceValues = getEmailReviewSheetValuesForCompare_(source, columnCount);
+  const targetValues = getEmailReviewSheetValuesForCompare_(target, columnCount);
+  const fullMatch = emailReviewSheetValuesEqual_(sourceValues, targetValues);
+  const identityMatch = fullMatch || emailReviewSheetIdentityRowsEqual_(source, target, columnCount);
+  result.status = identityMatch
+    ? 'fixture_loaded'
+    : (result.rowCount > 0 ? 'live_like' : 'unknown');
+  result.matchMode = fullMatch ? 'full' : (identityMatch ? 'identity' : 'none');
+  return result;
+}
+
+function buildEmailReviewFixtureHeaderCompatibility_(ss, cfg) {
+  const checks = [
+    { source: 'FIXTURE_EXPORT', target: cfg.exportLogSheetName },
+    { source: 'FIXTURE_PORTAL_ORDERS', target: cfg.portalOrdersSheetName },
+    { source: 'FIXTURE_STRIPE_EVENTS', target: PORTAL_STRIPE_EVENTS_SHEET_NAME, columnCount: PORTAL_STRIPE_EVENTS_HEADERS.length }
+  ];
+  return checks.map(function(check) {
+    try {
+      const op = checkEmailReviewFixtureSheet_(ss, check.source, check.target, {
+        columnCount: check.columnCount
+      });
+      return {
+        source: check.source,
+        target: check.target,
+        ok: op && op.ok !== false,
+        columns: op.columns || 0
+      };
+    } catch (err) {
+      return {
+        source: check.source,
+        target: check.target,
+        ok: false,
+        error: normalizeEmailReviewError_(err)
+      };
+    }
+  });
+}
+
+function buildPortalEmailQueueReadOnlyStatus_(ss) {
+  const sheet = ss && ss.getSheetByName(PORTAL_EMAIL_QUEUE_SHEET_NAME);
+  if (!sheet) {
+    return {
+      exists: false,
+      totalRows: 0,
+      countsByStatus: {}
+    };
+  }
+  const rows = listSheetRowInfos_(sheet);
+  const counts = {};
+  rows.forEach(function(info) {
+    const row = info && info.rowObjNormalized ? info.rowObjNormalized : {};
+    const status = trimString_(row.status).toLowerCase() || 'blank';
+    counts[status] = (counts[status] || 0) + 1;
+  });
+  return {
+    exists: true,
+    totalRows: rows.length,
+    countsByStatus: counts
+  };
+}
+
+function buildEmailReviewRuntimeStatus_(ss, cfg) {
+  const activeTabs = [
+    buildEmailReviewActiveTabStatus_(ss, 'FIXTURE_EXPORT', cfg.exportLogSheetName),
+    buildEmailReviewActiveTabStatus_(ss, 'FIXTURE_PORTAL_ORDERS', cfg.portalOrdersSheetName),
+    buildEmailReviewActiveTabStatus_(ss, 'FIXTURE_STRIPE_EVENTS', PORTAL_STRIPE_EVENTS_SHEET_NAME, {
+      columnCount: PORTAL_STRIPE_EVENTS_HEADERS.length
+    })
+  ];
+  const fixtureHeaders = buildEmailReviewFixtureHeaderCompatibility_(ss, cfg);
+  const statuses = activeTabs.map(function(item) {
+    return trimString_(item.status);
+  }).filter(Boolean);
+  const activeTabState = statuses.length && statuses.every(function(status) { return status === 'fixture_loaded'; })
+    ? 'fixture_loaded'
+    : (statuses.some(function(status) { return status === 'live_like'; }) ? 'live_like' : 'unknown');
+  return {
+    ok: true,
+    reviewRuntimeStatus: true,
+    readOnly: true,
+    sensitiveDataRedacted: true,
+    activeTabState: activeTabState,
+    activeTabs: activeTabs,
+    fixtureHeaders: fixtureHeaders,
+    queue: buildPortalEmailQueueReadOnlyStatus_(ss),
+    scheduler: getPurchaseOrderPaymentReminderScheduleStatus()
   };
 }
 
@@ -32975,6 +33353,9 @@ function appendEmailReviewCommunicationSummary_(result, content) {
     ? source.communicationContract
     : null;
   target.subject = trimString_(source.subject);
+  if (source.reviewSurface && typeof source.reviewSurface === 'object') {
+    target.reviewSurface = source.reviewSurface;
+  }
   if (!contract) {
     target.communicationIntent = '';
     target.lifecycleState = '';
@@ -32992,6 +33373,81 @@ function appendEmailReviewCommunicationSummary_(result, content) {
     target[key] = summary[key];
   });
   return target;
+}
+
+const EMAIL_REVIEW_ORDER_CONTEXT_PARITY_PAIRS_ = [
+  { label: 'Standard ACH pending', client: 'Standard ACH pending client', team: 'Standard ACH pending team' },
+  { label: 'Standard ACH verification', client: 'Standard ACH verification client', team: 'Standard ACH verification team' },
+  { label: 'Standard ACH verification 4-day reminder', client: 'Standard ACH verification 4-day reminder client', team: 'Standard ACH verification 4-day reminder team' },
+  { label: 'Standard ACH receipt', client: 'Standard ACH receipt client', team: 'Standard ACH receipt team' },
+  { label: 'Standard ACH failed', client: 'Standard ACH failed client', team: 'Standard ACH failed team' },
+  { label: 'Card paid', client: 'Card paid client', team: 'Card paid team' },
+  { label: 'Card failed', client: 'Card failed client', team: 'Card failed team' },
+  { label: 'Manual payment pending', client: 'Manual payment pending client', team: 'Manual payment pending team' },
+  { label: 'Manual payment received', client: 'Manual payment received client', team: 'Manual payment received team' },
+  { label: 'PO submitted', client: 'PO submitted client', team: 'PO submitted team' },
+  { label: 'PO payment received', client: 'PO payment received client', team: 'PO payment received team' },
+  { label: 'PO payment received production complete', client: 'PO payment received production complete client', team: 'PO payment received production complete team' },
+  { label: 'Production complete shipping', client: 'Production complete shipping client', team: 'Production complete shipping team' },
+  { label: 'Production complete pickup', client: 'Production complete pickup client', team: 'Production complete pickup team' },
+  { label: 'Explicit locked-order resend', client: 'Explicit locked-order resend client', team: 'Explicit locked-order resend team' }
+];
+
+function getEmailReviewResultByLabel_(results, label) {
+  const target = trimString_(label).toLowerCase();
+  for (let i = 0; i < (Array.isArray(results) ? results.length : 0); i++) {
+    const item = results[i] || {};
+    if (trimString_(item.label).toLowerCase() === target) return item;
+  }
+  return null;
+}
+
+function compareEmailReviewSurfaceSection_(clientSurface, teamSurface, key, mismatchCode, mismatches) {
+  const clientLines = normalizeLifecycleEmailReviewSurfaceLines_(
+    clientSurface && Array.isArray(clientSurface[key]) ? clientSurface[key] : []
+  );
+  const teamLines = normalizeLifecycleEmailReviewSurfaceLines_(
+    teamSurface && Array.isArray(teamSurface[key]) ? teamSurface[key] : []
+  );
+  if (JSON.stringify(clientLines) !== JSON.stringify(teamLines)) mismatches.push(mismatchCode);
+}
+
+function appendEmailReviewParityAssertionCases_(results) {
+  EMAIL_REVIEW_ORDER_CONTEXT_PARITY_PAIRS_.forEach(function(pair) {
+    const clientResult = getEmailReviewResultByLabel_(results, pair.client);
+    const teamResult = getEmailReviewResultByLabel_(results, pair.team);
+    const label = 'Parity ' + pair.label + ' client/team';
+    if (!clientResult || !teamResult || clientResult.skipped === true || teamResult.skipped === true) {
+      skipEmailReviewResult_(results, label, 'email_review_parity', 'team', 'parity_pair_not_available');
+      return;
+    }
+    const clientSurface = clientResult.reviewSurface && typeof clientResult.reviewSurface === 'object'
+      ? clientResult.reviewSurface
+      : null;
+    const teamSurface = teamResult.reviewSurface && typeof teamResult.reviewSurface === 'object'
+      ? teamResult.reviewSurface
+      : null;
+    const mismatches = [];
+    if (!clientSurface || !teamSurface) {
+      mismatches.push('review_surface_missing');
+    } else {
+      compareEmailReviewSurfaceSection_(clientSurface, teamSurface, 'progress', 'progress_mismatch', mismatches);
+      compareEmailReviewSurfaceSection_(clientSurface, teamSurface, 'projectTimingFields', 'project_details_mismatch', mismatches);
+      compareEmailReviewSurfaceSection_(clientSurface, teamSurface, 'history', 'history_mismatch', mismatches);
+    }
+    results.push({
+      ok: mismatches.length === 0,
+      sent: false,
+      dryRun: true,
+      assertionOnly: true,
+      label: label,
+      family: 'email_review_parity',
+      recipientClass: 'team',
+      parityPair: [pair.client, pair.team],
+      parityMismatchCodes: mismatches,
+      error: mismatches[0] || ''
+    });
+  });
 }
 
 function appendEmailReviewDocumentCopySummary_(result, options) {
@@ -34069,6 +34525,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
     }),
     body: lockedContent.body,
     htmlBody: lockedContent.htmlBody,
+    reviewSurface: lockedContent.reviewSurface,
     communicationContract: lockedContent.communicationContract
   }, attachments);
   sendEmailReviewContent_(results, 'Explicit locked-order resend team', 'locked_order_resend', 'team', [recipients.team], {
@@ -34077,6 +34534,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
     }),
     body: lockedTeamContent.body,
     htmlBody: lockedTeamContent.htmlBody,
+    reviewSurface: lockedTeamContent.reviewSurface,
     communicationContract: lockedTeamContent.communicationContract
   }, attachments);
 

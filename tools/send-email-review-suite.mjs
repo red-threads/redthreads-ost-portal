@@ -31,6 +31,7 @@ function parseArgs(argv) {
   const opts = {
     dryRun: false,
     resetFixtures: true,
+    fixtureSource: 'active',
     url: process.env.RT_EMAIL_REVIEW_WEB_APP_URL || DEFAULT_WEB_APP_URL,
     clientEmail: DEFAULT_CLIENT_EMAIL,
     apEmail: DEFAULT_AP_EMAIL,
@@ -39,6 +40,7 @@ function parseArgs(argv) {
   argv.forEach((arg) => {
     if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--no-reset') opts.resetFixtures = false;
+    else if (arg.startsWith('--fixture-source=')) opts.fixtureSource = arg.slice('--fixture-source='.length).trim() || 'active';
     else if (arg.startsWith('--url=')) opts.url = arg.slice('--url='.length).trim();
     else if (arg.startsWith('--client=')) opts.clientEmail = arg.slice('--client='.length).trim();
     else if (arg.startsWith('--ap=')) opts.apEmail = arg.slice('--ap='.length).trim();
@@ -59,6 +61,7 @@ function printHelp() {
     'Options:',
     '  --dry-run       Validate auth, recipients, fixtures, and stored portal artifact without sending.',
     '  --no-reset      Do not reset fixture tabs before the suite.',
+    '  --fixture-source=storage  Read FIXTURE_* tabs directly without active-tab reset or queue clear.',
     '  --team=<email>  Override review-suite team recipient.',
     '  --client=<email> Override review-suite client recipient.',
     '  --ap=<email>    Override review-suite AP recipient.',
@@ -101,6 +104,7 @@ async function main() {
     triggerSecret,
     dryRun: opts.dryRun,
     resetFixtures: opts.resetFixtures,
+    fixtureSource: opts.fixtureSource,
     teamEmail: opts.teamEmail,
     clientEmail: opts.clientEmail,
     apEmail: opts.apEmail
@@ -128,6 +132,11 @@ async function main() {
     review: json.review === true,
     headless: json.headless === true,
     dryRun: json.dryRun === true,
+    fixtureSource: json.fixtureSource || '',
+    resetFixtures: json.resetFixtures === true,
+    activeTabsMutated: json.activeTabsMutated === true,
+    queueCleared: json.queueCleared === true,
+    resetSummary: json.resetSummary || null,
     sentCount: json.sentCount || 0,
     skippedCount: json.skippedCount || 0,
     failedCount: json.failedCount || 0,
@@ -156,6 +165,8 @@ async function main() {
         contradictionErrorCount: item && item.contradictionErrorCount,
         contradictionWarningCount: item && item.contradictionWarningCount,
         contradictionCodes: item && item.contradictionCodes,
+        assertionOnly: item && item.assertionOnly,
+        parityMismatchCodes: item && item.parityMismatchCodes,
         error: item && item.error
       }))
       : []

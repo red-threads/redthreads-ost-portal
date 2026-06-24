@@ -213,6 +213,8 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 
 ## Fixture Reset Plan
 
+Version `1014` adds the no-mutation fixture-storage review path and paired client/team order-context parity assertions. `npm run email-review:suite -- --dry-run --fixture-source=storage` now renders from `FIXTURE_EXPORT`, `FIXTURE_PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS` directly; it does not copy into `EXPORT_LOG`, `PORTAL_ORDERS`, or `PORTAL_STRIPE_EVENTS`, and it does not clear `PORTAL_EMAIL_QUEUE`. The default review-suite path remains available for intentional active fixture resets. The protected post-deploy default dry run and storage-source dry run both returned `ok:true`, total `91`, sent `0`, skipped `1`, failed `0`, attachment fallback `44`, contradiction warnings/errors `0`, parity failures `0`, and matrix `ok:true` with `37 / 37` required cases covered and `0` intent mismatches. The read-only runtime status command classified active tabs as fixture-loaded: `EXPORT_LOG` and `PORTAL_STRIPE_EVENTS` matched fixture storage exactly, and `PORTAL_ORDERS` matched fixture row identity while differing only in generated cells. `PORTAL_EMAIL_QUEUE` remained at two `sent` rows after storage-mode validation.
+
 The first safe normalization step is complete: duplicated fixture-storage blocks were cleared while preserving headers and the existing canonical fixture rows. The second buildout added dedicated lifecycle rows for the missing safe states. The first controlled active reset for dry-run validation is also complete. The first live owner review-suite blast against the active fixture matrix is complete, the unlocked full review-suite blasts against version `985` are complete, versions `986`/`987` temporarily hid accepted/pass communications from future suite sends, version `989` re-unlocked the suite and completed another full live blast, version `990` re-hides the newly owner-reviewed/pass labels without running the email suite, version `991` adds sendable production-complete pickup/shipping coverage without a live suite send, version `992` refines team action-card status labels while hiding additional owner-reviewed team labels and running the live suite, version `993` adds sendable PO reminder/late-fee schedule coverage and completed an owner-approved live suite, version `997` installs the daily PO reminder trigger with owner-approved fixture-mode activation, version `998` refines client action/timing copy and completes another owner-approved live suite, version `999` refines production-complete pickup plus PO reminder copy and completes another owner-approved live suite, and version `1010` adds sendable ACH verification 4-calendar-day reminder client/team coverage and completes the owner-approved live suite. Active runtime tabs remain fixture-loaded after the version `1010` live-suite reset. Future active-tab restoration still requires explicit owner approval.
 
 Recommended next fixture/test-harness step:
@@ -236,6 +238,19 @@ Use this after a headless dry-run JSON capture:
 ```bash
 npm run email-review:suite -- --dry-run > /tmp/email-review-dry-run.json
 npm run email-review:matrix -- --input /tmp/email-review-dry-run.json
+```
+
+Use storage-source mode for fixture review without active-tab reset or queue clear:
+
+```bash
+npm run email-review:suite -- --dry-run --fixture-source=storage > /tmp/email-review-storage-dry-run.json
+npm run email-review:matrix -- --input /tmp/email-review-storage-dry-run.json
+```
+
+Use the protected read-only runtime status command before and after restoration work:
+
+```bash
+npm run email-review:status
 ```
 
 The strict variant fails if any target matrix case is missing or omitted:

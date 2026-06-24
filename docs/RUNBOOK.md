@@ -153,6 +153,8 @@ Useful options:
 
 ```bash
 npm run email-review:suite -- --no-reset
+npm run email-review:suite -- --dry-run --fixture-source=storage
+npm run email-review:status
 npm run email-review:suite -- --team=larryfinkerbean@gmail.com --client=josiah@redthreads.com --ap=josiah@redthreads.com
 ```
 
@@ -162,6 +164,8 @@ Behavior:
 - It reuses the latest validated portal-rendered invoice artifact from fixture/order rows.
 - It never generates fallback invoice PDFs.
 - It returns only redacted labels, recipient classes, attachment counts, and sent/skipped/failed counts.
+- `--fixture-source=storage` reads `FIXTURE_EXPORT`, `FIXTURE_PORTAL_ORDERS`, and `FIXTURE_STRIPE_EVENTS` directly and does not reset active runtime tabs or clear `PORTAL_EMAIL_QUEUE`.
+- `npm run email-review:status` calls the protected read-only status action and reports active-tab fixture/live classification, redacted queue counts by status, fixture header compatibility, and scheduled trigger status.
 - If no validated portal-rendered artifact exists, use the unlocked Team Mode browser path to refresh the artifact first.
 
 ## Final Response Requirements
