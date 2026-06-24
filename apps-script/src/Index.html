@@ -10580,13 +10580,20 @@
       padding:0 26px 26px;
     }
     .taxDocModal.is-review-mode .taxDocStage{
-      display:flex;
-      justify-content:center;
+      display:block;
+      overflow:auto;
       border:none;
       background:transparent;
       padding-top:0;
       padding-left:0;
       padding-right:0;
+    }
+    .taxDocModal.is-review-mode .taxFormPages{
+      width:min(100%,980px);
+      margin:0 auto;
+    }
+    .taxDocModal.is-review-mode .taxFormPageCard{
+      flex:0 0 auto;
     }
     .taxDocModal.is-team-review-mode .taxDocShell{
       grid-template-columns:minmax(0,980px);
@@ -17269,7 +17276,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 166">166</div>
+  <div class="devRevisionBadge" aria-label="Development revision 167">167</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
