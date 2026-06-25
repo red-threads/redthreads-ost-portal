@@ -2542,6 +2542,7 @@
       display:none !important;
     }
     .dashboardAccountProfileModal{
+      position:relative;
       width:min(920px,100%);
       max-height:min(86vh,820px);
       overflow:auto;
@@ -2859,6 +2860,51 @@
       display:flex;
       justify-content:flex-end;
       align-items:center;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top:18px;
+    }
+    .dashboardAccountProfileConfirm{
+      position:fixed;
+      inset:0;
+      z-index:45;
+      display:grid;
+      place-items:center;
+      padding:28px;
+      background:rgba(0,0,0,.38);
+      backdrop-filter:blur(8px);
+    }
+    .dashboardAccountProfileConfirm[hidden]{
+      display:none !important;
+    }
+    .dashboardAccountProfileConfirmCard{
+      width:min(420px,100%);
+      border:1px solid rgba(81,255,183,.24);
+      border-radius:16px;
+      background:linear-gradient(180deg, rgba(15,23,42,.98) 0%, rgba(5,8,17,.98) 100%);
+      box-shadow:0 28px 70px rgba(0,0,0,.48), 0 0 34px rgba(81,255,183,.08);
+      padding:20px;
+      color:#f8fafc;
+    }
+    .dashboardAccountProfileConfirmTitle{
+      margin:0 0 10px;
+      color:#51ffb7;
+      font-size:17px;
+      line-height:1.2;
+      font-weight:900;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .dashboardAccountProfileConfirmText{
+      margin:0;
+      color:#dbeafe;
+      font-size:13px;
+      line-height:1.6;
+      font-weight:700;
+    }
+    .dashboardAccountProfileConfirmActions{
+      display:flex;
+      justify-content:flex-end;
       flex-wrap:wrap;
       gap:10px;
       margin-top:18px;
@@ -17688,7 +17734,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 177">177</div>
+  <div class="devRevisionBadge" aria-label="Development revision 178">178</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17821,6 +17867,16 @@
           <div class="dashboardAccountProfileFooter" id="dashboardAccountProfileFooter">
             <button class="dashboardAccountProfileBtn" id="dashboardAccountProfileCancelBtn" type="button">Cancel</button>
             <button class="dashboardAccountProfileBtn is-primary" id="dashboardAccountProfileSaveBtn" type="button">Save details</button>
+          </div>
+          <div class="dashboardAccountProfileConfirm" id="dashboardAccountProfileConfirm" role="alertdialog" aria-modal="false" aria-labelledby="dashboardAccountProfileConfirmTitle" aria-describedby="dashboardAccountProfileConfirmText" hidden>
+            <div class="dashboardAccountProfileConfirmCard">
+              <h3 class="dashboardAccountProfileConfirmTitle" id="dashboardAccountProfileConfirmTitle">Save details before closing?</h3>
+              <p class="dashboardAccountProfileConfirmText" id="dashboardAccountProfileConfirmText">You have unsaved account details. Save them before leaving this card, or exit without saving.</p>
+              <div class="dashboardAccountProfileConfirmActions">
+                <button class="dashboardAccountProfileBtn" id="dashboardAccountProfileConfirmExitBtn" type="button">Just exit</button>
+                <button class="dashboardAccountProfileBtn is-primary" id="dashboardAccountProfileConfirmSaveBtn" type="button">Save details and exit</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -20118,6 +20174,9 @@
   let DASHBOARD_ACH_SETUP_BUSY = false;
   let DASHBOARD_ACCOUNT_PROFILE_SECTION = '';
   let DASHBOARD_ACCOUNT_PROFILE_SAVING = false;
+  let DASHBOARD_ACCOUNT_PROFILE_INITIAL_FORM_KEY = '';
+  let DASHBOARD_ACCOUNT_PROFILE_PENDING_CLOSE_REASON = '';
+  let DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN = false;
   let ACCOUNT_DOC_MODAL_TYPE = '';
   let ACCOUNT_DOC_MODAL_CONTEXT = '';
   let ACCOUNT_DOC_MODAL_HIDE_TIMER = 0;
@@ -22128,11 +22187,14 @@
   function setDashboardAccountProfileSaving_(saving){
     DASHBOARD_ACCOUNT_PROFILE_SAVING = saving === true;
     if (dashboardAccountProfileModal) dashboardAccountProfileModal.setAttribute('aria-busy', DASHBOARD_ACCOUNT_PROFILE_SAVING ? 'true' : 'false');
-    [dashboardAccountProfileCloseBtn, dashboardAccountProfileCancelBtn, dashboardAccountProfileSaveBtn].forEach(btn => {
+    [dashboardAccountProfileCloseBtn, dashboardAccountProfileCancelBtn, dashboardAccountProfileSaveBtn, dashboardAccountProfileConfirmExitBtn, dashboardAccountProfileConfirmSaveBtn].forEach(btn => {
       if (btn) btn.disabled = DASHBOARD_ACCOUNT_PROFILE_SAVING;
     });
     if (dashboardAccountProfileSaveBtn) {
       dashboardAccountProfileSaveBtn.textContent = DASHBOARD_ACCOUNT_PROFILE_SAVING ? 'Saving...' : 'Save details';
+    }
+    if (dashboardAccountProfileConfirmSaveBtn) {
+      dashboardAccountProfileConfirmSaveBtn.textContent = DASHBOARD_ACCOUNT_PROFILE_SAVING ? 'Saving...' : 'Save details and exit';
     }
   }
 
@@ -22454,6 +22516,35 @@
     return profile;
   }
 
+  function stableStringifyDashboardAccountProfile_(value){
+    if (Array.isArray(value)) {
+      return '[' + value.map(stableStringifyDashboardAccountProfile_).join(',') + ']';
+    }
+    if (value && typeof value === 'object') {
+      return '{' + Object.keys(value).sort().map(key => {
+        return JSON.stringify(key) + ':' + stableStringifyDashboardAccountProfile_(value[key]);
+      }).join(',') + '}';
+    }
+    return JSON.stringify(value == null ? '' : value);
+  }
+
+  function getDashboardAccountProfileFormKey_(){
+    try {
+      return stableStringifyDashboardAccountProfile_(readDashboardAccountProfileForm_());
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function setDashboardAccountProfileBaseline_(){
+    DASHBOARD_ACCOUNT_PROFILE_INITIAL_FORM_KEY = getDashboardAccountProfileFormKey_();
+  }
+
+  function hasDashboardAccountProfileUnsavedChanges_(){
+    if (!DASHBOARD_ACCOUNT_PROFILE_SECTION || !dashboardAccountProfileBackdrop || dashboardAccountProfileBackdrop.hidden) return false;
+    return getDashboardAccountProfileFormKey_() !== DASHBOARD_ACCOUNT_PROFILE_INITIAL_FORM_KEY;
+  }
+
   function validateDashboardAccountProfileForm_(profile){
     const value = (profile && typeof profile === 'object') ? profile : {};
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -22492,6 +22583,31 @@
     }
   }
 
+  function setDashboardAccountProfileConfirmOpen_(open, reason){
+    DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN = open === true;
+    DASHBOARD_ACCOUNT_PROFILE_PENDING_CLOSE_REASON = DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN ? String(reason || 'close') : '';
+    if (dashboardAccountProfileConfirm) dashboardAccountProfileConfirm.hidden = !DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN;
+    if (DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN) {
+      closeDashboardAccountProfileSelects_();
+      requestAnimationFrame(() => {
+        if (dashboardAccountProfileConfirmSaveBtn && typeof dashboardAccountProfileConfirmSaveBtn.focus === 'function') {
+          dashboardAccountProfileConfirmSaveBtn.focus();
+        }
+      });
+    }
+  }
+
+  function forceCloseDashboardAccountProfileModal_(evt){
+    if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+    if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
+    setDashboardAccountProfileConfirmOpen_(false, '');
+    setDashboardAccountProfileSaving_(false);
+    clearDashboardAccountProfileNotice_();
+    DASHBOARD_ACCOUNT_PROFILE_SECTION = '';
+    DASHBOARD_ACCOUNT_PROFILE_INITIAL_FORM_KEY = '';
+    if (dashboardAccountProfileBackdrop) dashboardAccountProfileBackdrop.hidden = true;
+  }
+
   function bindDashboardAccountProfileModalEvents_(){
     if (bindDashboardAccountProfileModalEvents_.isBound === true) return;
     bindDashboardAccountProfileModalEvents_.isBound = true;
@@ -22505,9 +22621,23 @@
         saveDashboardAccountProfileDetails_();
       });
     }
+    if (dashboardAccountProfileConfirmExitBtn) {
+      dashboardAccountProfileConfirmExitBtn.addEventListener('click', evt => {
+        forceCloseDashboardAccountProfileModal_(evt);
+      });
+    }
+    if (dashboardAccountProfileConfirmSaveBtn) {
+      dashboardAccountProfileConfirmSaveBtn.addEventListener('click', evt => {
+        if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+        if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
+        setDashboardAccountProfileConfirmOpen_(false, '');
+        saveDashboardAccountProfileDetails_({ closeOnSuccess: true });
+      });
+    }
     if (dashboardAccountProfileBackdrop) {
       dashboardAccountProfileBackdrop.addEventListener('click', evt => {
         if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+        if (DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN) return;
         const target = evt.target;
         if (dashboardAccountProfileModal && target instanceof Node && dashboardAccountProfileModal.contains(target)) return;
         closeDashboardAccountProfileModal_(evt);
@@ -22523,6 +22653,7 @@
     document.addEventListener('pointerdown', evt => {
       if (!dashboardAccountProfileBackdrop || dashboardAccountProfileBackdrop.hidden) return;
       if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+      if (DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN) return;
       const target = evt.target;
       if (dashboardAccountProfileModal && target instanceof Node && dashboardAccountProfileModal.contains(target)) return;
       closeDashboardAccountProfileModal_(evt);
@@ -22531,6 +22662,12 @@
       if (evt.key !== 'Escape') return;
       if (!dashboardAccountProfileBackdrop || dashboardAccountProfileBackdrop.hidden) return;
       if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+      if (DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        setDashboardAccountProfileConfirmOpen_(false, '');
+        return;
+      }
       if (dashboardAccountProfileBody && dashboardAccountProfileBody.querySelector('.dashboardAccountProfileSelect.isOpen')) {
         evt.preventDefault();
         evt.stopPropagation();
@@ -22555,8 +22692,10 @@
     bindDashboardAccountProfileModalEvents_();
     ensureDashboardAccountProfileBackdropMounted_();
     setDashboardAccountProfileSaving_(false);
+    setDashboardAccountProfileConfirmOpen_(false, '');
     clearDashboardAccountProfileNotice_();
     renderDashboardAccountProfileModal_();
+    setDashboardAccountProfileBaseline_();
     dashboardAccountProfileBackdrop.hidden = false;
     requestAnimationFrame(() => {
       const firstEditable = dashboardAccountProfileBody ? dashboardAccountProfileBody.querySelector('.dashboardAccountProfileSelectButton, input:not([type="checkbox"]):not([type="hidden"]), select, textarea') : null;
@@ -22568,31 +22707,40 @@
     });
   }
 
-  function closeDashboardAccountProfileModal_(evt){
+  function closeDashboardAccountProfileModal_(evt, options){
     if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
     if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
     if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
-    setDashboardAccountProfileSaving_(false);
-    clearDashboardAccountProfileNotice_();
-    DASHBOARD_ACCOUNT_PROFILE_SECTION = '';
-    if (dashboardAccountProfileBackdrop) dashboardAccountProfileBackdrop.hidden = true;
+    if (options && options.force === true) {
+      forceCloseDashboardAccountProfileModal_();
+      return;
+    }
+    if (DASHBOARD_ACCOUNT_PROFILE_CONFIRM_OPEN) return;
+    if (hasDashboardAccountProfileUnsavedChanges_()) {
+      setDashboardAccountProfileConfirmOpen_(true, options && options.reason);
+      return;
+    }
+    forceCloseDashboardAccountProfileModal_();
   }
 
-  async function saveDashboardAccountProfileDetails_(){
-    if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+  async function saveDashboardAccountProfileDetails_(options){
+    if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return false;
+    const opts = (options && typeof options === 'object') ? options : {};
+    const closeOnSuccess = opts.closeOnSuccess === true;
     const section = DASHBOARD_ACCOUNT_PROFILE_SECTION === 'primary_contact' ? 'primary_contact' : 'organization';
     let profile = {};
+    let didSave = false;
     try {
       profile = readDashboardAccountProfileForm_();
       validateDashboardAccountProfileForm_(profile);
     } catch (err) {
       setDashboardAccountProfileNotice_(String((err && err.message) || err), true);
-      return;
+      return false;
     }
     const requestPayload = await ensureDashboardAccountDocumentContextReady_();
     if (!requestPayload) {
       setDashboardAccountProfileNotice_('Account dashboard context is unavailable. Refresh and try again.', true);
-      return;
+      return false;
     }
     setDashboardAccountProfileSaving_(true);
     setDashboardAccountProfileNotice_('Saving account details...', false);
@@ -22612,12 +22760,16 @@
       }
       DASHBOARD_ACCOUNT_PROFILE_SECTION = section;
       renderDashboardAccountProfileModal_();
-      setDashboardAccountProfileNotice_(String(response.message || 'Account details saved.'), false);
+      setDashboardAccountProfileBaseline_();
+      didSave = true;
+      if (!closeOnSuccess) setDashboardAccountProfileNotice_(String(response.message || 'Account details saved.'), false);
     } catch (err) {
       setDashboardAccountProfileNotice_(String((err && err.message) || err), true);
     } finally {
       setDashboardAccountProfileSaving_(false);
+      if (didSave && closeOnSuccess) forceCloseDashboardAccountProfileModal_();
     }
+    return didSave;
   }
 
   function bindDashboardAccountProfileCard_(node, section){
@@ -23228,6 +23380,9 @@
   const dashboardAccountProfileCancelBtn = document.getElementById('dashboardAccountProfileCancelBtn');
   const dashboardAccountProfileSaveBtn = document.getElementById('dashboardAccountProfileSaveBtn');
   const dashboardAccountProfileFooter = document.getElementById('dashboardAccountProfileFooter');
+  const dashboardAccountProfileConfirm = document.getElementById('dashboardAccountProfileConfirm');
+  const dashboardAccountProfileConfirmExitBtn = document.getElementById('dashboardAccountProfileConfirmExitBtn');
+  const dashboardAccountProfileConfirmSaveBtn = document.getElementById('dashboardAccountProfileConfirmSaveBtn');
   const dashboardApplyTermsBtn = document.getElementById('dashboardApplyTermsBtn');
   const dashboardTaxExemptBtn = document.getElementById('dashboardTaxExemptBtn');
   const projectView = document.getElementById('projectView');

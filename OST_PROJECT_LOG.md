@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Account Profile Unsaved Changes Guard
+
+- Mode: Full ship scoped account-profile UI hardening.
+- Branch/commit/PR: `main`, Apps Script version `1052`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: prevent accidental draft loss when clients edit Organization or Primary Contact profile details and then close the modal by X, Cancel, outside click, or Escape.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `178` snapshots account-profile form state at modal open and after successful saves, compares current nested profile data through stable serialization, and shows a portal-styled confirmation card when dirty close is attempted. `Just exit` discards the draft; `Save details and exit` reuses the existing account-profile save path and closes only after success. Existing footer `Save details` still saves without closing.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add profile unsaved changes guard"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1052 - Add profile unsaved changes guard`. Direct `/exec` initially returned stale revision `177`, then a cache-busted retry returned HTTP `200` with `Development revision 178`, omitted stale revision `177`, included the unsaved-confirmation and forced-close markers, and had zero targeted secret/private-link markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained the portal wrapper marker, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no account profile save was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke both account-profile modals by editing a field, trying each close path, and testing `Just exit` plus `Save details and exit` with valid and invalid values.
+
 ## 2026-06-25 - Favorite Swag Profile Preference
 
 - Mode: Full ship scoped account-profile refinement.
