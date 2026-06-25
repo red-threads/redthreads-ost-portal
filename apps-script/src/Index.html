@@ -12227,6 +12227,17 @@
       box-shadow:0 12px 24px rgba(190,24,93,.26);
       margin-top:10px;
     }
+    #termsDocSubmitBtn{
+      background:linear-gradient(135deg,#86efac 0%, #51ffb7 42%, #22c55e 100%);
+      border-color:rgba(255,255,255,.2);
+      color:#0f172a;
+      box-shadow:0 12px 24px rgba(34,197,94,.24);
+    }
+    #termsDocSubmitBtn:hover{
+      border-color:rgba(255,255,255,.28);
+      background:linear-gradient(135deg,#a7f3d0 0%, #5cffbd 42%, #16a34a 100%);
+      box-shadow:0 14px 28px rgba(34,197,94,.28);
+    }
     .taxDocApprovalNote{
       font-size:12px;
       background:rgba(225,29,72,.08);
@@ -12234,6 +12245,12 @@
       color:#fecdd3;
       padding:12px 14px;
       border-radius:14px;
+    }
+    #termsDocApprovalNote{
+      background:rgba(34,197,94,.1);
+      border-color:rgba(74,222,128,.28);
+      color:#bbf7d0;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
     }
     .taxDocMessage{
       font-size:13px;
@@ -17277,7 +17294,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 170">170</div>
+  <div class="devRevisionBadge" aria-label="Development revision 171">171</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17848,13 +17865,13 @@
             </div>
             <div class="taxDocUploadPanel" id="termsDocUploadPanel" hidden>
               <div class="taxDocEmailPanelTitle">Attach completed document</div>
-              <div class="taxDocEmailPanelNote">Click below to choose the signed credit terms file(s) you want to send for RedThreads review.</div>
+              <div class="taxDocEmailPanelNote">Click below to choose the signed credit terms file(s) you want to send for Red Threads review.</div>
               <input class="taxDocUploadInput" id="termsDocUploadInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" multiple>
               <button class="taxDocActionBtn" id="termsDocUploadChooseBtn" type="button">Choose File</button>
               <div class="taxDocUploadSelectedFile" id="termsDocUploadSelectedFile">No file selected.</div>
             </div>
             <button class="taxDocPrimaryBtn" id="termsDocSubmitBtn" type="button" hidden>Submit to Red Threads</button>
-            <div class="taxDocApprovalNote" id="termsDocApprovalNote" hidden>Once your document is submitted, RedThreads will review and notify you upon approval or if changes need to be made.</div>
+            <div class="taxDocApprovalNote" id="termsDocApprovalNote" hidden>Once your document is submitted, Red Threads will review and notify you upon approval or if changes need to be made.</div>
             <div class="taxDocMessage info" id="termsDocMessage" hidden></div>
           </div>
           <div class="termsReviewSection" id="termsReviewSubmissionSection">
@@ -31103,7 +31120,7 @@
     if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT) return;
     if (!TERMS_DOC_SELECTED_FILES.length) {
       openTermsDocUploadPanel_();
-      setTermsDocMessage_('Choose a completed document before submitting it for RedThreads review.', 'err');
+      setTermsDocMessage_('Choose a completed document before submitting it for Red Threads review.', 'err');
       return;
     }
     ACCOUNT_DOC_UPLOAD_IN_FLIGHT = true;

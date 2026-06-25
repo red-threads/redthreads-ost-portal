@@ -120,7 +120,7 @@ The production timing display is scoped to order-context emails. These emails re
 | Team-to-client chat digest | `Chat digest team to client` | Chat digest plus lifecycle progress/details when order context is available | Uses the shared order-context timing display when lifecycle sections render | Hidden in version `990` after owner review |
 | Client-to-team chat digest | `Chat digest client to team` | Chat digest plus lifecycle progress/details when order context is available | Uses the shared order-context timing display when lifecycle sections render | Hidden in version `992` after owner review |
 | Summary/invoice explicit send | `Summary/invoice explicit send client` | Utility/document-copy path | No Project Details timing row; the utility send carries document-copy metadata rather than lifecycle project timing | Hidden in version `990` after owner review |
-| Account-document source and decisions | `Blank tax document source client`, `Blank credit terms source client`, `Tax exempt approved client`, `Tax exempt denied client`, `Tax exempt removed client`, `Tax exempt reset client`, `Credit terms approved client`, `Credit terms denied client`, `Credit terms removed client`, `Credit terms reset client` | Account-document path | No Project Details timing row; these emails are account/document communications, not order production communications | Client source/decision labels hidden in version `990`; tax-removal and credit-terms-removal labels cover account replacement clears |
+| Account-document source and decisions | `Blank tax document source client`, `Blank credit terms source client`, `Tax exempt submitted client`, `Tax exempt approved client`, `Tax exempt denied client`, `Tax exempt removed client`, `Tax exempt reset client`, `Credit terms submitted client`, `Credit terms approved client`, `Credit terms denied client`, `Credit terms removed client`, `Credit terms reset client` | Account-document path | No Project Details timing row; these emails are account/document communications, not order production communications | Client source/decision labels hidden in version `990`; submitted receipt labels added for client upload acknowledgements; tax-removal and credit-terms-removal labels cover account replacement clears |
 | Account-document team notifications | `Tax exempt submitted team review`, `Tax exempt approved team`, `Tax exempt removed team`, `Credit terms submitted team review`, `Credit terms approved team`, `Credit terms removed team` | Account-document path | No Project Details timing row; these emails are account/document communications, not order production communications | Hidden in version `992` after owner review; removal alerts have no Team Mode review CTA |
 | Password reset | `Password reset client` | Auth utility path | No Project Details timing row | Hidden in version `990` after owner review |
 | Submitted tax-form copy | `Submitted tax-form copy client` | Submitted artifact copy path | No Project Details timing row | Safely skipped when submitted artifact is unavailable |
@@ -200,10 +200,10 @@ The target matrix is split into sendable fixture cases and assertion-only cases.
 | `production_complete` | Client + team | Sendable pickup/shipping client + team review cases added in version `991`; no longer assertion-only |
 | `client_to_team_chat_digest` | Team | Sendable or omitted, but metadata should be inspectable |
 | `team_to_client_chat_digest` | Client | Sendable or omitted, but metadata should be inspectable |
-| `account_document_tax_submitted` | Team | Sendable |
+| `account_document_tax_submitted` | Client + team | Sendable |
 | `account_document_tax_approved` | Client + team | Sendable or omitted after validation |
 | `account_document_tax_denied` | Client | Sendable or omitted after validation |
-| `account_document_credit_terms_submitted` | Team | Sendable |
+| `account_document_credit_terms_submitted` | Client + team | Sendable |
 | `account_document_credit_terms_approved` | Client + team | Sendable or omitted after validation |
 | `account_document_credit_terms_denied` | Client | Sendable or omitted after validation |
 | `account_document_credit_terms_removed` | Client + team | Sendable |

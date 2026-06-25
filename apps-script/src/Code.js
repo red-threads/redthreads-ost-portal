@@ -24920,13 +24920,26 @@ function queueAccountDocumentLifecycleEmailSafely_(ctx, definition, submissionEn
     accountInfo: ctx && ctx.accountInfo
   };
   if (trimString_(eventName).toLowerCase() === 'submitted') {
-    return queuePortalLifecycleEmailJobSafely_(source, milestone, {
-      recipientClass: 'team',
-      eventType: 'account_document_submitted',
-      meta: Object.assign({}, meta, {
-        attachmentRequired: true
-      })
+    const teamMeta = Object.assign({}, meta, {
+      attachmentRequired: true
     });
+    const clientMeta = Object.assign({}, meta, {
+      attachmentFileIds: [],
+      attachmentFileNames: {},
+      attachmentRequired: false
+    });
+    return {
+      clientJob: queuePortalLifecycleEmailJobSafely_(source, milestone, {
+        recipientClass: 'client',
+        eventType: 'account_document_submitted',
+        meta: clientMeta
+      }),
+      teamJob: queuePortalLifecycleEmailJobSafely_(source, milestone, {
+        recipientClass: 'team',
+        eventType: 'account_document_submitted',
+        meta: teamMeta
+      })
+    };
   }
   return queuePortalLifecycleClientAndTeamEmailsSafely_(source, milestone, {
     eventType: 'account_document_' + trimString_(eventName).toLowerCase(),
@@ -25174,8 +25187,13 @@ function buildAccountDocumentTeamIdentityDetails_(meta, emailContext) {
 }
 
 function shouldRenderPortalLifecycleEmailCta_(milestone, recipientClass) {
+  const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
+  if (getPortalLifecycleEmailRecipientClass_(recipientClass) === 'client' &&
+      (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
+        normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted)) {
+    return false;
+  }
   if (getPortalLifecycleEmailRecipientClass_(recipientClass) === 'team') {
-    const normalized = normalizePortalLifecycleEmailMilestone_(milestone);
     if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
         normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed) {
       return false;
@@ -25207,22 +25225,25 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   if (reason) details.push('Reason: ' + reason);
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted) {
-    const clientIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
-      ? 'Red Threads received your credit terms application.'
-      : 'Red Threads received your tax exemption form.';
+    const creditTermsSubmitted = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted;
+    const clientIntro = creditTermsSubmitted
+      ? 'Red Threads received your credit terms document.'
+      : 'Red Threads received your sales tax exemption document.';
     const submittedTeamReview = isAccountDocumentSubmittedTeamReviewMilestone_(normalized, recipientClass);
-    const submittedTeamIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
+    const submittedTeamIntro = creditTermsSubmitted
       ? 'A client submitted a credit terms application for Red Threads review. Open Team Mode to review the document and update the account status.'
       : 'A client submitted a Michigan sales tax exemption form for Red Threads review. Open Team Mode to review the document and update the account status.';
     return {
       subject: isTeam
-        ? (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
+        ? (creditTermsSubmitted
           ? buildTeamSubject_('Review credit terms application')
           : buildTeamSubject_('Review sales tax exemption form'))
-        : (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted
-          ? 'Credit terms application submitted'
-          : 'Sales tax exemption form submitted'),
-      heading: isTeam ? ('Review ' + labels.submission) : clientIntro.replace(/[.]+$/g, ''),
+        : (creditTermsSubmitted
+          ? 'Credit terms document received'
+          : 'Sales tax exemption document received'),
+      heading: isTeam
+        ? ('Review ' + labels.submission)
+        : (creditTermsSubmitted ? 'Credit terms document received' : 'Sales tax exemption document received'),
       intro: isTeam
         ? (submittedTeamReview
           ? submittedTeamIntro
@@ -25230,7 +25251,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         : clientIntro,
       statusCopy: isTeam
         ? (submittedTeamReview ? '' : 'Review the submitted document in Team Mode.')
-        : 'Red Threads will review the document and update the portal.',
+        : 'Your document is under review. No action is required from you at this time. Red Threads will be in touch if we have any questions, if changes are needed, or when your document is approved. Review typically takes up to five business days.',
       details: details
     };
   }
@@ -25303,17 +25324,19 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     const clearedByName = trimString_(meta && meta.clearedByName);
     const clearedByEmail = normalizeEmail_(meta && meta.clearedByEmail);
     const removedDetails = isTeam ? details.slice() : [];
-    const includeRemovedActorDetails = !isTeam || creditTermsRemoved;
+    const includeRemovedActorDetails = !isTeam;
     if (clearedAtLabel) removedDetails.push('Removed: ' + clearedAtLabel);
     if (includeRemovedActorDetails && clearedByName) removedDetails.push('Removed by: ' + clearedByName);
     if (includeRemovedActorDetails && clearedByEmail) removedDetails.push('Removed by email: ' + clearedByEmail);
     return {
       subject: isTeam
         ? buildTeamSubject_(creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
-        : buildActionNeededSubject_(creditTermsRemoved ? 'Upload a new credit terms document' : 'Upload a new sales tax exemption document'),
+        : (creditTermsRemoved
+          ? 'Credit Terms removed from Red Threads portal account'
+          : buildActionNeededSubject_('Upload a new sales tax exemption document')),
       heading: isTeam
         ? (creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
-        : (creditTermsRemoved ? 'Upload a new credit terms document' : 'Upload a new sales tax exemption document'),
+        : (creditTermsRemoved ? 'Credit terms agreement was removed' : 'Upload a new sales tax exemption document'),
       intro: isTeam
         ? (creditTermsRemoved
           ? 'A client removed the credit terms document that was on file for their Red Threads account.'
@@ -25324,12 +25347,10 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
       statusCopy: isTeam
         ? 'The client was directed to upload a replacement from the account dashboard. No review action is available until a replacement document is submitted.'
         : (creditTermsRemoved
-          ? 'Account credit terms cannot be used until a new credit terms document is submitted and approved.'
+          ? 'Account credit terms cannot be used until a new credit terms document is submitted and approved.\n\nYou will no longer have the ability to place purchase orders until new terms are established.'
           : 'Sales tax exemption cannot be applied again until a new document is submitted and approved.'),
       nextStep: isTeam
-        ? (creditTermsRemoved
-          ? 'Monitor for a new credit terms submission.'
-          : '')
+        ? ''
         : (creditTermsRemoved
           ? 'Upload a new credit terms document from your account dashboard.'
           : 'Upload a new sales tax exemption document from your account dashboard.'),
@@ -35504,6 +35525,7 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
   sendEmailReviewProductionCompleteExamples_(results, fixture, recipients);
   const ctx = fixture.accountContext || {};
   const metas = [
+    { label: 'Tax exempt submitted client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', attachmentRequired: false },
     { label: 'Tax exempt submitted team review', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', attachmentRequired: false },
     { label: 'Tax exempt approved client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
     { label: 'Tax exempt approved team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
@@ -35511,6 +35533,7 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
     { label: 'Tax exempt removed client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', clearedAt: '2026-06-24T12:00:00Z', clearedByName: 'Fixture Client', clearedByEmail: recipients.client },
     { label: 'Tax exempt removed team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form', clearedAt: '2026-06-24T12:00:00Z', clearedByName: 'Fixture Client', clearedByEmail: recipients.client },
     { label: 'Tax exempt reset client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.tax_exempt, documentLabel: 'Michigan sales tax exemption form' },
+    { label: 'Credit terms submitted client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', attachmentRequired: false },
     { label: 'Credit terms submitted team review', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', attachmentRequired: false },
     { label: 'Credit terms approved client', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved, recipientClass: 'client', to: recipients.client, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30' },
     { label: 'Credit terms approved team', milestone: PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_approved, recipientClass: 'team', to: recipients.team, documentType: ACCOUNT_DOCUMENT_TYPES.credit_terms, documentLabel: 'Credit terms application', paymentTermsLabel: 'Net 30' },

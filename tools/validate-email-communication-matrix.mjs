@@ -226,9 +226,9 @@ const REQUIRED_MATRIX = [
   },
   {
     caseLabel: 'account_document_tax_submitted',
-    recipientClass: 'team',
+    recipientClass: 'client+team',
     expectedCommunicationIntent: ['account_document_review_required'],
-    labels: ['Tax exempt submitted team review'],
+    labels: ['Tax exempt submitted client', 'Tax exempt submitted team review'],
     sendMode: 'sendable',
     artifactRequirement: 'optional'
   },
@@ -258,9 +258,9 @@ const REQUIRED_MATRIX = [
   },
   {
     caseLabel: 'account_document_credit_terms_submitted',
-    recipientClass: 'team',
+    recipientClass: 'client+team',
     expectedCommunicationIntent: ['account_document_review_required'],
-    labels: ['Credit terms submitted team review'],
+    labels: ['Credit terms submitted client', 'Credit terms submitted team review'],
     sendMode: 'sendable',
     artifactRequirement: 'optional'
   },
