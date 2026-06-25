@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Tax Email Entry And Profile Details Refinement
+
+- Mode: Full ship scoped UI/account-profile refinement.
+- Branch/commit/PR: `main`, Apps Script version `1049`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: make the sales-tax blank-form email entry state use green validation styling, prevent competing rail actions while an email send is in progress, and ship the current local account-profile field/copy updates.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `175` changes the sales-tax blank-form recipient input focus ring from red to green, makes `#taxDocEmailSendBtn` switch from red to green after a valid recipient is entered, disables download/upload controls while the blank-form email send is in flight, adds AP contact name/direct phone fields to the Organization profile editor, removes locked identity section headers from profile modals, and updates the Primary Contact subtitle. `Code.js` sanitizes and stores `accountsPayableName` and `accountsPayablePhone` in the existing organization profile JSON.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine tax email entry and profile details"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1049 - Refine tax email entry and profile details`. Direct `/exec` returned HTTP `200` with `Development revision 175`, omitted stale revision `174`, included tax email ready-state and AP profile markers, and had zero targeted secret/private-link markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained the portal wrapper marker, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no sales-tax blank-form email was sent from this shell, no account profile save was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke the sales-tax blank-form email panel in an authenticated dashboard session and confirm the input focus/send-ready states plus disabled competing rail actions during send.
+
 ## 2026-06-25 - Account Profile Editor Control Refinement
 
 - Mode: Full ship scoped UI/copy refinement.

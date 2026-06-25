@@ -11782,8 +11782,8 @@
       outline:none;
     }
     .taxDocEmailInput:focus{
-      border-color:rgba(251,113,133,.48);
-      box-shadow:0 0 0 3px rgba(244,63,94,.14);
+      border-color:rgba(81,255,183,.62);
+      box-shadow:0 0 0 3px rgba(81,255,183,.14);
     }
     .taxDocEmailInput::placeholder{
       color:#94a3b8;
@@ -12589,6 +12589,17 @@
       border-color:rgba(255,255,255,.22);
       box-shadow:0 12px 24px rgba(190,24,93,.26);
       margin-top:10px;
+    }
+    #taxDocEmailSendBtn.is-ready{
+      background:linear-gradient(135deg,#86efac 0%, #51ffb7 42%, #22c55e 100%);
+      border-color:rgba(255,255,255,.2);
+      color:#0f172a;
+      box-shadow:0 12px 24px rgba(34,197,94,.24);
+    }
+    #taxDocEmailSendBtn.is-ready:hover{
+      border-color:rgba(255,255,255,.28);
+      background:linear-gradient(135deg,#a7f3d0 0%, #5cffbd 42%, #16a34a 100%);
+      box-shadow:0 14px 28px rgba(34,197,94,.28);
     }
     #termsDocSubmitBtn{
       background:linear-gradient(135deg,#86efac 0%, #51ffb7 42%, #22c55e 100%);
@@ -17657,7 +17668,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 174">174</div>
+  <div class="devRevisionBadge" aria-label="Development revision 175">175</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20145,6 +20156,7 @@
   let TERMS_DOC_MESSAGE_HIDE_TIMER = 0;
   let TAX_DOC_EMAIL_PANEL_OPEN = false;
   let TAX_DOC_UPLOAD_PANEL_OPEN = false;
+  let TAX_DOC_BLANK_DOWNLOAD_READY = false;
   let TAX_FORM_FINAL_SUBMIT_IN_FLIGHT = false;
   let TAX_FORM_FINAL_EMAIL_IN_FLIGHT = false;
   let TAX_FORM_FINAL_EMAIL_SENT = false;
@@ -22060,7 +22072,7 @@
 
   function getAccountProfileSectionSubtitle_(section){
     return section === 'primary_contact'
-      ? 'Your name and primary email are locked. You can add practical contact details for future Red Threads coordination.'
+      ? 'Your name and primary email are locked. Add additional details for future Red Threads coordination.'
       : 'Your organization name is locked. You can add business details Red Threads may use for future account coordination.';
   }
 
@@ -22260,7 +22272,7 @@
     dashboardAccountProfileBody.innerHTML = '';
     if (dashboardAccountProfileTitle) dashboardAccountProfileTitle.textContent = getAccountProfileSectionTitle_(section);
     if (dashboardAccountProfileSub) dashboardAccountProfileSub.textContent = getAccountProfileSectionSubtitle_(section);
-    const identityGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, section === 'primary_contact' ? 'Locked contact identity' : 'Locked organization identity');
+    const identityGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, '');
     if (section === 'primary_contact') {
       appendDashboardAccountProfileField_(identityGrid, { label: 'Full name', locked: true, value: account.primaryContactName || account.billingContactName || 'Contact details' });
       appendDashboardAccountProfileField_(identityGrid, { label: 'Primary email', locked: true, value: account.primaryEmail || account.billingContactEmail || '--' });
@@ -22310,7 +22322,9 @@
       billingGrid.hidden = toggle.checked;
     });
     const detailsGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Business details');
+    appendDashboardAccountProfileField_(detailsGrid, { label: 'Accounts payable name', path: 'accountsPayableName', value: getAccountProfilePathValue_(profile, 'accountsPayableName') });
     appendDashboardAccountProfileField_(detailsGrid, { label: 'Accounts payable email', type: 'email', path: 'accountsPayableEmail', value: getAccountProfilePathValue_(profile, 'accountsPayableEmail') });
+    appendDashboardAccountProfileField_(detailsGrid, { label: 'Accounts payable direct phone', path: 'accountsPayablePhone', value: getAccountProfilePathValue_(profile, 'accountsPayablePhone') });
     appendDashboardAccountProfileField_(detailsGrid, { label: 'General office phone', path: 'officePhone', value: getAccountProfilePathValue_(profile, 'officePhone') });
     appendDashboardAccountProfileField_(detailsGrid, { label: 'Website', type: 'url', path: 'website', value: getAccountProfilePathValue_(profile, 'website'), wide: true });
   }
@@ -32495,12 +32509,17 @@
 
   function renderTaxDocEmailPanel_(){
     if (taxDocEmailPanel) taxDocEmailPanel.hidden = !TAX_DOC_EMAIL_PANEL_OPEN;
+    const hasValidTaxEmailRecipients = parseEmailRecipients(taxDocEmailInput && taxDocEmailInput.value).length > 0;
+    if (taxDocDownloadBtn) {
+      taxDocDownloadBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT || TAX_DOC_BLANK_DOWNLOAD_READY !== true;
+    }
     if (taxDocEmailBtn) {
       taxDocEmailBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT;
       taxDocEmailBtn.textContent = ACCOUNT_DOC_EMAIL_IN_FLIGHT ? 'Sending…' : 'Send Blank Form via Email';
     }
     if (taxDocEmailSendBtn) {
       taxDocEmailSendBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT;
+      taxDocEmailSendBtn.classList.toggle('is-ready', hasValidTaxEmailRecipients);
       taxDocEmailSendBtn.textContent = ACCOUNT_DOC_EMAIL_IN_FLIGHT ? 'Sending…' : 'Send';
     }
     if (taxDocEmailCancelBtn) taxDocEmailCancelBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT;
@@ -32508,16 +32527,17 @@
   }
 
   function renderTaxDocUploadPanel_(){
+    const uploadControlsDisabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT || ACCOUNT_DOC_EMAIL_IN_FLIGHT;
     if (taxDocUploadPanel) taxDocUploadPanel.hidden = !TAX_DOC_UPLOAD_PANEL_OPEN;
     if (taxDocUploadFocusBtn) {
-      taxDocUploadFocusBtn.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
+      taxDocUploadFocusBtn.disabled = uploadControlsDisabled;
       taxDocUploadFocusBtn.textContent = ACCOUNT_DOC_UPLOAD_IN_FLIGHT ? 'Uploading…' : 'Upload Completed Form';
     }
     if (taxDocUploadChooseBtn) {
-      taxDocUploadChooseBtn.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
+      taxDocUploadChooseBtn.disabled = uploadControlsDisabled;
       taxDocUploadChooseBtn.textContent = ACCOUNT_DOC_SELECTED_FILE ? 'Choose Different File' : 'Choose File';
     }
-    if (taxDocUploadInput) taxDocUploadInput.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
+    if (taxDocUploadInput) taxDocUploadInput.disabled = uploadControlsDisabled;
     if (taxDocUploadSelectedFile) {
       taxDocUploadSelectedFile.textContent = ACCOUNT_DOC_SELECTED_FILE
         ? (ACCOUNT_DOC_SELECTED_FILE.name + ' • ' + Math.max(1, Math.round((ACCOUNT_DOC_SELECTED_FILE.size || 0) / 1024)) + ' KB')
@@ -32526,7 +32546,7 @@
     const showSubmit = !!ACCOUNT_DOC_SELECTED_FILE;
     if (taxDocSubmitBtn) {
       taxDocSubmitBtn.hidden = !showSubmit;
-      taxDocSubmitBtn.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT || !showSubmit;
+      taxDocSubmitBtn.disabled = uploadControlsDisabled || !showSubmit;
       taxDocSubmitBtn.textContent = ACCOUNT_DOC_UPLOAD_IN_FLIGHT ? 'Submitting…' : 'Submit to Red Threads';
     }
     if (taxDocApprovalNote) taxDocApprovalNote.hidden = !showSubmit;
@@ -32542,7 +32562,7 @@
   }
 
   function openTaxDocUploadPanel_(){
-    if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT) return;
+    if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT || ACCOUNT_DOC_EMAIL_IN_FLIGHT) return;
     TAX_DOC_EMAIL_PANEL_OPEN = false;
     TAX_DOC_UPLOAD_PANEL_OPEN = true;
     renderTaxDocEmailPanel_();
@@ -32620,6 +32640,7 @@
     ACCOUNT_DOC_EMAIL_IN_FLIGHT = true;
     TAX_DOC_EMAIL_PANEL_OPEN = false;
     renderTaxDocEmailPanel_();
+    renderTaxDocUploadPanel_();
     setTaxDocMessage('', 'info');
     try {
       const resp = await callServer('emailAccountDocumentSource', getTaxWorkspaceDocumentRequestPayload_({
@@ -32635,6 +32656,7 @@
     } finally {
       ACCOUNT_DOC_EMAIL_IN_FLIGHT = false;
       renderTaxDocEmailPanel_();
+      renderTaxDocUploadPanel_();
     }
   }
 
@@ -36263,7 +36285,8 @@
     if (taxFormPage2Card) taxFormPage2Card.classList.toggle('is-review-clean', inReview);
     const page2Canvas = taxFormPage2Card ? taxFormPage2Card.querySelector('.taxFormPageCanvas') : null;
     if (page2Canvas) page2Canvas.classList.toggle('is-review-clean', inReview);
-    if (taxDocDownloadBtn) taxDocDownloadBtn.disabled = false;
+    TAX_DOC_BLANK_DOWNLOAD_READY = true;
+    if (taxDocDownloadBtn) taxDocDownloadBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT || TAX_DOC_BLANK_DOWNLOAD_READY !== true;
     renderTaxDocEmailPanel_();
     renderTaxDocUploadPanel_();
     if (taxDocBackToEditorBtn) taxDocBackToEditorBtn.hidden = !inReview;
@@ -36983,6 +37006,7 @@
     resetTaxFormSubmissionState_();
     TAX_DOC_EMAIL_PANEL_OPEN = false;
     TAX_DOC_UPLOAD_PANEL_OPEN = false;
+    TAX_DOC_BLANK_DOWNLOAD_READY = false;
     ACCOUNT_DOC_EMAIL_IN_FLIGHT = false;
     ACCOUNT_DOC_UPLOAD_IN_FLIGHT = false;
     ACCOUNT_DOC_SELECTED_FILE = null;
@@ -49193,6 +49217,7 @@
     if (taxDocEmailSendBtn) taxDocEmailSendBtn.addEventListener('click', submitTaxDocEmail_);
     if (taxDocSubmitBtn) taxDocSubmitBtn.addEventListener('click', submitTaxDocUploadedDocument_);
     if (taxDocEmailInput) {
+      taxDocEmailInput.addEventListener('input', renderTaxDocEmailPanel_);
       taxDocEmailInput.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();

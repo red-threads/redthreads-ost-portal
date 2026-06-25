@@ -10400,7 +10400,9 @@ function sanitizeOrganizationAccountProfile_(profile) {
     mailingAddress: sanitizeAccountProfileAddress_(source.mailingAddress),
     billingSameAsMailing: billingSameAsMailing,
     billingAddress: billingSameAsMailing ? {} : sanitizeAccountProfileAddress_(source.billingAddress),
+    accountsPayableName: sanitizeAccountProfileText_(source.accountsPayableName, 120),
     accountsPayableEmail: sanitizeAccountProfileEmail_(source.accountsPayableEmail, 'Accounts payable email'),
+    accountsPayablePhone: sanitizeAccountProfileText_(source.accountsPayablePhone, 40),
     officePhone: sanitizeAccountProfileText_(source.officePhone, 40),
     website: sanitizeAccountProfileWebsite_(source.website)
   };
