@@ -25333,7 +25333,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         ? buildTeamSubject_(creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
         : (creditTermsRemoved
           ? 'Credit Terms removed from Red Threads portal account'
-          : buildActionNeededSubject_('Upload a new sales tax exemption document')),
+          : 'Sales tax exemption document removed from Red Threads account'),
       heading: isTeam
         ? (creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
         : (creditTermsRemoved ? 'Credit terms agreement was removed' : 'Upload a new sales tax exemption document'),
@@ -25348,12 +25348,13 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         ? 'The client was directed to upload a replacement from the account dashboard. No review action is available until a replacement document is submitted.'
         : (creditTermsRemoved
           ? 'Account credit terms cannot be used until a new credit terms document is submitted and approved.\n\nYou will no longer have the ability to place purchase orders until new terms are established.'
-          : 'Sales tax exemption cannot be applied again until a new document is submitted and approved.'),
+          : 'Sales tax cannot be toggled on/off orders again until a new document is submitted and approved.'),
       nextStep: isTeam
         ? ''
         : (creditTermsRemoved
           ? 'Upload a new credit terms document from your account dashboard.'
           : 'Upload a new sales tax exemption document from your account dashboard.'),
+      nextStepLabel: !isTeam && !creditTermsRemoved ? 'Potential next step:' : '',
       details: removedDetails
     };
   }
@@ -25397,9 +25398,11 @@ function getAccountDocumentLifecycleNonOrderLayout_(milestone, recipientClass) {
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_reset ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
-      normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_reset) {
     return 'next_step_first';
+  }
+  if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_removed) {
+    return 'copy_first_next_step';
   }
   return '';
 }
@@ -25677,6 +25680,7 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     intro = docCopy && docCopy.intro ? docCopy.intro : 'An account document update was recorded.';
     statusCopy = hasDocStatusCopy ? trimString_(docCopy.statusCopy) : 'Review the portal for the current status.';
     nextStep = hasDocNextStep ? trimString_(docCopy.nextStep) : '';
+    nextStepLabel = trimString_(docCopy && docCopy.nextStepLabel);
     details = docCopy && Array.isArray(docCopy.details) ? docCopy.details : details;
   } else {
     subjectParts.push(isTeam ? 'Red Threads portal update' : 'Red Threads portal update');
@@ -28420,6 +28424,7 @@ function buildLifecycleEmailShell_(options) {
   const nonOrderNoActionFirst = !hasOrderContext && nonOrderLayout === 'no_action_first';
   const nonOrderNextStepFirst = !hasOrderContext && (nonOrderLayout === 'next_step_first' || nonOrderNoActionFirst);
   const nonOrderDetailsFirst = !hasOrderContext && nonOrderLayout === 'details_first_cta_after_copy';
+  const nonOrderCopyFirst = !hasOrderContext && nonOrderLayout === 'copy_first_next_step';
   const textNextStep = nextStep
     ? (nonOrderNoActionFirst ? nextStep : ((noActionNextStep ? 'No action required: ' : (nextStepLabel || 'Next step: ')) + (nextStepLabel ? ' ' : '') + nextStep))
     : '';
@@ -28510,7 +28515,7 @@ function buildLifecycleEmailShell_(options) {
   }).filter(Boolean).join('\n');
   const nonOrderNextStepIsNoAction = !hasOrderContext && isLifecycleEmailNoActionText_(nextStep);
   const nonOrderNextStepColor = nonOrderNextStepIsNoAction ? theme.successGreen : theme.currentAqua;
-  const nonOrderNextStepLabel = nonOrderNextStepIsNoAction ? 'No action required:' : 'Next step:';
+  const nonOrderNextStepLabel = nonOrderNextStepIsNoAction ? 'No action required:' : (nextStepLabel || 'Next step:');
   const nonOrderPrimaryCtaHtml = primaryCta
     ? ('<div style="margin:0 0 18px;' + (primaryCtaAlignStyle || (nonOrderNextStepFirst ? 'text-align:center;' : '')) + '"><a href="' + escapeHtml_(primaryCta.url) + '" style="' + buildPortalNativeEmailStyle_({
       display: 'inline-block',
@@ -28528,7 +28533,7 @@ function buildLifecycleEmailShell_(options) {
     : '';
   const htmlInnerParts = [
     '<div style="font-family:' + theme.fontFamily + ';font-size:14px;line-height:1.7;color:' + theme.textMuted + ';">',
-    hasOrderContext ? actionCardHtml : (nonOrderNextStepFirst ? nonOrderNextStepHtml : (nonOrderDetailsFirst ? '' : primaryCtaHtml)),
+    hasOrderContext ? actionCardHtml : (nonOrderNextStepFirst ? nonOrderNextStepHtml : ((nonOrderDetailsFirst || nonOrderCopyFirst) ? '' : primaryCtaHtml)),
     !hasOrderContext && (nonOrderNoActionFirst || nonOrderDetailsFirst) ? accountDetailsHtml : '',
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
     !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
@@ -28536,6 +28541,7 @@ function buildLifecycleEmailShell_(options) {
     !hasOrderContext && nonOrderNextStepFirst ? nonOrderPrimaryCtaHtml : '',
     !hasOrderContext && nonOrderDetailsFirst ? primaryCtaHtml : '',
     !hasOrderContext && !nonOrderNextStepFirst && !nonOrderDetailsFirst ? nonOrderNextStepHtml : '',
+    !hasOrderContext && nonOrderCopyFirst ? primaryCtaHtml : '',
     progressHtml,
     detailsHtml || buildLifecycleEmailAttachmentNoteBlock_(attachmentNote).html,
     !hasOrderContext && !nonOrderNextStepFirst && !nonOrderDetailsFirst ? accountDetailsHtml : ''
