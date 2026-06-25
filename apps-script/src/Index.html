@@ -10288,7 +10288,7 @@
       line-height:1.55;
     }
     .termsReviewSub.is-benefit{
-      color:var(--green);
+      color:#51ffb7;
       font-weight:800;
     }
     .termsReviewHeadActions{
@@ -10990,7 +10990,7 @@
     }
     .taxDocSub{
       max-width:820px;
-      color:var(--green);
+      color:#51ffb7;
       font-size:14px;
       line-height:1.55;
       font-weight:800;
@@ -17746,7 +17746,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 180">180</div>
+  <div class="devRevisionBadge" aria-label="Development revision 181">181</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18471,7 +18471,7 @@
           <div class="taxDocTitleRow">
             <h2 class="taxDocTitle" id="taxDocTitle">Michigan Sales and Use Tax Certificate of Exemption • Official Form 3372</h2>
           </div>
-          <div class="taxDocSub" id="taxDocSub" hidden>Submit your exemption certificate to enable tax-exempt ordering controls for future portal orders.</div>
+          <div class="taxDocSub" id="taxDocSub" hidden>Submit your organization's exemption certificate to toggle sales tax payments on/off future Red Threads orders.</div>
         </div>
         <div class="taxDocHeadActions">
           <button class="taxDocHeadBtn" id="taxDocTeamBackBtn" type="button" hidden>Back to Snapshot</button>
@@ -36558,7 +36558,7 @@
     if (taxDocTitle) taxDocTitle.textContent = String(manifest.title || 'Michigan Sales and Use Tax Certificate of Exemption').trim() + ' • Official Form 3372';
     if (taxDocSub) {
       taxDocSub.hidden = inReview;
-      taxDocSub.textContent = 'Submit your exemption certificate to enable tax-exempt ordering controls for future portal orders.';
+      taxDocSub.textContent = "Submit your organization's exemption certificate to toggle sales tax payments on/off future Red Threads orders.";
     }
     if (taxDocApprovalNote) {
       taxDocApprovalNote.textContent = 'Once your document is submitted, RedThreads will review and notify you upon approval or if changes need to be made.';

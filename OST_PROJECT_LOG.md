@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Account Document Benefit Subtitle Refinement
+
+- Mode: Full ship scoped account-document UI/copy refinement.
+- Branch/commit/PR: `main`, Apps Script version `1055`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: update the sales-tax benefit subtitle copy and align the account-document benefit subtitle color with the brighter portal action/progress green.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `181` changes the sales-tax not-started workspace subtitle to `Submit your organization's exemption certificate to toggle sales tax payments on/off future Red Threads orders.` and updates both sales-tax and credit-terms benefit subtitle color to `#51ffb7`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine account document benefit subtitles"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1055 - Refine account document benefit subtitles`. Direct `/exec?smoke=1055` returned HTTP `200` with `Development revision 181`, omitted stale revision `180`, included `color:#51ffb7`, referenced the stable deployment ID, and had zero targeted secret/private-link markers. A follow-up direct marker check confirmed the escaped Apps Script source contains the updated sales-tax sentence and omits the prior tax benefit copy. Public `/portal?smoke=1055` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted secret/private-link markers; public wrapper fetches do not inline Apps Script revision/copy markers because the app is iframe-loaded.
+- Runtime data state: no email-review suite was run, no account-document action was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually confirm the brighter benefit text color in both credit-terms and sales-tax not-started document workspaces.
+
 ## 2026-06-25 - Sales Tax Benefit Subtitle
 
 - Mode: Full ship scoped sales-tax UI/copy refinement.
