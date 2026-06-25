@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Credit Terms Benefit Subtitle
+
+- Mode: Full ship scoped credit-terms UI/copy refinement.
+- Branch/commit/PR: `main`, Apps Script version `1053`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add a concise green benefit line under the not-started `Red Threads Credit Terms` header so clients understand why completing credit terms matters.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `179` adds a green `.termsReviewSub.is-benefit` treatment and shows `Complete credit terms to unlock purchase-order checkout, net terms eligibility, and more flexible payment options for future orders.` in the client blank-document credit-terms workspace. Approved, pending, rejected, and team-review credit-terms subtitles keep their existing copy and styling.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add credit terms benefit subtitle"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1053 - Add credit terms benefit subtitle`. Direct `/exec?smoke=1053` returned HTTP `200` with `Development revision 179`, omitted stale revision `178`, included the new credit-terms benefit-copy marker, referenced the stable deployment ID, and had zero targeted secret/private-link markers. Public `/portal?smoke=1053` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted secret/private-link markers; public wrapper fetches do not inline Apps Script revision/copy markers because the app is iframe-loaded.
+- Runtime data state: no email-review suite was run, no account-document action was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke an account with no credit terms on file and confirm the green benefit line appears under the header without crowding the action rail.
+
 ## 2026-06-25 - Account Profile Unsaved Changes Guard
 
 - Mode: Full ship scoped account-profile UI hardening.

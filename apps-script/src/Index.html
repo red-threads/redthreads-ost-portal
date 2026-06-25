@@ -10287,6 +10287,10 @@
       font-size:14px;
       line-height:1.55;
     }
+    .termsReviewSub.is-benefit{
+      color:var(--green);
+      font-weight:800;
+    }
     .termsReviewHeadActions{
       position:absolute;
       top:22px;
@@ -17734,7 +17738,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 178">178</div>
+  <div class="devRevisionBadge" aria-label="Development revision 179">179</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -33320,6 +33324,7 @@
       }
       if (termsReviewSub) {
         termsReviewSub.hidden = false;
+        termsReviewSub.classList.remove('is-benefit');
         if (statusTone === 'approved') {
           termsReviewSub.textContent = 'This is your approved signed credit terms document. Purchase-order checkout is now available for this account.';
         } else if (statusTone === 'pending') {
@@ -33400,7 +33405,11 @@
         termsReviewStatusPill.textContent = statusLabel;
         termsReviewStatusPill.className = 'accountDocStatusPill' + (statusTone === 'approved' ? ' is-approved' : (statusTone === 'pending' ? ' is-pending' : (statusTone === 'rejected' ? ' is-rejected' : '')));
       }
-      if (termsReviewSub) termsReviewSub.hidden = true;
+      if (termsReviewSub) {
+        termsReviewSub.hidden = false;
+        termsReviewSub.classList.add('is-benefit');
+        termsReviewSub.textContent = 'Complete credit terms to unlock purchase-order checkout, net terms eligibility, and more flexible payment options for future orders.';
+      }
       if (termsDocClientSection) termsDocClientSection.hidden = false;
       if (termsReviewSubmissionSection) termsReviewSubmissionSection.hidden = true;
       if (termsReviewActionRow) termsReviewActionRow.hidden = true;
@@ -33459,7 +33468,10 @@
     }
     if (termsReviewTitle) termsReviewTitle.textContent = 'Red Threads Credit Terms • Team Review';
     if (termsReviewStatusPill) termsReviewStatusPill.hidden = true;
-    if (termsReviewSub) termsReviewSub.hidden = false;
+    if (termsReviewSub) {
+      termsReviewSub.hidden = false;
+      termsReviewSub.classList.remove('is-benefit');
+    }
     if (termsDocClientSection) termsDocClientSection.hidden = true;
     if (termsReviewSubmissionSection) termsReviewSubmissionSection.hidden = false;
     if (termsReviewActionRow) termsReviewActionRow.hidden = false;
