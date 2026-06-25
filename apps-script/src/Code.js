@@ -10435,6 +10435,15 @@ function sanitizePrimaryContactAccountProfile_(profile) {
     ? source.bonusPreferences
     : {};
   const apparelSizes = ['xs', 's', 'm', 'l', 'xl', '2xl', '3xl', '4xl', 'other'];
+  const favoriteSwagTypes = [
+    't-shirt', 'heavyweight-t-shirt', 'long-sleeve-t-shirt', 'long-sleeve-hooded-t-shirt', 'performance-tee', 'tank-top',
+    'sweatshirt', 'hooded-sweatshirt', 'crewneck-sweatshirt', 'quarter-zip-sweatshirt', 'zip-up-hoodie',
+    'jacket', 'softshell-jacket', 'vest', 'fleece-vest', 'rain-jacket', 'windbreaker',
+    'jogger-sweatpants', 'open-bottom-sweatpants', 'fleece-shorts', 'athletic-shorts',
+    'polo', 'performance-polo', 'button-down-shirt',
+    'hat', 'flat-bill', 'dad-hat', 'trucker-hat', 'mesh-hat', 'beanie', 'boonie-hat', 'bucket-hat',
+    'socks', 'tote-bag', 'backpack', 'blanket'
+  ];
   return {
     roleTitle: sanitizeAccountProfileText_(source.roleTitle, 100),
     mobilePhone: sanitizeAccountProfileText_(source.mobilePhone, 40),
@@ -10446,6 +10455,7 @@ function sanitizePrimaryContactAccountProfile_(profile) {
       birthday: sanitizeAccountProfileDate_(bonus.birthday, 'Birthday'),
       tshirtSize: sanitizeAccountProfileChoice_(bonus.tshirtSize, apparelSizes, ''),
       sweatshirtSize: sanitizeAccountProfileChoice_(bonus.sweatshirtSize, apparelSizes, ''),
+      favoriteSwagType: sanitizeAccountProfileChoice_(bonus.favoriteSwagType, favoriteSwagTypes, ''),
       apparelNotes: sanitizeAccountProfileText_(bonus.apparelNotes, 500)
     },
     alternateOrderContact: {

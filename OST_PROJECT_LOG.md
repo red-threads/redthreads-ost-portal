@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Favorite Swag Profile Preference
+
+- Mode: Full ship scoped account-profile refinement.
+- Branch/commit/PR: `main`, Apps Script version `1051`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add a grouped `Favorite type of swag` dropdown to the Primary Contact `Perks & Promo Details` section and tighten the section subheader copy.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `177` updates the bonus-details subheader, adds a custom grouped favorite-swag dropdown beside `Sweatshirt size`, and extends the existing account-profile select helper with non-selectable category headers plus a bounded scroll menu. `Code.js` sanitizes `bonusPreferences.favoriteSwagType` against a fixed list spanning tops, sweatshirts, outerwear, bottoms, polos/wovens, hats, and extras. No Sheet columns were added.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add favorite swag profile preference"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1051 - Add favorite swag profile preference`. Direct `/exec` returned HTTP `200` with `Development revision 177`, omitted stale revision `176`, included `bonusPreferences.favoriteSwagType` and `dashboardAccountProfileSelectGroup` markers, and had zero targeted secret/private-link markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained the portal wrapper marker, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no account profile save was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke the Primary Contact profile modal and save/reopen a favorite-swag selection in an authenticated dashboard session.
+
 ## 2026-06-25 - Profile Promo Details And Document Email Refinement
 
 - Mode: Full ship scoped account-profile and document-email refinement.

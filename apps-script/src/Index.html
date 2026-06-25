@@ -2777,6 +2777,8 @@
       top:calc(100% + 6px);
       left:0;
       right:0;
+      max-height:min(360px, 52vh);
+      overflow-y:auto;
       padding:6px;
       border:1px solid rgba(81,255,183,.42);
       border-radius:12px;
@@ -2785,6 +2787,17 @@
     }
     .dashboardAccountProfileSelectMenu[hidden]{
       display:none !important;
+    }
+    .dashboardAccountProfileSelectGroup{
+      margin:6px 4px 3px;
+      padding:8px 6px 5px;
+      border-top:1px solid rgba(148,163,184,.16);
+      color:#94a3b8;
+      font-size:10px;
+      line-height:1.1;
+      font-weight:900;
+      letter-spacing:.09em;
+      text-transform:uppercase;
     }
     .dashboardAccountProfileSelectOption{
       appearance:none;
@@ -17675,7 +17688,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 176">176</div>
+  <div class="devRevisionBadge" aria-label="Development revision 177">177</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -22196,6 +22209,13 @@
     menu.setAttribute('role', 'listbox');
     (Array.isArray(opts.options) ? opts.options : []).forEach(option => {
       const item = (option && typeof option === 'object') ? option : {};
+      if (item.group || item.header) {
+        const group = createEl('div', 'dashboardAccountProfileSelectGroup', item.group || item.header);
+        group.setAttribute('role', 'presentation');
+        group.setAttribute('aria-hidden', 'true');
+        menu.appendChild(group);
+        return;
+      }
       const optionButton = document.createElement('button');
       optionButton.type = 'button';
       optionButton.className = 'dashboardAccountProfileSelectOption';
@@ -22305,10 +22325,57 @@
         { value: '4xl', label: '4XL' },
         { value: 'other', label: 'Other' }
       ];
-      const bonusGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Perks & Promo Details', 'Share a few optional details so Red Threads can send better-fit gifts, birthday surprises, and promo apparel when opportunities come up.');
+      const favoriteSwagOptions = [
+        { value: '', label: 'No preference' },
+        { group: 'Tops' },
+        { value: 't-shirt', label: 'T-shirt' },
+        { value: 'heavyweight-t-shirt', label: 'Heavyweight T-shirt' },
+        { value: 'long-sleeve-t-shirt', label: 'Long sleeve T-shirt' },
+        { value: 'long-sleeve-hooded-t-shirt', label: 'Long sleeve hooded T-shirt' },
+        { value: 'performance-tee', label: 'Performance tee' },
+        { value: 'tank-top', label: 'Tank top' },
+        { group: 'Sweatshirts' },
+        { value: 'sweatshirt', label: 'Sweatshirt' },
+        { value: 'hooded-sweatshirt', label: 'Hooded sweatshirt' },
+        { value: 'crewneck-sweatshirt', label: 'Crewneck sweatshirt' },
+        { value: 'quarter-zip-sweatshirt', label: 'Quarter-zip sweatshirt' },
+        { value: 'zip-up-hoodie', label: 'Zip-up hoodie' },
+        { group: 'Outerwear' },
+        { value: 'jacket', label: 'Jacket' },
+        { value: 'softshell-jacket', label: 'Softshell jacket' },
+        { value: 'vest', label: 'Vest' },
+        { value: 'fleece-vest', label: 'Fleece vest' },
+        { value: 'rain-jacket', label: 'Rain jacket' },
+        { value: 'windbreaker', label: 'Windbreaker' },
+        { group: 'Bottoms' },
+        { value: 'jogger-sweatpants', label: 'Jogger sweatpants' },
+        { value: 'open-bottom-sweatpants', label: 'Open bottom sweatpants' },
+        { value: 'fleece-shorts', label: 'Fleece shorts' },
+        { value: 'athletic-shorts', label: 'Athletic shorts' },
+        { group: 'Polos & Wovens' },
+        { value: 'polo', label: 'Polo' },
+        { value: 'performance-polo', label: 'Performance polo' },
+        { value: 'button-down-shirt', label: 'Button-down shirt' },
+        { group: 'Hats' },
+        { value: 'hat', label: 'Hat' },
+        { value: 'flat-bill', label: 'Flat bill' },
+        { value: 'dad-hat', label: 'Dad hat' },
+        { value: 'trucker-hat', label: 'Trucker hat' },
+        { value: 'mesh-hat', label: 'Mesh hat' },
+        { value: 'beanie', label: 'Beanie' },
+        { value: 'boonie-hat', label: 'Boonie hat' },
+        { value: 'bucket-hat', label: 'Bucket hat' },
+        { group: 'Extras' },
+        { value: 'socks', label: 'Socks' },
+        { value: 'tote-bag', label: 'Tote bag' },
+        { value: 'backpack', label: 'Backpack' },
+        { value: 'blanket', label: 'Blanket' }
+      ];
+      const bonusGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Perks & Promo Details', 'Help Red Threads send better-fit gifts, birthday surprises, and promo apparel when opportunities come up.');
       appendDashboardAccountProfileField_(bonusGrid, { label: 'Birthday', type: 'date', path: 'bonusPreferences.birthday', value: getAccountProfilePathValue_(profile, 'bonusPreferences.birthday') });
       appendDashboardAccountProfileField_(bonusGrid, { label: 'T-shirt size', type: 'select', path: 'bonusPreferences.tshirtSize', value: getAccountProfilePathValue_(profile, 'bonusPreferences.tshirtSize'), options: apparelSizeOptions });
       appendDashboardAccountProfileField_(bonusGrid, { label: 'Sweatshirt size', type: 'select', path: 'bonusPreferences.sweatshirtSize', value: getAccountProfilePathValue_(profile, 'bonusPreferences.sweatshirtSize'), options: apparelSizeOptions });
+      appendDashboardAccountProfileField_(bonusGrid, { label: 'Favorite type of swag', type: 'select', path: 'bonusPreferences.favoriteSwagType', value: getAccountProfilePathValue_(profile, 'bonusPreferences.favoriteSwagType'), options: favoriteSwagOptions });
       appendDashboardAccountProfileField_(bonusGrid, { label: 'Apparel preferences', type: 'textarea', path: 'bonusPreferences.apparelNotes', value: getAccountProfilePathValue_(profile, 'bonusPreferences.apparelNotes'), rows: 4, wide: true, placeholder: 'Favorite colors, fit notes, preferred styles, or other apparel details.' });
       const altGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Alternate order contact');
       appendDashboardAccountProfileField_(altGrid, { label: 'Name', path: 'alternateOrderContact.name', value: getAccountProfilePathValue_(profile, 'alternateOrderContact.name') });
