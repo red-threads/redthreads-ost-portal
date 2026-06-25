@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Sales Tax Benefit Subtitle
+
+- Mode: Full ship scoped sales-tax UI/copy refinement.
+- Branch/commit/PR: `main`, Apps Script version `1054`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add a concise green benefit line under the Form 3372 header so clients understand why submitting the sales-tax exemption matters.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `180` adds a `taxDocSub` header subtitle and green styling, displaying `Submit your exemption certificate to enable tax-exempt ordering controls for future portal orders.` in the editable blank-form sales-tax workspace. Guided review mode, approved/pending/rejected client views, and team-review tax views keep their existing header behavior.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add sales tax benefit subtitle"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1054 - Add sales tax benefit subtitle`. Direct `/exec?smoke=1054` returned HTTP `200` with `Development revision 180`, omitted stale revision `179`, included the new sales-tax benefit-copy marker, referenced the stable deployment ID, and had zero targeted secret/private-link markers. Public `/portal?smoke=1054` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted secret/private-link markers; public wrapper fetches do not inline Apps Script revision/copy markers because the app is iframe-loaded.
+- Runtime data state: no email-review suite was run, no account-document action was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke an account with no sales-tax exemption on file and confirm the green subtitle appears under the Form 3372 header without crowding the close/action controls.
+
 ## 2026-06-25 - Credit Terms Benefit Subtitle
 
 - Mode: Full ship scoped credit-terms UI/copy refinement.

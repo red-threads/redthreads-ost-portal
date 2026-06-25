@@ -10988,6 +10988,14 @@
       line-height:1.04;
       color:#fff;
     }
+    .taxDocSub{
+      max-width:820px;
+      color:var(--green);
+      font-size:14px;
+      line-height:1.55;
+      font-weight:800;
+      margin-top:8px;
+    }
     .taxDocHeadActions{
       position:absolute;
       top:22px;
@@ -17738,7 +17746,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 179">179</div>
+  <div class="devRevisionBadge" aria-label="Development revision 180">180</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18463,6 +18471,7 @@
           <div class="taxDocTitleRow">
             <h2 class="taxDocTitle" id="taxDocTitle">Michigan Sales and Use Tax Certificate of Exemption • Official Form 3372</h2>
           </div>
+          <div class="taxDocSub" id="taxDocSub" hidden>Submit your exemption certificate to enable tax-exempt ordering controls for future portal orders.</div>
         </div>
         <div class="taxDocHeadActions">
           <button class="taxDocHeadBtn" id="taxDocTeamBackBtn" type="button" hidden>Back to Snapshot</button>
@@ -23615,6 +23624,7 @@
   const taxDocStage = document.getElementById('taxDocStage');
   const taxDocClose = document.getElementById('taxDocClose');
   const taxDocTitle = document.getElementById('taxDocTitle');
+  const taxDocSub = document.getElementById('taxDocSub');
   const taxDocTeamBackBtn = document.getElementById('taxDocTeamBackBtn');
   const taxDocTeamDenyBtn = document.getElementById('taxDocTeamDenyBtn');
   const taxDocTeamApproveBtn = document.getElementById('taxDocTeamApproveBtn');
@@ -35047,6 +35057,7 @@
     taxDocModal.classList.remove('is-client-view-mode');
     if (taxDocRail) taxDocRail.hidden = true;
     if (taxDocTitle) taxDocTitle.textContent = 'Michigan Sales and Use Tax Certificate of Exemption • Team Review';
+    if (taxDocSub) taxDocSub.hidden = true;
     if (taxDocBackToEditorBtn) taxDocBackToEditorBtn.hidden = true;
     if (taxDocFinalSubmitBtn) taxDocFinalSubmitBtn.hidden = true;
     if (taxDocTeamBackBtn) {
@@ -35107,6 +35118,7 @@
     taxDocModal.classList.add('is-client-view-mode');
     taxDocModal.classList.remove('is-team-review-mode');
     if (taxDocTitle) taxDocTitle.textContent = 'Michigan Sales and Use Tax Certificate of Exemption • ' + statusLabel;
+    if (taxDocSub) taxDocSub.hidden = true;
     if (taxDocTeamBackBtn) taxDocTeamBackBtn.hidden = true;
     if (taxDocTeamApproveBtn) taxDocTeamApproveBtn.hidden = true;
     if (taxDocTeamDenyBtn) taxDocTeamDenyBtn.hidden = true;
@@ -36544,6 +36556,10 @@
     const inReview = !!(currentStep && currentStep.isReview);
     taxDocModal.classList.toggle('is-review-mode', inReview);
     if (taxDocTitle) taxDocTitle.textContent = String(manifest.title || 'Michigan Sales and Use Tax Certificate of Exemption').trim() + ' • Official Form 3372';
+    if (taxDocSub) {
+      taxDocSub.hidden = inReview;
+      taxDocSub.textContent = 'Submit your exemption certificate to enable tax-exempt ordering controls for future portal orders.';
+    }
     if (taxDocApprovalNote) {
       taxDocApprovalNote.textContent = 'Once your document is submitted, RedThreads will review and notify you upon approval or if changes need to be made.';
     }
