@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Account Profile Editor Control Refinement
+
+- Mode: Full ship scoped UI/copy refinement.
+- Branch/commit/PR: `main`, Apps Script version `1048`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: make the new account-profile editor controls feel native to the portal, align dashboard/profile/ACH close-button hover styling, and ship the current local sales-tax source-email copy cleanup.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `174` changes Organization and Primary Contact dashboard cards to the existing green approved/on-file hover treatment when identity information is present, removes the Primary Contact `Contact preferences` header, replaces the two primary-contact profile native selects with portal-styled custom dropdowns backed by the same hidden form values, removes the Organization `Account/order notes for Red Threads` field, and aligns the account-profile plus ACH Manage Accounts X buttons with the credit-terms/tax red circular close style. `Code.js` no longer accepts organization profile notes and updates the sales-tax blank-form source email so the portal-completion sentence is included and styled green in HTML.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine account profile editor controls"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1048 - Refine account profile editor controls`. Direct `/exec` returned HTTP `200` with `Development revision 174`, omitted stale revision `173`, included account-profile dropdown and close-hover markers, and had zero targeted secret/private-link markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained the portal wrapper marker, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no account profile save was submitted from this shell, no sales-tax blank-form email was sent from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke the Primary Contact dropdowns, Organization editor, and ACH Manage Accounts close hover in an authenticated dashboard session.
+
 ## 2026-06-25 - Tax Control Hardening And Account Profile Cards
 
 - Mode: Full ship runtime UI/event hardening plus account-profile dashboard enhancement.

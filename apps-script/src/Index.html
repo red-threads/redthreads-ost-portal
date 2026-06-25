@@ -2356,15 +2356,31 @@
     .dashboardAchManageClose{
       appearance:none;
       -webkit-appearance:none;
-      border:1px solid rgba(255,255,255,.16);
+      width:42px;
+      height:42px;
+      border:1px solid rgba(225,29,72,.62);
       border-radius:999px;
-      background:rgba(255,255,255,.06);
-      color:#fff;
-      width:36px;
-      height:36px;
-      font:inherit;
+      background:rgba(225,29,72,.12);
+      color:#ff8da0;
+      font-size:18px;
+      line-height:1;
+      display:grid;
+      place-items:center;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
       font-weight:900;
       cursor:pointer;
+    }
+    .dashboardAchManageClose:hover{
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
+      color:#fff;
+      transform:translateY(-1px);
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
+    }
+    .dashboardAchManageClose:focus-visible{
+      outline:none;
+      box-shadow:0 0 0 3px var(--rt-redRing);
     }
     .dashboardAchManageClose:disabled,
     .dashboardAchManageBtn:disabled{
@@ -2562,15 +2578,31 @@
     .dashboardAccountProfileClose{
       appearance:none;
       -webkit-appearance:none;
-      border:1px solid rgba(255,255,255,.16);
+      width:42px;
+      height:42px;
+      border:1px solid rgba(225,29,72,.62);
       border-radius:999px;
-      background:rgba(255,255,255,.06);
-      color:#fff;
-      width:36px;
-      height:36px;
-      font:inherit;
+      background:rgba(225,29,72,.12);
+      color:#ff8da0;
+      font-size:18px;
+      line-height:1;
+      display:grid;
+      place-items:center;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
       font-weight:900;
       cursor:pointer;
+    }
+    .dashboardAccountProfileClose:hover{
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
+      color:#fff;
+      transform:translateY(-1px);
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
+    }
+    .dashboardAccountProfileClose:focus-visible{
+      outline:none;
+      box-shadow:0 0 0 3px var(--rt-redRing);
     }
     .dashboardAccountProfileClose:disabled,
     .dashboardAccountProfileBtn:disabled{
@@ -2667,6 +2699,115 @@
       outline:none;
       border-color:rgba(81,255,183,.62);
       box-shadow:0 0 0 3px rgba(81,255,183,.12);
+    }
+    .dashboardAccountProfileSelect{
+      position:relative;
+      width:100%;
+    }
+    .dashboardAccountProfileSelect input[type="hidden"]{
+      display:none !important;
+    }
+    .dashboardAccountProfileSelectButton{
+      appearance:none;
+      -webkit-appearance:none;
+      width:100%;
+      min-height:40px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      border:1px solid rgba(81,255,183,.28);
+      border-radius:10px;
+      background:linear-gradient(180deg, rgba(2,6,23,.78) 0%, rgba(15,23,42,.66) 100%);
+      color:#f8fafc;
+      padding:10px 11px;
+      font:inherit;
+      font-size:13px;
+      line-height:1.35;
+      font-weight:800;
+      text-align:left;
+      box-sizing:border-box;
+      cursor:pointer;
+      box-shadow:inset 0 0 0 1px rgba(81,255,183,.04);
+      transition:border-color .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+    .dashboardAccountProfileSelectButton:hover,
+    .dashboardAccountProfileSelectButton:focus-visible,
+    .dashboardAccountProfileSelect.isOpen .dashboardAccountProfileSelectButton{
+      outline:none;
+      border-color:rgba(81,255,183,.72);
+      box-shadow:0 0 0 3px rgba(81,255,183,.12), inset 0 0 0 1px rgba(81,255,183,.08);
+      background:linear-gradient(180deg, rgba(3,20,17,.9) 0%, rgba(10,28,24,.76) 100%);
+    }
+    .dashboardAccountProfileSelectValue{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .dashboardAccountProfileSelectArrow{
+      flex:0 0 auto;
+      width:22px;
+      height:22px;
+      display:grid;
+      place-items:center;
+      border-radius:999px;
+      border:1px solid rgba(81,255,183,.34);
+      background:rgba(81,255,183,.1);
+      color:#51ffb7;
+      font-size:14px;
+      line-height:1;
+      font-weight:900;
+      transition:transform .16s ease, background-color .16s ease;
+    }
+    .dashboardAccountProfileSelect.isOpen .dashboardAccountProfileSelectArrow{
+      transform:rotate(180deg);
+      background:rgba(81,255,183,.18);
+    }
+    .dashboardAccountProfileSelectMenu{
+      position:absolute;
+      z-index:20;
+      top:calc(100% + 6px);
+      left:0;
+      right:0;
+      padding:6px;
+      border:1px solid rgba(81,255,183,.42);
+      border-radius:12px;
+      background:linear-gradient(180deg, rgba(15,23,42,.98) 0%, rgba(2,6,23,.98) 100%);
+      box-shadow:0 18px 40px rgba(0,0,0,.45), 0 0 26px rgba(81,255,183,.12);
+    }
+    .dashboardAccountProfileSelectMenu[hidden]{
+      display:none !important;
+    }
+    .dashboardAccountProfileSelectOption{
+      appearance:none;
+      -webkit-appearance:none;
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border:0;
+      border-radius:9px;
+      background:transparent;
+      color:#dbeafe;
+      min-height:34px;
+      padding:8px 10px;
+      font:inherit;
+      font-size:13px;
+      line-height:1.25;
+      font-weight:800;
+      text-align:left;
+      cursor:pointer;
+    }
+    .dashboardAccountProfileSelectOption:hover,
+    .dashboardAccountProfileSelectOption:focus-visible{
+      outline:none;
+      background:rgba(81,255,183,.1);
+      color:#f8fafc;
+    }
+    .dashboardAccountProfileSelectOption[aria-selected="true"]{
+      background:rgba(81,255,183,.16);
+      color:#51ffb7;
     }
     .dashboardAccountProfileLockedValue{
       min-height:40px;
@@ -17516,7 +17657,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 173">173</div>
+  <div class="devRevisionBadge" aria-label="Development revision 174">174</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21980,6 +22121,90 @@
     return type === 'textarea' ? 700 : 160;
   }
 
+  function closeDashboardAccountProfileSelects_(exceptSelect){
+    if (!dashboardAccountProfileBody) return;
+    dashboardAccountProfileBody.querySelectorAll('.dashboardAccountProfileSelect.isOpen').forEach(select => {
+      if (exceptSelect && select === exceptSelect) return;
+      select.classList.remove('isOpen');
+      const button = select.querySelector('.dashboardAccountProfileSelectButton');
+      const menu = select.querySelector('.dashboardAccountProfileSelectMenu');
+      if (button) button.setAttribute('aria-expanded', 'false');
+      if (menu) menu.hidden = true;
+    });
+  }
+
+  function setDashboardAccountProfileSelectValue_(select, value){
+    if (!select) return;
+    const cleanValue = String(value || '');
+    const hidden = select.querySelector('input[data-profile-path]');
+    const valueNode = select.querySelector('.dashboardAccountProfileSelectValue');
+    const options = Array.from(select.querySelectorAll('.dashboardAccountProfileSelectOption'));
+    let label = '';
+    options.forEach(option => {
+      const isSelected = String(option.dataset.value || '') === cleanValue;
+      option.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      if (isSelected) label = String(option.textContent || '').trim();
+    });
+    if (!label && options.length) {
+      label = String(options[0].textContent || '').trim();
+      if (hidden) hidden.value = String(options[0].dataset.value || '');
+      options[0].setAttribute('aria-selected', 'true');
+    } else if (hidden) {
+      hidden.value = cleanValue;
+    }
+    if (valueNode) valueNode.textContent = label || 'No preference';
+  }
+
+  function appendDashboardAccountProfileSelect_(field, opts, id){
+    const select = createEl('div', 'dashboardAccountProfileSelect');
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.id = id + '_value';
+    hidden.dataset.profilePath = String(opts.path || '').trim();
+    select.appendChild(hidden);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = id;
+    button.className = 'dashboardAccountProfileSelectButton';
+    button.setAttribute('aria-haspopup', 'listbox');
+    button.setAttribute('aria-expanded', 'false');
+    button.appendChild(createEl('span', 'dashboardAccountProfileSelectValue', 'No preference'));
+    button.appendChild(createEl('span', 'dashboardAccountProfileSelectArrow', '⌄'));
+    select.appendChild(button);
+    const menu = createEl('div', 'dashboardAccountProfileSelectMenu');
+    menu.hidden = true;
+    menu.setAttribute('role', 'listbox');
+    (Array.isArray(opts.options) ? opts.options : []).forEach(option => {
+      const item = (option && typeof option === 'object') ? option : {};
+      const optionButton = document.createElement('button');
+      optionButton.type = 'button';
+      optionButton.className = 'dashboardAccountProfileSelectOption';
+      optionButton.setAttribute('role', 'option');
+      optionButton.dataset.value = String(item.value || '');
+      optionButton.textContent = String(item.label || item.value || 'No preference');
+      optionButton.addEventListener('click', evt => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        setDashboardAccountProfileSelectValue_(select, optionButton.dataset.value || '');
+        closeDashboardAccountProfileSelects_();
+        button.focus();
+      });
+      menu.appendChild(optionButton);
+    });
+    select.appendChild(menu);
+    button.addEventListener('click', evt => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const willOpen = !select.classList.contains('isOpen');
+      closeDashboardAccountProfileSelects_(select);
+      select.classList.toggle('isOpen', willOpen);
+      button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      menu.hidden = !willOpen;
+    });
+    setDashboardAccountProfileSelectValue_(select, opts.value);
+    field.appendChild(select);
+  }
+
   function appendDashboardAccountProfileField_(grid, options){
     const opts = (options && typeof options === 'object') ? options : {};
     const field = createEl('div', 'dashboardAccountProfileField' + (opts.wide ? ' isWide' : ''));
@@ -21992,24 +22217,18 @@
       grid.appendChild(field);
       return field;
     }
+    if (opts.type === 'select') {
+      appendDashboardAccountProfileSelect_(field, opts, id);
+      grid.appendChild(field);
+      return field;
+    }
     const control = opts.type === 'textarea'
       ? document.createElement('textarea')
-      : opts.type === 'select'
-        ? document.createElement('select')
-        : document.createElement('input');
+      : document.createElement('input');
     control.id = id;
     control.dataset.profilePath = String(opts.path || '').trim();
     if (opts.type === 'textarea') {
       control.rows = opts.rows || 4;
-      control.value = String(opts.value || '');
-    } else if (opts.type === 'select') {
-      (Array.isArray(opts.options) ? opts.options : []).forEach(option => {
-        const item = (option && typeof option === 'object') ? option : {};
-        const node = document.createElement('option');
-        node.value = String(item.value || '');
-        node.textContent = String(item.label || item.value || '');
-        control.appendChild(node);
-      });
       control.value = String(opts.value || '');
     } else {
       control.type = String(opts.type || 'text');
@@ -22025,7 +22244,8 @@
 
   function appendDashboardAccountProfileSection_(body, title){
     const section = createEl('section', 'dashboardAccountProfileSection');
-    section.appendChild(createEl('h3', 'dashboardAccountProfileSectionTitle', title));
+    const cleanTitle = String(title || '').trim();
+    if (cleanTitle) section.appendChild(createEl('h3', 'dashboardAccountProfileSectionTitle', cleanTitle));
     const grid = createEl('div', 'dashboardAccountProfileGrid');
     section.appendChild(grid);
     body.appendChild(section);
@@ -22044,7 +22264,7 @@
     if (section === 'primary_contact') {
       appendDashboardAccountProfileField_(identityGrid, { label: 'Full name', locked: true, value: account.primaryContactName || account.billingContactName || 'Contact details' });
       appendDashboardAccountProfileField_(identityGrid, { label: 'Primary email', locked: true, value: account.primaryEmail || account.billingContactEmail || '--' });
-      const contactGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Contact preferences');
+      const contactGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, '');
       appendDashboardAccountProfileField_(contactGrid, { label: 'Role/title', path: 'roleTitle', value: getAccountProfilePathValue_(profile, 'roleTitle') });
       appendDashboardAccountProfileField_(contactGrid, { label: 'Preferred contact method', type: 'select', path: 'preferredContactMethod', value: getAccountProfilePathValue_(profile, 'preferredContactMethod'), options: [{ value: '', label: 'No preference' }, { value: 'email', label: 'Email' }, { value: 'phone', label: 'Phone' }] });
       appendDashboardAccountProfileField_(contactGrid, { label: 'Mobile phone', path: 'mobilePhone', value: getAccountProfilePathValue_(profile, 'mobilePhone') });
@@ -22093,7 +22313,6 @@
     appendDashboardAccountProfileField_(detailsGrid, { label: 'Accounts payable email', type: 'email', path: 'accountsPayableEmail', value: getAccountProfilePathValue_(profile, 'accountsPayableEmail') });
     appendDashboardAccountProfileField_(detailsGrid, { label: 'General office phone', path: 'officePhone', value: getAccountProfilePathValue_(profile, 'officePhone') });
     appendDashboardAccountProfileField_(detailsGrid, { label: 'Website', type: 'url', path: 'website', value: getAccountProfilePathValue_(profile, 'website'), wide: true });
-    appendDashboardAccountProfileField_(detailsGrid, { label: 'Account/order notes for Red Threads', type: 'textarea', path: 'notes', value: getAccountProfilePathValue_(profile, 'notes'), wide: true });
   }
 
   function assignDashboardAccountProfilePath_(target, path, value){
@@ -22178,6 +22397,13 @@
         closeDashboardAccountProfileModal_(evt);
       });
     }
+    if (dashboardAccountProfileModal) {
+      dashboardAccountProfileModal.addEventListener('pointerdown', evt => {
+        const target = evt.target;
+        if (target instanceof Element && target.closest('.dashboardAccountProfileSelect')) return;
+        closeDashboardAccountProfileSelects_();
+      }, true);
+    }
     document.addEventListener('pointerdown', evt => {
       if (!dashboardAccountProfileBackdrop || dashboardAccountProfileBackdrop.hidden) return;
       if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
@@ -22189,6 +22415,12 @@
       if (evt.key !== 'Escape') return;
       if (!dashboardAccountProfileBackdrop || dashboardAccountProfileBackdrop.hidden) return;
       if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+      if (dashboardAccountProfileBody && dashboardAccountProfileBody.querySelector('.dashboardAccountProfileSelect.isOpen')) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        closeDashboardAccountProfileSelects_();
+        return;
+      }
       closeDashboardAccountProfileModal_(evt);
     });
   }
@@ -22211,7 +22443,7 @@
     renderDashboardAccountProfileModal_();
     dashboardAccountProfileBackdrop.hidden = false;
     requestAnimationFrame(() => {
-      const firstEditable = dashboardAccountProfileBody ? dashboardAccountProfileBody.querySelector('input:not([type="checkbox"]), select, textarea') : null;
+      const firstEditable = dashboardAccountProfileBody ? dashboardAccountProfileBody.querySelector('.dashboardAccountProfileSelectButton, input:not([type="checkbox"]):not([type="hidden"]), select, textarea') : null;
       if (firstEditable && typeof firstEditable.focus === 'function') {
         firstEditable.focus();
       } else if (dashboardAccountProfileCloseBtn) {
@@ -22287,6 +22519,8 @@
     const termsWorkflow = getAccountDocumentWorkflowByType_('credit_terms', account);
     const taxWorkflow = getAccountDocumentWorkflowByType_('tax_exempt', account);
     const approvedTermsLabel = getApprovedPaymentTermsLabel_(account) || getApprovedPaymentTermsLabel_(termsWorkflow);
+    const hasOrganizationInfo = !!String(account.orgName || '').trim();
+    const hasPrimaryContactInfo = !!String(account.primaryContactName || account.billingContactName || '').trim();
     DASHBOARD_ACCOUNT_SUMMARY = account;
 
     dashboardAccountMeta.innerHTML = '';
@@ -22298,7 +22532,7 @@
         interactive: true,
         profileSection: 'organization',
         hoverValue: 'Edit details',
-        stateClass: 'isNotStarted',
+        stateClass: hasOrganizationInfo ? 'isApproved' : 'isNotStarted',
         ariaLabel: 'Edit organization details'
       }
     );
@@ -22309,7 +22543,7 @@
         interactive: true,
         profileSection: 'primary_contact',
         hoverValue: 'Edit contact info',
-        stateClass: 'isNotStarted',
+        stateClass: hasPrimaryContactInfo ? 'isApproved' : 'isNotStarted',
         ariaLabel: 'Edit primary contact info'
       }
     );

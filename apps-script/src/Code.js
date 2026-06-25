@@ -10402,8 +10402,7 @@ function sanitizeOrganizationAccountProfile_(profile) {
     billingAddress: billingSameAsMailing ? {} : sanitizeAccountProfileAddress_(source.billingAddress),
     accountsPayableEmail: sanitizeAccountProfileEmail_(source.accountsPayableEmail, 'Accounts payable email'),
     officePhone: sanitizeAccountProfileText_(source.officePhone, 40),
-    website: sanitizeAccountProfileWebsite_(source.website),
-    notes: sanitizeAccountProfileText_(source.notes, 700)
+    website: sanitizeAccountProfileWebsite_(source.website)
   };
 }
 
@@ -11161,8 +11160,10 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
   const token = resolveAccountDocumentPortalToken_(ctx);
   const uploadUrl = token ? buildDashboardAccountDocumentResubmitUrl_(token, definition.type) : '';
   const taxNotice = "Gain the ability to toggle sales tax on/off of your organization's orders.";
+  const uploadInstructionBase = 'Complete and sign the attached PDF, then click the button below to upload the finished document to your Red Threads portal account.';
+  const portalCompletionInstruction = "Or complete the document in the portal - it's faster and easier.";
   const uploadInstruction = uploadUrl
-    ? 'Complete and sign the attached PDF, then click the button below to upload the finished document to your Red Threads portal account.'
+    ? (uploadInstructionBase + ' ' + portalCompletionInstruction)
     : 'Complete and sign the PDF, then log into your Red Threads portal dashboard and choose Tax Exemption to upload the completed form.';
   const reviewNote = 'The Red Threads team will review the completed form and notify you when the review is complete.';
   const body = [
@@ -11198,7 +11199,11 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
     maxWidth: '640px',
     bodyHtml: [
       buildPortalNativeEmailGreenCalloutHtml_(taxNotice),
-      '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.text + ';">' + escapeHtml_(uploadInstruction) + '</p>',
+      uploadUrl
+        ? ('<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.text + ';">' +
+          escapeHtml_(uploadInstructionBase) +
+          ' <span style="color:' + theme.successGreen + ';font-weight:800;">' + escapeHtml_(portalCompletionInstruction) + '</span></p>')
+        : ('<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.text + ';">' + escapeHtml_(uploadInstruction) + '</p>'),
       ctaHtml,
       '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(reviewNote) + '</p>',
       '<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:' + theme.textSoft + ';">' + escapeHtml_(taxBlankEmailFooter) + '</p>'
