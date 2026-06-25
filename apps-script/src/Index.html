@@ -2648,6 +2648,13 @@
       letter-spacing:.06em;
       text-transform:uppercase;
     }
+    .dashboardAccountProfileSectionSub{
+      margin:-4px 0 12px;
+      color:#94a3b8;
+      font-size:13px;
+      line-height:1.5;
+      font-weight:650;
+    }
     .dashboardAccountProfileGrid{
       display:grid;
       grid-template-columns:repeat(2,minmax(0,1fr));
@@ -17668,7 +17675,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 175">175</div>
+  <div class="devRevisionBadge" aria-label="Development revision 176">176</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -22119,6 +22126,7 @@
   function getDashboardAccountProfileMaxLength_(path, type){
     const key = String(path || '').trim();
     if (!key) return 0;
+    if (key.indexOf('apparelNotes') >= 0) return 500;
     if (key === 'notes') return 700;
     if (key === 'website') return 180;
     if (key.indexOf('email') >= 0 || key.indexOf('Email') >= 0) return 160;
@@ -22254,10 +22262,12 @@
     return field;
   }
 
-  function appendDashboardAccountProfileSection_(body, title){
+  function appendDashboardAccountProfileSection_(body, title, subtext){
     const section = createEl('section', 'dashboardAccountProfileSection');
     const cleanTitle = String(title || '').trim();
+    const cleanSubtext = String(subtext || '').trim();
     if (cleanTitle) section.appendChild(createEl('h3', 'dashboardAccountProfileSectionTitle', cleanTitle));
+    if (cleanSubtext) section.appendChild(createEl('p', 'dashboardAccountProfileSectionSub', cleanSubtext));
     const grid = createEl('div', 'dashboardAccountProfileGrid');
     section.appendChild(grid);
     body.appendChild(section);
@@ -22283,6 +22293,23 @@
       appendDashboardAccountProfileField_(contactGrid, { label: 'Office phone', path: 'officePhone', value: getAccountProfilePathValue_(profile, 'officePhone') });
       appendDashboardAccountProfileField_(contactGrid, { label: 'Office extension', path: 'officeExtension', value: getAccountProfilePathValue_(profile, 'officeExtension') });
       appendDashboardAccountProfileField_(contactGrid, { label: 'Preferred phone type', type: 'select', path: 'preferredPhoneType', value: getAccountProfilePathValue_(profile, 'preferredPhoneType'), options: [{ value: '', label: 'No preference' }, { value: 'mobile', label: 'Mobile' }, { value: 'office', label: 'Office' }] });
+      const apparelSizeOptions = [
+        { value: '', label: 'No preference' },
+        { value: 'xs', label: 'XS' },
+        { value: 's', label: 'S' },
+        { value: 'm', label: 'M' },
+        { value: 'l', label: 'L' },
+        { value: 'xl', label: 'XL' },
+        { value: '2xl', label: '2XL' },
+        { value: '3xl', label: '3XL' },
+        { value: '4xl', label: '4XL' },
+        { value: 'other', label: 'Other' }
+      ];
+      const bonusGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Perks & Promo Details', 'Share a few optional details so Red Threads can send better-fit gifts, birthday surprises, and promo apparel when opportunities come up.');
+      appendDashboardAccountProfileField_(bonusGrid, { label: 'Birthday', type: 'date', path: 'bonusPreferences.birthday', value: getAccountProfilePathValue_(profile, 'bonusPreferences.birthday') });
+      appendDashboardAccountProfileField_(bonusGrid, { label: 'T-shirt size', type: 'select', path: 'bonusPreferences.tshirtSize', value: getAccountProfilePathValue_(profile, 'bonusPreferences.tshirtSize'), options: apparelSizeOptions });
+      appendDashboardAccountProfileField_(bonusGrid, { label: 'Sweatshirt size', type: 'select', path: 'bonusPreferences.sweatshirtSize', value: getAccountProfilePathValue_(profile, 'bonusPreferences.sweatshirtSize'), options: apparelSizeOptions });
+      appendDashboardAccountProfileField_(bonusGrid, { label: 'Apparel preferences', type: 'textarea', path: 'bonusPreferences.apparelNotes', value: getAccountProfilePathValue_(profile, 'bonusPreferences.apparelNotes'), rows: 4, wide: true, placeholder: 'Favorite colors, fit notes, preferred styles, or other apparel details.' });
       const altGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Alternate order contact');
       appendDashboardAccountProfileField_(altGrid, { label: 'Name', path: 'alternateOrderContact.name', value: getAccountProfilePathValue_(profile, 'alternateOrderContact.name') });
       appendDashboardAccountProfileField_(altGrid, { label: 'Email', type: 'email', path: 'alternateOrderContact.email', value: getAccountProfilePathValue_(profile, 'alternateOrderContact.email') });
@@ -22388,6 +22415,14 @@
       return;
     }
     checkEmail(value.alternateOrderContact && value.alternateOrderContact.email, 'Alternate order contact email');
+    const birthday = String(value.bonusPreferences && value.bonusPreferences.birthday || '').trim();
+    if (birthday) {
+      const match = birthday.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const date = match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) : null;
+      if (!match || date.getUTCFullYear() !== Number(match[1]) || date.getUTCMonth() !== Number(match[2]) - 1 || date.getUTCDate() !== Number(match[3])) {
+        throw new Error('Birthday must be a valid date.');
+      }
+    }
   }
 
   function bindDashboardAccountProfileModalEvents_(){

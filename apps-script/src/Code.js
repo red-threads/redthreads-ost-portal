@@ -10381,6 +10381,24 @@ function sanitizeAccountProfileChoice_(value, allowed, fallback) {
   return allowed.indexOf(clean) >= 0 ? clean : fallback;
 }
 
+function sanitizeAccountProfileDate_(value, label) {
+  const clean = trimString_(value);
+  if (!clean) return '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    throw new Error((label || 'Date') + ' must be a valid date.');
+  }
+  const parts = clean.split('-').map(function(part) { return Number(part); });
+  const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  if (
+    date.getUTCFullYear() !== parts[0] ||
+    date.getUTCMonth() !== parts[1] - 1 ||
+    date.getUTCDate() !== parts[2]
+  ) {
+    throw new Error((label || 'Date') + ' must be a valid date.');
+  }
+  return clean;
+}
+
 function sanitizeAccountProfileAddress_(value) {
   const source = (value && typeof value === 'object') ? value : {};
   return {
@@ -10413,6 +10431,10 @@ function sanitizePrimaryContactAccountProfile_(profile) {
   const alternate = (source.alternateOrderContact && typeof source.alternateOrderContact === 'object')
     ? source.alternateOrderContact
     : {};
+  const bonus = (source.bonusPreferences && typeof source.bonusPreferences === 'object')
+    ? source.bonusPreferences
+    : {};
+  const apparelSizes = ['xs', 's', 'm', 'l', 'xl', '2xl', '3xl', '4xl', 'other'];
   return {
     roleTitle: sanitizeAccountProfileText_(source.roleTitle, 100),
     mobilePhone: sanitizeAccountProfileText_(source.mobilePhone, 40),
@@ -10420,6 +10442,12 @@ function sanitizePrimaryContactAccountProfile_(profile) {
     officeExtension: sanitizeAccountProfileText_(source.officeExtension, 20),
     preferredPhoneType: sanitizeAccountProfileChoice_(source.preferredPhoneType, ['mobile', 'office'], ''),
     preferredContactMethod: sanitizeAccountProfileChoice_(source.preferredContactMethod, ['email', 'phone'], ''),
+    bonusPreferences: {
+      birthday: sanitizeAccountProfileDate_(bonus.birthday, 'Birthday'),
+      tshirtSize: sanitizeAccountProfileChoice_(bonus.tshirtSize, apparelSizes, ''),
+      sweatshirtSize: sanitizeAccountProfileChoice_(bonus.sweatshirtSize, apparelSizes, ''),
+      apparelNotes: sanitizeAccountProfileText_(bonus.apparelNotes, 500)
+    },
     alternateOrderContact: {
       name: sanitizeAccountProfileText_(alternate.name, 120),
       email: sanitizeAccountProfileEmail_(alternate.email, 'Alternate order contact email'),
@@ -11204,7 +11232,7 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
       uploadUrl
         ? ('<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.text + ';">' +
           escapeHtml_(uploadInstructionBase) +
-          ' <span style="color:' + theme.successGreen + ';font-weight:800;">' + escapeHtml_(portalCompletionInstruction) + '</span></p>')
+          ' <span style="color:' + theme.successGreen + ';font-weight:400;">' + escapeHtml_(portalCompletionInstruction) + '</span></p>')
         : ('<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:' + theme.text + ';">' + escapeHtml_(uploadInstruction) + '</p>'),
       ctaHtml,
       '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:' + theme.textMuted + ';">' + escapeHtml_(reviewNote) + '</p>',
@@ -12646,8 +12674,6 @@ function emailTaxExemptSubmissionCopy_(payload) {
   ]);
   if (!recipients.length) return { ok: false, error: 'No recipient email is available for this account.' };
   const accountSummary = ctx.accountInfo && ctx.accountInfo.summary ? ctx.accountInfo.summary : {};
-  const token = resolveAccountDocumentPortalToken_(ctx);
-  const portalUrl = token ? buildExternalPortalUrl_(token) : '';
   const personName = trimString_(
     (ctx.identity && ctx.identity.personName) ||
     (accountSummary && accountSummary.billingContactName) ||
@@ -12661,7 +12687,6 @@ function emailTaxExemptSubmissionCopy_(payload) {
     '',
     'A copy of your completed Michigan sales tax exemption form is attached.',
     'Your form is under review by the Red Threads team. You will receive an update when the review is complete.',
-    portalUrl ? ('You can view the current tax exemption status in your portal: ' + portalUrl) : '',
     '',
     buildStandardNoReplyFooterCopy_(),
     '',
@@ -12675,9 +12700,6 @@ function emailTaxExemptSubmissionCopy_(payload) {
     '    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;color:#cbd5e1;">Hi ' + escapeHtml_(firstName) + ',</p>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">A copy of your completed Michigan sales tax exemption form is attached.</p>',
     '    <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#cbd5e1;">Your form is under review by the Red Threads team. You will receive an update when the review is complete.</p>',
-    portalUrl
-      ? ('    <p style="margin:0 0 18px;"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:14px 20px;border-radius:999px;background:#00c8ff;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Red Threads Portal</a></p>')
-      : '',
     '    <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#94a3b8;">' + escapeHtml_(buildStandardNoReplyFooterCopy_()) + '</p>',
     '    <p style="margin:12px 0 0;font-size:14px;line-height:1.7;color:#f8fafc;font-weight:700;">- Red Threads Team</p>',
     '  </div>',
@@ -25517,7 +25539,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         : (creditTermsRemoved
           ? 'Upload a new credit terms document from your account dashboard.'
           : 'Upload a new sales tax exemption document from your account dashboard.'),
-      nextStepLabel: !isTeam && !creditTermsRemoved ? 'Potential next step:' : '',
+      nextStepLabel: !isTeam ? 'Potential next step:' : '',
       details: removedDetails
     };
   }

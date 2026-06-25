@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Profile Promo Details And Document Email Refinement
+
+- Mode: Full ship scoped account-profile and document-email refinement.
+- Branch/commit/PR: `main`, Apps Script version `1050`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: add optional Primary Contact promo/apparel details and ship the current local document-email refinements, including the credit-terms removed client label change to `Potential next step:`.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `176` adds `Perks & Promo Details` to the Primary Contact profile modal with optional birthday, T-shirt size, sweatshirt size, and apparel notes fields stored under `primaryContactProfileJson.bonusPreferences`. `Code.js` sanitizes the new bonus preferences, validates date-shaped birthdays, keeps apparel sizes constrained to the defined option list, and caps apparel notes at `500` characters. The credit-terms removed client email now renders `Potential next step:`; the sales-tax blank-form source email's green portal-completion sentence is regular weight; and the submitted tax-form copy email no longer includes portal click-through in HTML or plain text.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add profile promo details and refine document emails"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1050 - Add profile promo details and refine document emails`. Direct `/exec` returned HTTP `200` with `Development revision 176`, omitted stale revision `175`, included the `bonusPreferences.birthday` runtime marker, and had zero targeted secret/private-link markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained the portal wrapper marker, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no document email was sent from this shell, no account profile save was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke the Primary Contact profile modal in an authenticated dashboard session and manually trigger the affected document emails if inbox rendering confirmation is desired.
+
 ## 2026-06-25 - Tax Email Entry And Profile Details Refinement
 
 - Mode: Full ship scoped UI/account-profile refinement.
