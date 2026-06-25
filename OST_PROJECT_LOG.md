@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Tax Control Hardening And Account Profile Cards
+
+- Mode: Full ship runtime UI/event hardening plus account-profile dashboard enhancement.
+- Branch/commit/PR: `main`, Apps Script version `1047`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: harden sales-tax Form 3372 workspace controls that could silently no-op and ship the already-local dashboard Organization/Primary Contact profile card modal work.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `173` delegates the tax workspace `Send`, upload submit, `Back to Editor`, `Submit Final Document`, submitted-copy email, and close-entry controls through the capture-safe workspace action path. Final submit now routes back to the first incomplete editable section with a visible message if review is not ready. The account dashboard Organization and Primary Contact cards now use the interactive red-hover treatment and open a dashboard profile modal with locked canonical identity fields plus editable optional business/contact profile details. `Code.js` adds account-level profile JSON storage and an authenticated account profile update action; no pricing, snapshot, payment, ACH/Stripe, account-document approval, routing, or email lifecycle behavior was intentionally changed.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Harden tax form controls and add account profile details"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1047 - Harden tax form controls and add account profile details`. Direct `/exec` returned HTTP `200` with `Development revision 173`, omitted stale revision `172`, included tax-control/account-profile markers, and had zero targeted secret/private-link markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, retained the portal wrapper marker, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no live blank-form email or final tax document submission was triggered from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched. The account-profile feature may append its new `PORTAL_ACCOUNTS` headers during deployed runtime initialization.
+- Follow-ups: owner should manually smoke the side-effectful sales-tax `Send Blank Form via Email` and guided `Submit Final Document` paths, then report any console or DOM state if either still fails.
+
 ## 2026-06-24 - Credit Terms Replacement Flow On Version 1032
 
 - Mode: Full ship runtime/account-document workflow and email enhancement.

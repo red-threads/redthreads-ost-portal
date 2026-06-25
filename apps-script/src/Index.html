@@ -2511,6 +2511,228 @@
       gap:10px;
       margin-top:18px;
     }
+    .dashboardAccountProfileBackdrop{
+      position:fixed;
+      inset:0;
+      z-index:1210;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      background:rgba(0,0,0,.82);
+      backdrop-filter:blur(16px);
+    }
+    .dashboardAccountProfileBackdrop[hidden]{
+      display:none !important;
+    }
+    .dashboardAccountProfileModal{
+      width:min(920px,100%);
+      max-height:min(86vh,820px);
+      overflow:auto;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:16px;
+      background:linear-gradient(180deg, rgba(15,23,42,.98) 0%, rgba(5,8,17,.98) 100%);
+      box-shadow:0 30px 95px rgba(0,0,0,.48);
+      color:var(--rt-text);
+      padding:22px;
+    }
+    .dashboardAccountProfileHead{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+    }
+    .dashboardAccountProfileTitle{
+      margin:0;
+      color:#51ffb7;
+      font-size:22px;
+      line-height:1.15;
+      font-weight:900;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .dashboardAccountProfileSub{
+      margin:8px 0 0;
+      color:#dbeafe;
+      font-size:13px;
+      line-height:1.5;
+      font-weight:700;
+    }
+    .dashboardAccountProfileClose{
+      appearance:none;
+      -webkit-appearance:none;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:999px;
+      background:rgba(255,255,255,.06);
+      color:#fff;
+      width:36px;
+      height:36px;
+      font:inherit;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .dashboardAccountProfileClose:disabled,
+    .dashboardAccountProfileBtn:disabled{
+      opacity:.58;
+      cursor:wait;
+    }
+    .dashboardAccountProfileNotice{
+      margin:0 0 14px;
+      border:1px solid rgba(81,255,183,.26);
+      border-radius:10px;
+      background:rgba(81,255,183,.08);
+      color:#dbeafe;
+      padding:10px 12px;
+      font-size:12px;
+      line-height:1.45;
+      font-weight:800;
+    }
+    .dashboardAccountProfileNotice[hidden]{
+      display:none !important;
+    }
+    .dashboardAccountProfileNotice.isError{
+      border-color:rgba(251,113,133,.42);
+      background:rgba(251,113,133,.12);
+      color:#fecdd3;
+    }
+    .dashboardAccountProfileBody{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .dashboardAccountProfileSection{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:12px;
+      background:rgba(255,255,255,.035);
+      padding:14px;
+    }
+    .dashboardAccountProfileSectionTitle{
+      margin:0 0 12px;
+      color:#f8fafc;
+      font-size:13px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    .dashboardAccountProfileGrid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+    }
+    .dashboardAccountProfileField{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-width:0;
+    }
+    .dashboardAccountProfileField.isWide{
+      grid-column:1 / -1;
+    }
+    .dashboardAccountProfileField label,
+    .dashboardAccountProfileToggle{
+      color:#94a3b8;
+      font-size:11px;
+      line-height:1.2;
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    .dashboardAccountProfileField input,
+    .dashboardAccountProfileField select,
+    .dashboardAccountProfileField textarea{
+      appearance:none;
+      -webkit-appearance:none;
+      width:100%;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:10px;
+      background:rgba(2,6,23,.64);
+      color:#f8fafc;
+      min-height:40px;
+      padding:10px 11px;
+      font:inherit;
+      font-size:13px;
+      line-height:1.35;
+      font-weight:700;
+      box-sizing:border-box;
+    }
+    .dashboardAccountProfileField textarea{
+      min-height:96px;
+      resize:vertical;
+    }
+    .dashboardAccountProfileField input:focus,
+    .dashboardAccountProfileField select:focus,
+    .dashboardAccountProfileField textarea:focus{
+      outline:none;
+      border-color:rgba(81,255,183,.62);
+      box-shadow:0 0 0 3px rgba(81,255,183,.12);
+    }
+    .dashboardAccountProfileLockedValue{
+      min-height:40px;
+      border:1px solid rgba(255,255,255,.1);
+      border-radius:10px;
+      background:rgba(255,255,255,.055);
+      color:#cbd5e1;
+      padding:10px 11px;
+      font-size:13px;
+      line-height:1.35;
+      font-weight:800;
+      overflow-wrap:anywhere;
+    }
+    .dashboardAccountProfileToggle{
+      display:flex;
+      align-items:center;
+      gap:9px;
+      width:max-content;
+      max-width:100%;
+      color:#dbeafe;
+      cursor:pointer;
+    }
+    .dashboardAccountProfileToggle input{
+      width:18px;
+      height:18px;
+      accent-color:#51ffb7;
+    }
+    .dashboardAccountProfileFooter{
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top:18px;
+    }
+    .dashboardAccountProfileBtn{
+      appearance:none;
+      -webkit-appearance:none;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:999px;
+      background:rgba(255,255,255,.06);
+      color:#f8fafc;
+      min-height:36px;
+      padding:0 16px;
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .dashboardAccountProfileBtn.is-primary{
+      border-color:rgba(81,255,183,.5);
+      background:rgba(81,255,183,.12);
+      color:#9fffd0;
+    }
+    @media (max-width:720px){
+      .dashboardAccountProfileBackdrop{
+        padding:14px;
+      }
+      .dashboardAccountProfileModal{
+        max-height:90vh;
+        padding:18px;
+      }
+      .dashboardAccountProfileGrid{
+        grid-template-columns:1fr;
+      }
+    }
     .dashboardAchSetupLoading{
       min-height:360px;
       display:flex;
@@ -17294,7 +17516,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 172">172</div>
+  <div class="devRevisionBadge" aria-label="Development revision 173">173</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -17410,6 +17632,23 @@
           <div class="dashboardAchManageFooter" id="dashboardAchManageFooter">
             <button class="dashboardAchManageBtn" id="dashboardAchManageDoneBtn" type="button">Done</button>
             <button class="dashboardAchManageBtn is-primary" id="dashboardAchManageAddBtn" type="button">Link Account to Make ACH Payments</button>
+          </div>
+        </div>
+      </div>
+      <div class="dashboardAccountProfileBackdrop" id="dashboardAccountProfileBackdrop" hidden>
+        <div class="dashboardAccountProfileModal" id="dashboardAccountProfileModal" role="dialog" aria-modal="true" aria-labelledby="dashboardAccountProfileTitle">
+          <div class="dashboardAccountProfileHead">
+            <div>
+              <h2 class="dashboardAccountProfileTitle" id="dashboardAccountProfileTitle">Account details</h2>
+              <p class="dashboardAccountProfileSub" id="dashboardAccountProfileSub">Update optional business details for future Red Threads work.</p>
+            </div>
+            <button class="dashboardAccountProfileClose" id="dashboardAccountProfileCloseBtn" type="button" aria-label="Close account details">X</button>
+          </div>
+          <div class="dashboardAccountProfileNotice" id="dashboardAccountProfileNotice" hidden></div>
+          <div class="dashboardAccountProfileBody" id="dashboardAccountProfileBody"></div>
+          <div class="dashboardAccountProfileFooter" id="dashboardAccountProfileFooter">
+            <button class="dashboardAccountProfileBtn" id="dashboardAccountProfileCancelBtn" type="button">Cancel</button>
+            <button class="dashboardAccountProfileBtn is-primary" id="dashboardAccountProfileSaveBtn" type="button">Save details</button>
           </div>
         </div>
       </div>
@@ -19705,6 +19944,8 @@
   let CURRENT_STATE_SUMMARY = {};
   let DASHBOARD_ACCOUNT_SUMMARY = {};
   let DASHBOARD_ACH_SETUP_BUSY = false;
+  let DASHBOARD_ACCOUNT_PROFILE_SECTION = '';
+  let DASHBOARD_ACCOUNT_PROFILE_SAVING = false;
   let ACCOUNT_DOC_MODAL_TYPE = '';
   let ACCOUNT_DOC_MODAL_CONTEXT = '';
   let ACCOUNT_DOC_MODAL_HIDE_TIMER = 0;
@@ -19845,6 +20086,11 @@
     };
   }
 
+  function normalizeAccountProfileObject_(value){
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return clonePlainObject(value);
+  }
+
   function normalizeAccountSummary(rawSummary){
     const raw = (rawSummary && typeof rawSummary === 'object') ? rawSummary : {};
     const rawAchMethods = Array.isArray(raw.achPaymentMethods) ? raw.achPaymentMethods : [];
@@ -19936,6 +20182,11 @@
       taxExemptDocumentDownloadUrl: String(raw.taxExemptDocumentDownloadUrl || '').trim(),
       billingContactEmail: String(raw.billingContactEmail || '').trim(),
       billingContactName: String(raw.billingContactName || '').trim(),
+      organizationProfile: normalizeAccountProfileObject_(raw.organizationProfile),
+      primaryContactProfile: normalizeAccountProfileObject_(raw.primaryContactProfile),
+      accountProfileUpdatedAt: String(raw.accountProfileUpdatedAt || '').trim(),
+      accountProfileUpdatedByName: String(raw.accountProfileUpdatedByName || '').trim(),
+      accountProfileUpdatedByEmail: String(raw.accountProfileUpdatedByEmail || '').trim(),
       stripeCustomerId: String(raw.stripeCustomerId || '').trim(),
       achPaymentMethods: achPaymentMethods,
       defaultAchPaymentMethodId: String(raw.defaultAchPaymentMethodId || '').trim(),
@@ -20932,6 +21183,7 @@
     if (interactive) {
       node.type = 'button';
       node.dataset.documentType = String(opts.documentType || '').trim();
+      node.dataset.profileSection = String(opts.profileSection || '').trim();
       node.setAttribute('aria-label', String(opts.ariaLabel || idleValue || label || '').trim());
     }
     node.appendChild(createEl('span', 'dashboardAccountCardKey', label));
@@ -21661,6 +21913,374 @@
     setAuthMessage('', false, { view: VIEW_DASHBOARD });
   }
 
+  function getAccountProfileSectionTitle_(section){
+    return section === 'primary_contact' ? 'Primary contact' : 'Organization details';
+  }
+
+  function getAccountProfileSectionSubtitle_(section){
+    return section === 'primary_contact'
+      ? 'Your name and primary email are locked. You can add practical contact details for future Red Threads coordination.'
+      : 'Your organization name is locked. You can add business details Red Threads may use for future account coordination.';
+  }
+
+  function getAccountProfileDataBySection_(account, section){
+    const safeAccount = normalizeAccountSummary(account);
+    return section === 'primary_contact'
+      ? normalizeAccountProfileObject_(safeAccount.primaryContactProfile)
+      : normalizeAccountProfileObject_(safeAccount.organizationProfile);
+  }
+
+  function getAccountProfilePathValue_(source, path, fallback){
+    const parts = String(path || '').split('.').filter(Boolean);
+    let value = source;
+    for (let i = 0; i < parts.length; i += 1) {
+      if (!value || typeof value !== 'object') return fallback || '';
+      value = value[parts[i]];
+    }
+    return value == null ? (fallback || '') : value;
+  }
+
+  function setDashboardAccountProfileNotice_(message, isError){
+    if (!dashboardAccountProfileNotice) return;
+    const text = String(message || '').trim();
+    dashboardAccountProfileNotice.textContent = text;
+    dashboardAccountProfileNotice.hidden = !text;
+    dashboardAccountProfileNotice.classList.toggle('isError', !!isError);
+  }
+
+  function clearDashboardAccountProfileNotice_(){
+    setDashboardAccountProfileNotice_('', false);
+  }
+
+  function setDashboardAccountProfileSaving_(saving){
+    DASHBOARD_ACCOUNT_PROFILE_SAVING = saving === true;
+    if (dashboardAccountProfileModal) dashboardAccountProfileModal.setAttribute('aria-busy', DASHBOARD_ACCOUNT_PROFILE_SAVING ? 'true' : 'false');
+    [dashboardAccountProfileCloseBtn, dashboardAccountProfileCancelBtn, dashboardAccountProfileSaveBtn].forEach(btn => {
+      if (btn) btn.disabled = DASHBOARD_ACCOUNT_PROFILE_SAVING;
+    });
+    if (dashboardAccountProfileSaveBtn) {
+      dashboardAccountProfileSaveBtn.textContent = DASHBOARD_ACCOUNT_PROFILE_SAVING ? 'Saving...' : 'Save details';
+    }
+  }
+
+  function getDashboardAccountProfileMaxLength_(path, type){
+    const key = String(path || '').trim();
+    if (!key) return 0;
+    if (key === 'notes') return 700;
+    if (key === 'website') return 180;
+    if (key.indexOf('email') >= 0 || key.indexOf('Email') >= 0) return 160;
+    if (key.indexOf('line1') >= 0 || key.indexOf('line2') >= 0) return 120;
+    if (key.indexOf('city') >= 0 || key.indexOf('country') >= 0) return 80;
+    if (key.indexOf('state') >= 0) return 32;
+    if (key.indexOf('postalCode') >= 0) return 24;
+    if (key.indexOf('roleTitle') >= 0) return 100;
+    if (key.indexOf('name') >= 0 || key.indexOf('Name') >= 0) return 120;
+    if (key.indexOf('extension') >= 0 || key.indexOf('Extension') >= 0) return 20;
+    if (key.indexOf('phone') >= 0 || key.indexOf('Phone') >= 0) return 40;
+    return type === 'textarea' ? 700 : 160;
+  }
+
+  function appendDashboardAccountProfileField_(grid, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const field = createEl('div', 'dashboardAccountProfileField' + (opts.wide ? ' isWide' : ''));
+    const label = createEl('label', '', opts.label || '');
+    const id = String(opts.id || ('accountProfileField_' + String(opts.path || '').replace(/[^a-z0-9]+/gi, '_'))).trim();
+    label.setAttribute('for', id);
+    field.appendChild(label);
+    if (opts.locked === true) {
+      field.appendChild(createEl('div', 'dashboardAccountProfileLockedValue', opts.value || '--'));
+      grid.appendChild(field);
+      return field;
+    }
+    const control = opts.type === 'textarea'
+      ? document.createElement('textarea')
+      : opts.type === 'select'
+        ? document.createElement('select')
+        : document.createElement('input');
+    control.id = id;
+    control.dataset.profilePath = String(opts.path || '').trim();
+    if (opts.type === 'textarea') {
+      control.rows = opts.rows || 4;
+      control.value = String(opts.value || '');
+    } else if (opts.type === 'select') {
+      (Array.isArray(opts.options) ? opts.options : []).forEach(option => {
+        const item = (option && typeof option === 'object') ? option : {};
+        const node = document.createElement('option');
+        node.value = String(item.value || '');
+        node.textContent = String(item.label || item.value || '');
+        control.appendChild(node);
+      });
+      control.value = String(opts.value || '');
+    } else {
+      control.type = String(opts.type || 'text');
+      control.value = String(opts.value || '');
+    }
+    const maxLength = getDashboardAccountProfileMaxLength_(opts.path, opts.type);
+    if (maxLength > 0) control.maxLength = maxLength;
+    if (opts.placeholder) control.placeholder = String(opts.placeholder);
+    field.appendChild(control);
+    grid.appendChild(field);
+    return field;
+  }
+
+  function appendDashboardAccountProfileSection_(body, title){
+    const section = createEl('section', 'dashboardAccountProfileSection');
+    section.appendChild(createEl('h3', 'dashboardAccountProfileSectionTitle', title));
+    const grid = createEl('div', 'dashboardAccountProfileGrid');
+    section.appendChild(grid);
+    body.appendChild(section);
+    return grid;
+  }
+
+  function renderDashboardAccountProfileModal_(){
+    if (!dashboardAccountProfileBody) return;
+    const section = DASHBOARD_ACCOUNT_PROFILE_SECTION === 'primary_contact' ? 'primary_contact' : 'organization';
+    const account = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
+    const profile = getAccountProfileDataBySection_(account, section);
+    dashboardAccountProfileBody.innerHTML = '';
+    if (dashboardAccountProfileTitle) dashboardAccountProfileTitle.textContent = getAccountProfileSectionTitle_(section);
+    if (dashboardAccountProfileSub) dashboardAccountProfileSub.textContent = getAccountProfileSectionSubtitle_(section);
+    const identityGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, section === 'primary_contact' ? 'Locked contact identity' : 'Locked organization identity');
+    if (section === 'primary_contact') {
+      appendDashboardAccountProfileField_(identityGrid, { label: 'Full name', locked: true, value: account.primaryContactName || account.billingContactName || 'Contact details' });
+      appendDashboardAccountProfileField_(identityGrid, { label: 'Primary email', locked: true, value: account.primaryEmail || account.billingContactEmail || '--' });
+      const contactGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Contact preferences');
+      appendDashboardAccountProfileField_(contactGrid, { label: 'Role/title', path: 'roleTitle', value: getAccountProfilePathValue_(profile, 'roleTitle') });
+      appendDashboardAccountProfileField_(contactGrid, { label: 'Preferred contact method', type: 'select', path: 'preferredContactMethod', value: getAccountProfilePathValue_(profile, 'preferredContactMethod'), options: [{ value: '', label: 'No preference' }, { value: 'email', label: 'Email' }, { value: 'phone', label: 'Phone' }] });
+      appendDashboardAccountProfileField_(contactGrid, { label: 'Mobile phone', path: 'mobilePhone', value: getAccountProfilePathValue_(profile, 'mobilePhone') });
+      appendDashboardAccountProfileField_(contactGrid, { label: 'Office phone', path: 'officePhone', value: getAccountProfilePathValue_(profile, 'officePhone') });
+      appendDashboardAccountProfileField_(contactGrid, { label: 'Office extension', path: 'officeExtension', value: getAccountProfilePathValue_(profile, 'officeExtension') });
+      appendDashboardAccountProfileField_(contactGrid, { label: 'Preferred phone type', type: 'select', path: 'preferredPhoneType', value: getAccountProfilePathValue_(profile, 'preferredPhoneType'), options: [{ value: '', label: 'No preference' }, { value: 'mobile', label: 'Mobile' }, { value: 'office', label: 'Office' }] });
+      const altGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Alternate order contact');
+      appendDashboardAccountProfileField_(altGrid, { label: 'Name', path: 'alternateOrderContact.name', value: getAccountProfilePathValue_(profile, 'alternateOrderContact.name') });
+      appendDashboardAccountProfileField_(altGrid, { label: 'Email', type: 'email', path: 'alternateOrderContact.email', value: getAccountProfilePathValue_(profile, 'alternateOrderContact.email') });
+      appendDashboardAccountProfileField_(altGrid, { label: 'Phone', path: 'alternateOrderContact.phone', value: getAccountProfilePathValue_(profile, 'alternateOrderContact.phone') });
+      return;
+    }
+    appendDashboardAccountProfileField_(identityGrid, { label: 'Organization name', locked: true, value: account.orgName || '--', wide: true });
+    const mailingGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Mailing address');
+    appendDashboardAccountProfileField_(mailingGrid, { label: 'Address line 1', path: 'mailingAddress.line1', value: getAccountProfilePathValue_(profile, 'mailingAddress.line1'), wide: true });
+    appendDashboardAccountProfileField_(mailingGrid, { label: 'Address line 2', path: 'mailingAddress.line2', value: getAccountProfilePathValue_(profile, 'mailingAddress.line2'), wide: true });
+    appendDashboardAccountProfileField_(mailingGrid, { label: 'City', path: 'mailingAddress.city', value: getAccountProfilePathValue_(profile, 'mailingAddress.city') });
+    appendDashboardAccountProfileField_(mailingGrid, { label: 'State', path: 'mailingAddress.state', value: getAccountProfilePathValue_(profile, 'mailingAddress.state') });
+    appendDashboardAccountProfileField_(mailingGrid, { label: 'ZIP', path: 'mailingAddress.postalCode', value: getAccountProfilePathValue_(profile, 'mailingAddress.postalCode') });
+    appendDashboardAccountProfileField_(mailingGrid, { label: 'Country', path: 'mailingAddress.country', value: getAccountProfilePathValue_(profile, 'mailingAddress.country') });
+    const billingSection = createEl('section', 'dashboardAccountProfileSection');
+    billingSection.appendChild(createEl('h3', 'dashboardAccountProfileSectionTitle', 'Billing address'));
+    const toggleLabel = createEl('label', 'dashboardAccountProfileToggle');
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.id = 'dashboardAccountProfileBillingSame';
+    toggle.checked = getAccountProfilePathValue_(profile, 'billingSameAsMailing', true) !== false;
+    toggleLabel.appendChild(toggle);
+    toggleLabel.appendChild(createEl('span', '', 'Same as mailing address'));
+    billingSection.appendChild(toggleLabel);
+    const billingGrid = createEl('div', 'dashboardAccountProfileGrid');
+    billingGrid.id = 'dashboardAccountProfileBillingGrid';
+    billingGrid.hidden = toggle.checked;
+    billingSection.appendChild(billingGrid);
+    dashboardAccountProfileBody.appendChild(billingSection);
+    appendDashboardAccountProfileField_(billingGrid, { label: 'Address line 1', path: 'billingAddress.line1', value: getAccountProfilePathValue_(profile, 'billingAddress.line1'), wide: true });
+    appendDashboardAccountProfileField_(billingGrid, { label: 'Address line 2', path: 'billingAddress.line2', value: getAccountProfilePathValue_(profile, 'billingAddress.line2'), wide: true });
+    appendDashboardAccountProfileField_(billingGrid, { label: 'City', path: 'billingAddress.city', value: getAccountProfilePathValue_(profile, 'billingAddress.city') });
+    appendDashboardAccountProfileField_(billingGrid, { label: 'State', path: 'billingAddress.state', value: getAccountProfilePathValue_(profile, 'billingAddress.state') });
+    appendDashboardAccountProfileField_(billingGrid, { label: 'ZIP', path: 'billingAddress.postalCode', value: getAccountProfilePathValue_(profile, 'billingAddress.postalCode') });
+    appendDashboardAccountProfileField_(billingGrid, { label: 'Country', path: 'billingAddress.country', value: getAccountProfilePathValue_(profile, 'billingAddress.country') });
+    toggle.addEventListener('change', () => {
+      billingGrid.hidden = toggle.checked;
+    });
+    const detailsGrid = appendDashboardAccountProfileSection_(dashboardAccountProfileBody, 'Business details');
+    appendDashboardAccountProfileField_(detailsGrid, { label: 'Accounts payable email', type: 'email', path: 'accountsPayableEmail', value: getAccountProfilePathValue_(profile, 'accountsPayableEmail') });
+    appendDashboardAccountProfileField_(detailsGrid, { label: 'General office phone', path: 'officePhone', value: getAccountProfilePathValue_(profile, 'officePhone') });
+    appendDashboardAccountProfileField_(detailsGrid, { label: 'Website', type: 'url', path: 'website', value: getAccountProfilePathValue_(profile, 'website'), wide: true });
+    appendDashboardAccountProfileField_(detailsGrid, { label: 'Account/order notes for Red Threads', type: 'textarea', path: 'notes', value: getAccountProfilePathValue_(profile, 'notes'), wide: true });
+  }
+
+  function assignDashboardAccountProfilePath_(target, path, value){
+    const parts = String(path || '').split('.').filter(Boolean);
+    if (!parts.length) return;
+    let cursor = target;
+    parts.forEach((part, idx) => {
+      if (idx === parts.length - 1) {
+        cursor[part] = value;
+        return;
+      }
+      if (!cursor[part] || typeof cursor[part] !== 'object') cursor[part] = {};
+      cursor = cursor[part];
+    });
+  }
+
+  function readDashboardAccountProfileForm_(){
+    const section = DASHBOARD_ACCOUNT_PROFILE_SECTION === 'primary_contact' ? 'primary_contact' : 'organization';
+    const profile = {};
+    if (!dashboardAccountProfileBody) return profile;
+    dashboardAccountProfileBody.querySelectorAll('[data-profile-path]').forEach(control => {
+      const path = String(control.dataset.profilePath || '').trim();
+      if (!path) return;
+      assignDashboardAccountProfilePath_(profile, path, String(control.value || '').trim());
+    });
+    if (section === 'organization') {
+      const same = document.getElementById('dashboardAccountProfileBillingSame');
+      profile.billingSameAsMailing = same ? same.checked === true : true;
+      if (profile.billingSameAsMailing) profile.billingAddress = {};
+    }
+    return profile;
+  }
+
+  function validateDashboardAccountProfileForm_(profile){
+    const value = (profile && typeof profile === 'object') ? profile : {};
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const checkEmail = (email, label) => {
+      const text = String(email || '').trim();
+      if (text && !emailPattern.test(text)) throw new Error(label + ' must be a valid email address.');
+    };
+    if (dashboardAccountProfileBody) {
+      dashboardAccountProfileBody.querySelectorAll('[data-profile-path]').forEach(control => {
+        const max = Number(control.maxLength || 0);
+        const text = String(control.value || '');
+        if (max > 0 && text.length > max) {
+          const field = control.closest ? control.closest('.dashboardAccountProfileField') : null;
+          const labelNode = field ? field.querySelector('label') : null;
+          const label = labelNode ? String(labelNode.textContent || 'This field').trim() : 'This field';
+          throw new Error(label + ' must be ' + max + ' characters or fewer.');
+        }
+      });
+    }
+    if (DASHBOARD_ACCOUNT_PROFILE_SECTION === 'organization') {
+      checkEmail(value.accountsPayableEmail, 'Accounts payable email');
+      const site = String(value.website || '').trim();
+      if (site && !/^(https?:\/\/)?[^\s/$.?#].[^\s]*$/i.test(site)) {
+        throw new Error('Website must be a valid web address.');
+      }
+      return;
+    }
+    checkEmail(value.alternateOrderContact && value.alternateOrderContact.email, 'Alternate order contact email');
+  }
+
+  function bindDashboardAccountProfileModalEvents_(){
+    if (bindDashboardAccountProfileModalEvents_.isBound === true) return;
+    bindDashboardAccountProfileModalEvents_.isBound = true;
+    [dashboardAccountProfileCloseBtn, dashboardAccountProfileCancelBtn].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', evt => closeDashboardAccountProfileModal_(evt));
+    });
+    if (dashboardAccountProfileSaveBtn) {
+      dashboardAccountProfileSaveBtn.addEventListener('click', evt => {
+        if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+        saveDashboardAccountProfileDetails_();
+      });
+    }
+    if (dashboardAccountProfileBackdrop) {
+      dashboardAccountProfileBackdrop.addEventListener('click', evt => {
+        if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+        const target = evt.target;
+        if (dashboardAccountProfileModal && target instanceof Node && dashboardAccountProfileModal.contains(target)) return;
+        closeDashboardAccountProfileModal_(evt);
+      });
+    }
+    document.addEventListener('pointerdown', evt => {
+      if (!dashboardAccountProfileBackdrop || dashboardAccountProfileBackdrop.hidden) return;
+      if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+      const target = evt.target;
+      if (dashboardAccountProfileModal && target instanceof Node && dashboardAccountProfileModal.contains(target)) return;
+      closeDashboardAccountProfileModal_(evt);
+    }, true);
+    document.addEventListener('keydown', evt => {
+      if (evt.key !== 'Escape') return;
+      if (!dashboardAccountProfileBackdrop || dashboardAccountProfileBackdrop.hidden) return;
+      if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+      closeDashboardAccountProfileModal_(evt);
+    });
+  }
+
+  function ensureDashboardAccountProfileBackdropMounted_(){
+    if (!dashboardAccountProfileBackdrop || !document.body) return;
+    if (dashboardAccountProfileBackdrop.parentNode !== document.body) {
+      document.body.appendChild(dashboardAccountProfileBackdrop);
+    }
+  }
+
+  function openDashboardAccountProfileModal_(section){
+    const normalizedSection = section === 'primary_contact' ? 'primary_contact' : 'organization';
+    if (!dashboardAccountProfileBackdrop) return;
+    DASHBOARD_ACCOUNT_PROFILE_SECTION = normalizedSection;
+    bindDashboardAccountProfileModalEvents_();
+    ensureDashboardAccountProfileBackdropMounted_();
+    setDashboardAccountProfileSaving_(false);
+    clearDashboardAccountProfileNotice_();
+    renderDashboardAccountProfileModal_();
+    dashboardAccountProfileBackdrop.hidden = false;
+    requestAnimationFrame(() => {
+      const firstEditable = dashboardAccountProfileBody ? dashboardAccountProfileBody.querySelector('input:not([type="checkbox"]), select, textarea') : null;
+      if (firstEditable && typeof firstEditable.focus === 'function') {
+        firstEditable.focus();
+      } else if (dashboardAccountProfileCloseBtn) {
+        dashboardAccountProfileCloseBtn.focus();
+      }
+    });
+  }
+
+  function closeDashboardAccountProfileModal_(evt){
+    if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+    if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
+    if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+    setDashboardAccountProfileSaving_(false);
+    clearDashboardAccountProfileNotice_();
+    DASHBOARD_ACCOUNT_PROFILE_SECTION = '';
+    if (dashboardAccountProfileBackdrop) dashboardAccountProfileBackdrop.hidden = true;
+  }
+
+  async function saveDashboardAccountProfileDetails_(){
+    if (DASHBOARD_ACCOUNT_PROFILE_SAVING) return;
+    const section = DASHBOARD_ACCOUNT_PROFILE_SECTION === 'primary_contact' ? 'primary_contact' : 'organization';
+    let profile = {};
+    try {
+      profile = readDashboardAccountProfileForm_();
+      validateDashboardAccountProfileForm_(profile);
+    } catch (err) {
+      setDashboardAccountProfileNotice_(String((err && err.message) || err), true);
+      return;
+    }
+    const requestPayload = await ensureDashboardAccountDocumentContextReady_();
+    if (!requestPayload) {
+      setDashboardAccountProfileNotice_('Account dashboard context is unavailable. Refresh and try again.', true);
+      return;
+    }
+    setDashboardAccountProfileSaving_(true);
+    setDashboardAccountProfileNotice_('Saving account details...', false);
+    try {
+      const response = await callServer('updateAccountProfileDetails', Object.assign({}, requestPayload, {
+        section: section,
+        profile: profile
+      }));
+      if (!response || response.ok !== true) {
+        throw new Error(String((response && response.error) || 'Account details could not be saved.'));
+      }
+      if (response.accountSummary) {
+        DASHBOARD_ACCOUNT_SUMMARY = normalizeAccountSummary(response.accountSummary);
+        ACCOUNT_SUMMARY = normalizeAccountSummary(response.accountSummary);
+        syncDashboardAccountContextFromSummary_(DASHBOARD_ACCOUNT_SUMMARY);
+        renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY);
+      }
+      DASHBOARD_ACCOUNT_PROFILE_SECTION = section;
+      renderDashboardAccountProfileModal_();
+      setDashboardAccountProfileNotice_(String(response.message || 'Account details saved.'), false);
+    } catch (err) {
+      setDashboardAccountProfileNotice_(String((err && err.message) || err), true);
+    } finally {
+      setDashboardAccountProfileSaving_(false);
+    }
+  }
+
+  function bindDashboardAccountProfileCard_(node, section){
+    if (!node) return;
+    const normalizedSection = section === 'primary_contact' ? 'primary_contact' : 'organization';
+    node.addEventListener('click', evt => {
+      if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+      openDashboardAccountProfileModal_(normalizedSection);
+    });
+  }
+
   function renderDashboardAccountStatus(summary){
     if (!dashboardAccountPanel || !dashboardAccountMeta || !dashboardAccountBullets) return;
     const account = normalizeAccountSummary(summary);
@@ -21671,8 +22291,32 @@
 
     dashboardAccountMeta.innerHTML = '';
     dashboardAccountMeta.classList.add('dashboardAccountGrid');
-    dashboardAccountMeta.appendChild(buildDashboardAccountCard_('Organization', account.orgName || account.primaryContactName || '--'));
-    dashboardAccountMeta.appendChild(buildDashboardAccountCard_('Primary Email', account.primaryEmail || '--'));
+    const organizationCard = buildDashboardAccountCard_(
+      'Organization',
+      account.orgName || account.primaryContactName || '--',
+      {
+        interactive: true,
+        profileSection: 'organization',
+        hoverValue: 'Edit details',
+        stateClass: 'isNotStarted',
+        ariaLabel: 'Edit organization details'
+      }
+    );
+    const primaryContactCard = buildDashboardAccountCard_(
+      'Primary contact',
+      account.primaryContactName || account.billingContactName || 'Contact details',
+      {
+        interactive: true,
+        profileSection: 'primary_contact',
+        hoverValue: 'Edit contact info',
+        stateClass: 'isNotStarted',
+        ariaLabel: 'Edit primary contact info'
+      }
+    );
+    bindDashboardAccountProfileCard_(organizationCard, 'organization');
+    bindDashboardAccountProfileCard_(primaryContactCard, 'primary_contact');
+    dashboardAccountMeta.appendChild(organizationCard);
+    dashboardAccountMeta.appendChild(primaryContactCard);
 
     const termsCard = buildDashboardAccountCard_(
       'Credit Terms',
@@ -22224,6 +22868,16 @@
   const dashboardAchManageDoneBtn = document.getElementById('dashboardAchManageDoneBtn');
   const dashboardAchManageAddBtn = document.getElementById('dashboardAchManageAddBtn');
   const dashboardAchManageFooter = document.getElementById('dashboardAchManageFooter');
+  const dashboardAccountProfileBackdrop = document.getElementById('dashboardAccountProfileBackdrop');
+  const dashboardAccountProfileModal = document.getElementById('dashboardAccountProfileModal');
+  const dashboardAccountProfileTitle = document.getElementById('dashboardAccountProfileTitle');
+  const dashboardAccountProfileSub = document.getElementById('dashboardAccountProfileSub');
+  const dashboardAccountProfileNotice = document.getElementById('dashboardAccountProfileNotice');
+  const dashboardAccountProfileBody = document.getElementById('dashboardAccountProfileBody');
+  const dashboardAccountProfileCloseBtn = document.getElementById('dashboardAccountProfileCloseBtn');
+  const dashboardAccountProfileCancelBtn = document.getElementById('dashboardAccountProfileCancelBtn');
+  const dashboardAccountProfileSaveBtn = document.getElementById('dashboardAccountProfileSaveBtn');
+  const dashboardAccountProfileFooter = document.getElementById('dashboardAccountProfileFooter');
   const dashboardApplyTermsBtn = document.getElementById('dashboardApplyTermsBtn');
   const dashboardTaxExemptBtn = document.getElementById('dashboardTaxExemptBtn');
   const projectView = document.getElementById('projectView');
@@ -33463,6 +34117,66 @@
     }
   }
 
+  function handleTaxDocEmailSendClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    submitTaxDocEmail_().catch(err => {
+      setTaxDocMessage(String((err && err.message) || err || 'Unable to email the blank form.'), 'err');
+    });
+  }
+
+  function handleTaxDocUploadSubmitClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    submitTaxDocUploadedDocument_().catch(err => {
+      setTaxDocMessage(String((err && err.message) || err || 'Unable to submit the completed document.'), 'err');
+    });
+  }
+
+  function returnTaxFormToEditor_(){
+    TAX_FORM_LAST_AUTO_ADVANCED_STEP_ID = '';
+    if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = true;
+    TAX_FORM_FINAL_MODAL_MODE = '';
+    TAX_FORM_FINAL_MODAL_MESSAGE = '';
+    goToTaxFormStep_('section1', { focusControl: true });
+  }
+
+  function handleTaxDocBackToEditorClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    returnTaxFormToEditor_();
+  }
+
+  function handleTaxDocFinalSubmitClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    submitTaxFormFinalDocument_().catch(err => {
+      TAX_FORM_FINAL_MODAL_MODE = 'error';
+      TAX_FORM_FINAL_MODAL_MESSAGE = String((err && err.message) || err || 'Unable to submit the completed document.');
+      if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = false;
+      renderTaxFormSuccessModal_();
+      setTaxDocMessage(TAX_FORM_FINAL_MODAL_MESSAGE, 'err');
+    });
+  }
+
+  function handleTaxDocEmailCopyClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    emailSubmittedTaxFormCopy_().catch(err => {
+      setTaxDocMessage(String((err && err.message) || err || 'Unable to email the completed copy.'), 'err');
+    });
+  }
+
+  function handleTaxDocCloseEntryClick_(event){
+    if (!isTaxWorkspaceActionSurfaceOpen_()) return;
+    containTaxWorkspaceActionEvent_(event);
+    if (String(TAX_FORM_FINAL_MODAL_MODE || '').trim() === 'error') {
+      returnTaxFormToEditor_();
+      return;
+    }
+    closeTaxExemptWorkspace();
+  }
+
   function handleTaxReplacementActionClick_(event){
     if (!event || !isTaxWorkspaceActionSurfaceOpen_()) return;
     const target = event.target;
@@ -33568,6 +34282,30 @@
     if (target.closest('#taxDocEmailCancelBtn')) {
       containTaxWorkspaceActionEvent_(event);
       closeTaxDocEmailPanel_();
+      return;
+    }
+    if (target.closest('#taxDocEmailSendBtn')) {
+      handleTaxDocEmailSendClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocSubmitBtn')) {
+      handleTaxDocUploadSubmitClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocBackToEditorBtn')) {
+      handleTaxDocBackToEditorClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocFinalSubmitBtn')) {
+      handleTaxDocFinalSubmitClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocEmailCopyBtn')) {
+      handleTaxDocEmailCopyClick_(event);
+      return;
+    }
+    if (target.closest('#taxDocCloseEntryBtn')) {
+      handleTaxDocCloseEntryClick_(event);
       return;
     }
     if (target.closest('#taxDocReplacementBtn')) {
@@ -33964,8 +34702,36 @@
     }
   }
 
+  function routeTaxFormToFirstIncompleteReviewField_(){
+    if (taxSubmitSuccessBackdrop) taxSubmitSuccessBackdrop.hidden = true;
+    TAX_FORM_FINAL_MODAL_MODE = '';
+    TAX_FORM_FINAL_MODAL_MESSAGE = '';
+    TAX_FORM_LAST_AUTO_ADVANCED_STEP_ID = '';
+    const section4 = getTaxFormStepById_('section4');
+    const nextFieldId = getTaxFormNextIncompleteFieldForStep_(section4);
+    const field = nextFieldId ? getTaxFormFieldById_(nextFieldId) : null;
+    setTaxDocMessage(
+      field
+        ? ('Complete "' + String(field.label || field.id || 'this field').trim() + '" before submitting the final document.')
+        : 'Complete the required tax form fields before submitting the final document.',
+      'err'
+    );
+    if (nextFieldId) {
+      setTaxFormActiveField_(nextFieldId, { stepId: 'section4', focusControl: true });
+      return;
+    }
+    TAX_FORM_GUIDED_STARTED = true;
+    TAX_FORM_CURRENT_STEP_ID = 'section4';
+    ensureTaxFormActiveField_();
+    renderTaxFormWorkspace_();
+  }
+
   async function submitTaxFormFinalDocument_(){
-    if (TAX_FORM_FINAL_SUBMIT_IN_FLIGHT || !isTaxFormReadyForReview_()) return;
+    if (TAX_FORM_FINAL_SUBMIT_IN_FLIGHT) return;
+    if (!isTaxFormReadyForReview_()) {
+      routeTaxFormToFirstIncompleteReviewField_();
+      return;
+    }
     clearTaxFormFinalSubmitReconcileTimer_();
     TAX_FORM_FINAL_SUBMIT_IN_FLIGHT = true;
     TAX_FORM_FINAL_SUBMIT_STARTED_AT = new Date().toISOString();

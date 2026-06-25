@@ -417,6 +417,11 @@ const PORTAL_ACCOUNT_HEADERS = [
   'taxExemptExpiresAt',
   'billingContactEmail',
   'billingContactName',
+  'organizationProfileJson',
+  'primaryContactProfileJson',
+  'accountProfileUpdatedAt',
+  'accountProfileUpdatedByName',
+  'accountProfileUpdatedByEmail',
   'stripeCustomerId',
   'achPaymentMethodsJson',
   'defaultAchPaymentMethodId',
@@ -10340,6 +10345,152 @@ function buildAccountDocumentContext_(payload) {
   };
 }
 
+function normalizeAccountProfileSection_(section) {
+  const value = trimString_(section).toLowerCase();
+  if (value === 'organization') return 'organization';
+  if (value === 'primary_contact' || value === 'primary-contact' || value === 'contact') return 'primary_contact';
+  return '';
+}
+
+function sanitizeAccountProfileText_(value, maxLength) {
+  const limit = Math.max(1, Number(maxLength || 160));
+  return trimString_(value).slice(0, limit);
+}
+
+function sanitizeAccountProfileEmail_(value, label) {
+  const email = normalizeEmail_(value);
+  if (!email) return '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error((label || 'Email') + ' must be a valid email address.');
+  }
+  return email.slice(0, 160);
+}
+
+function sanitizeAccountProfileWebsite_(value) {
+  let site = trimString_(value).slice(0, 180);
+  if (!site) return '';
+  if (!/^https?:\/\//i.test(site)) site = 'https://' + site;
+  if (!/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(site)) {
+    throw new Error('Website must be a valid web address.');
+  }
+  return site;
+}
+
+function sanitizeAccountProfileChoice_(value, allowed, fallback) {
+  const clean = trimString_(value).toLowerCase();
+  return allowed.indexOf(clean) >= 0 ? clean : fallback;
+}
+
+function sanitizeAccountProfileAddress_(value) {
+  const source = (value && typeof value === 'object') ? value : {};
+  return {
+    line1: sanitizeAccountProfileText_(source.line1, 120),
+    line2: sanitizeAccountProfileText_(source.line2, 120),
+    city: sanitizeAccountProfileText_(source.city, 80),
+    state: sanitizeAccountProfileText_(source.state, 32),
+    postalCode: sanitizeAccountProfileText_(source.postalCode || source.zip, 24),
+    country: sanitizeAccountProfileText_(source.country, 80)
+  };
+}
+
+function sanitizeOrganizationAccountProfile_(profile) {
+  const source = (profile && typeof profile === 'object') ? profile : {};
+  const billingSameAsMailing = source.billingSameAsMailing !== false;
+  return {
+    mailingAddress: sanitizeAccountProfileAddress_(source.mailingAddress),
+    billingSameAsMailing: billingSameAsMailing,
+    billingAddress: billingSameAsMailing ? {} : sanitizeAccountProfileAddress_(source.billingAddress),
+    accountsPayableEmail: sanitizeAccountProfileEmail_(source.accountsPayableEmail, 'Accounts payable email'),
+    officePhone: sanitizeAccountProfileText_(source.officePhone, 40),
+    website: sanitizeAccountProfileWebsite_(source.website),
+    notes: sanitizeAccountProfileText_(source.notes, 700)
+  };
+}
+
+function sanitizePrimaryContactAccountProfile_(profile) {
+  const source = (profile && typeof profile === 'object') ? profile : {};
+  const alternate = (source.alternateOrderContact && typeof source.alternateOrderContact === 'object')
+    ? source.alternateOrderContact
+    : {};
+  return {
+    roleTitle: sanitizeAccountProfileText_(source.roleTitle, 100),
+    mobilePhone: sanitizeAccountProfileText_(source.mobilePhone, 40),
+    officePhone: sanitizeAccountProfileText_(source.officePhone, 40),
+    officeExtension: sanitizeAccountProfileText_(source.officeExtension, 20),
+    preferredPhoneType: sanitizeAccountProfileChoice_(source.preferredPhoneType, ['mobile', 'office'], ''),
+    preferredContactMethod: sanitizeAccountProfileChoice_(source.preferredContactMethod, ['email', 'phone'], ''),
+    alternateOrderContact: {
+      name: sanitizeAccountProfileText_(alternate.name, 120),
+      email: sanitizeAccountProfileEmail_(alternate.email, 'Alternate order contact email'),
+      phone: sanitizeAccountProfileText_(alternate.phone, 40)
+    }
+  };
+}
+
+function parseAccountProfileJsonForSummary_(value) {
+  const parsed = safeJsonParse_(value, {});
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  return parsed;
+}
+
+function updateAccountProfileDetails_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok !== true) return ctx;
+  if (!ctx.accountInfo || !ctx.accountInfo.rowInfo) {
+    return {
+      ok: false,
+      code: 'account_required',
+      error: 'A saved portal account is required before account details can be updated.'
+    };
+  }
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const section = normalizeAccountProfileSection_(p.section);
+  if (!section) {
+    return { ok: false, code: 'invalid_account_profile_section', error: 'Choose organization or primary contact details.' };
+  }
+  const profilePayload = (p.profile && typeof p.profile === 'object') ? p.profile : {};
+  const cleanProfile = section === 'organization'
+    ? sanitizeOrganizationAccountProfile_(profilePayload)
+    : sanitizePrimaryContactAccountProfile_(profilePayload);
+  const now = nowIso_();
+  cleanProfile.updatedAt = now;
+  const accountSummary = ctx.accountInfo.summary || {};
+  const actorName = sanitizeAccountProfileText_(
+    accountSummary.primaryContactName || accountSummary.billingContactName || (ctx.identity && ctx.identity.personName),
+    120
+  );
+  const actorEmail = normalizeEmail_(
+    accountSummary.primaryEmail || accountSummary.billingContactEmail || (ctx.identity && ctx.identity.personEmail)
+  );
+  const updates = {
+    accountProfileUpdatedAt: now,
+    accountProfileUpdatedByName: actorName,
+    accountProfileUpdatedByEmail: actorEmail,
+    updatedAt: now
+  };
+  if (section === 'organization') {
+    updates.organizationProfileJson = JSON.stringify(cleanProfile);
+  } else {
+    updates.primaryContactProfileJson = JSON.stringify(cleanProfile);
+  }
+  setRowValuesByHeaderMap_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row, ctx.accountInfo.rowInfo.colMap, updates);
+  const refreshed = buildRowInfoFromSheet_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row);
+  return {
+    ok: true,
+    updatedSection: section,
+    accountSummary: buildPortalAccountSummary_(refreshed.rowObjNormalized, ctx.cfg),
+    message: section === 'organization' ? 'Organization details saved.' : 'Primary contact details saved.'
+  };
+}
+
+function updateAccountProfileDetails(payload) {
+  try {
+    return updateAccountProfileDetails_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
 function refreshAccountDocumentContextAccount_(ctx) {
   const refreshed = buildRowInfoFromSheet_(ctx.infra.accountsSheet, ctx.accountInfo.rowInfo.row);
   ctx.accountInfo = {
@@ -18351,6 +18502,11 @@ function buildPortalAccountSummary_(accountRow, cfg) {
     taxExemptDocumentDownloadUrl: taxExemptWorkflow ? taxExemptWorkflow.sourceDocumentDownloadUrl : '',
     billingContactEmail: normalizeEmail_(row.billingcontactemail || row.billingContactEmail),
     billingContactName: trimString_(row.billingcontactname || row.billingContactName),
+    organizationProfile: parseAccountProfileJsonForSummary_(row.organizationprofilejson || row.organizationProfileJson),
+    primaryContactProfile: parseAccountProfileJsonForSummary_(row.primarycontactprofilejson || row.primaryContactProfileJson),
+    accountProfileUpdatedAt: trimString_(row.accountprofileupdatedat || row.accountProfileUpdatedAt),
+    accountProfileUpdatedByName: trimString_(row.accountprofileupdatedbyname || row.accountProfileUpdatedByName),
+    accountProfileUpdatedByEmail: normalizeEmail_(row.accountprofileupdatedbyemail || row.accountProfileUpdatedByEmail),
     stripeCustomerId: trimString_(row.stripecustomerid || row.stripeCustomerId),
     achPaymentMethods: normalizeAchPaymentMethodsJson_(row.achpaymentmethodsjson || row.achPaymentMethodsJson),
     defaultAchPaymentMethodId: trimString_(row.defaultachpaymentmethodid || row.defaultAchPaymentMethodId),
