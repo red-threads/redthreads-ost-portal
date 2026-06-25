@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-25 - Approved Tax Document Scroll Fix
+
+- Mode: Full ship scoped approved-tax viewer UI/layout fix.
+- Branch/commit/PR: `main`, Apps Script version `1056`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: make the approved sales-tax exemption document viewer scrollable top-to-bottom when the stored certificate is taller than the viewport.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `182` constrains the approved tax client-view shell, makes the document stage own vertical scrolling, keeps the replacement rail top-aligned, lets approved image documents contribute their full rendered height, and keeps iframe/loading states bounded. The previously local credit-terms subtitle copy edit also shipped: `Complete credit terms to unlock purchase-order checkout, net terms eligibility, and more flexible payment options.`
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Fix approved tax document scrolling"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1056 - Fix approved tax document scrolling`. Direct `/exec?smoke=1056` returned HTTP `200` with `Development revision 182`, omitted stale revision `181`, included the approved-tax scroll CSS markers and shortened credit-terms copy marker, referenced the stable deployment ID, and had zero targeted secret/private-link markers. Public `/portal?smoke=1056` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted secret/private-link markers; public wrapper fetches do not inline Apps Script revision/copy markers because the app is iframe-loaded.
+- Runtime data state: no email-review suite was run, no account-document action was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke an authenticated approved-tax account view and confirm the document pane scrolls through the full stored certificate while the replacement card and X close remain usable.
+
 ## 2026-06-25 - Account Document Benefit Subtitle Refinement
 
 - Mode: Full ship scoped account-document UI/copy refinement.

@@ -11042,21 +11042,26 @@
     }
     .taxDocModal.is-client-view-mode .taxDocShell{
       grid-template-columns:minmax(0,1fr);
+      min-height:0;
+      overflow:hidden;
       padding:0 26px 26px;
     }
     .taxDocModal.is-client-view-mode.has-tax-replacement-action .taxDocShell{
       grid-template-columns:minmax(0,980px) minmax(260px,320px);
-      align-items:start;
+      align-items:stretch;
     }
     .taxDocModal.is-client-view-mode .taxDocStage{
       display:block;
-      overflow:auto;
+      min-height:0;
+      overflow-x:hidden;
+      overflow-y:auto;
       border:none;
       background:transparent;
       padding:0;
     }
     .taxDocModal.is-client-view-mode .taxDocApprovedViewer{
       width:min(100%,980px);
+      min-height:0;
       margin:0 auto;
       padding-bottom:20px;
     }
@@ -11292,17 +11297,19 @@
       border:1px solid rgba(255,255,255,.09);
       background:#fff;
       box-shadow:0 24px 48px rgba(15,23,42,.22);
-      overflow:hidden;
+      overflow:visible;
     }
     .taxDocApprovedViewerCard.is-frame{
       width:min(100%, 860px);
       aspect-ratio:8.5 / 11;
+      overflow:hidden;
     }
     .taxDocApprovedViewerCard.is-loading{
       display:flex;
       align-items:center;
       justify-content:center;
       min-height:min(78vh, 1120px);
+      overflow:hidden;
     }
     .taxDocApprovedViewerLoading{
       display:flex;
@@ -11335,6 +11342,7 @@
       display:block;
       width:100%;
       height:auto;
+      border-radius:inherit;
       background:#fff;
     }
     .taxDocApprovedViewerImage[hidden]{
@@ -17746,7 +17754,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 181">181</div>
+  <div class="devRevisionBadge" aria-label="Development revision 182">182</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -33418,7 +33426,7 @@
       if (termsReviewSub) {
         termsReviewSub.hidden = false;
         termsReviewSub.classList.add('is-benefit');
-        termsReviewSub.textContent = 'Complete credit terms to unlock purchase-order checkout, net terms eligibility, and more flexible payment options for future orders.';
+        termsReviewSub.textContent = 'Complete credit terms to unlock purchase-order checkout, net terms eligibility, and more flexible payment options.';
       }
       if (termsDocClientSection) termsDocClientSection.hidden = false;
       if (termsReviewSubmissionSection) termsReviewSubmissionSection.hidden = true;
