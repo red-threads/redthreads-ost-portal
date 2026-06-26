@@ -667,8 +667,8 @@ const DASHBOARD_READ_MODEL_SOURCE_LEGACY = 'legacy_live_projection';
 const DASHBOARD_READ_MODEL_SOURCE_TABLE = 'projection_table';
 const DASHBOARD_READ_MODEL_SOURCE_DATABASE = 'projection_database';
 const DASHBOARD_READ_MODEL_CRITICAL_LIMIT = 6;
-const DASHBOARD_READ_MODEL_CRITICAL_READY_PROFILE = 'criticalTop6PeekSummaryReady';
-const DASHBOARD_READ_MODEL_CRITICAL_FALLBACK_PROFILE = 'criticalTop6PeekSummaryFallback';
+const DASHBOARD_READ_MODEL_CRITICAL_READY_PROFILE = 'criticalTop6PeekSummaryThumbReady';
+const DASHBOARD_READ_MODEL_CRITICAL_FALLBACK_PROFILE = 'criticalTop6PeekSummaryThumbFallback';
 const PORTAL_EMAIL_QUEUE_TRAFFIC_NUDGE_CACHE_KEY = 'rt:emailQueueTrafficNudge:v1';
 const PORTAL_EMAIL_QUEUE_TRAFFIC_NUDGE_TTL_SEC = 60;
 const AUTH_RESET_RETURN_CACHE_PREFIX = 'auth_reset_return_';
@@ -4613,7 +4613,9 @@ function buildDashboardReadModelCriticalEnvelope_(criticalResp, criticalTokens) 
   tokenList.forEach(function(token) {
     const item = itemByToken[token] || {};
     const statusReady = item.ok === true && isValidDashboardStatusSeedPayload_(item.statusSeed);
-    const peekReady = item.ok === true && isRenderableDashboardPeekPayload_(item.peekPreview);
+    const peekReady = item.ok === true &&
+      isRenderableDashboardPeekPayload_(item.peekPreview) &&
+      !!buildDashboardProjectThumbnailMetaFromPeekSummary_(item.peekPreview);
     if (statusReady) {
       statusByToken[token] = cloneJsonValue_(item.statusSeed, {});
       statusReadyTokens.push(token);
@@ -4657,6 +4659,41 @@ function buildDashboardReadModelCriticalEnvelope_(criticalResp, criticalTokens) 
   };
 }
 
+function buildDashboardProjectThumbnailMetaFromPeekSummary_(peekSummary) {
+  const payload = (peekSummary && typeof peekSummary === 'object') ? peekSummary : {};
+  const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+  for (let i = 0; i < jobs.length; i += 1) {
+    const job = (jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
+    const previewImageUrl = trimString_(job.previewImageUrl);
+    const previewImageCandidates = Array.isArray(job.previewImageCandidates)
+      ? uniqueTrimmedStrings_(job.previewImageCandidates)
+      : [];
+    const candidates = uniqueTrimmedStrings_(
+      (previewImageUrl ? [previewImageUrl] : []).concat(previewImageCandidates)
+    );
+    if (!candidates.length) continue;
+    return {
+      previewImageUrl: previewImageUrl || candidates[0],
+      previewImageCandidates: candidates,
+      previewImageAlt: trimString_(job.previewImageAlt || job.printJobName || 'Project preview')
+    };
+  }
+  return null;
+}
+
+function applyDashboardProjectThumbnailMeta_(project, thumbnailMeta) {
+  const safeProject = (project && typeof project === 'object') ? project : {};
+  const thumbnail = (thumbnailMeta && typeof thumbnailMeta === 'object') ? thumbnailMeta : null;
+  if (!thumbnail || !Array.isArray(thumbnail.previewImageCandidates) || !thumbnail.previewImageCandidates.length) {
+    return safeProject;
+  }
+  safeProject.previewImageUrl = trimString_(thumbnail.previewImageUrl) || thumbnail.previewImageCandidates[0];
+  safeProject.previewImageCandidates = uniqueTrimmedStrings_(thumbnail.previewImageCandidates);
+  safeProject.previewImageAlt = trimString_(thumbnail.previewImageAlt || safeProject.dealTitle || safeProject.dealNumber || 'Project preview');
+  safeProject.thumbnailSource = 'peek_summary';
+  return safeProject;
+}
+
 function applyDashboardCriticalEnvelopeToProjects_(projects, criticalEnvelope) {
   const critical = (criticalEnvelope && typeof criticalEnvelope === 'object') ? criticalEnvelope : {};
   const statusByToken = (critical.statusByToken && typeof critical.statusByToken === 'object') ? critical.statusByToken : {};
@@ -4672,6 +4709,10 @@ function applyDashboardCriticalEnvelopeToProjects_(projects, criticalEnvelope) {
       safeProject.peekInline = true;
       safeProject.peekProfile = DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY;
       safeProject.peekPreview = cloneJsonValue_(peekSummary, {});
+      applyDashboardProjectThumbnailMeta_(
+        safeProject,
+        buildDashboardProjectThumbnailMetaFromPeekSummary_(peekSummary)
+      );
     } else if (critical.tokens && critical.tokens.indexOf(token) >= 0) {
       safeProject.peekInline = false;
       safeProject.criticalPeekFallback = true;
@@ -4754,7 +4795,9 @@ function buildDashboardCriticalEnvelopeFromProjectionRows_(criticalTokens, proje
       const peekPreview = parseDashboardProjectionRecordJsonField_(row.peekSummaryJson || row.peekSummary || row.peekPreview);
       return {
         token: token,
-        ok: isValidDashboardStatusSeedPayload_(statusSeed) && isValidDashboardPeekSummaryPayload_(peekPreview),
+        ok: isValidDashboardStatusSeedPayload_(statusSeed) &&
+          isValidDashboardPeekSummaryPayload_(peekPreview) &&
+          !!buildDashboardProjectThumbnailMetaFromPeekSummary_(peekPreview),
         statusSeed: statusSeed,
         peekPreview: peekPreview,
         error: trimString_(row.staleReason)
@@ -4799,7 +4842,8 @@ function isDashboardReadModelCriticalProjectReady_(project) {
     item &&
     item.ok === true &&
     isValidDashboardStatusSeedPayload_(item.statusSeed) &&
-    isRenderableDashboardPeekPayload_(item.peekPreview)
+    isRenderableDashboardPeekPayload_(item.peekPreview) &&
+    !!buildDashboardProjectThumbnailMetaFromPeekSummary_(item.peekPreview)
   );
 }
 

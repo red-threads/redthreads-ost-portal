@@ -1540,6 +1540,7 @@
       justify-content:center;
     }
     .dashboardPeekJobPreview{
+      position:relative;
       width:92px;
       height:92px;
       border-radius:18px;
@@ -1548,6 +1549,7 @@
       align-items:center;
       justify-content:center;
       box-shadow:0 10px 24px rgba(0,0,0,.35);
+      isolation:isolate;
     }
     .dashboardPeekJobPreview img{
       width:100%;
@@ -1680,10 +1682,31 @@
       color:#ff4b7d;
     }
     .dashboardPeekPlaceholderLine{
+      position:relative;
       display:block;
       height:12px;
       border-radius:999px;
       background:rgba(255,255,255,.11);
+      overflow:hidden;
+      isolation:isolate;
+    }
+    .dashboardPeekBody.isLoading .dashboardPeekPlaceholderLine::after,
+    .dashboardPeekJobRow.isShell .dashboardPeekJobPreview::after,
+    .dashboardPeekJobPreview.isImageLoading::after,
+    .authProjectsThumb.isImageLoading::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      transform:translateX(-100%);
+      background:linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(115,255,208,.24) 45%, rgba(255,255,255,.08) 60%, rgba(255,255,255,0) 100%);
+      animation:dashboardStatusSheen 1.25s linear infinite;
+      pointer-events:none;
+      z-index:2;
+    }
+    .dashboardPeekJobPreview.isImageLoading img,
+    .authProjectsThumb.isImageLoading img{
+      position:relative;
+      z-index:1;
     }
     .dashboardPeekPlaceholderLine.isWide{
       width:92%;
@@ -1745,6 +1768,16 @@
     .dashboardPeekShellList{
       gap:8px;
       justify-content:flex-start;
+    }
+    @media (prefers-reduced-motion: reduce){
+      .dashboardPeekBody.isLoading .dashboardPeekPlaceholderLine::after,
+      .dashboardPeekJobRow.isShell .dashboardPeekJobPreview::after,
+      .dashboardPeekJobPreview.isImageLoading::after,
+      .authProjectsThumb.isImageLoading::after{
+        animation:none;
+        transform:none;
+        opacity:.36;
+      }
     }
 
     /* ===== Dark Glass Auth + Dashboard (Scoped) ===== */
@@ -17810,7 +17843,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 193">193</div>
+  <div class="devRevisionBadge" aria-label="Development revision 194">194</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24207,8 +24240,9 @@
   const DASHBOARD_PROJECT_PEEK_PROFILE_FULL = 'full';
   const DASHBOARD_READ_MODEL_VERSION = 'v3-draft-1';
   const DASHBOARD_READ_MODEL_SOURCE_LEGACY = 'legacy_live_projection';
-  const DASHBOARD_CRITICAL_CACHE_PROFILE = 'criticalTop6PeekSummaryReady';
-  const DASHBOARD_CRITICAL_FALLBACK_PROFILE = 'criticalTop6PeekSummaryFallback';
+  const DASHBOARD_CRITICAL_CACHE_PROFILE = 'criticalTop6PeekSummaryThumbReady';
+  const DASHBOARD_CRITICAL_FALLBACK_PROFILE = 'criticalTop6PeekSummaryThumbFallback';
+  const DASHBOARD_CRITICAL_THUMBNAIL_WAIT_MS = 2500;
   const DASHBOARD_CRITICAL_READY_REASON = 'dashboard-critical-ready';
   const DASHBOARD_CRITICAL_FALLBACK_REASON = 'dashboard-critical-fallback';
   const DASHBOARD_STATUS_VISIBLE_BATCH_SIZE = 8;
@@ -24995,6 +25029,7 @@
       criticalTokens: [],
       criticalStatusReady: false,
       criticalPeekReady: false,
+      criticalThumbnailReady: false,
       criticalReadyEmitted: false,
       backgroundStatusState: 'idle',
       backgroundPeekState: 'idle',
@@ -25037,6 +25072,57 @@
       tokens.push(token);
     });
     return tokens;
+  }
+
+  function getDashboardThumbnailMetaFromPeekPayload_(peekPayload){
+    const payload = (peekPayload && typeof peekPayload === 'object') ? peekPayload : {};
+    const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+    for (let i = 0; i < jobs.length; i += 1) {
+      const job = (jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
+      const previewUrl = String(job.previewImageUrl || '').trim();
+      const previewCandidates = Array.isArray(job.previewImageCandidates)
+        ? job.previewImageCandidates.map(url => String(url || '').trim()).filter(Boolean)
+        : [];
+      const candidates = Array.from(new Set((previewUrl ? [previewUrl] : []).concat(previewCandidates)));
+      if (!candidates.length) continue;
+      return {
+        previewImageUrl: previewUrl || candidates[0],
+        previewImageCandidates: candidates,
+        previewImageAlt: String(job.previewImageAlt || job.printJobName || 'Project preview').trim() || 'Project preview'
+      };
+    }
+    return null;
+  }
+
+  function applyDashboardProjectThumbnailMeta_(project, thumbnailMeta){
+    const target = (project && typeof project === 'object') ? project : {};
+    const thumbnail = (thumbnailMeta && typeof thumbnailMeta === 'object') ? thumbnailMeta : null;
+    const candidates = thumbnail && Array.isArray(thumbnail.previewImageCandidates)
+      ? thumbnail.previewImageCandidates.map(url => String(url || '').trim()).filter(Boolean)
+      : [];
+    if (!candidates.length) return false;
+    const uniqueCandidates = Array.from(new Set(candidates));
+    target.previewImageUrl = String(thumbnail.previewImageUrl || uniqueCandidates[0] || '').trim();
+    target.previewImageCandidates = uniqueCandidates;
+    target.previewImageAlt = String(thumbnail.previewImageAlt || target.dealTitle || target.dealNumber || 'Project preview').trim() || 'Project preview';
+    target.thumbnailSource = 'peek-summary';
+    return true;
+  }
+
+  function applyDashboardProjectThumbnailFromPeekPayload_(project, peekPayload){
+    if (!isDashboardProjectPeekRenderablePayload_(peekPayload)) return false;
+    return applyDashboardProjectThumbnailMeta_(project, getDashboardThumbnailMetaFromPeekPayload_(peekPayload));
+  }
+
+  function getDashboardProjectByToken_(projects, token){
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) return null;
+    const list = Array.isArray(projects) ? projects : [];
+    for (let i = 0; i < list.length; i += 1) {
+      const project = list[i];
+      if (String(project && project.token || '').trim() === cleanToken) return project;
+    }
+    return null;
   }
 
   function isDashboardProjectStatusSeedPayload_(payload){
@@ -25110,6 +25196,7 @@
     entry.source = String(opts.source || '').trim();
     DASHBOARD_PROJECT_PEEK_CACHE.set(cleanToken, entry);
     prewarmDashboardPeekPayloadImages_(payload);
+    updateDashboardProjectRowThumbnailFromPeekPayload_(cleanToken, payload);
     return true;
   }
 
@@ -25128,15 +25215,16 @@
     return !!getDashboardProjectPeekCachedPayload_(token, options);
   }
 
-  function isDashboardCriticalProjectResultReady_(result){
-    const item = (result && typeof result === 'object') ? result : null;
-    return !!(
-      item &&
-      item.ok === true &&
-      isDashboardProjectStatusSeedPayload_(item.statusSeed) &&
-      isDashboardProjectPeekRenderablePayload_(item.peekPreview)
-    );
-  }
+    function isDashboardCriticalProjectResultReady_(result){
+      const item = (result && typeof result === 'object') ? result : null;
+      return !!(
+        item &&
+        item.ok === true &&
+        isDashboardProjectStatusSeedPayload_(item.statusSeed) &&
+        isDashboardProjectPeekRenderablePayload_(item.peekPreview) &&
+        !!getDashboardThumbnailMetaFromPeekPayload_(item.peekPreview)
+      );
+    }
 
   function getDashboardCriticalResultMap_(resp){
     const map = new Map();
@@ -25277,20 +25365,119 @@
     const critical = (meta && typeof meta === 'object') ? meta : {};
     response.dashboardCacheProfile = critical.profile || DASHBOARD_CRITICAL_CACHE_PROFILE;
     response.dashboardCritical = Object.assign({
-      profile: response.dashboardCacheProfile,
-      criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
-      criticalTokens: [],
-      criticalReady: false,
-      criticalStatusReady: false,
-      criticalPeekReady: false,
-      fallback: false,
-      readyCount: 0,
-      fallbackCount: 0
-    }, critical);
-    return response;
-  }
+        profile: response.dashboardCacheProfile,
+        criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+        criticalTokens: [],
+        criticalReady: false,
+        criticalStatusReady: false,
+        criticalPeekReady: false,
+        criticalThumbnailReady: false,
+        criticalThumbnailFallback: false,
+        thumbnailReadyTokens: [],
+        thumbnailFallbackTokens: [],
+        thumbnailReadyCount: 0,
+        thumbnailFallbackCount: 0,
+        thumbnailCandidateCount: 0,
+        thumbnailTimeout: false,
+        fallback: false,
+        readyCount: 0,
+        fallbackCount: 0
+      }, critical);
+      return response;
+    }
 
-  function applyDashboardCriticalDataToHomeData_(homeData, criticalResp, criticalTokens){
+    async function applyDashboardCriticalThumbnailReadiness_(homeData, criticalTokens, coordinator){
+      const payload = (homeData && typeof homeData === 'object') ? homeData : {};
+      const projects = Array.isArray(payload.projects) ? payload.projects : [];
+      const tokens = uniqueDashboardProjectPeekTokens_(
+        Array.isArray(criticalTokens) && criticalTokens.length
+          ? criticalTokens
+          : getDashboardCriticalProjectTokens_(projects)
+      );
+      const resultByToken = new Map();
+      let candidateCount = 0;
+      let timedOut = false;
+
+      markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_thumbnail_start', {
+        criticalCount: tokens.length
+      });
+
+      const tasks = tokens.map(token => {
+        const project = getDashboardProjectByToken_(projects, token);
+        if (!project) {
+          resultByToken.set(token, 'fallback');
+          return Promise.resolve();
+        }
+        if (project.peekInline === true && isDashboardProjectPeekRenderablePayload_(project.peekPreview)) {
+          applyDashboardProjectThumbnailFromPeekPayload_(project, project.peekPreview);
+        }
+        const candidates = getDashboardPeekImageCandidates_(project);
+        candidateCount += candidates.length;
+        if (!candidates.length) {
+          resultByToken.set(token, 'fallback');
+          return Promise.resolve();
+        }
+        return prewarmImageCandidates_(candidates)
+          .then(resolvedUrl => {
+            resultByToken.set(token, resolvedUrl ? 'ready' : 'fallback');
+          })
+          .catch(() => {
+            resultByToken.set(token, 'fallback');
+          });
+      });
+
+      if (tasks.length) {
+        await Promise.race([
+          Promise.all(tasks),
+          waitMs_(DASHBOARD_CRITICAL_THUMBNAIL_WAIT_MS).then(() => {
+            timedOut = true;
+          })
+        ]);
+      }
+
+      const readyTokens = [];
+      const fallbackTokens = [];
+      tokens.forEach(token => {
+        if (resultByToken.get(token) === 'ready') readyTokens.push(token);
+        else fallbackTokens.push(token);
+      });
+
+      const thumbnailReady = fallbackTokens.length === 0;
+      const critical = payload.dashboardCritical && typeof payload.dashboardCritical === 'object'
+        ? payload.dashboardCritical
+        : {};
+      const statusReady = critical.criticalStatusReady === true;
+      const peekReady = critical.criticalPeekReady === true;
+      const allReady = statusReady && peekReady && thumbnailReady;
+      const profile = allReady ? DASHBOARD_CRITICAL_CACHE_PROFILE : DASHBOARD_CRITICAL_FALLBACK_PROFILE;
+      payload.dashboardCacheProfile = profile;
+      payload.dashboardCritical = Object.assign({}, critical, {
+        profile: profile,
+        criticalReady: allReady,
+        criticalThumbnailReady: thumbnailReady,
+        criticalThumbnailFallback: fallbackTokens.length > 0,
+        thumbnailReadyTokens: readyTokens,
+        thumbnailFallbackTokens: fallbackTokens,
+        thumbnailReadyCount: readyTokens.length,
+        thumbnailFallbackCount: fallbackTokens.length,
+        thumbnailCandidateCount: candidateCount,
+        thumbnailTimeout: timedOut === true,
+        fallback: !allReady,
+        storedAt: Date.now()
+      });
+
+      markDashboardCoordinatorPhase_(coordinator, thumbnailReady ? 'dashboard_critical_thumbnail_ready' : 'dashboard_critical_thumbnail_fallback', {
+        ok: thumbnailReady,
+        criticalCount: tokens.length,
+        thumbnailCandidateCount: candidateCount,
+        thumbnailReadyCount: readyTokens.length,
+        thumbnailFallbackCount: fallbackTokens.length,
+        thumbnailTimeout: timedOut === true
+      });
+      return payload;
+    }
+
+    function applyDashboardCriticalDataToHomeData_(homeData, criticalResp, criticalTokens){
     const payload = clonePlainObject(homeData || {});
     const projects = Array.isArray(payload.projects) ? payload.projects : [];
     const tokenSet = new Set(Array.isArray(criticalTokens) ? criticalTokens : []);
@@ -25315,6 +25502,7 @@
         project.peekInline = true;
         project.peekPreview = result.peekPreview;
         project.peekProfile = getDashboardProjectPeekPayloadProfile_(result.peekPreview);
+        applyDashboardProjectThumbnailFromPeekPayload_(project, result.peekPreview);
         rememberDashboardProjectPeekPayload_(token, result.peekPreview, {
           source: 'critical'
         });
@@ -25362,6 +25550,8 @@
       critical.criticalReady === true &&
       critical.criticalStatusReady === true &&
       critical.criticalPeekReady === true &&
+      critical.criticalThumbnailReady === true &&
+      critical.criticalThumbnailFallback !== true &&
       critical.fallback !== true
     );
   }
@@ -27529,6 +27719,7 @@
         safeProject.peekInline = true;
         safeProject.peekProfile = getDashboardProjectPeekPayloadProfile_(peekSummary);
         safeProject.peekPreview = clonePlainObject(peekSummary);
+        applyDashboardProjectThumbnailFromPeekPayload_(safeProject, peekSummary);
       } else if (criticalTokenSet.has(token)) {
         safeProject.peekInline = false;
         safeProject.criticalPeekFallback = true;
@@ -27612,6 +27803,7 @@
       coordinator.criticalTokens = getDashboardCriticalProjectTokens_(cachedCritical.projects);
       coordinator.criticalStatusReady = true;
       coordinator.criticalPeekReady = true;
+      coordinator.criticalThumbnailReady = true;
       hideDashboardProjectsLoadingPlaceholder_();
       applyDashboardHomeData(cachedCritical);
       if (opts.awaitPaint) {
@@ -27622,6 +27814,7 @@
         ok: true,
         cacheHit: true,
         criticalCount: coordinator.criticalTokens.length,
+        thumbnailReadyCount: cachedCritical.dashboardCritical && cachedCritical.dashboardCritical.thumbnailReadyCount,
         projectCount: Array.isArray(cachedCritical.projects) ? cachedCritical.projects.length : 0
       });
       return cachedCritical;
@@ -27639,26 +27832,30 @@
             });
             return null;
           }
-          const criticalMeta = readModelHomeData.dashboardCritical || {};
-          const projects = Array.isArray(readModelHomeData.projects) ? readModelHomeData.projects : [];
+            await applyDashboardCriticalThumbnailReadiness_(readModelHomeData, readModelHomeData.dashboardCritical && readModelHomeData.dashboardCritical.criticalTokens, coordinator);
+            const criticalMeta = readModelHomeData.dashboardCritical || {};
+            const projects = Array.isArray(readModelHomeData.projects) ? readModelHomeData.projects : [];
           const criticalTokens = Array.isArray(criticalMeta.criticalTokens)
             ? criticalMeta.criticalTokens.slice()
             : getDashboardCriticalProjectTokens_(projects);
           coordinator.readModelSource = String(readModelHomeData.readSource || '');
           coordinator.metadataReady = true;
           coordinator.criticalTokens = criticalTokens.slice();
-          coordinator.cacheProfile = readModelHomeData.dashboardCacheProfile || 'metadataOnly';
-          coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
-          coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
-          coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
-          markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_critical_fallback' : 'dashboard_read_model_critical_ready', {
-            ok: criticalMeta.fallback !== true,
-            readSource: coordinator.readModelSource,
-            projectCount: projects.length,
-            criticalCount: criticalTokens.length,
-            readyCount: criticalMeta.readyCount,
-            fallbackCount: criticalMeta.fallbackCount
-          });
+            coordinator.cacheProfile = readModelHomeData.dashboardCacheProfile || 'metadataOnly';
+            coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
+            coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
+            coordinator.criticalThumbnailReady = criticalMeta.criticalThumbnailReady === true;
+            coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
+            markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_critical_fallback' : 'dashboard_read_model_critical_ready', {
+              ok: criticalMeta.fallback !== true,
+              readSource: coordinator.readModelSource,
+              projectCount: projects.length,
+              criticalCount: criticalTokens.length,
+              readyCount: criticalMeta.readyCount,
+              fallbackCount: criticalMeta.fallbackCount,
+              thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+              thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+            });
           rememberDashboardHomeResponse_(dashboardHomePayload, readModelHomeData);
           hideDashboardProjectsLoadingPlaceholder_();
           applyDashboardHomeData(readModelHomeData);
@@ -27670,11 +27867,13 @@
           logDashboardCoordinator_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_revealed_fallback' : 'dashboard_read_model_revealed', {
             ok: true,
             readSource: coordinator.readModelSource,
-            projectCount: projects.length,
-            criticalCount: criticalTokens.length,
-            readyCount: criticalMeta.readyCount,
-            fallbackCount: criticalMeta.fallbackCount
-          });
+              projectCount: projects.length,
+              criticalCount: criticalTokens.length,
+              readyCount: criticalMeta.readyCount,
+              fallbackCount: criticalMeta.fallbackCount,
+              thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+              thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+            });
           return readModelHomeData;
         }
       } catch (readModelErr) {
@@ -27744,18 +27943,25 @@
         }
       }
 
-      const criticalHomeData = applyDashboardCriticalDataToHomeData_(resp, criticalResp, criticalTokens);
-      const criticalMeta = criticalHomeData.dashboardCritical || {};
-      coordinator.cacheProfile = criticalHomeData.dashboardCacheProfile || 'metadataOnly';
-      coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
-      coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
-      coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
-      markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_critical_fallback' : 'dashboard_critical_ready', {
-        ok: criticalMeta.fallback !== true,
-        criticalCount: criticalTokens.length,
-        readyCount: criticalMeta.readyCount,
-        fallbackCount: criticalMeta.fallbackCount
-      });
+	      const criticalHomeData = await applyDashboardCriticalThumbnailReadiness_(
+	        applyDashboardCriticalDataToHomeData_(resp, criticalResp, criticalTokens),
+	        criticalTokens,
+	        coordinator
+	      );
+	      const criticalMeta = criticalHomeData.dashboardCritical || {};
+	      coordinator.cacheProfile = criticalHomeData.dashboardCacheProfile || 'metadataOnly';
+	      coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
+	      coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
+	      coordinator.criticalThumbnailReady = criticalMeta.criticalThumbnailReady === true;
+	      coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
+	      markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_critical_fallback' : 'dashboard_critical_ready', {
+	        ok: criticalMeta.fallback !== true,
+	        criticalCount: criticalTokens.length,
+	        readyCount: criticalMeta.readyCount,
+	        fallbackCount: criticalMeta.fallbackCount,
+	        thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+	        thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+	      });
 
       rememberDashboardHomeResponse_(dashboardHomePayload, criticalHomeData);
       hideDashboardProjectsLoadingPlaceholder_();
@@ -27767,11 +27973,13 @@
       consumeDashboardBootstrapIntent_().catch(() => {});
       logDashboardCoordinator_(coordinator, criticalMeta.fallback === true ? 'dashboard_critical_revealed_fallback' : 'dashboard_critical_revealed', {
         ok: true,
-        projectCount: Array.isArray(criticalHomeData.projects) ? criticalHomeData.projects.length : 0,
-        criticalCount: criticalTokens.length,
-        readyCount: criticalMeta.readyCount,
-        fallbackCount: criticalMeta.fallbackCount
-      });
+	        projectCount: Array.isArray(criticalHomeData.projects) ? criticalHomeData.projects.length : 0,
+	        criticalCount: criticalTokens.length,
+	        readyCount: criticalMeta.readyCount,
+	        fallbackCount: criticalMeta.fallbackCount,
+	        thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+	        thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+	      });
       return criticalHomeData;
     } catch (err) {
       const msg = String((err && err.message) || err);
@@ -29505,6 +29713,7 @@
     batchTokens.forEach(token => {
       const cached = getDashboardProjectPeekCachedPayload_(token, { preferSummary: true });
       if (cached) {
+        updateDashboardProjectRowThumbnailFromPeekPayload_(token, cached);
         resultPromises.push(Promise.resolve(cached));
         return;
       }
@@ -29650,11 +29859,19 @@
     );
   }
 
+  function setDashboardProjectPeekBodyLoading_(isLoading){
+    if (!dashboardPeekBody) return;
+    dashboardPeekBody.classList.toggle('isLoading', isLoading === true);
+  }
+
   function closeDashboardProjectPeek(){
     DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN = '';
     DASHBOARD_PROJECT_PEEK_ACTIVE_TRIGGER = null;
     if (dashboardPeekBackdrop) dashboardPeekBackdrop.hidden = true;
-    if (dashboardPeekBody) dashboardPeekBody.innerHTML = '';
+    if (dashboardPeekBody) {
+      setDashboardProjectPeekBodyLoading_(false);
+      dashboardPeekBody.innerHTML = '';
+    }
     if (dashboardCard) dashboardCard.classList.remove('isPeekOpen');
   }
 
@@ -29861,6 +30078,7 @@
     if (dashboardCard) dashboardCard.classList.add('isPeekOpen');
     setDashboardProjectPeekHeader_(project);
     dashboardPeekBody.innerHTML = '';
+    setDashboardProjectPeekBodyLoading_(true);
 
     const summaryGrid = createEl('div', 'dashboardPeekSummaryGrid isShell');
     summaryGrid.appendChild(buildDashboardPeekMetricShellCard_('isUnits', false));
@@ -30032,6 +30250,7 @@
     dashboardPeekBackdrop.hidden = false;
     if (dashboardCard) dashboardCard.classList.add('isPeekOpen');
     setDashboardProjectPeekHeader_(project);
+    setDashboardProjectPeekBodyLoading_(false);
     dashboardPeekBody.innerHTML = '';
 
     dashboardPeekBody.appendChild(renderDashboardPeekTopSummary_(payload));
@@ -30175,6 +30394,7 @@
     } catch (err) {
       if (requestSeq !== DASHBOARD_PROJECT_PEEK_REQUEST_SEQ || DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN !== token) return;
       if (dashboardPeekBody) {
+        setDashboardProjectPeekBodyLoading_(false);
         dashboardPeekBody.innerHTML = '';
         dashboardPeekBody.appendChild(createEl('div', 'dashboardPeekEmpty', String((err && err.message) || err || 'Unable to load project details.')));
       }
@@ -30268,6 +30488,9 @@
 
     list.forEach((project, index) => {
       const projectToken = String(project && project.token || '').trim();
+      if (project && project.peekInline === true && isDashboardProjectPeekRenderablePayload_(project.peekPreview)) {
+        applyDashboardProjectThumbnailFromPeekPayload_(project, project.peekPreview);
+      }
       const statusSeed = (project && project.statusSeed && typeof project.statusSeed === 'object')
         ? project.statusSeed
         : null;
@@ -30423,6 +30646,20 @@
     const selector = 'tr[data-project-token="' + escapeDashboardProjectTokenSelector_(token) + '"]';
     const row = authProjectsBody.querySelector(selector);
     return row instanceof HTMLElement ? row : null;
+  }
+
+  function updateDashboardProjectRowThumbnailFromPeekPayload_(token, peekPayload){
+    const row = getDashboardProjectRowForToken_(token);
+    if (!row || !isDashboardProjectPeekRenderablePayload_(peekPayload)) return false;
+    const thumbWrap = row.querySelector('.authProjectsThumb');
+    if (!(thumbWrap instanceof HTMLElement)) return false;
+    const thumbnailMeta = getDashboardThumbnailMetaFromPeekPayload_(peekPayload);
+    if (!thumbnailMeta || !Array.isArray(thumbnailMeta.previewImageCandidates) || !thumbnailMeta.previewImageCandidates.length) return false;
+    const existingImg = thumbWrap.querySelector('img');
+    if (existingImg instanceof HTMLImageElement && existingImg.complete && existingImg.naturalWidth > 0) return true;
+    thumbWrap.innerHTML = '';
+    populateDashboardPreviewImage_(thumbWrap, thumbnailMeta, 'PJ1');
+    return true;
   }
 
   function orderDashboardStatusHydrationTokens_(tokens){
@@ -31537,6 +31774,11 @@
     }
   }
 
+  function setDashboardPreviewImageLoading_(wrapEl, isLoading){
+    if (!(wrapEl instanceof HTMLElement)) return;
+    wrapEl.classList.toggle('isImageLoading', isLoading === true);
+  }
+
   function populateDashboardPreviewImage_(wrapEl, source, fallbackText){
     const item = (source && typeof source === 'object') ? source : {};
     const allCandidates = getDashboardPeekImageCandidates_(item);
@@ -31544,11 +31786,13 @@
     const fallback = String(fallbackText || '').trim() || 'PJ1';
     sterilizeDashboardPreviewImage_(wrapEl, null);
     if (!allCandidates.length) {
+      setDashboardPreviewImageLoading_(wrapEl, false);
       wrapEl.appendChild(createEl('span', 'authProjectsThumbFallback', fallback));
       return;
     }
     const readyImg = buildReadyDashboardPeekImageNode_(allCandidates, altText);
     if (readyImg) {
+      setDashboardPreviewImageLoading_(wrapEl, false);
       sterilizeDashboardPreviewImage_(wrapEl, readyImg);
       wrapEl.appendChild(readyImg);
       return;
@@ -31561,11 +31805,14 @@
     sterilizeDashboardPreviewImage_(wrapEl, img);
     img.style.opacity = '0';
     img.style.transition = 'opacity .16s ease';
+    setDashboardPreviewImageLoading_(wrapEl, true);
     wrapEl.appendChild(img);
     loadImageWithFallback(img, allCandidates, resolvedUrl => {
       setDashboardPeekImageAssetReady_(allCandidates, img, resolvedUrl);
+      setDashboardPreviewImageLoading_(wrapEl, false);
       img.style.opacity = '1';
     }, () => {
+      setDashboardPreviewImageLoading_(wrapEl, false);
       img.remove();
       wrapEl.innerHTML = '';
       wrapEl.appendChild(createEl('span', 'authProjectsThumbFallback', fallback));
