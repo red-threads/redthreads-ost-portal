@@ -332,6 +332,57 @@
       return !!(params && params.toString());
     }
 
+    function isDashboardIframeRoute(params) {
+      return !!(params && params.get && params.get("dashboard") === "1");
+    }
+
+    function isAccountDocumentIframeRoute(params) {
+      return !!(params && params.get && params.get("accountDoc"));
+    }
+
+    function getPortalReadyPayload(data) {
+      var payload = data && typeof data.payload === "object" ? data.payload : {};
+      return payload && typeof payload === "object" ? payload : {};
+    }
+
+    function getPortalReadyReason(data) {
+      var payload = getPortalReadyPayload(data);
+      return String(payload.readyStage || payload.reason || data.reason || "").trim();
+    }
+
+    function isDashboardSemanticReadyMessage(data) {
+      var reason = getPortalReadyReason(data);
+      return reason === "dashboard-critical-ready" ||
+        reason === "dashboard-critical-fallback" ||
+        reason === "dashboard-load-failed";
+    }
+
+    function shouldHideLoadingForPortalReady(data) {
+      if (!isDashboardIframeRoute(iframeParams)) return true;
+      if (isAccountDocumentIframeRoute(iframeParams) && getPortalReadyReason(data) === "account-document-upload-ready") {
+        return true;
+      }
+      return isDashboardSemanticReadyMessage(data);
+    }
+
+    function handleIframeLoadReady() {
+      if (isDashboardIframeRoute(iframeParams)) {
+        logPortalWrapperTiming("iframe-load-waiting-dashboard-critical", {
+          routeType: "dashboard"
+        });
+        return;
+      }
+      hideLoading("iframe-load");
+    }
+
+    function handleLoadingTimeout() {
+      if (isDashboardIframeRoute(iframeParams)) {
+        hideLoading("dashboard-timeout-fallback");
+        return;
+      }
+      hideLoading("timeout");
+    }
+
     function buildIframeUrl(params) {
       var query = params && params.toString ? params.toString() : "";
       return query ? APP_URL + "?" + query : APP_URL;
@@ -452,8 +503,8 @@
       }
 
       if (shouldShowLoading) {
-        iframe.addEventListener("load", function () { hideLoading("iframe-load"); }, { once: true });
-        window.setTimeout(function () { hideLoading("timeout"); }, 16000);
+        iframe.addEventListener("load", handleIframeLoadReady, { once: true });
+        window.setTimeout(handleLoadingTimeout, isDashboardIframeRoute(iframeParams) ? 45000 : 16000);
       }
 
       iframe.src = buildIframeUrl(iframeParams);
@@ -556,8 +607,8 @@
         if (loadingTitle) {
           loadingTitle.textContent = iframeParams.get("t") ? "Loading project..." : "Loading portal...";
         }
-        iframe.addEventListener("load", function () { hideLoading("iframe-load"); }, { once: true });
-        window.setTimeout(function () { hideLoading("timeout"); }, 16000);
+        iframe.addEventListener("load", handleIframeLoadReady, { once: true });
+        window.setTimeout(handleLoadingTimeout, isDashboardIframeRoute(iframeParams) ? 45000 : 16000);
       }
       iframe.src = buildIframeUrl(iframeParams);
     }
@@ -574,7 +625,14 @@
       }
 
       if (data.type === "RT_PORTAL_READY") {
-        hideLoading("portal-ready");
+        if (shouldHideLoadingForPortalReady(data)) {
+          hideLoading(getPortalReadyReason(data) || "portal-ready");
+        } else {
+          logPortalWrapperTiming("portal-ready-waiting-dashboard-critical", {
+            routeType: "dashboard",
+            reason: getPortalReadyReason(data)
+          });
+        }
         return;
       }
 
