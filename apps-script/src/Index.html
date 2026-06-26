@@ -1120,12 +1120,47 @@
       animation:rtSpin .75s linear infinite;
       flex:0 0 auto;
     }
-    .authProjectsLoadingText{
-      position:relative;
-      z-index:1;
-    }
-    .authProjectsStatusSkeleton{
-      position:relative;
+	    .authProjectsLoadingText{
+	      position:relative;
+	      z-index:1;
+	    }
+	    .authProjectsLoadOlderRow td{
+	      padding:14px 18px;
+	      text-align:center;
+	      background:rgba(15,23,42,.04);
+	    }
+	    .authProjectsLoadOlderBtn{
+	      appearance:none;
+	      -webkit-appearance:none;
+	      min-width:180px;
+	      min-height:38px;
+	      border-radius:999px;
+	      border:1px solid rgba(20,184,166,.38);
+	      background:
+	        linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)),
+	        rgba(15,23,42,.94);
+	      color:#dffef5;
+	      font-size:12px;
+	      font-weight:900;
+	      letter-spacing:.02em;
+	      cursor:pointer;
+	      box-shadow:
+	        0 12px 24px rgba(15,23,42,.16),
+	        inset 0 1px 0 rgba(255,255,255,.1);
+	      transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+	    }
+	    .authProjectsLoadOlderBtn:hover,
+	    .authProjectsLoadOlderBtn:focus-visible{
+	      border-color:rgba(20,184,166,.72);
+	      transform:translateY(-1px);
+	      box-shadow:
+	        0 14px 28px rgba(15,23,42,.2),
+	        0 0 0 3px rgba(20,184,166,.12),
+	        inset 0 1px 0 rgba(255,255,255,.12);
+	      outline:none;
+	    }
+	    .authProjectsStatusSkeleton{
+	      position:relative;
       width:100%;
       min-height:30px;
       border-radius:14px;
@@ -2396,8 +2431,14 @@
     .dashboardAchManageClose{
       appearance:none;
       -webkit-appearance:none;
+      box-sizing:border-box;
       width:42px;
       height:42px;
+      min-width:42px;
+      min-height:42px;
+      flex:0 0 42px;
+      aspect-ratio:1 / 1;
+      padding:0;
       border:1px solid rgba(225,29,72,.62);
       border-radius:999px;
       background:rgba(225,29,72,.12);
@@ -7050,15 +7091,15 @@
     }
     .summaryEstimateControlSecondary.isTaxExemptionPending:hover,
     .summaryEstimateControlSecondary.isTaxExemptionPending:focus-visible{
-      border-color:rgba(57,214,255,.98);
-      background:linear-gradient(180deg, rgba(57,214,255,.92) 0%, rgba(43,194,235,.9) 100%);
-      color:#061116;
+      border-color:rgba(57,214,255,.72);
+      background:rgba(10,24,28,.24);
+      color:#55dfff;
       transform:none;
       box-shadow:
-        0 16px 28px rgba(0,0,0,.22),
-        0 0 0 1px rgba(57,214,255,.22),
-        0 0 26px rgba(57,214,255,.16),
-        inset 0 1px 0 rgba(255,255,255,.14);
+        0 10px 22px rgba(0,0,0,.18),
+        0 0 0 1px rgba(57,214,255,.12),
+        0 0 18px rgba(57,214,255,.12),
+        inset 0 1px 0 rgba(255,255,255,.08);
     }
     .summaryEstimateControlPrimary:disabled,
     .summaryEstimateControlSecondary:disabled,
@@ -15539,6 +15580,7 @@
     }
     .orderFlowModal.isSelection .orderFlowHeadTaxPendingNotice{
       max-width:calc(100% - 44px);
+      margin-right:42px;
       font-size:15px;
     }
     .orderFlowModal.isSelection .orderFlowTitle{
@@ -17924,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 198">198</div>
+  <div class="devRevisionBadge" aria-label="Development revision 199">199</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24306,10 +24348,12 @@
   let DASHBOARD_OPEN_ARMED_BTN = null;
   let DASHBOARD_OPEN_ARMED_AT = 0;
   let DASHBOARD_OPEN_ARMED_SOURCE = '';
-  const DASHBOARD_PROJECT_PEEK_CACHE = new Map();
-  const DASHBOARD_PROJECT_PEEK_INFLIGHT = new Map();
-  const DASHBOARD_PROJECT_PEEK_SUMMARY_INFLIGHT = new Map();
-  const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_CACHE = new Map();
+	  const DASHBOARD_PROJECT_PEEK_CACHE = new Map();
+	  const DASHBOARD_PROJECT_PEEK_INFLIGHT = new Map();
+	  const DASHBOARD_PROJECT_PEEK_SUMMARY_INFLIGHT = new Map();
+	  const DASHBOARD_PROJECT_STATUS_INFLIGHT = new Map();
+	  const DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT = new Map();
+	  const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_CACHE = new Map();
   const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT = new Map();
   const DASHBOARD_PEEK_IMAGE_PREWARM_CACHE = new Map();
   const DASHBOARD_HOME_RESPONSE_CACHE = new Map();
@@ -24329,24 +24373,29 @@
   let DASHBOARD_PROJECT_PEEK_PREFETCH_HANDLE_KIND = '';
   let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ = 0;
   let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = [];
-  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE = 0;
-  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND = '';
-  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = 650;
-  let DASHBOARD_PROJECT_PEEK_DOC_PREWARMED = false;
-  let DASHBOARD_STATUS_HYDRATION_SEQ = 0;
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE = 0;
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND = '';
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = 650;
+	  let DASHBOARD_PROJECT_PEEK_DOC_PREWARMED = false;
+	  let DASHBOARD_STATUS_HYDRATION_SEQ = 0;
+	  let DASHBOARD_ROW_PAIR_HYDRATION_SEQ = 0;
+	  let DASHBOARD_ACTIVE_STATE = null;
   const DASHBOARD_OPEN_ARM_WINDOW_MS = 1500;
   const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_TTL_MS = 30000;
-  const DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS = 60000;
-  const DASHBOARD_CRITICAL_PROJECT_LIMIT = 6;
-  const DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY = 'summary';
-  const DASHBOARD_PROJECT_PEEK_PROFILE_FULL = 'full';
-  const DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS = 8000;
+	  const DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS = 60000;
+	  const DASHBOARD_CRITICAL_PROJECT_LIMIT = 6;
+	  const DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE = 6;
+	  const DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY = 'summary';
+	  const DASHBOARD_PROJECT_PEEK_PROFILE_FULL = 'full';
+	  const DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS = 6000;
+	  const DASHBOARD_ROW_PAIR_HYDRATION_FALLBACK_MS = 2500;
+	  const DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS = 8000;
   const DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT = 3;
   const DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS = 1400;
   const DASHBOARD_READ_MODEL_VERSION = 'v3-draft-1';
   const DASHBOARD_READ_MODEL_SOURCE_LEGACY = 'legacy_live_projection';
-  const DASHBOARD_CRITICAL_CACHE_PROFILE = 'criticalTop6PeekSummaryThumbReady';
-  const DASHBOARD_CRITICAL_FALLBACK_PROFILE = 'criticalTop6PeekSummaryThumbFallback';
+	  const DASHBOARD_CRITICAL_CACHE_PROFILE = 'criticalSixFullPeekRowsReadyV3';
+	  const DASHBOARD_CRITICAL_FALLBACK_PROFILE = 'criticalSixFullPeekRowsFallbackV3';
   const DASHBOARD_CRITICAL_THUMBNAIL_WAIT_MS = 2500;
   const DASHBOARD_CRITICAL_READY_REASON = 'dashboard-critical-ready';
   const DASHBOARD_CRITICAL_FALLBACK_REASON = 'dashboard-critical-fallback';
@@ -25039,10 +25088,11 @@
     DASHBOARD_PROJECTS_LOADING_VISIBLE = true;
   }
 
-  function resetDashboardHomeTransientState_(){
-    DASHBOARD_PROJECT_PEEK_CACHE.clear();
-    DASHBOARD_PROJECT_PEEK_INFLIGHT.clear();
-    DASHBOARD_PROJECT_PEEK_SUMMARY_INFLIGHT.clear();
+	  function resetDashboardHomeTransientState_(){
+	    resetDashboardActiveState_();
+	    DASHBOARD_PROJECT_PEEK_CACHE.clear();
+	    DASHBOARD_PROJECT_PEEK_INFLIGHT.clear();
+	    DASHBOARD_PROJECT_PEEK_SUMMARY_INFLIGHT.clear();
     DASHBOARD_STATUS_HYDRATION_SEQ += 1;
     clearDashboardProjectPayloadPrefetch_();
     clearDashboardProjectPeekPrefetch_();
@@ -25112,16 +25162,155 @@
     return true;
   }
 
-  function getDashboardAccessRouteType_(requestPayload, fallback){
-    const payload = (requestPayload && typeof requestPayload === 'object') ? requestPayload : {};
-    if (fallback) return String(fallback || '').trim();
-    if (payload.accountAccessToken || payload.accountId) return 'account_dashboard';
-    if (payload.token) return 'token_dashboard';
-    if (payload.sessionId) return 'session_dashboard';
-    return 'dashboard';
-  }
+	  function getDashboardAccessRouteType_(requestPayload, fallback){
+	    const payload = (requestPayload && typeof requestPayload === 'object') ? requestPayload : {};
+	    if (fallback) return String(fallback || '').trim();
+	    if (payload.accountAccessToken || payload.accountId) return 'account_dashboard';
+	    if (payload.token) return 'token_dashboard';
+	    if (payload.sessionId) return 'session_dashboard';
+	    return 'dashboard';
+	  }
 
-  function createDashboardLoadingCoordinator_(requestPayload, options){
+	  function createDashboardActiveState_(contextKey){
+	    return {
+	      contextKey: String(contextKey || '').trim(),
+	      projects: [],
+	      projectByToken: new Map(),
+	      statusByToken: new Map(),
+	      pairedReadyTokens: new Set(),
+	      visibleCount: DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE,
+	      backgroundHydrationState: 'idle',
+	      backgroundHydrationStarted: false,
+	      storedAt: Date.now()
+	    };
+	  }
+
+	  function resetDashboardActiveState_(){
+	    DASHBOARD_ACTIVE_STATE = null;
+	    DASHBOARD_ROW_PAIR_HYDRATION_SEQ += 1;
+	    DASHBOARD_PROJECT_STATUS_INFLIGHT.clear();
+	    DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT.clear();
+	  }
+
+	  function getDashboardActiveStateForCurrentContext_(){
+	    const state = DASHBOARD_ACTIVE_STATE;
+	    if (!state || !state.contextKey) return null;
+	    const currentKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
+	    if (currentKey && state.contextKey !== currentKey) return null;
+	    return state;
+	  }
+
+	  function getDashboardActiveProjectByToken_(token){
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    const cleanToken = String(token || '').trim();
+	    if (!state || !cleanToken) return null;
+	    return state.projectByToken.get(cleanToken) || null;
+	  }
+
+	  function getDashboardVisibleProjectCount_(projectCount){
+	    const total = Math.max(0, Number(projectCount || 0) || 0);
+	    if (!total) return 0;
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    const current = state ? Number(state.visibleCount || 0) : 0;
+	    const minimum = Math.min(total, DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE);
+	    return Math.min(total, Math.max(minimum, current || minimum));
+	  }
+
+	  function rememberDashboardProjectStatusSeed_(token, statusSeed){
+	    const cleanToken = String(token || '').trim();
+	    if (!cleanToken || !isDashboardProjectStatusSeedPayload_(statusSeed)) return false;
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    if (state) {
+	      state.statusByToken.set(cleanToken, clonePlainObject(statusSeed));
+	      const project = state.projectByToken.get(cleanToken);
+	      if (project) project.statusSeed = clonePlainObject(statusSeed);
+	    }
+	    return true;
+	  }
+
+	  function hasDashboardProjectStatusReady_(token){
+	    const cleanToken = String(token || '').trim();
+	    const project = getDashboardActiveProjectByToken_(cleanToken);
+	    if (project && isDashboardProjectStatusSeedPayload_(project.statusSeed)) return true;
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    return !!(state && isDashboardProjectStatusSeedPayload_(state.statusByToken.get(cleanToken)));
+	  }
+
+	  function hasDashboardProjectThumbnailReady_(token){
+	    const cleanToken = String(token || '').trim();
+	    const project = getDashboardActiveProjectByToken_(cleanToken);
+	    if (project && getDashboardPeekImageCandidates_(project).length) return true;
+	    const cached = getDashboardProjectPeekCachedPayload_(cleanToken, { preferSummary: true });
+	    return !!(cached && getDashboardThumbnailMetaFromPeekPayload_(cached));
+	  }
+
+	  function hasDashboardProjectPairedRowReady_(token){
+	    const cleanToken = String(token || '').trim();
+	    if (!cleanToken) return false;
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    if (state && state.pairedReadyTokens.has(cleanToken)) return true;
+	    return hasDashboardProjectStatusReady_(cleanToken) && hasDashboardProjectThumbnailReady_(cleanToken);
+	  }
+
+	  function markDashboardProjectPairedRowReady_(token){
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    const cleanToken = String(token || '').trim();
+	    if (state && cleanToken) state.pairedReadyTokens.add(cleanToken);
+	  }
+
+	  function setDashboardActiveProjects_(payload){
+	    const data = (payload && typeof payload === 'object') ? payload : {};
+	    const projects = Array.isArray(data.projects) ? data.projects : [];
+	    const contextKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
+	    const existing = getDashboardActiveStateForCurrentContext_();
+	    const state = existing || createDashboardActiveState_(contextKey);
+	    const existingVisibleCount = existing ? Number(existing.visibleCount || 0) : 0;
+	    state.contextKey = contextKey || state.contextKey;
+	    state.projects = projects;
+	    state.projectByToken = new Map();
+	    projects.forEach(project => {
+	      const token = String(project && project.token || '').trim();
+	      if (!token) return;
+	      const existingSeed = state.statusByToken.get(token);
+	      if (!isDashboardProjectStatusSeedPayload_(project.statusSeed) && isDashboardProjectStatusSeedPayload_(existingSeed)) {
+	        project.statusSeed = clonePlainObject(existingSeed);
+	      }
+	      const cachedPeek = getDashboardProjectPeekCachedPayload_(token, { preferSummary: true });
+	      if (cachedPeek) {
+	        project.peekInline = true;
+	        project.peekProfile = getDashboardProjectPeekPayloadProfile_(cachedPeek);
+	        project.peekPreview = clonePlainObject(cachedPeek);
+	        applyDashboardProjectThumbnailFromPeekPayload_(project, cachedPeek);
+	      }
+	      state.projectByToken.set(token, project);
+	      if (isDashboardProjectStatusSeedPayload_(project.statusSeed)) {
+	        state.statusByToken.set(token, clonePlainObject(project.statusSeed));
+	      }
+	      if (project.peekInline === true && isDashboardProjectPeekRenderablePayload_(project.peekPreview)) {
+	        applyDashboardProjectThumbnailFromPeekPayload_(project, project.peekPreview);
+	      }
+	      if (isDashboardProjectStatusSeedPayload_(project.statusSeed) && getDashboardPeekImageCandidates_(project).length) {
+	        state.pairedReadyTokens.add(token);
+	      }
+	    });
+	    state.visibleCount = Math.min(
+	      projects.length,
+	      Math.max(
+	        Math.min(projects.length, DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE),
+	        existingVisibleCount || DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE
+	      )
+	    );
+	    state.storedAt = Date.now();
+	    DASHBOARD_ACTIVE_STATE = state;
+	    return state;
+	  }
+
+	  function hasUsableMountedDashboardForCurrentContext_(){
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    return !!(CURRENT_VIEW === VIEW_DASHBOARD && state && state.projects.length && hasDashboardProjectRows_());
+	  }
+
+	  function createDashboardLoadingCoordinator_(requestPayload, options){
     const opts = (options && typeof options === 'object') ? options : {};
     const payload = (requestPayload && typeof requestPayload === 'object') ? requestPayload : {};
     return {
@@ -25132,10 +25321,11 @@
       readModelVersion: DASHBOARD_READ_MODEL_VERSION,
       readModelSource: '',
       metadataReady: false,
-      criticalTokens: [],
-      criticalStatusReady: false,
-      criticalPeekReady: false,
-      criticalThumbnailReady: false,
+	      criticalTokens: [],
+	      criticalStatusReady: false,
+	      criticalPeekReady: false,
+	      criticalFullPeekReady: false,
+	      criticalThumbnailReady: false,
       criticalReadyEmitted: false,
       backgroundStatusState: 'idle',
       backgroundPeekState: 'idle',
@@ -25291,20 +25481,34 @@
       summaryPayload: null,
       fullPayload: null
     };
-    if (profile === DASHBOARD_PROJECT_PEEK_PROFILE_FULL) {
-      entry.fullPayload = clonePlainObject(payload);
-      entry.fullStoredAt = Date.now();
+	    if (profile === DASHBOARD_PROJECT_PEEK_PROFILE_FULL) {
+	      entry.fullPayload = clonePlainObject(payload);
+	      entry.fullStoredAt = Date.now();
     } else {
       entry.summaryPayload = clonePlainObject(payload);
       entry.summaryStoredAt = Date.now();
     }
-    entry.storedAt = Date.now();
-    entry.source = String(opts.source || '').trim();
-    DASHBOARD_PROJECT_PEEK_CACHE.set(cleanToken, entry);
-    prewarmDashboardPeekPayloadImages_(payload);
-    updateDashboardProjectRowThumbnailFromPeekPayload_(cleanToken, payload);
-    return true;
-  }
+	    entry.storedAt = Date.now();
+	    entry.source = String(opts.source || '').trim();
+	    DASHBOARD_PROJECT_PEEK_CACHE.set(cleanToken, entry);
+		    const activeProject = getDashboardActiveProjectByToken_(cleanToken);
+		    if (activeProject) {
+		      activeProject.peekInline = true;
+		      activeProject.peekProfile = profile;
+		      activeProject.peekPreview = clonePlainObject(payload);
+		      if (profile === DASHBOARD_PROJECT_PEEK_PROFILE_FULL) {
+		        activeProject.fullPeekInline = true;
+		        activeProject.fullPeekProfile = DASHBOARD_PROJECT_PEEK_PROFILE_FULL;
+		        activeProject.fullPeekPreview = clonePlainObject(payload);
+		      }
+		      applyDashboardProjectThumbnailFromPeekPayload_(activeProject, payload);
+		    }
+	    prewarmDashboardPeekPayloadImages_(payload);
+	    if (opts.deferRowUpdate !== true) {
+	      updateDashboardProjectRowThumbnailFromPeekPayload_(cleanToken, payload);
+	    }
+	    return true;
+	  }
 
   function getDashboardProjectPeekCachedPayload_(token, options){
     const opts = (options && typeof options === 'object') ? options : {};
@@ -25342,13 +25546,22 @@
     return map;
   }
 
-  function buildDashboardCriticalBatchRequestPayload_(requestPayload, tokens){
-    return Object.assign({}, (requestPayload && typeof requestPayload === 'object') ? requestPayload : {}, {
-      tokens: Array.isArray(tokens) ? tokens.slice(0, DASHBOARD_CRITICAL_PROJECT_LIMIT) : [],
-      criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
-      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY
-    });
-  }
+	  function buildDashboardCriticalBatchRequestPayload_(requestPayload, tokens){
+	    return Object.assign({}, (requestPayload && typeof requestPayload === 'object') ? requestPayload : {}, {
+	      tokens: Array.isArray(tokens) ? tokens.slice(0, DASHBOARD_CRITICAL_PROJECT_LIMIT) : [],
+	      criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+	      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY
+	    });
+	  }
+
+	  function buildDashboardFullPeekBatchRequestPayload_(requestPayload, tokens){
+	    return Object.assign({}, (requestPayload && typeof requestPayload === 'object') ? requestPayload : {}, {
+	      tokens: Array.isArray(tokens) ? tokens.slice(0, DASHBOARD_CRITICAL_PROJECT_LIMIT) : [],
+	      batchLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+	      criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+	      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL
+	    });
+	  }
 
   async function requestDashboardProjectCriticalBatch_(requestPayload, tokens, coordinator, attempt){
     const batchTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
@@ -25433,7 +25646,7 @@
     };
   }
 
-  async function fetchDashboardProjectCriticalBatchWithRetry_(requestPayload, tokens, coordinator){
+	  async function fetchDashboardProjectCriticalBatchWithRetry_(requestPayload, tokens, coordinator){
     const criticalTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
     const responses = [];
     let firstError = null;
@@ -25463,8 +25676,145 @@
       }
     }
     if (!responses.length && firstError) throw firstError;
-    return mergeDashboardCriticalBatchResponses_(criticalTokens, responses);
-  }
+	    return mergeDashboardCriticalBatchResponses_(criticalTokens, responses);
+	  }
+
+	  function getDashboardFullPeekResultMap_(resp){
+	    const map = new Map();
+	    const list = resp && Array.isArray(resp.projects) ? resp.projects : [];
+	    list.forEach(item => {
+	      const token = String(item && item.token || '').trim();
+	      if (token) map.set(token, item);
+	    });
+	    return map;
+	  }
+
+	  function isDashboardFullPeekResultReady_(result){
+	    const item = (result && typeof result === 'object') ? result : null;
+	    return !!(
+	      item &&
+	      item.ok === true &&
+	      isDashboardProjectPeekFullPayload_(item.peekPreview)
+	    );
+	  }
+
+	  function getDashboardFullPeekFailedTokens_(tokens, responses){
+	    const latestByToken = new Map();
+	    (Array.isArray(responses) ? responses : []).forEach(resp => {
+	      const map = getDashboardFullPeekResultMap_(resp);
+	      map.forEach((value, token) => {
+	        latestByToken.set(token, value);
+	      });
+	    });
+	    return (Array.isArray(tokens) ? tokens : []).filter(token => {
+	      return !isDashboardFullPeekResultReady_(latestByToken.get(token));
+	    });
+	  }
+
+	  function mergeDashboardFullPeekBatchResponses_(tokens, responses){
+	    const byToken = new Map();
+	    (Array.isArray(responses) ? responses : []).forEach(resp => {
+	      const map = getDashboardFullPeekResultMap_(resp);
+	      map.forEach((value, token) => {
+	        const current = byToken.get(token);
+	        if (!current || isDashboardFullPeekResultReady_(value) || !isDashboardFullPeekResultReady_(current)) {
+	          byToken.set(token, value);
+	        }
+	      });
+	    });
+	    const firstResponse = Array.isArray(responses) && responses.length ? responses[0] : {};
+	    return {
+	      ok: true,
+	      dashboardPeekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+	      projectionVersion: String(firstResponse && firstResponse.projectionVersion || '').trim(),
+	      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+	      peekVersion: String(firstResponse && firstResponse.peekVersion || '').trim(),
+	      projects: (Array.isArray(tokens) ? tokens : []).map(token => byToken.get(token) || {
+	        token: token,
+	        ok: false,
+	        error: 'Full Project Peek data unavailable.'
+	      })
+	    };
+	  }
+
+	  async function requestDashboardProjectFullPeekBatch_(requestPayload, tokens, coordinator, attempt){
+	    const batchTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
+	    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_request', {
+	      stage: attempt > 0 ? 'retry' : 'initial',
+	      tokenCount: batchTokens.length,
+	      batchSize: batchTokens.length
+	    });
+	    const resp = await callServer('getDashboardProjectFullPeekBatch', buildDashboardFullPeekBatchRequestPayload_(requestPayload, batchTokens));
+	    const serverTiming = getServerPortalLoadTimingSummary_(resp);
+	    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_response', Object.assign({
+	      stage: attempt > 0 ? 'retry' : 'initial',
+	      ok: !!(resp && resp.ok === true),
+	      tokenCount: batchTokens.length,
+	      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
+	    }, serverTiming || {}));
+	    if (!resp || resp.ok !== true) {
+	      throw new Error(String((resp && resp.error) || 'Unable to load full Project Peek data.'));
+	    }
+	    return resp;
+	  }
+
+	  async function fetchDashboardProjectFullPeekBatchWithRetry_(requestPayload, tokens, coordinator){
+	    const criticalTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
+	    const responses = [];
+	    let firstError = null;
+	    try {
+	      responses.push(await requestDashboardProjectFullPeekBatch_(requestPayload, criticalTokens, coordinator, 0));
+	    } catch (err) {
+	      firstError = err;
+	      markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_failed', {
+	        stage: 'initial',
+	        ok: false,
+	        tokenCount: criticalTokens.length
+	      });
+	    }
+	    const failedTokens = responses.length
+	      ? getDashboardFullPeekFailedTokens_(criticalTokens, responses)
+	      : criticalTokens.slice();
+	    if (failedTokens.length) {
+	      try {
+	        responses.push(await requestDashboardProjectFullPeekBatch_(requestPayload, failedTokens, coordinator, 1));
+	      } catch (err) {
+	        if (!firstError) firstError = err;
+	        markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_failed', {
+	          stage: 'retry',
+	          ok: false,
+	          tokenCount: failedTokens.length
+	        });
+	      }
+	    }
+	    if (!responses.length && firstError) throw firstError;
+	    return mergeDashboardFullPeekBatchResponses_(criticalTokens, responses);
+	  }
+
+	  async function fetchDashboardProjectFullPeekBatchBounded_(requestPayload, tokens, coordinator){
+	    let timedOut = false;
+	    const work = fetchDashboardProjectFullPeekBatchWithRetry_(requestPayload, tokens, coordinator);
+	    const timeout = waitMs_(DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS).then(() => {
+	      timedOut = true;
+	      return {
+	        ok: true,
+	        timedOut: true,
+	        projects: (Array.isArray(tokens) ? tokens : []).map(token => ({
+	          token: token,
+	          ok: false,
+	          error: 'Full Project Peek timed out.'
+	        }))
+	      };
+	    });
+	    const resp = await Promise.race([work, timeout]);
+	    if (timedOut) {
+	      markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_timeout', {
+	        ok: false,
+	        tokenCount: Array.isArray(tokens) ? tokens.length : 0
+	      });
+	    }
+	    return resp;
+	  }
 
   function markDashboardHomeResponseCriticalMeta_(payload, meta){
     const response = (payload && typeof payload === 'object') ? payload : {};
@@ -25475,11 +25825,17 @@
         criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
         criticalTokens: [],
         criticalReady: false,
-        criticalStatusReady: false,
-        criticalPeekReady: false,
-        criticalThumbnailReady: false,
-        criticalThumbnailFallback: false,
-        thumbnailReadyTokens: [],
+	        criticalStatusReady: false,
+	        criticalPeekReady: false,
+	        criticalFullPeekReady: false,
+	        criticalThumbnailReady: false,
+	        criticalThumbnailFallback: false,
+	        fullPeekReadyTokens: [],
+	        fullPeekFallbackTokens: [],
+	        fullPeekReadyCount: 0,
+	        fullPeekFallbackCount: 0,
+	        fullPeekTimeout: false,
+	        thumbnailReadyTokens: [],
         thumbnailFallbackTokens: [],
         thumbnailReadyCount: 0,
         thumbnailFallbackCount: 0,
@@ -25552,9 +25908,10 @@
       const critical = payload.dashboardCritical && typeof payload.dashboardCritical === 'object'
         ? payload.dashboardCritical
         : {};
-      const statusReady = critical.criticalStatusReady === true;
-      const peekReady = critical.criticalPeekReady === true;
-      const allReady = statusReady && peekReady && thumbnailReady;
+	      const statusReady = critical.criticalStatusReady === true;
+	      const peekReady = critical.criticalPeekReady === true;
+	      const fullPeekReady = critical.criticalFullPeekReady === true;
+	      const allReady = statusReady && peekReady && fullPeekReady && thumbnailReady;
       const profile = allReady ? DASHBOARD_CRITICAL_CACHE_PROFILE : DASHBOARD_CRITICAL_FALLBACK_PROFILE;
       payload.dashboardCacheProfile = profile;
       payload.dashboardCritical = Object.assign({}, critical, {
@@ -25583,8 +25940,8 @@
       return payload;
     }
 
-    function applyDashboardCriticalDataToHomeData_(homeData, criticalResp, criticalTokens){
-    const payload = clonePlainObject(homeData || {});
+	  function applyDashboardCriticalDataToHomeData_(homeData, criticalResp, criticalTokens){
+	    const payload = clonePlainObject(homeData || {});
     const projects = Array.isArray(payload.projects) ? payload.projects : [];
     const tokenSet = new Set(Array.isArray(criticalTokens) ? criticalTokens : []);
     const resultMap = getDashboardCriticalResultMap_(criticalResp);
@@ -25638,11 +25995,81 @@
       projectionVersion: String(criticalResp && criticalResp.projectionVersion || ''),
       peekProfile: String(criticalResp && criticalResp.peekProfile || DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY),
       peekVersion: String(criticalResp && criticalResp.peekVersion || ''),
-      storedAt: Date.now()
-    });
-  }
+	      storedAt: Date.now()
+	    });
+	  }
 
-  function isDashboardHomeCriticalReady_(data){
+		  function applyDashboardCriticalFullPeekDataToHomeData_(homeData, fullResp, criticalTokens){
+		    const payload = (homeData && typeof homeData === 'object') ? homeData : {};
+	    const projects = Array.isArray(payload.projects) ? payload.projects : [];
+	    const tokens = Array.isArray(criticalTokens) ? criticalTokens.slice() : [];
+	    const resultMap = getDashboardFullPeekResultMap_(fullResp);
+	    const readyTokens = [];
+	    const fallbackTokens = [];
+	    tokens.forEach(token => {
+	      const result = resultMap.get(token) || null;
+	      if (isDashboardFullPeekResultReady_(result)) {
+	        rememberDashboardProjectPeekPayload_(token, result.peekPreview, {
+	          source: 'critical-full'
+	        });
+		        const project = getDashboardProjectByToken_(projects, token);
+		        if (project) {
+		          project.fullPeekInline = true;
+		          project.fullPeekProfile = DASHBOARD_PROJECT_PEEK_PROFILE_FULL;
+		          project.fullPeekPreview = clonePlainObject(result.peekPreview);
+		        }
+		        readyTokens.push(token);
+	      } else {
+	        const project = getDashboardProjectByToken_(projects, token);
+	        if (project) project.criticalFullPeekFallback = true;
+	        fallbackTokens.push(token);
+	      }
+	    });
+	    const critical = payload.dashboardCritical && typeof payload.dashboardCritical === 'object'
+	      ? payload.dashboardCritical
+	      : {};
+	    const fullReady = fallbackTokens.length === 0;
+	    const allReady = critical.criticalStatusReady === true &&
+	      critical.criticalPeekReady === true &&
+	      critical.criticalThumbnailReady === true &&
+	      fullReady;
+	    const profile = allReady ? DASHBOARD_CRITICAL_CACHE_PROFILE : DASHBOARD_CRITICAL_FALLBACK_PROFILE;
+	    payload.dashboardCacheProfile = profile;
+	    payload.dashboardCritical = Object.assign({}, critical, {
+	      profile: profile,
+	      criticalReady: allReady,
+	      criticalFullPeekReady: fullReady,
+	      fullPeekReadyTokens: readyTokens,
+	      fullPeekFallbackTokens: fallbackTokens,
+	      fullPeekReadyCount: readyTokens.length,
+	      fullPeekFallbackCount: fallbackTokens.length,
+	      fullPeekTimeout: fullResp && fullResp.timedOut === true,
+	      fallback: !allReady,
+	      peekFullProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+	      peekFullVersion: String(fullResp && fullResp.peekVersion || ''),
+	      storedAt: Date.now()
+	    });
+		    return payload;
+		  }
+
+		  function hasDashboardHomeInlineFullPeekPayloads_(data, tokens){
+		    const payload = (data && typeof data === 'object') ? data : null;
+		    const projects = payload && Array.isArray(payload.projects) ? payload.projects : [];
+		    const requiredTokens = uniqueDashboardProjectPeekTokens_(
+		      Array.isArray(tokens) && tokens.length
+		        ? tokens
+		        : getDashboardCriticalProjectTokens_(projects)
+		    );
+		    if (!requiredTokens.length) return true;
+		    return requiredTokens.every(token => {
+		      const project = getDashboardProjectByToken_(projects, token);
+		      if (!project) return false;
+		      if (project.fullPeekInline === true && isDashboardProjectPeekFullPayload_(project.fullPeekPreview)) return true;
+		      return project.peekInline === true && isDashboardProjectPeekFullPayload_(project.peekPreview);
+		    });
+		  }
+
+		  function isDashboardHomeCriticalReady_(data){
     const payload = (data && typeof data === 'object') ? data : null;
     const critical = payload && payload.dashboardCritical && typeof payload.dashboardCritical === 'object'
       ? payload.dashboardCritical
@@ -25653,14 +26080,17 @@
       payload.dashboardCacheProfile === DASHBOARD_CRITICAL_CACHE_PROFILE &&
       critical &&
       critical.profile === DASHBOARD_CRITICAL_CACHE_PROFILE &&
-      critical.criticalReady === true &&
-      critical.criticalStatusReady === true &&
-      critical.criticalPeekReady === true &&
-      critical.criticalThumbnailReady === true &&
-      critical.criticalThumbnailFallback !== true &&
-      critical.fallback !== true
-    );
-  }
+	      critical.criticalReady === true &&
+	      critical.criticalStatusReady === true &&
+	      critical.criticalPeekReady === true &&
+		      critical.criticalFullPeekReady === true &&
+		      critical.criticalThumbnailReady === true &&
+		      critical.fullPeekFallbackCount === 0 &&
+		      critical.criticalThumbnailFallback !== true &&
+		      critical.fallback !== true &&
+		      hasDashboardHomeInlineFullPeekPayloads_(payload, critical.criticalTokens)
+		    );
+	  }
 
   function getDashboardReadyReasonForHomeResponse_(data){
     const critical = data && data.dashboardCritical && typeof data.dashboardCritical === 'object'
@@ -27751,13 +28181,14 @@
       hasRequestKey: !!requestKey,
       cacheBypassReason: getDashboardHomeReturnCacheBypassReason_()
     });
-    const pending = loadDashboardHomeCriticalReady_({
-      requestPayload: payload,
-      suppressLoadingMessage: true,
-      awaitPaint: false,
-      showPlaceholder: opts.showPlaceholder === true,
-      routeType: 'dashboard_background'
-    })
+	    const pending = loadDashboardHomeCriticalReady_({
+	      requestPayload: payload,
+	      suppressLoadingMessage: true,
+	      awaitPaint: false,
+	      showPlaceholder: opts.showPlaceholder === true,
+	      preserveTransientState: opts.preserveTransientState === true,
+	      routeType: 'dashboard_background'
+	    })
       .then(resp => {
         const currentRequestKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
         if (!resp || resp.ok !== true) {
@@ -27800,26 +28231,53 @@
     });
   }
 
-  function ensureDashboardProjectsHydratingAfterAccountDocumentClose_(reason){
-    if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
-    const payload = getDashboardContextRequestPayload_();
-    if (!payload) return;
-    const cached = getDashboardHomeCacheEntry_(buildDashboardHomeSummaryPayload_(payload));
-    if (cached && isDashboardHomeCriticalReady_(cached)) {
-      if (!hasDashboardProjectRows_()) applyDashboardHomeData(cached);
-      return;
-    }
-    rtShowLoader('Loading dashboard', 'Finishing your account view.');
-    loadDashboardHomeCriticalReady_({
-      requestPayload: payload,
-      suppressLoadingMessage: true,
-      awaitPaint: true,
-      showPlaceholder: true,
-      routeType: String(reason || 'account_document_close').trim() || 'account_document_close'
-    }).catch(() => null).finally(() => {
-      rtHideLoader();
-    });
-  }
+	  function resumeDashboardAfterAccountDocumentOverlay_(reason, options){
+	    if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
+	    const payload = getDashboardContextRequestPayload_();
+	    if (!payload) return;
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const routeType = String(reason || 'account_document_close').trim() || 'account_document_close';
+	    const hasMountedDashboard = hasUsableMountedDashboardForCurrentContext_();
+	    const bypassReason = getDashboardHomeReturnCacheBypassReason_();
+	    if (hasMountedDashboard) {
+	      debugLog('dashboardAccountDocumentOverlayResume', {
+	        reason: routeType,
+	        mounted: true,
+	        refreshReason: bypassReason
+	      });
+	      syncDashboardAccountContextFromSummary_(DASHBOARD_ACCOUNT_SUMMARY || ACCOUNT_SUMMARY || {});
+	      renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY || ACCOUNT_SUMMARY || {});
+	      startDashboardPairedBackgroundHydration_(DASHBOARD_ACTIVE_STATE && DASHBOARD_ACTIVE_STATE.projects, {
+	        source: routeType
+	      });
+	      if (bypassReason || opts.forceRefresh === true) {
+	        startDashboardHomeBackgroundLoad_(payload, routeType, {
+	          showPlaceholder: false,
+	          preserveTransientState: true
+	        }).catch(() => {});
+	      }
+	      return;
+	    }
+	    const cached = getDashboardHomeCacheEntry_(buildDashboardHomeSummaryPayload_(payload));
+	    if (cached && isDashboardHomeCriticalReady_(cached)) {
+	      applyDashboardHomeData(cached);
+	      return;
+	    }
+	    rtShowLoader('Loading dashboard', 'Finishing your account view.');
+	    loadDashboardHomeCriticalReady_({
+	      requestPayload: payload,
+	      suppressLoadingMessage: true,
+	      awaitPaint: true,
+	      showPlaceholder: true,
+	      routeType: routeType
+	    }).catch(() => null).finally(() => {
+	      rtHideLoader();
+	    });
+	  }
+
+	  function ensureDashboardProjectsHydratingAfterAccountDocumentClose_(reason){
+	    resumeDashboardAfterAccountDocumentOverlay_(reason);
+	  }
 
   async function loadDashboardForDeepLink_(options){
     const opts = (options && typeof options === 'object') ? options : {};
@@ -27994,17 +28452,18 @@
     const peekReady = critical.ready === true && critical.fallback !== true && criticalTokens.every(token => {
       return isDashboardProjectPeekRenderablePayload_(peekByToken[token]);
     });
-    const ready = critical.ready === true && critical.fallback !== true && statusReady && peekReady;
+	    const ready = critical.ready === true && critical.fallback !== true && statusReady && peekReady;
     model.dashboardHomeProfile = model.dashboardHomeProfile || 'summary';
     model.dashboardCacheProfile = ready ? DASHBOARD_CRITICAL_CACHE_PROFILE : DASHBOARD_CRITICAL_FALLBACK_PROFILE;
     model.dashboardCritical = Object.assign({}, model.dashboardCritical || {}, {
       profile: model.dashboardCacheProfile,
       criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
       criticalTokens: criticalTokens,
-      criticalReady: ready,
-      criticalStatusReady: statusReady,
-      criticalPeekReady: peekReady,
-      fallback: !ready,
+	      criticalReady: ready,
+	      criticalStatusReady: statusReady,
+	      criticalPeekReady: peekReady,
+	      criticalFullPeekReady: false,
+	      fallback: !ready,
       readyCount: Number(critical.readyCount || 0) || 0,
       fallbackCount: Number(critical.fallbackCount || 0) || 0,
       projectionVersion: String(critical.projectionVersion || ''),
@@ -28109,10 +28568,11 @@
     if (cachedCritical && isDashboardHomeCriticalReady_(cachedCritical)) {
       coordinator.cacheProfile = DASHBOARD_CRITICAL_CACHE_PROFILE;
       coordinator.metadataReady = true;
-      coordinator.criticalTokens = getDashboardCriticalProjectTokens_(cachedCritical.projects);
-      coordinator.criticalStatusReady = true;
-      coordinator.criticalPeekReady = true;
-      coordinator.criticalThumbnailReady = true;
+	      coordinator.criticalTokens = getDashboardCriticalProjectTokens_(cachedCritical.projects);
+	      coordinator.criticalStatusReady = true;
+	      coordinator.criticalPeekReady = true;
+	      coordinator.criticalFullPeekReady = true;
+	      coordinator.criticalThumbnailReady = true;
       hideDashboardProjectsLoadingPlaceholder_();
       applyDashboardHomeData(cachedCritical);
       if (opts.awaitPaint) {
@@ -28141,19 +28601,28 @@
             });
             return null;
           }
-            await applyDashboardCriticalThumbnailReadiness_(readModelHomeData, readModelHomeData.dashboardCritical && readModelHomeData.dashboardCritical.criticalTokens, coordinator);
-            const criticalMeta = readModelHomeData.dashboardCritical || {};
-            const projects = Array.isArray(readModelHomeData.projects) ? readModelHomeData.projects : [];
-          const criticalTokens = Array.isArray(criticalMeta.criticalTokens)
-            ? criticalMeta.criticalTokens.slice()
-            : getDashboardCriticalProjectTokens_(projects);
-          coordinator.readModelSource = String(readModelHomeData.readSource || '');
-          coordinator.metadataReady = true;
-          coordinator.criticalTokens = criticalTokens.slice();
-            coordinator.cacheProfile = readModelHomeData.dashboardCacheProfile || 'metadataOnly';
-            coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
-            coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
-            coordinator.criticalThumbnailReady = criticalMeta.criticalThumbnailReady === true;
+	            let criticalReadyHomeData = readModelHomeData;
+	            const readModelCriticalTokens = readModelHomeData.dashboardCritical && Array.isArray(readModelHomeData.dashboardCritical.criticalTokens)
+	              ? readModelHomeData.dashboardCritical.criticalTokens.slice()
+	              : getDashboardCriticalProjectTokens_(readModelHomeData.projects);
+	            const fullPeekResp = readModelCriticalTokens.length
+	              ? await fetchDashboardProjectFullPeekBatchBounded_(dashboardHomePayload, readModelCriticalTokens, coordinator)
+	              : { ok: true, projects: [] };
+	            criticalReadyHomeData = applyDashboardCriticalFullPeekDataToHomeData_(criticalReadyHomeData, fullPeekResp, readModelCriticalTokens);
+	            await applyDashboardCriticalThumbnailReadiness_(criticalReadyHomeData, readModelCriticalTokens, coordinator);
+	            const criticalMeta = criticalReadyHomeData.dashboardCritical || {};
+	            const projects = Array.isArray(criticalReadyHomeData.projects) ? criticalReadyHomeData.projects : [];
+	          const criticalTokens = Array.isArray(criticalMeta.criticalTokens)
+	            ? criticalMeta.criticalTokens.slice()
+	            : getDashboardCriticalProjectTokens_(projects);
+	          coordinator.readModelSource = String(criticalReadyHomeData.readSource || '');
+	          coordinator.metadataReady = true;
+	          coordinator.criticalTokens = criticalTokens.slice();
+	            coordinator.cacheProfile = criticalReadyHomeData.dashboardCacheProfile || 'metadataOnly';
+	            coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
+	            coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
+	            coordinator.criticalFullPeekReady = criticalMeta.criticalFullPeekReady === true;
+	            coordinator.criticalThumbnailReady = criticalMeta.criticalThumbnailReady === true;
             coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
             markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_critical_fallback' : 'dashboard_read_model_critical_ready', {
               ok: criticalMeta.fallback !== true,
@@ -28165,9 +28634,9 @@
               thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
               thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
             });
-          rememberDashboardHomeResponse_(dashboardHomePayload, readModelHomeData);
-          hideDashboardProjectsLoadingPlaceholder_();
-          applyDashboardHomeData(readModelHomeData);
+	          rememberDashboardHomeResponse_(dashboardHomePayload, criticalReadyHomeData);
+	          hideDashboardProjectsLoadingPlaceholder_();
+	          applyDashboardHomeData(criticalReadyHomeData);
           if (opts.awaitPaint) {
             await new Promise(resolve => requestAnimationFrame(resolve));
           }
@@ -28183,7 +28652,7 @@
               thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
               thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
             });
-          return readModelHomeData;
+	          return criticalReadyHomeData;
         }
       } catch (readModelErr) {
         coordinator.readModelSource = 'unavailable';
@@ -28252,8 +28721,13 @@
         }
       }
 
-	      const criticalHomeData = await applyDashboardCriticalThumbnailReadiness_(
-	        applyDashboardCriticalDataToHomeData_(resp, criticalResp, criticalTokens),
+	      let criticalHomeData = applyDashboardCriticalDataToHomeData_(resp, criticalResp, criticalTokens);
+	      const fullPeekResp = criticalTokens.length
+	        ? await fetchDashboardProjectFullPeekBatchBounded_(dashboardHomePayload, criticalTokens, coordinator)
+	        : { ok: true, projects: [] };
+	      criticalHomeData = applyDashboardCriticalFullPeekDataToHomeData_(criticalHomeData, fullPeekResp, criticalTokens);
+	      criticalHomeData = await applyDashboardCriticalThumbnailReadiness_(
+	        criticalHomeData,
 	        criticalTokens,
 	        coordinator
 	      );
@@ -28261,6 +28735,7 @@
 	      coordinator.cacheProfile = criticalHomeData.dashboardCacheProfile || 'metadataOnly';
 	      coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
 	      coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
+	      coordinator.criticalFullPeekReady = criticalMeta.criticalFullPeekReady === true;
 	      coordinator.criticalThumbnailReady = criticalMeta.criticalThumbnailReady === true;
 	      coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
 	      markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_critical_fallback' : 'dashboard_critical_ready', {
@@ -30025,12 +30500,14 @@
     const resultPromises = [];
     const requestTokens = [];
     batchTokens.forEach(token => {
-      const cached = getDashboardProjectPeekCachedPayload_(token, { preferSummary: true });
-      if (cached) {
-        updateDashboardProjectRowThumbnailFromPeekPayload_(token, cached);
-        resultPromises.push(Promise.resolve(cached));
-        return;
-      }
+	      const cached = getDashboardProjectPeekCachedPayload_(token, { preferSummary: true });
+	      if (cached) {
+	        if (opts.deferRowUpdate !== true) {
+	          updateDashboardProjectRowThumbnailFromPeekPayload_(token, cached);
+	        }
+	        resultPromises.push(Promise.resolve(cached));
+	        return;
+	      }
       const inflight = DASHBOARD_PROJECT_PEEK_SUMMARY_INFLIGHT.get(token);
       if (inflight) {
         resultPromises.push(inflight);
@@ -30059,15 +30536,18 @@
             throw new Error(String((resp && resp.error) || 'Unable to load project summaries.'));
           }
           const byToken = new Map();
-          (Array.isArray(resp.projects) ? resp.projects : []).forEach(item => {
-            const token = String(item && item.token || '').trim();
-            const peek = item && item.ok === true && isDashboardProjectPeekRenderablePayload_(item.peekPreview)
-              ? item.peekPreview
-              : null;
-            if (!token || !peek) return;
-            rememberDashboardProjectPeekPayload_(token, peek, { source: source });
-            byToken.set(token, peek);
-          });
+	          (Array.isArray(resp.projects) ? resp.projects : []).forEach(item => {
+	            const token = String(item && item.token || '').trim();
+	            const peek = item && item.ok === true && isDashboardProjectPeekRenderablePayload_(item.peekPreview)
+	              ? item.peekPreview
+	              : null;
+	            if (!token || !peek) return;
+	            rememberDashboardProjectPeekPayload_(token, peek, {
+	              source: source,
+	              deferRowUpdate: opts.deferRowUpdate === true
+	            });
+	            byToken.set(token, peek);
+	          });
           logPortalClientLoadTiming_(trace, 'complete', {
             routeType: 'dashboard_peek_summary',
             source: source,
@@ -30787,157 +31267,205 @@
     closeDashboardProjectPeek();
   });
 
-  function renderProjectRows(projects){
-    if (!authProjectsBody || !authProjectsEmpty) return;
-    DASHBOARD_PROJECTS_LOADING_VISIBLE = false;
-    authProjectsBody.innerHTML = '';
-    const list = Array.isArray(projects) ? projects : [];
-    updateDashboardProjectsTitle(list);
+	  function buildDashboardProjectRow_(project, index){
+	    const projectToken = String(project && project.token || '').trim();
+	    if (project && project.peekInline === true && isDashboardProjectPeekRenderablePayload_(project.peekPreview)) {
+	      applyDashboardProjectThumbnailFromPeekPayload_(project, project.peekPreview);
+	    }
+	    const statusSeed = (project && project.statusSeed && typeof project.statusSeed === 'object')
+	      ? project.statusSeed
+	      : null;
+	    const pairReady = hasDashboardProjectPairedRowReady_(projectToken);
+	    const tr = createEl('tr', '');
+	    tr.dataset.projectToken = projectToken;
+	    tr.dataset.statusFallback = String(project && project.status || '').trim() || '--';
+	    const thumbCell = createEl('td', 'authProjectsThumbCell');
+	    const previewCell = createEl('div', 'authProjectsPreviewCell');
+	    const thumbBtn = createEl('button', 'authProjectsPreviewBtn');
+	    thumbBtn.type = 'button';
+	    thumbBtn.setAttribute('aria-label', 'View project snapshot');
+	    const thumbWrap = createEl('div', 'authProjectsThumb');
+	    populateDashboardPreviewImage_(thumbWrap, pairReady ? project : {}, 'PJ1');
+	    if (!pairReady) setDashboardPreviewImageLoading_(thumbWrap, true);
+	    const previewOverlay = createEl('span', 'authProjectsPreviewOverlay');
+	    previewOverlay.setAttribute('aria-hidden', 'true');
+	    previewOverlay.appendChild(createEl('span', 'authProjectsPreviewPlus', '+'));
+	    thumbBtn.appendChild(thumbWrap);
+	    thumbBtn.appendChild(previewOverlay);
+	    thumbBtn.appendChild(createEl('span', 'authProjectsPreviewHover', 'Expand\nProject\nDetails'));
+	    thumbBtn.addEventListener('pointerenter', () => {
+	      promoteDashboardProjectPeekPrefetch_(projectToken, {
+	        immediate: true,
+	        source: 'thumb-hover'
+	      });
+	      promoteDashboardProjectPeekFullPrefetch_(projectToken, {
+	        immediate: index < DASHBOARD_CRITICAL_PROJECT_LIMIT,
+	        source: 'thumb-hover'
+	      });
+	    });
+	    thumbBtn.addEventListener('focus', () => {
+	      promoteDashboardProjectPeekPrefetch_(projectToken, {
+	        immediate: true,
+	        source: 'thumb-focus'
+	      });
+	      promoteDashboardProjectPeekFullPrefetch_(projectToken, {
+	        immediate: index < DASHBOARD_CRITICAL_PROJECT_LIMIT,
+	        source: 'thumb-focus'
+	      });
+	    });
+	    thumbBtn.addEventListener('click', event => {
+	      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+	      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+	      promoteDashboardProjectPeekPrefetch_(projectToken, {
+	        immediate: true,
+	        source: 'thumb-open'
+	      });
+	      openDashboardProjectPeek(project, thumbBtn);
+	    });
+	    previewCell.appendChild(thumbBtn);
+	    thumbCell.appendChild(previewCell);
+	    tr.appendChild(thumbCell);
 
-    if (!list.length) {
-      authProjectsEmpty.hidden = false;
-      return;
-    }
-    authProjectsEmpty.hidden = true;
+	    const detailsCell = createEl('td', 'authProjectsDetailsCell');
+	    const detailsWrap = createEl('div', 'authProjectsDetails');
+	    const numberLine = createEl('div', 'authProjectsDetailsLine');
+	    numberLine.appendChild(createEl('span', 'authProjectsDetailsLabel', 'Number:'));
+	    numberLine.appendChild(createEl('span', 'authProjectsDetailsValue', String(project && project.dealNumber || '--').trim() || '--'));
+	    detailsWrap.appendChild(numberLine);
 
-    list.forEach((project, index) => {
-      const projectToken = String(project && project.token || '').trim();
-      if (project && project.peekInline === true && isDashboardProjectPeekRenderablePayload_(project.peekPreview)) {
-        applyDashboardProjectThumbnailFromPeekPayload_(project, project.peekPreview);
-      }
-      const statusSeed = (project && project.statusSeed && typeof project.statusSeed === 'object')
-        ? project.statusSeed
-        : null;
-      const tr = createEl('tr', '');
-      tr.dataset.projectToken = projectToken;
-      tr.dataset.statusFallback = String(project && project.status || '').trim() || '--';
-      const thumbCell = createEl('td', 'authProjectsThumbCell');
-      const previewCell = createEl('div', 'authProjectsPreviewCell');
-      const thumbBtn = createEl('button', 'authProjectsPreviewBtn');
-      thumbBtn.type = 'button';
-      thumbBtn.setAttribute('aria-label', 'View project snapshot');
-      const thumbWrap = createEl('div', 'authProjectsThumb');
-      populateDashboardPreviewImage_(thumbWrap, project, 'PJ1');
-      const previewOverlay = createEl('span', 'authProjectsPreviewOverlay');
-      previewOverlay.setAttribute('aria-hidden', 'true');
-      previewOverlay.appendChild(createEl('span', 'authProjectsPreviewPlus', '+'));
-      thumbBtn.appendChild(thumbWrap);
-      thumbBtn.appendChild(previewOverlay);
-      thumbBtn.appendChild(createEl('span', 'authProjectsPreviewHover', 'Expand\nProject\nDetails'));
-      thumbBtn.addEventListener('pointerenter', () => {
-        promoteDashboardProjectPeekPrefetch_(projectToken, {
-          immediate: true,
-          source: 'thumb-hover'
-        });
-        promoteDashboardProjectPeekFullPrefetch_(projectToken, {
-          immediate: index < DASHBOARD_CRITICAL_PROJECT_LIMIT,
-          source: 'thumb-hover'
-        });
-      });
-      thumbBtn.addEventListener('focus', () => {
-        promoteDashboardProjectPeekPrefetch_(projectToken, {
-          immediate: true,
-          source: 'thumb-focus'
-        });
-        promoteDashboardProjectPeekFullPrefetch_(projectToken, {
-          immediate: index < DASHBOARD_CRITICAL_PROJECT_LIMIT,
-          source: 'thumb-focus'
-        });
-      });
-      thumbBtn.addEventListener('click', event => {
-        if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-        promoteDashboardProjectPeekPrefetch_(projectToken, {
-          immediate: true,
-          source: 'thumb-open'
-        });
-        openDashboardProjectPeek(project, thumbBtn);
-      });
-      previewCell.appendChild(thumbBtn);
-      thumbCell.appendChild(previewCell);
-      tr.appendChild(thumbCell);
+	    const titleLine = createEl('div', 'authProjectsDetailsLine isProjectNameLine');
+	    const projectTitle = formatDashboardProjectTitle_(project);
+	    titleLine.appendChild(createEl('span', 'authProjectsDetailsLabel', 'Name:'));
+	    const projectTitleValue = createEl('span', 'authProjectsDetailsValue isProjectName', projectTitle);
+	    projectTitleValue.title = projectTitle;
+	    titleLine.appendChild(projectTitleValue);
+	    detailsWrap.appendChild(titleLine);
 
-      const detailsCell = createEl('td', 'authProjectsDetailsCell');
-      const detailsWrap = createEl('div', 'authProjectsDetails');
-      const numberLine = createEl('div', 'authProjectsDetailsLine');
-      numberLine.appendChild(createEl('span', 'authProjectsDetailsLabel', 'Number:'));
-      numberLine.appendChild(createEl('span', 'authProjectsDetailsValue', String(project && project.dealNumber || '--').trim() || '--'));
-      detailsWrap.appendChild(numberLine);
+	    const startedLine = createEl('div', 'authProjectsDetailsLine');
+	    startedLine.appendChild(createEl('span', 'authProjectsDetailsLabel', 'Started:'));
+	    startedLine.appendChild(createEl('span', 'authProjectsDetailsValue', formatProjectDate(project.exportedAt || project.createdAt)));
+	    detailsWrap.appendChild(startedLine);
+	    detailsCell.appendChild(detailsWrap);
+	    tr.appendChild(detailsCell);
 
-      const titleLine = createEl('div', 'authProjectsDetailsLine isProjectNameLine');
-      const projectTitle = formatDashboardProjectTitle_(project);
-      titleLine.appendChild(createEl('span', 'authProjectsDetailsLabel', 'Name:'));
-      const projectTitleValue = createEl('span', 'authProjectsDetailsValue isProjectName', projectTitle);
-      projectTitleValue.title = projectTitle;
-      titleLine.appendChild(projectTitleValue);
-      detailsWrap.appendChild(titleLine);
+	    const statusCell = createEl('td', 'authProjectsStatusCell');
+	    const statusHost = createEl('div', 'authProjectsStatusHost');
+	    statusHost.dataset.dashboardStatusHost = '1';
+	    statusCell.appendChild(statusHost);
+	    tr.appendChild(statusCell);
 
-      const startedLine = createEl('div', 'authProjectsDetailsLine');
-      startedLine.appendChild(createEl('span', 'authProjectsDetailsLabel', 'Started:'));
-      startedLine.appendChild(createEl('span', 'authProjectsDetailsValue', formatProjectDate(project.exportedAt || project.createdAt)));
-      detailsWrap.appendChild(startedLine);
-      detailsCell.appendChild(detailsWrap);
-      tr.appendChild(detailsCell);
+	    const openCell = createEl('td', 'authProjectsActionCell');
+	    const openBtn = createEl('a', 'authProjectsOpenBtn');
+	    openBtn.dataset.projectToken = projectToken;
+	    openBtn.appendChild(createDashboardPeekSvgIcon_('open'));
+	    openBtn.appendChild(createEl('span', '', 'Open Project'));
+	    const projectUrl = buildExternalPortalProjectUrl_(projectToken);
+	    if (projectUrl) openBtn.href = projectUrl;
+	    else openBtn.setAttribute('aria-disabled', 'true');
+	    openBtn.addEventListener('pointerenter', () => {
+	      prefetchDashboardProjectPayload_(projectToken, {
+	        requireAuthSession: !hasDashboardTokenContext_(),
+	        source: 'pointerenter'
+	      }).catch(() => {});
+	    });
+	    openBtn.addEventListener('focus', () => {
+	      prefetchDashboardProjectPayload_(projectToken, {
+	        requireAuthSession: !hasDashboardTokenContext_(),
+	        source: 'focus'
+	      }).catch(() => {});
+	    });
+	    openBtn.addEventListener('pointerdown', event => {
+	      if (!isPlainLeftClick_(event)) return;
+	      armDashboardProjectOpen(openBtn, 'pointer');
+	    });
+	    openBtn.addEventListener('keydown', event => {
+	      if (!event) return;
+	      if (event.key !== 'Enter' && event.key !== ' ') return;
+	      armDashboardProjectOpen(openBtn, 'keyboard');
+	      if (event.key === ' ') {
+	        event.preventDefault();
+	        event.stopPropagation();
+	        if (!shouldAllowDashboardProjectOpen(openBtn, event)) return;
+	        openProjectFromDashboard(project.token, openBtn);
+	      }
+	    });
+	    openBtn.addEventListener('click', event => {
+	      if (!isPlainLeftClick_(event)) return;
+	      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+	      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+	      if (!shouldAllowDashboardProjectOpen(openBtn, event)) return;
+	      openProjectFromDashboard(project.token, openBtn);
+	    });
+	    openCell.appendChild(openBtn);
+	    tr.appendChild(openCell);
 
-      const statusCell = createEl('td', 'authProjectsStatusCell');
-      const statusHost = createEl('div', 'authProjectsStatusHost');
-      statusHost.dataset.dashboardStatusHost = '1';
-      statusCell.appendChild(statusHost);
-      tr.appendChild(statusCell);
+	    if (pairReady && statusSeed && Array.isArray(statusSeed.steps) && statusSeed.steps.length) {
+	      requestAnimationFrame(() => renderDashboardProjectStatusIntoRow_(projectToken, statusSeed));
+	    } else {
+	      renderDashboardProjectStatusSkeleton_(statusHost);
+	    }
+	    return tr;
+	  }
 
-      const openCell = createEl('td', 'authProjectsActionCell');
-      const openBtn = createEl('a', 'authProjectsOpenBtn');
-      openBtn.dataset.projectToken = projectToken;
-      openBtn.appendChild(createDashboardPeekSvgIcon_('open'));
-      openBtn.appendChild(createEl('span', '', 'Open Project'));
-      const projectUrl = buildExternalPortalProjectUrl_(projectToken);
-      if (projectUrl) openBtn.href = projectUrl;
-      else openBtn.setAttribute('aria-disabled', 'true');
-      openBtn.addEventListener('pointerenter', () => {
-        prefetchDashboardProjectPayload_(projectToken, {
-          requireAuthSession: !hasDashboardTokenContext_(),
-          source: 'pointerenter'
-        }).catch(() => {});
-      });
-      openBtn.addEventListener('focus', () => {
-        prefetchDashboardProjectPayload_(projectToken, {
-          requireAuthSession: !hasDashboardTokenContext_(),
-          source: 'focus'
-        }).catch(() => {});
-      });
-      openBtn.addEventListener('pointerdown', event => {
-        if (!isPlainLeftClick_(event)) return;
-        armDashboardProjectOpen(openBtn, 'pointer');
-      });
-      openBtn.addEventListener('keydown', event => {
-        if (!event) return;
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        armDashboardProjectOpen(openBtn, 'keyboard');
-        if (event.key === ' ') {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!shouldAllowDashboardProjectOpen(openBtn, event)) return;
-          openProjectFromDashboard(project.token, openBtn);
-        }
-      });
-      openBtn.addEventListener('click', event => {
-        if (!isPlainLeftClick_(event)) return;
-        if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-        if (!shouldAllowDashboardProjectOpen(openBtn, event)) return;
-        openProjectFromDashboard(project.token, openBtn);
-      });
-      openCell.appendChild(openBtn);
-      tr.appendChild(openCell);
+	  function buildDashboardLoadOlderRow_(){
+	    const tr = createEl('tr', 'authProjectsLoadOlderRow');
+	    tr.dataset.dashboardLoadOlder = '1';
+	    const td = createEl('td', '');
+	    td.colSpan = 4;
+	    const btn = createEl('button', 'authProjectsLoadOlderBtn', 'Load older jobs');
+	    btn.type = 'button';
+	    btn.addEventListener('click', () => {
+	      revealNextDashboardProjectBatch_();
+	    });
+	    td.appendChild(btn);
+	    tr.appendChild(td);
+	    return tr;
+	  }
 
-      authProjectsBody.appendChild(tr);
-      if (statusSeed && Array.isArray(statusSeed.steps) && statusSeed.steps.length) {
-        renderDashboardProjectStatusIntoRow_(projectToken, statusSeed);
-      } else {
-        renderDashboardProjectStatusSkeleton_(statusHost);
-      }
-    });
-  }
+	  function renderProjectRows(projects){
+	    if (!authProjectsBody || !authProjectsEmpty) return;
+	    DASHBOARD_PROJECTS_LOADING_VISIBLE = false;
+	    authProjectsBody.innerHTML = '';
+	    const list = Array.isArray(projects) ? projects : [];
+	    const state = setDashboardActiveProjects_({ projects: list });
+	    const visibleCount = getDashboardVisibleProjectCount_(list.length);
+	    updateDashboardProjectsTitle(list);
+
+	    if (!list.length) {
+	      authProjectsEmpty.hidden = false;
+	      return;
+	    }
+	    authProjectsEmpty.hidden = true;
+
+	    list.slice(0, visibleCount).forEach((project, index) => {
+	      authProjectsBody.appendChild(buildDashboardProjectRow_(project, index));
+	    });
+	    if (visibleCount < list.length) {
+	      authProjectsBody.appendChild(buildDashboardLoadOlderRow_());
+	    }
+	    if (state) state.visibleCount = visibleCount;
+	  }
+
+	  function revealNextDashboardProjectBatch_(){
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    if (!state || !Array.isArray(state.projects) || !state.projects.length) return;
+	    const oldVisibleCount = getDashboardVisibleProjectCount_(state.projects.length);
+	    const nextVisibleCount = Math.min(
+	      state.projects.length,
+	      oldVisibleCount + DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE
+	    );
+	    if (nextVisibleCount <= oldVisibleCount) return;
+	    state.visibleCount = nextVisibleCount;
+	    renderProjectRows(state.projects);
+	    const revealedTokens = state.projects
+	      .slice(oldVisibleCount, nextVisibleCount)
+	      .map(project => String(project && project.token || '').trim())
+	      .filter(Boolean);
+	    hydrateDashboardProjectRowPairs_(revealedTokens, {
+	      source: 'load-older',
+	      immediate: true
+	    }).catch(() => {});
+	  }
 
   function getDashboardProjectsNeedingStatusHydration_(projects){
     const list = Array.isArray(projects) ? projects : [];
@@ -31027,9 +31555,9 @@
     });
   }
 
-  function applyDashboardProjectStatusBatchResponse_(tokens, resp){
-    const batchTokens = Array.isArray(tokens) ? tokens : [];
-    if (!resp || resp.ok !== true || !Array.isArray(resp.projects)) {
+	  function applyDashboardProjectStatusBatchResponse_(tokens, resp){
+	    const batchTokens = Array.isArray(tokens) ? tokens : [];
+	    if (!resp || resp.ok !== true || !Array.isArray(resp.projects)) {
       batchTokens.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
       return;
     }
@@ -31037,19 +31565,236 @@
     resp.projects.forEach(projectStatus => {
       const token = String(projectStatus && projectStatus.token || '').trim();
       if (!token) return;
-      returned.add(token);
-      if (projectStatus.ok === true && Array.isArray(projectStatus.steps) && projectStatus.steps.length) {
-        renderDashboardProjectStatusIntoRow_(token, projectStatus);
-      } else {
+	      returned.add(token);
+	      if (projectStatus.ok === true && Array.isArray(projectStatus.steps) && projectStatus.steps.length) {
+	        rememberDashboardProjectStatusSeed_(token, projectStatus);
+	        renderDashboardProjectStatusIntoRow_(token, projectStatus);
+	      } else {
         renderDashboardProjectStatusFallback_(token, String(projectStatus && projectStatus.fallbackStatus || ''));
       }
     });
     batchTokens.forEach(token => {
       if (!returned.has(token)) renderDashboardProjectStatusFallback_(token, '');
-    });
-  }
+	    });
+	  }
 
-  async function hydrateDashboardProjectStatuses_(projects, options){
+	  function fetchDashboardProjectStatusBatchForTokens_(tokens, options){
+	    const batchTokens = uniqueDashboardProjectPeekTokens_(tokens);
+	    if (!batchTokens.length) return Promise.resolve(new Map());
+	    const requestPayload = getDashboardContextRequestPayload_();
+	    if (!requestPayload) return Promise.resolve(new Map());
+	    const requestTokens = [];
+	    const resultPromises = [];
+	    batchTokens.forEach(token => {
+	      const activeProject = getDashboardActiveProjectByToken_(token);
+	      if (activeProject && isDashboardProjectStatusSeedPayload_(activeProject.statusSeed)) {
+	        resultPromises.push(Promise.resolve([token, activeProject.statusSeed]));
+	        return;
+	      }
+	      const inflight = DASHBOARD_PROJECT_STATUS_INFLIGHT.get(token);
+	      if (inflight) {
+	        resultPromises.push(inflight.then(seed => [token, seed]));
+	        return;
+	      }
+	      requestTokens.push(token);
+	    });
+	    if (requestTokens.length) {
+	      const opts = (options && typeof options === 'object') ? options : {};
+	      const source = String(opts.source || 'paired').trim() || 'paired';
+	      const trace = createPortalClientLoadTimingTrace_('dashboard_status_pair_fetch');
+	      markPortalClientLoadTiming_(trace, 'request_start', {
+	        routeType: 'dashboard_status_pair',
+	        source: source,
+	        batchSize: requestTokens.length
+	      });
+	      const request = callServer('getDashboardProjectStatusBatch', Object.assign({}, requestPayload, { tokens: requestTokens }))
+	        .then(resp => {
+	          const serverTiming = getServerPortalLoadTimingSummary_(resp);
+	          markPortalClientLoadTiming_(trace, 'response_received', Object.assign({
+	            routeType: 'dashboard_status_pair',
+	            source: source,
+	            ok: !!(resp && resp.ok === true),
+	            projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
+	          }, serverTiming || {}));
+	          if (!resp || resp.ok !== true || !Array.isArray(resp.projects)) {
+	            throw new Error(String((resp && resp.error) || 'Unable to load order progress.'));
+	          }
+	          const map = new Map();
+	          resp.projects.forEach(projectStatus => {
+	            const token = String(projectStatus && projectStatus.token || '').trim();
+	            if (!token) return;
+	            if (projectStatus.ok === true && Array.isArray(projectStatus.steps) && projectStatus.steps.length) {
+	              rememberDashboardProjectStatusSeed_(token, projectStatus);
+	              map.set(token, projectStatus);
+	            }
+	          });
+	          logPortalClientLoadTiming_(trace, 'complete', {
+	            routeType: 'dashboard_status_pair',
+	            source: source,
+	            ok: true,
+	            projectCount: map.size
+	          });
+	          return map;
+	        })
+	        .catch(err => {
+	          logPortalClientLoadTiming_(trace, 'failed', {
+	            routeType: 'dashboard_status_pair',
+	            source: source,
+	            ok: false,
+	            batchSize: requestTokens.length
+	          });
+	          throw err;
+	        })
+	        .finally(() => {
+	          requestTokens.forEach(token => {
+	            DASHBOARD_PROJECT_STATUS_INFLIGHT.delete(token);
+	          });
+	        });
+	      requestTokens.forEach(token => {
+	        const tokenPromise = request.then(map => map.get(token) || null);
+	        DASHBOARD_PROJECT_STATUS_INFLIGHT.set(token, tokenPromise);
+	        resultPromises.push(tokenPromise.then(seed => [token, seed]));
+	      });
+	    }
+	    return Promise.all(resultPromises).then(entries => {
+	      const map = new Map();
+	      entries.forEach(entry => {
+	        const token = String(entry && entry[0] || '').trim();
+	        const seed = entry && entry[1];
+	        if (token && isDashboardProjectStatusSeedPayload_(seed)) map.set(token, seed);
+	      });
+	      return map;
+	    });
+	  }
+
+	  function commitDashboardPairedRowHydration_(tokens, statusMap){
+	    const batchTokens = uniqueDashboardProjectPeekTokens_(tokens);
+	    batchTokens.forEach(token => {
+	      const project = getDashboardActiveProjectByToken_(token);
+	      const seed = (statusMap && statusMap.get && statusMap.get(token)) ||
+	        (project && isDashboardProjectStatusSeedPayload_(project.statusSeed) ? project.statusSeed : null);
+	      const cachedPeek = getDashboardProjectPeekCachedPayload_(token, { preferSummary: true });
+	      if (project && cachedPeek) {
+	        applyDashboardProjectThumbnailFromPeekPayload_(project, cachedPeek);
+	      }
+	      const row = getDashboardProjectRowForToken_(token);
+	      if (row && seed && Array.isArray(seed.steps) && seed.steps.length) {
+	        renderDashboardProjectStatusIntoRow_(token, seed);
+	      }
+	      if (row && cachedPeek) {
+	        updateDashboardProjectRowThumbnailFromPeekPayload_(token, cachedPeek);
+	      }
+	      if (seed && cachedPeek && getDashboardThumbnailMetaFromPeekPayload_(cachedPeek)) {
+	        markDashboardProjectPairedRowReady_(token);
+	      }
+	    });
+	  }
+
+	  async function hydrateDashboardProjectRowPairs_(tokens, options){
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const batchTokens = uniqueDashboardProjectPeekTokens_(tokens)
+	      .filter(token => !hasDashboardProjectPairedRowReady_(token));
+	    if (!batchTokens.length) return null;
+	    const pairKey = batchTokens.join('|');
+	    const existing = DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT.get(pairKey);
+	    if (existing) return existing;
+	    const seq = DASHBOARD_ROW_PAIR_HYDRATION_SEQ;
+	    const source = String(opts.source || 'paired-background').trim() || 'paired-background';
+	    const trace = createPortalClientLoadTimingTrace_('dashboard_paired_row_hydration');
+	    markPortalClientLoadTiming_(trace, 'start', {
+	      routeType: 'dashboard_paired_rows',
+	      source: source,
+	      tokenCount: batchTokens.length,
+	      batchSize: batchTokens.length
+	    });
+	    const pending = (async () => {
+	      let statusMap = new Map();
+	      let summaryValues = [];
+	      const statusPromise = fetchDashboardProjectStatusBatchForTokens_(batchTokens, { source: source })
+	        .then(map => {
+	          statusMap = map || new Map();
+	          return statusMap;
+	        })
+	        .catch(() => new Map());
+	      const summaryPromise = fetchDashboardProjectPeekSummaryBatch_(batchTokens, {
+	        source: source,
+	        deferRowUpdate: true
+	      })
+	        .then(values => {
+	          summaryValues = Array.isArray(values) ? values : [];
+	          return summaryValues;
+	        })
+	        .catch(() => []);
+	      let timedOut = false;
+	      await Promise.race([
+	        Promise.all([statusPromise, summaryPromise]),
+	        waitMs_(DASHBOARD_ROW_PAIR_HYDRATION_FALLBACK_MS).then(() => {
+	          timedOut = true;
+	        })
+	      ]);
+	      if (seq !== DASHBOARD_ROW_PAIR_HYDRATION_SEQ) return null;
+	      commitDashboardPairedRowHydration_(batchTokens, statusMap);
+	      if (timedOut) {
+	        Promise.all([statusPromise, summaryPromise]).then(() => {
+	          if (seq !== DASHBOARD_ROW_PAIR_HYDRATION_SEQ) return;
+	          commitDashboardPairedRowHydration_(batchTokens, statusMap);
+	        }).catch(() => {});
+	      }
+	      logPortalClientLoadTiming_(trace, timedOut ? 'fallback_commit' : 'complete', {
+	        routeType: 'dashboard_paired_rows',
+	        source: source,
+	        ok: true,
+	        fallback: timedOut === true,
+	        tokenCount: batchTokens.length,
+	        statusReadyCount: statusMap.size,
+	        peekReadyCount: summaryValues.length
+	      });
+	      return null;
+	    })().finally(() => {
+	      DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT.delete(pairKey);
+	    });
+	    DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT.set(pairKey, pending);
+	    return pending;
+	  }
+
+	  function startDashboardPairedBackgroundHydration_(projects, options){
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    const list = Array.isArray(projects) ? projects : (state && Array.isArray(state.projects) ? state.projects : []);
+	    if (!list.length) return;
+	    const seq = ++DASHBOARD_ROW_PAIR_HYDRATION_SEQ;
+	    DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT.clear();
+	    if (state) {
+	      state.backgroundHydrationStarted = true;
+	      state.backgroundHydrationState = 'running';
+	    }
+	    const tokens = list
+	      .map(project => String(project && project.token || '').trim())
+	      .filter(token => token && !hasDashboardProjectPairedRowReady_(token));
+	    const batches = [];
+	    for (let i = 0; i < tokens.length; i += DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE) {
+	      batches.push(tokens.slice(i, i + DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE));
+	    }
+	    const run = async () => {
+	      for (let i = 0; i < batches.length; i += 1) {
+	        if (seq !== DASHBOARD_ROW_PAIR_HYDRATION_SEQ) return;
+	        if (i > 0) await waitForDashboardBackgroundHydrationTurn_(260);
+	        await hydrateDashboardProjectRowPairs_(batches[i], {
+	          source: opts.source || 'paired-background'
+	        }).catch(() => null);
+	      }
+	      if (seq !== DASHBOARD_ROW_PAIR_HYDRATION_SEQ) return;
+	      const current = getDashboardActiveStateForCurrentContext_();
+	      if (current) current.backgroundHydrationState = 'complete';
+	      maybePrewarmDashboardAccountDocuments_();
+	    };
+	    run().catch(() => {
+	      const current = getDashboardActiveStateForCurrentContext_();
+	      if (current) current.backgroundHydrationState = 'failed';
+	    });
+	  }
+
+	  async function hydrateDashboardProjectStatuses_(projects, options){
     const opts = (options && typeof options === 'object') ? options : {};
     const tokens = getDashboardProjectsNeedingStatusHydration_(projects);
     if (!tokens.length) return null;
@@ -31158,56 +31903,58 @@
     const payload = (data && typeof data === 'object') ? data : {};
     const opts = (options && typeof options === 'object') ? options : {};
     const projects = Array.isArray(payload.projects) ? payload.projects : [];
-    projects.forEach(project => {
-      const token = String(project && project.token || '').trim();
-      const inlinePeek = project && project.peekInline === true && isDashboardProjectPeekRenderablePayload_(project.peekPreview)
-        ? project.peekPreview
-        : null;
-      if (!token || !inlinePeek) return;
-      rememberDashboardProjectPeekPayload_(token, inlinePeek, {
-        source: 'home-inline'
-      });
-    });
+	    projects.forEach(project => {
+	      const token = String(project && project.token || '').trim();
+	      const inlinePeek = project && project.peekInline === true && isDashboardProjectPeekRenderablePayload_(project.peekPreview)
+	        ? project.peekPreview
+	        : null;
+	      const inlineFullPeek = project && project.fullPeekInline === true && isDashboardProjectPeekFullPayload_(project.fullPeekPreview)
+	        ? project.fullPeekPreview
+	        : null;
+	      if (!token) return;
+	      if (inlinePeek) {
+	        rememberDashboardProjectPeekPayload_(token, inlinePeek, {
+	          source: 'home-inline'
+	        });
+	      }
+	      if (inlineFullPeek) {
+	        rememberDashboardProjectPeekPayload_(token, inlineFullPeek, {
+	          source: 'home-inline-full'
+	        });
+	      }
+	    });
     renderProjectRows(projects);
     syncDashboardAccountContextFromSummary_(payload.accountSummary || {});
     renderDashboardAccountStatus(payload.accountSummary || {});
-    if (opts.deferHydration === true) {
-      return payload;
-    }
-    let summaryPeekPrefetchStarted = false;
-    let fullPeekPrefetchStarted = false;
-    const startPeekSummaryPrefetchOnce = () => {
-      if (summaryPeekPrefetchStarted) return;
-      summaryPeekPrefetchStarted = true;
-      startDashboardProjectPeekPrefetch_(projects, {
-        initialDelayMs: 240
-      });
-    };
-    const startFullPeekPrefetchOnce = source => {
-      if (fullPeekPrefetchStarted) return;
-      if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
-      fullPeekPrefetchStarted = true;
-      startDashboardProjectPeekFullPrefetch_(getDashboardCriticalProjectTokens_(projects), {
-        initialDelayMs: 900,
-        maxInitial: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT,
-        nextDelayMs: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS,
-        source: String(source || 'status-settled')
-      });
-    };
-    const fullPrefetchFallbackTimer = window.setTimeout(() => {
-      startFullPeekPrefetchOnce('bounded-delay');
-    }, DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS);
-    hydrateDashboardProjectStatuses_(projects, {
-      onFirstBatchComplete: startPeekSummaryPrefetchOnce
-    }).catch(() => null).finally(() => {
-      startPeekSummaryPrefetchOnce();
-      if (fullPrefetchFallbackTimer) {
-        window.clearTimeout(fullPrefetchFallbackTimer);
-      }
-      startFullPeekPrefetchOnce('status-settled');
-    });
-    return payload;
-  }
+	    if (opts.deferHydration === true) {
+	      return payload;
+	    }
+	    let fullPeekPrefetchStarted = false;
+	    const startFullPeekPrefetchOnce = source => {
+	      if (fullPeekPrefetchStarted) return;
+	      if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
+	      fullPeekPrefetchStarted = true;
+	      startDashboardProjectPeekFullPrefetch_(getDashboardCriticalProjectTokens_(projects), {
+	        initialDelayMs: 1200,
+	        maxInitial: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT,
+	        nextDelayMs: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS,
+	        source: String(source || 'status-settled')
+	      });
+	    };
+	    const fullPrefetchFallbackTimer = window.setTimeout(() => {
+	      startFullPeekPrefetchOnce('bounded-delay');
+	    }, DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS);
+	    startDashboardPairedBackgroundHydration_(projects, {
+	      source: 'post-reveal'
+	    });
+	    waitMs_(Math.min(DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS, 2200)).then(() => {
+	      if (fullPrefetchFallbackTimer) {
+	        window.clearTimeout(fullPrefetchFallbackTimer);
+	      }
+	      startFullPeekPrefetchOnce('paired-hydration-started');
+	    });
+	    return payload;
+	  }
 
   function formatDashboardProjectTitle_(project){
     const projectNumber = String(project && project.dealNumber || '').trim();
@@ -34599,19 +35346,19 @@
       return;
     }
     const shouldHydrateDashboard = ACCOUNT_DOC_MODAL_CONTEXT === 'dashboard' && CURRENT_VIEW === VIEW_DASHBOARD;
-    if (!termsReviewBackdrop) {
-      resetTermsClientWorkspaceState_();
-      if (shouldHydrateDashboard) {
-        ensureDashboardProjectsHydratingAfterAccountDocumentClose_('credit_terms_close');
-      }
-      return;
-    }
+	    if (!termsReviewBackdrop) {
+	      resetTermsClientWorkspaceState_();
+	      if (shouldHydrateDashboard) {
+	        resumeDashboardAfterAccountDocumentOverlay_('credit_terms_close');
+	      }
+	      return;
+	    }
     const opts = (options && typeof options === 'object') ? options : {};
     termsReviewBackdrop.classList.remove('open');
-    syncOverlayScrollLock();
-    if (shouldHydrateDashboard) {
-      ensureDashboardProjectsHydratingAfterAccountDocumentClose_('credit_terms_close');
-    }
+	    syncOverlayScrollLock();
+	    if (shouldHydrateDashboard) {
+	      resumeDashboardAfterAccountDocumentOverlay_('credit_terms_close');
+	    }
     const finalize = () => {
       termsReviewBackdrop.hidden = true;
       resetTermsClientWorkspaceState_();
@@ -39514,10 +40261,10 @@
     if (TAX_DOC_HIDE_TIMER) {
       clearTimeout(TAX_DOC_HIDE_TIMER);
       TAX_DOC_HIDE_TIMER = 0;
-    }
-    if (shouldHydrateDashboard) {
-      ensureDashboardProjectsHydratingAfterAccountDocumentClose_('tax_exempt_close');
-    }
+	    }
+	    if (shouldHydrateDashboard) {
+	      resumeDashboardAfterAccountDocumentOverlay_('tax_exempt_close');
+	    }
     if (opts.immediate === true) {
       taxDocBackdrop.hidden = true;
       return;
@@ -40444,24 +41191,26 @@
     setSummaryOptions({ salesTaxEnabled: !presentation.salesTaxEnabled });
   }
 
+  function syncOrderFlowTaxPendingNotice_(){
+    if (!orderFlowTaxPendingNotice) return;
+    const shouldShow = ORDER_FLOW_MODE === 'fulfillment' && isSalesTaxExemptionPendingReview_(ACCOUNT_SUMMARY);
+    orderFlowTaxPendingNotice.textContent = 'Sales Tax Exemption Status: Pending Approval';
+    orderFlowTaxPendingNotice.hidden = !shouldShow;
+  }
+
   function renderOrderFlowAccountBanner_(){
     if (!orderFlowAccountBanner) return;
     const showBanner = ORDER_FLOW_MODE === 'fulfillment';
+    syncOrderFlowTaxPendingNotice_();
     if (!showBanner) {
       orderFlowAccountBanner.hidden = true;
       orderFlowAccountBanner.innerHTML = '';
-      if (orderFlowTaxPendingNotice) orderFlowTaxPendingNotice.hidden = true;
       return;
     }
 
     orderFlowAccountBanner.innerHTML = '';
 
     const actionsRow = createEl('div', 'orderFlowAccountActionsRow');
-    const taxPending = isSalesTaxExemptionPendingReview_(ACCOUNT_SUMMARY);
-    if (orderFlowTaxPendingNotice) {
-      orderFlowTaxPendingNotice.textContent = 'Sales Tax Exemption Status: Pending Approval';
-      orderFlowTaxPendingNotice.hidden = !taxPending;
-    }
     const hasBannerContent = actionsRow.childElementCount > 0;
     orderFlowAccountBanner.hidden = !hasBannerContent;
     if (hasBannerContent) {
@@ -42815,6 +43564,7 @@
     if (orderFlowModal) orderFlowModal.classList.toggle('isSelection', ORDER_FLOW_MODE === 'fulfillment');
     if (orderFlowModal) orderFlowModal.classList.toggle('isMinimumsBlocking', ORDER_FLOW_MODE === 'blocking' && ORDER_FLOW_BLOCKING_KIND === 'minimums');
     if (orderFlowAccountBanner) orderFlowAccountBanner.hidden = ORDER_FLOW_MODE !== 'fulfillment';
+    syncOrderFlowTaxPendingNotice_();
     renderOrderFlowModalTitle_();
     if (orderFlowTitle) orderFlowTitle.hidden = false;
     if (orderFlowStatePill) {

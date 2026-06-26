@@ -1925,6 +1925,9 @@ function doPost(e) {
     if (action === 'get_dashboard_project_peek') {
       return jsonOutput_(getDashboardProjectPeek(payload));
     }
+    if (action === 'get_dashboard_project_full_peek_batch') {
+      return jsonOutput_(getDashboardProjectFullPeekBatch(payload));
+    }
     if (action === 'get_dashboard_project_peek_summary_batch') {
       return jsonOutput_(getDashboardProjectPeekSummaryBatch(payload));
     }
@@ -5208,6 +5211,159 @@ function getDashboardProjectPeek(payload) {
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
+}
+
+function getDashboardProjectFullPeekBatch(payload) {
+  const timing = createPortalLoadTimingTrace_('getDashboardProjectFullPeekBatch');
+  try {
+    const tokenCount = payload && Array.isArray(payload.tokens) ? payload.tokens.length : 0;
+    markPortalLoadTiming_(timing, 'request_received', {
+      routeType: 'dashboard_full_peek',
+      tokenCount: tokenCount,
+      batchSize: tokenCount,
+      hasSession: !!(payload && payload.sessionId),
+      hasToken: !!(payload && payload.token)
+    });
+    const resp = buildDashboardProjectFullPeekBatch_(payload);
+    markPortalLoadTiming_(timing, 'response_ready', {
+      routeType: 'dashboard_full_peek',
+      ok: !!(resp && resp.ok === true),
+      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0,
+      batchSize: tokenCount
+    });
+    return attachPortalLoadTiming_(resp, timing, {
+      routeType: 'dashboard_full_peek',
+      ok: !!(resp && resp.ok === true),
+      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0,
+      batchSize: tokenCount
+    });
+  } catch (err) {
+    return attachPortalLoadTiming_({ ok: false, error: String((err && err.message) || err) }, timing, {
+      routeType: 'dashboard_full_peek',
+      ok: false
+    });
+  }
+}
+
+function buildDashboardProjectFullPeekBatch_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const batchLimit = Math.max(1, Math.min(6, parseInt(String(opts.batchLimit || opts.criticalProjectLimit || 6), 10) || 6));
+  const tokens = uniqueTrimmedStrings_(opts.tokens).slice(0, batchLimit);
+  if (!tokens.length) {
+    return {
+      ok: true,
+      dashboardPeekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+      projectionVersion: getDashboardProjectProjectionVersion_(),
+      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+      peekVersion: getDashboardProjectPeekPayloadVersion_(),
+      projects: []
+    };
+  }
+
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const exportSheet = infra.exportSheet;
+  if (!exportSheet) {
+    return { ok: false, error: 'Auth configuration is incomplete.' };
+  }
+
+  const sessionId = trimString_(opts.sessionId);
+  const dashboardToken = trimString_(opts.token);
+  let authorizedEmail = '';
+  let authorizedAccountSummary = null;
+  if (sessionId) {
+    const userCtx = getUserContextBySessionId_(ss, sessionId);
+    if (!userCtx || userCtx.ok !== true) {
+      return userCtx || { ok: false, error: 'Missing session.' };
+    }
+    authorizedEmail = normalizeEmail_(userCtx.email);
+    authorizedAccountSummary = buildDashboardStatusAccountSummaryForEmail_(exportSheet, authorizedEmail, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  } else if (hasPortalAccountDirectAccessPayload_(opts)) {
+    const directAccount = resolvePortalAccountDirectAccess_(opts, { cfg: cfg, ss: ss, infra: infra });
+    if (!directAccount || directAccount.ok !== true) return directAccount;
+    authorizedAccountSummary = directAccount.accountSummary || {};
+  } else if (dashboardToken) {
+    const dashboardRowInfo = findRowByToken_(exportSheet, dashboardToken);
+    if (!dashboardRowInfo) return { ok: false, error: 'Link not found.' };
+    authorizedEmail = normalizeEmail_(dashboardRowInfo.rowObjNormalized && dashboardRowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+    authorizedAccountSummary = buildDashboardStatusAccountSummaryForEmail_(exportSheet, authorizedEmail, {
+      cfg: cfg,
+      ss: ss,
+      infra: infra
+    });
+  }
+
+  if (!authorizedEmail && !authorizedAccountSummary) {
+    return { ok: false, error: 'Missing session.' };
+  }
+
+  const rowInfoMapByToken = buildDashboardExportRowInfoMapForTokens_(exportSheet, tokens);
+  const authorizedByToken = {};
+  tokens.forEach(function(projectToken) {
+    const rowInfo = rowInfoMapByToken[projectToken] || null;
+    if (!rowInfo) return;
+    const rowEmail = normalizeEmail_(rowInfo.rowObjNormalized && rowInfo.rowObjNormalized[EXPORT_LOG_PERSON_EMAIL_HEADER]);
+    const accountAuthorized = authorizedAccountSummary
+      ? isExportRowVisibleForAccount_(rowInfo.rowObjNormalized, authorizedAccountSummary)
+      : false;
+    if (accountAuthorized || (rowEmail && rowEmail === authorizedEmail)) {
+      authorizedByToken[projectToken] = true;
+    }
+  });
+
+  const projects = tokens.map(function(projectToken) {
+    const rowInfo = rowInfoMapByToken[projectToken] || null;
+    if (!rowInfo) {
+      return { token: projectToken, ok: false, error: 'Link not found.' };
+    }
+    if (authorizedByToken[projectToken] !== true) {
+      return { token: projectToken, ok: false, error: 'Unauthorized project access.' };
+    }
+    try {
+      const peekPreview = buildDashboardProjectPeekMetaForToken_(projectToken, {
+        cfg: cfg,
+        ss: ss,
+        infra: infra,
+        exportSheet: exportSheet,
+        rowInfo: rowInfo
+      });
+      if (!peekPreview || peekPreview.ok !== true || getDashboardProjectPeekPayloadProfile_(peekPreview) !== DASHBOARD_PROJECT_PEEK_PROFILE_FULL) {
+        return {
+          token: projectToken,
+          ok: false,
+          error: String((peekPreview && peekPreview.error) || 'Unable to derive full Project Peek data.')
+        };
+      }
+      return {
+        token: projectToken,
+        ok: true,
+        projectionVersion: getDashboardProjectProjectionVersion_(),
+        peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+        peekVersion: getDashboardProjectPeekPayloadVersion_(),
+        peekPreview: peekPreview
+      };
+    } catch (err) {
+      return {
+        token: projectToken,
+        ok: false,
+        error: String((err && err.message) || err || 'Unable to derive full Project Peek data.')
+      };
+    }
+  });
+
+  return {
+    ok: true,
+    dashboardPeekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+    peekVersion: getDashboardProjectPeekPayloadVersion_(),
+    projects: projects
+  };
 }
 
 function getDashboardProjectPeekSummaryBatch(payload) {
