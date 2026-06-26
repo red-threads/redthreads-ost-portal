@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Harden Sales Tax Pending Review UI
+
+- Mode: Full ship scoped client-facing sales-tax pending-state UI hardening.
+- Branch/commit/PR: `main`, Apps Script version `1069`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: make pending/under-review sales-tax exemption state blue, persistent, and non-actionable across project summary controls, the dashboard uploaded-document viewer, and checkout/order-flow pending status.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added a shared client-side pending helper using the existing normalized account-document tone. Project summary controls now render a disabled blue pending button with the text `Sales tax exemption form has been submitted and is under review.` and no click handler. The tax document viewer now shows a pending-only blue notice above the uploaded document copy. Checkout/order-flow now renders the pending notice in the compact header/close area and uses the same blue family instead of the prior red pending treatment. The version `1068` denied-tax dashboard reset remains in place. `Index.html` revision badge advanced to `197`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and targeted source checks for revision `197`, stale revision `196` absence, pending summary/viewer/header markers, and old red pending marker absence all passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Harden sales tax pending review UI"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1069 - Harden sales tax pending review UI`. Cache-busted direct `/exec?smoke=1069...` returned HTTP `200` with `Development revision 197`, omitted stale revision `196`, referenced the stable deployment ID, included the pending summary/viewer/header markers, and omitted the old red pending marker. Public `/portal?smoke=1069...` returned HTTP `200`, referenced the stable deployment ID, and retained wrapper markers.
+- Runtime data state: no account-document action was clicked from this shell, no email-review suite was run, no Sheet data was manually mutated, no `PORTAL_EMAIL_QUEUE` rows were manually touched, and no approval/denial/upload/submission flow was exercised.
+- Follow-ups: owner should manually smoke an account with sales-tax exemption under review to confirm the project summary button persists after credit-card toggles, another project under the same account shows the same disabled blue state, the dashboard pending viewer notice appears, and checkout pending copy sits beside the close control.
+
 ## 2026-06-26 - Reset Denied Tax Dashboard Card
 
 - Mode: Full ship scoped dashboard account-document presentation fix.

@@ -7025,6 +7025,41 @@
       white-space:normal;
       text-wrap:pretty;
     }
+    .summaryEstimateControlSecondary.isTaxExemptionPending{
+      min-height:58px;
+      padding:8px 12px;
+      line-height:1.2;
+      white-space:normal;
+      border-color:rgba(57,214,255,.72);
+      background:rgba(10,24,28,.24);
+      color:#55dfff;
+      cursor:default;
+      opacity:1;
+      box-shadow:
+        0 10px 22px rgba(0,0,0,.18),
+        0 0 0 1px rgba(57,214,255,.12),
+        0 0 18px rgba(57,214,255,.12),
+        inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .summaryEstimateControlSecondary.isTaxExemptionPending > span{
+      display:block;
+      width:100%;
+      text-align:center;
+      white-space:normal;
+      text-wrap:pretty;
+    }
+    .summaryEstimateControlSecondary.isTaxExemptionPending:hover,
+    .summaryEstimateControlSecondary.isTaxExemptionPending:focus-visible{
+      border-color:rgba(57,214,255,.98);
+      background:linear-gradient(180deg, rgba(57,214,255,.92) 0%, rgba(43,194,235,.9) 100%);
+      color:#061116;
+      transform:none;
+      box-shadow:
+        0 16px 28px rgba(0,0,0,.22),
+        0 0 0 1px rgba(57,214,255,.22),
+        0 0 26px rgba(57,214,255,.16),
+        inset 0 1px 0 rgba(255,255,255,.14);
+    }
     .summaryEstimateControlPrimary:disabled,
     .summaryEstimateControlSecondary:disabled,
     .summaryEstimateToggleRow:disabled,
@@ -7033,6 +7068,10 @@
       opacity:.65;
       transform:none;
       box-shadow:none;
+      filter:none;
+    }
+    .summaryEstimateControlSecondary.isTaxExemptionPending:disabled{
+      opacity:1;
       filter:none;
     }
     .summaryEstimateControlPrimary.isPlaceholder{
@@ -11337,9 +11376,32 @@
     .taxDocApprovedViewer{
       width:100%;
       display:flex;
+      flex-direction:column;
+      align-items:center;
       justify-content:center;
+      gap:12px;
     }
     .taxDocApprovedViewer[hidden]{
+      display:none !important;
+    }
+    .taxDocClientReviewNotice{
+      width:min(100%, 980px);
+      margin:0 auto;
+      padding:12px 16px;
+      border-radius:16px;
+      border:1px solid rgba(57,214,255,.72);
+      background:rgba(10,24,28,.42);
+      color:#55dfff;
+      font-size:14px;
+      font-weight:900;
+      line-height:1.42;
+      text-align:center;
+      box-shadow:
+        0 0 0 1px rgba(57,214,255,.14),
+        0 0 24px rgba(57,214,255,.12),
+        inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .taxDocClientReviewNotice[hidden]{
       display:none !important;
     }
     .taxDocApprovedViewerCard{
@@ -13666,6 +13728,19 @@
       justify-content:space-between;
       gap:10px;
     }
+    .orderFlowHeadTaxPendingNotice{
+      margin-left:auto;
+      max-width:min(620px, calc(100% - 52px));
+      color:#55dfff;
+      font-size:16px;
+      line-height:1.14;
+      font-weight:900;
+      text-align:right;
+      text-shadow:0 0 18px rgba(57,214,255,.16);
+    }
+    .orderFlowHeadTaxPendingNotice[hidden]{
+      display:none !important;
+    }
     .orderFlowModal.isBlocking{
       width:min(800px, calc(100% - 44px));
       overflow-x:hidden;
@@ -13788,8 +13863,8 @@
       text-shadow:0 0 20px rgba(81,255,183,.14);
     }
     .orderFlowAccountStatusLine.is-pending{
-      color:#ff5a6b;
-      text-shadow:0 0 18px rgba(255,31,47,.12);
+      color:#55dfff;
+      text-shadow:0 0 18px rgba(57,214,255,.16);
     }
     .orderFlowTaxControlBar{
       display:flex;
@@ -15461,6 +15536,10 @@
       margin-bottom:2px;
       padding:0;
       justify-content:flex-end;
+    }
+    .orderFlowModal.isSelection .orderFlowHeadTaxPendingNotice{
+      max-width:calc(100% - 44px);
+      font-size:15px;
     }
     .orderFlowModal.isSelection .orderFlowTitle{
       display:none !important;
@@ -17845,7 +17924,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 196">196</div>
+  <div class="devRevisionBadge" aria-label="Development revision 197">197</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18584,6 +18663,7 @@
       <div class="taxDocShell">
         <div class="taxDocStage" id="taxDocStage">
           <div class="taxDocApprovedViewer" id="taxDocApprovedViewer" hidden>
+            <div class="taxDocClientReviewNotice" id="taxDocClientReviewNotice" hidden>This is a copy of your uploaded document that is currently under review. Red Threads will notify you if any changes are needed.</div>
             <div class="taxDocApprovedViewerCard" id="taxDocApprovedViewerCard">
               <div class="taxDocApprovedViewerLoading" id="taxDocApprovedViewerLoading" hidden>
                 <div class="rt-spinner" aria-hidden="true">
@@ -18830,6 +18910,7 @@
       <div class="orderFlowAccountBanner" id="orderFlowAccountBanner" hidden></div>
       <div class="orderFlowHead">
         <h2 class="orderFlowTitle" id="orderFlowTitle">Place Order</h2>
+        <div class="orderFlowHeadTaxPendingNotice" id="orderFlowTaxPendingNotice" hidden>Sales Tax Exemption Status: Pending Approval</div>
         <button class="orderFlowClose" id="orderFlowClose" type="button" aria-label="Close order modal">X</button>
       </div>
       <div class="orderFlowStatePill" id="orderFlowStatePill">Checkout</div>
@@ -23750,6 +23831,7 @@
   const taxFormLocalNav = document.getElementById('taxFormLocalNav');
   const taxForm3372ManifestData = document.getElementById('taxForm3372ManifestData');
   const taxDocApprovedViewer = document.getElementById('taxDocApprovedViewer');
+  const taxDocClientReviewNotice = document.getElementById('taxDocClientReviewNotice');
   const taxDocApprovedViewerCard = document.getElementById('taxDocApprovedViewerCard');
   const taxDocApprovedViewerLoading = document.getElementById('taxDocApprovedViewerLoading');
   const taxDocApprovedViewerImage = document.getElementById('taxDocApprovedViewerImage');
@@ -23839,6 +23921,7 @@
   const orderFlowAchDecisionModal = document.getElementById('orderFlowAchDecisionModal');
   const orderFlowAccountBanner = document.getElementById('orderFlowAccountBanner');
   const orderFlowHead = orderFlowModal ? orderFlowModal.querySelector('.orderFlowHead') : null;
+  const orderFlowTaxPendingNotice = document.getElementById('orderFlowTaxPendingNotice');
   const orderFlowClose = document.getElementById('orderFlowClose');
   const orderFlowTitle = document.getElementById('orderFlowTitle');
   const orderFlowStatePill = document.getElementById('orderFlowStatePill');
@@ -32706,6 +32789,11 @@
     return 'idle';
   }
 
+  function isSalesTaxExemptionPendingReview_(account){
+    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', account || ACCOUNT_SUMMARY);
+    return getAccountDocumentStatusTone_(workflow) === 'pending';
+  }
+
   function getApprovedPaymentTermsLabel_(source){
     const item = (source && typeof source === 'object') ? source : {};
     return String(item.approvedPaymentTermsLabel || '').trim();
@@ -36122,6 +36210,7 @@
     if (taxDocModal) taxDocModal.classList.remove('is-review-mode', 'is-client-view-mode');
     if (taxDocModal) taxDocModal.classList.remove('has-tax-replacement-action');
     if (taxDocApprovedViewer) taxDocApprovedViewer.hidden = true;
+    if (taxDocClientReviewNotice) taxDocClientReviewNotice.hidden = true;
     if (taxDocReplacementRail) taxDocReplacementRail.hidden = true;
     renderTaxReplacementConfirm_();
     if (taxDocApprovedViewerCard) {
@@ -36737,6 +36826,7 @@
     const inlineSrc = String(artifact.inlineSrc || artifact.imageUrl || '').trim();
     const previewSrc = String((!isImage && inlineSrc) || '').trim();
     const isLoading = TAX_DOC_CLIENT_VIEW_LOADING === true;
+    const showPendingNotice = isSalesTaxExemptionPendingReview_(getActiveAccountSummaryForTaxWorkspace_()) && !isLoading;
     taxDocModal.classList.add('is-review-mode');
     taxDocModal.classList.add('is-client-view-mode');
     taxDocModal.classList.remove('is-team-review-mode');
@@ -36764,6 +36854,10 @@
       taxFormLocalNav.hidden = true;
     }
     if (taxDocApprovedViewer) taxDocApprovedViewer.hidden = false;
+    if (taxDocClientReviewNotice) {
+      taxDocClientReviewNotice.textContent = 'This is a copy of your uploaded document that is currently under review. Red Threads will notify you if any changes are needed.';
+      taxDocClientReviewNotice.hidden = !showPendingNotice;
+    }
     if (taxDocApprovedViewerCard) {
       taxDocApprovedViewerCard.classList.toggle('is-loading', isLoading);
       taxDocApprovedViewerCard.classList.toggle('is-frame', !isLoading && !isImage && !!previewSrc);
@@ -40102,17 +40196,17 @@
     if (!showBanner) {
       orderFlowAccountBanner.hidden = true;
       orderFlowAccountBanner.innerHTML = '';
+      if (orderFlowTaxPendingNotice) orderFlowTaxPendingNotice.hidden = true;
       return;
     }
 
     orderFlowAccountBanner.innerHTML = '';
 
     const actionsRow = createEl('div', 'orderFlowAccountActionsRow');
-    const taxWorkflow = getAccountDocumentWorkflowByType_('tax_exempt', ACCOUNT_SUMMARY);
-    const taxTone = getAccountDocumentStatusTone_(taxWorkflow);
-
-    if (taxTone === 'pending') {
-      actionsRow.appendChild(createEl('div', 'orderFlowAccountStatusLine is-pending', 'Sales Tax Exemption Status: Pending Approval'));
+    const taxPending = isSalesTaxExemptionPendingReview_(ACCOUNT_SUMMARY);
+    if (orderFlowTaxPendingNotice) {
+      orderFlowTaxPendingNotice.textContent = 'Sales Tax Exemption Status: Pending Approval';
+      orderFlowTaxPendingNotice.hidden = !taxPending;
     }
     const hasBannerContent = actionsRow.childElementCount > 0;
     orderFlowAccountBanner.hidden = !hasBannerContent;
@@ -47462,10 +47556,8 @@
   }
 
   function shouldShowSummaryTaxExemptionCta_(){
-    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', ACCOUNT_SUMMARY);
-    const tone = getAccountDocumentStatusTone_(workflow);
     if (ACCOUNT_SUMMARY.taxExemptActive || ACCOUNT_SUMMARY.taxExemptApproved) return false;
-    if (tone === 'pending') return false;
+    if (isSalesTaxExemptionPendingReview_(ACCOUNT_SUMMARY)) return false;
     return true;
   }
 
@@ -49126,7 +49218,14 @@
       );
     }
 
-    if (!canToggleSalesTax && shouldShowSummaryTaxExemptionCta_()) {
+    if (!canToggleSalesTax && isSalesTaxExemptionPendingReview_(ACCOUNT_SUMMARY)) {
+      const pendingTaxBtn = createEl('button', 'summaryEstimateControlSecondary isTaxExemptionPending');
+      pendingTaxBtn.type = 'button';
+      pendingTaxBtn.disabled = true;
+      pendingTaxBtn.setAttribute('aria-disabled', 'true');
+      pendingTaxBtn.appendChild(createEl('span', '', 'Sales tax exemption form has been submitted and is under review.'));
+      card.appendChild(pendingTaxBtn);
+    } else if (!canToggleSalesTax && shouldShowSummaryTaxExemptionCta_()) {
       const taxBtn = createEl('button', 'summaryEstimateControlSecondary isTaxExemptionCta');
       taxBtn.type = 'button';
       taxBtn.disabled = isBusy;
