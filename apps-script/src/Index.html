@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 199">199</div>
+  <div class="devRevisionBadge" aria-label="Development revision 200">200</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -31414,12 +31414,37 @@
 	    td.colSpan = 4;
 	    const btn = createEl('button', 'authProjectsLoadOlderBtn', 'Load older jobs');
 	    btn.type = 'button';
-	    btn.addEventListener('click', () => {
+	    btn.addEventListener('click', event => {
+	      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+	      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
 	      revealNextDashboardProjectBatch_();
 	    });
 	    td.appendChild(btn);
 	    tr.appendChild(td);
 	    return tr;
+	  }
+
+	  function getDashboardRenderedProjectRowCount_(){
+	    if (!authProjectsBody) return 0;
+	    return authProjectsBody.querySelectorAll('tr[data-project-token]').length;
+	  }
+
+	  function scrollDashboardProjectRowIntoView_(token){
+	    const row = getDashboardProjectRowForToken_(token);
+	    if (!row || typeof row.scrollIntoView !== 'function') return false;
+	    const prefersReducedMotion = typeof window !== 'undefined' &&
+	      typeof window.matchMedia === 'function' &&
+	      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+	    try {
+	      row.scrollIntoView({
+	        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+	        block: 'start',
+	        inline: 'nearest'
+	      });
+	    } catch (_) {
+	      row.scrollIntoView(true);
+	    }
+	    return true;
 	  }
 
 	  function renderProjectRows(projects){
@@ -31447,11 +31472,20 @@
 	  }
 
 	  function revealNextDashboardProjectBatch_(){
-	    const state = getDashboardActiveStateForCurrentContext_();
+	    const state = getDashboardActiveStateForCurrentContext_() || DASHBOARD_ACTIVE_STATE;
 	    if (!state || !Array.isArray(state.projects) || !state.projects.length) return;
-	    const oldVisibleCount = getDashboardVisibleProjectCount_(state.projects.length);
+	    const totalCount = state.projects.length;
+	    const renderedCount = getDashboardRenderedProjectRowCount_();
+	    const storedVisibleCount = Math.max(0, Number(state.visibleCount || 0) || 0);
+	    const oldVisibleCount = Math.min(
+	      totalCount,
+	      Math.max(
+	        Math.min(totalCount, DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE),
+	        renderedCount || storedVisibleCount || getDashboardVisibleProjectCount_(totalCount)
+	      )
+	    );
 	    const nextVisibleCount = Math.min(
-	      state.projects.length,
+	      totalCount,
 	      oldVisibleCount + DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE
 	    );
 	    if (nextVisibleCount <= oldVisibleCount) return;
@@ -31465,6 +31499,12 @@
 	      source: 'load-older',
 	      immediate: true
 	    }).catch(() => {});
+	    const firstRevealedToken = revealedTokens[0] || '';
+	    if (firstRevealedToken) {
+	      requestAnimationFrame(() => {
+	        scrollDashboardProjectRowIntoView_(firstRevealedToken);
+	      });
+	    }
 	  }
 
   function getDashboardProjectsNeedingStatusHydration_(projects){
