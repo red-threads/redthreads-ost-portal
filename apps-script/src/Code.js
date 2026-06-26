@@ -352,7 +352,7 @@ const PORTAL_DOCUMENT_REF_RE = /^(EST|INV)-(.+)-v(\d{1,4})$/i;
 const LEGACY_INVOICE_NUMBER_RE = /^INV-\d{8}-[A-Z0-9]{8}$/i;
 const PORTAL_RENDERED_INVOICE_FILE_NAME_RE = /^Red Threads(?: - Project [^-]+ - | Project(?:-[^-]+)?-)(?:Estimate|Invoice|Receipt|Receipt for Invoice|Summary)(?:\s+v\d{1,4}|-|\.)/i;
 const LEGACY_SERVER_INVOICE_FILE_NAME_RE = /^INV-\d{8}-[A-Z0-9]{8}\b/i;
-const CHAT_MESSAGE_DIGEST_DELAY_MS = 10 * 60 * 1000;
+const CHAT_MESSAGE_DIGEST_DELAY_MS = 5 * 60 * 1000;
 const CHAT_MESSAGE_DIGEST_DIRECTIONS = {
   client_to_team: 'client_to_team',
   team_to_client: 'team_to_client'
@@ -37931,8 +37931,8 @@ function getChatMessageDigestJobName_(message) {
 function buildChatMessageDigestJobLine_(message) {
   const number = getChatMessageDigestJobNumber_(message);
   const name = getChatMessageDigestJobName_(message);
-  if (number && name) return 'PJ' + number + ': ' + name;
-  if (number) return 'PJ' + number;
+  if (number && name) return 'Print Job #' + number + ': ' + name;
+  if (number) return 'Print Job #' + number;
   if (name) return name;
   return '';
 }
@@ -38107,10 +38107,10 @@ function buildChatMessageDigestEmailContent_(rowInfo, messages, options) {
     ? ('    <div style="margin:14px 0 18px;' + (isTeamDigest ? 'text-align:center;' : '') + '"><a href="' + escapeHtml_(portalUrl) + '" style="display:inline-block;padding:10px 15px;border-radius:999px;background:' + theme.brandRed + ';color:#ffffff;text-decoration:none;font-size:12px;line-height:1.2;font-weight:900;border:1px solid ' + theme.brandRedMid + ';">' + escapeHtml_(ctaLabel) + '</a>' + (isTeamDigest ? teamPasswordHintHtml : '') + '</div>')
     : '';
   const clientHtmlMessagesBlock = messageRows.map(function(messageRow, index) {
-    const metaColor = messageRow.isTeamMessage ? theme.brandRed : theme.textSoft;
-    const jobLineColor = messageRow.isTeamMessage ? theme.brandRedMid : theme.text;
-    const textColor = messageRow.isTeamMessage ? '#fb7185' : theme.textMuted;
-    const textWeight = messageRow.isTeamMessage ? '800' : '400';
+    const metaColor = '#94a3b8';
+    const jobLineColor = '#f8fafc';
+    const textColor = theme.successGreen;
+    const textWeight = '400';
     const separator = index > 0 ? ('padding-top:12px;border-top:1px solid ' + theme.panelBorderSoft + ';') : '';
     return [
       '<div style="margin:0 0 14px;' + separator + '">',

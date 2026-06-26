@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Chat Digest Timing and Styling
+
+- Mode: Full ship scoped chat digest email timing/rendering refinement.
+- Branch/commit/PR: `main`, Apps Script version `1063`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: reduce portal chat digest batching from ten minutes to five minutes in both directions, align client-facing digest message styling with the team-facing presentation, and replace `PJ...` digest labels with `Print Job #...`.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Code.js` changes the shared `CHAT_MESSAGE_DIGEST_DELAY_MS` constant to five minutes, so both `client_to_team` and `team_to_client` digests use the same shorter debounce. The shared digest job-line builder now returns `Print Job #...` labels for plain text and HTML messages. The client-facing digest message block now uses muted sender/timestamp text, white print-job text, and green message body text to match the team digest presentation. `Index.html` revision badge advanced to `189`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine chat digest timing and styling"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1063 - Refine chat digest timing and styling`. Initial direct `/exec?smoke=1063` returned stale revision `188`; a cache-busted retry returned HTTP `200` with `Development revision 189`, omitted stale revision `188`, referenced the stable deployment ID, and had zero targeted secret/private-link markers. Public `/portal?smoke=1063` returned HTTP `200`, referenced the stable deployment ID, retained wrapper markers, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no portal chat message was sent from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should manually smoke one client-to-team message and one team-to-client reply if live inbox timing confirmation is desired; expected first eligible send is five minutes after the latest message in the digest window.
+
 ## 2026-06-26 - Dashboard Progress Alignment Polish
 
 - Mode: Full ship scoped dashboard CSS/layout refinement.
