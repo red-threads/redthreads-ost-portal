@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Reset Denied Tax Dashboard Card
+
+- Mode: Full ship scoped dashboard account-document presentation fix.
+- Branch/commit/PR: `main`, Apps Script version `1068`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: stop showing `Changes Needed` on the Tax Exemption dashboard card after a team denial; present denied/rejected tax exemption as the same not-started card state clients see before any document is uploaded.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: added dashboard-card-only tax status normalization for `tax_exempt` rejected/denied workflows. The card now displays `Not Started`, uses the not-started tone, hovers to `Complete Document`, skips denied-viewer prewarm, and routes dashboard clicks into the normal sales-tax submission workspace. Stored workflow status, denial reason, submission history, emails, queues, Sheets, pricing, payment/ACH/Stripe, routing, and Team Mode review behavior were not changed. `Index.html` revision badge advanced to `196`.
+- Validation: `git fetch origin main` plus ahead/behind check `0 0`, `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Reset denied tax dashboard card"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1068 - Reset denied tax dashboard card`. The first direct smoke briefly returned stale revision `195`; cache-busted direct retries returned HTTP `200` with `Development revision 196`, omitted stale revision `195`, referenced the stable deployment ID, and included the dashboard tax normalization helper marker. Public `/portal?smoke=1068...` returned HTTP `200`, referenced the stable deployment ID, retained wrapper markers, and did not show an obvious error page.
+- Runtime data state: no account-document action was clicked from this shell, no email-review suite was run, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should manually refresh an account with a denied sales-tax exemption and confirm the dashboard card now looks like the pre-upload `Not Started` state and opens the standard sales-tax submission flow.
+
 ## 2026-06-26 - Dashboard V3 Read Model Migration Phase 4
 
 - Mode: Local runtime implementation, no deploy.

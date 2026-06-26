@@ -17845,7 +17845,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 195">195</div>
+  <div class="devRevisionBadge" aria-label="Development revision 196">196</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21489,6 +21489,18 @@
     return value === 'approved' || value === 'under_review' || value === 'denied';
   }
 
+  function getDashboardDocumentCardStatusValue_(documentType, workflow){
+    const type = String(documentType || '').trim().toLowerCase();
+    const value = getAccountDocumentStatusValue_(workflow);
+    if (type === 'tax_exempt' && (value === 'rejected' || value === 'denied')) return 'not_started';
+    return value;
+  }
+
+  function shouldOpenDashboardDocumentViewer_(documentType, workflow){
+    return shouldOpenAccountDocumentViewer_(workflow) &&
+      getDashboardDocumentCardStatusValue_(documentType, workflow) !== 'not_started';
+  }
+
   function getDashboardDocumentHoverLabel_(statusValue, documentType){
     const type = String(documentType || '').trim().toLowerCase();
     if (statusValue === 'approved') return (type === 'tax_exempt' || type === 'credit_terms') ? 'View/Edit Document' : 'View Document';
@@ -21501,7 +21513,7 @@
 
   function getDashboardDocumentIdleLabel_(documentType, workflow, account){
     const type = String(documentType || '').trim().toLowerCase();
-    const statusValue = getAccountDocumentStatusValue_(workflow);
+    const statusValue = getDashboardDocumentCardStatusValue_(type, workflow);
     if (type === 'credit_terms' && statusValue === 'approved') {
       const approvedTermsLabel = getApprovedPaymentTermsLabel_(account) || getApprovedPaymentTermsLabel_(workflow);
       return approvedTermsLabel ? ('Approved • ' + approvedTermsLabel) : 'Approved';
@@ -21509,11 +21521,12 @@
     if (type === 'tax_exempt' && statusValue === 'approved') {
       return 'Approved / On File';
     }
+    if (statusValue === 'not_started') return 'Not Started';
     return getAccountDocumentStatusLabel_(workflow);
   }
 
-  function getDashboardDocumentCardTone_(workflow){
-    const value = getAccountDocumentStatusValue_(workflow);
+  function getDashboardDocumentCardTone_(documentType, workflow){
+    const value = getDashboardDocumentCardStatusValue_(documentType, workflow);
     if (value === 'approved') return 'isApproved';
     if (value === 'under_review') return 'isPending';
     if (value === 'not_started') return 'isNotStarted';
@@ -21548,7 +21561,7 @@
     if (!requestPayload) return null;
     const account = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
     const workflow = getAccountDocumentWorkflowByType_(type, account);
-    if (!shouldOpenAccountDocumentViewer_(workflow)) return null;
+    if (!shouldOpenDashboardDocumentViewer_(type, workflow)) return null;
     const methodName = type === 'credit_terms' ? 'getApprovedCreditTermsViewer' : 'getTaxExemptClientViewer';
     try {
       return await fetchApprovedDocumentViewerResponse_(type, methodName, requestPayload);
@@ -22939,8 +22952,8 @@
       {
         interactive: true,
         documentType: 'credit_terms',
-        hoverValue: getDashboardDocumentHoverLabel_(getAccountDocumentStatusValue_(termsWorkflow), 'credit_terms'),
-        stateClass: getDashboardDocumentCardTone_(termsWorkflow),
+        hoverValue: getDashboardDocumentHoverLabel_(getDashboardDocumentCardStatusValue_('credit_terms', termsWorkflow), 'credit_terms'),
+        stateClass: getDashboardDocumentCardTone_('credit_terms', termsWorkflow),
         ariaLabel: 'Credit Terms'
       }
     );
@@ -22950,8 +22963,8 @@
       {
         interactive: true,
         documentType: 'tax_exempt',
-        hoverValue: getDashboardDocumentHoverLabel_(getAccountDocumentStatusValue_(taxWorkflow), 'tax_exempt'),
-        stateClass: getDashboardDocumentCardTone_(taxWorkflow),
+        hoverValue: getDashboardDocumentHoverLabel_(getDashboardDocumentCardStatusValue_('tax_exempt', taxWorkflow), 'tax_exempt'),
+        stateClass: getDashboardDocumentCardTone_('tax_exempt', taxWorkflow),
         ariaLabel: 'Tax Exemption'
       }
     );
@@ -30928,7 +30941,7 @@
     }
     const account = normalizeAccountSummary(DASHBOARD_ACCOUNT_SUMMARY);
     const workflow = getAccountDocumentWorkflowByType_('tax_exempt', account);
-    if (shouldOpenAccountDocumentViewer_(workflow)) {
+    if (shouldOpenDashboardDocumentViewer_('tax_exempt', workflow)) {
       try {
         await openTaxExemptClientViewer_({ context: 'dashboard' });
       } catch (err) {
