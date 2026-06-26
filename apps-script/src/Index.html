@@ -17754,7 +17754,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 183">183</div>
+  <div class="devRevisionBadge" aria-label="Development revision 184">184</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -32858,6 +32858,17 @@
     });
   }
 
+  function handleTaxDocUploadInputChange_(event){
+    const input = event && event.target === taxDocUploadInput ? event.target : taxDocUploadInput;
+    if (!input) return;
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (event && typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    ACCOUNT_DOC_SELECTED_FILE = input.files && input.files[0] ? input.files[0] : null;
+    TAX_DOC_UPLOAD_PANEL_OPEN = true;
+    renderTaxDocUploadPanel_();
+    if (ACCOUNT_DOC_SELECTED_FILE) setTaxDocMessage('', 'info');
+  }
+
   async function submitTaxDocUploadedDocument_(){
     if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT) return;
     if (!(ACCOUNT_DOC_SELECTED_FILE instanceof File)) {
@@ -34860,6 +34871,13 @@
     }
   }
 
+  function handleTaxWorkspaceChange_(event){
+    if (!event || !isTaxWorkspaceActionSurfaceOpen_()) return;
+    if (event.target === taxDocUploadInput) {
+      handleTaxDocUploadInputChange_(event);
+    }
+  }
+
   function bindTaxDocumentWorkspaceEvents_(){
     if (bindTaxDocumentWorkspaceEvents_.isBound === true) return;
     bindTaxDocumentWorkspaceEvents_.isBound = true;
@@ -34867,6 +34885,7 @@
     if (taxDocBackdrop) taxDocBackdrop.addEventListener('click', handleTaxDocumentBackdropClick_);
     document.addEventListener('keydown', handleTaxDocumentKeydown_);
     document.addEventListener('click', handleTaxWorkspaceActionClick_, true);
+    document.addEventListener('change', handleTaxWorkspaceChange_, true);
     if (taxReplacementConfirmBackdrop) taxReplacementConfirmBackdrop.addEventListener('click', handleTaxReplacementConfirmBackdropClick_);
     if (taxReplacementCancelBtn) taxReplacementCancelBtn.addEventListener('click', handleTaxReplacementCancelClick_);
     if (taxReplacementConfirmBtn) taxReplacementConfirmBtn.addEventListener('click', handleTaxReplacementConfirmClick_);
@@ -49484,13 +49503,6 @@
       });
     }
     if (taxDocUploadChooseBtn) taxDocUploadChooseBtn.addEventListener('click', openTaxDocUploadPicker_);
-    if (taxDocUploadInput) {
-      taxDocUploadInput.addEventListener('change', () => {
-        ACCOUNT_DOC_SELECTED_FILE = taxDocUploadInput.files && taxDocUploadInput.files[0] ? taxDocUploadInput.files[0] : null;
-        TAX_DOC_UPLOAD_PANEL_OPEN = true;
-        renderTaxDocUploadPanel_();
-      });
-    }
     if (taxDocReplacementRail) {
       taxDocReplacementRail.addEventListener('click', event => {
         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();

@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Sales Tax Upload Deep-Link Hardening
+
+- Mode: Full ship scoped sales-tax email copy and tax workspace UI/event hardening.
+- Branch/commit/PR: `main`, Apps Script version `1058`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: update two client-facing sales-tax email headings/subjects and fix the completed Form 3372 upload picker failing to retain the selected file when opened from the emailed deep link.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Code.js` changes the tax-removed client email heading to `Sales Tax exemption status removed from account`, the blank Form 3372 source email subject to `Complete sales tax exemption form — Red Threads`, and that email header to `Complete Michigan sales tax form & upload`. `Index.html` revision `184` moves tax upload file selection into the capture-safe delegated tax workspace `change` path and removes the old direct-only tax file-input listener, preserving selected-file state across dashboard-opened and deep-link-opened tax workspaces.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Harden tax upload deep link and email copy"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1058 - Harden tax upload deep link and email copy`. Direct `/exec?smoke=1058` returned HTTP `200` with `Development revision 184`, omitted stale revision `183`, referenced the stable deployment ID, included the delegated upload-change marker, and had zero targeted secret/private-link markers. Public `/portal?smoke=1058` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted secret/private-link markers. Source marker checks confirmed the new tax blank-form subject/header and removed-status client email heading.
+- Runtime data state: no email-review suite was run, no live document email was sent from this shell, no file upload was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should smoke the emailed sales-tax upload deep link by choosing a local file and confirming the panel shows the selected filename plus the existing submit button before deciding whether to submit.
+
 ## 2026-06-26 - Dashboard Project Column Refinement
 
 - Mode: Full ship scoped dashboard CSS/layout refinement.

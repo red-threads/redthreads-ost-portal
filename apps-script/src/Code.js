@@ -11235,7 +11235,7 @@ function buildTaxExemptBlankEmailPayload_(ctx, definition, recipients) {
     : '';
   const htmlBody = buildPortalNativeEmailShellHtml_({
     eyebrow: 'Red Threads Portal - Notification',
-    heading: definition.label,
+    heading: 'Complete Michigan sales tax form & upload',
     maxWidth: '640px',
     bodyHtml: [
       buildPortalNativeEmailGreenCalloutHtml_(taxNotice),
@@ -18326,7 +18326,7 @@ function getAccountDocumentDefinition_(documentType, cfg) {
       expiresAtField: 'taxExemptExpiresAt',
       supportsGuidedForm: true,
       uploadLabel: 'Upload completed exemption document',
-      blankEmailSubject: 'Sales tax exemption form — Red Threads',
+      blankEmailSubject: 'Complete sales tax exemption form — Red Threads',
       teamReviewSubject: 'Review sales tax exemption form'
     };
   }
@@ -25531,7 +25531,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
           : 'Sales tax exemption document removed from Red Threads account'),
       heading: isTeam
         ? (creditTermsRemoved ? 'Credit terms document removed' : 'Sales tax exemption document removed')
-        : (creditTermsRemoved ? 'Credit terms agreement was removed' : 'Upload a new sales tax exemption document'),
+        : (creditTermsRemoved ? 'Credit terms agreement was removed' : 'Sales Tax exemption status removed from account'),
       intro: isTeam
         ? (creditTermsRemoved
           ? 'A client removed the credit terms document that was on file for their Red Threads account.'
