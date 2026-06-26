@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Dashboard Project Column Refinement
+
+- Mode: Full ship scoped dashboard CSS/layout refinement.
+- Branch/commit/PR: `main`, Apps Script version `1057`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: reduce the authenticated dashboard Open Project action column by 15% and transfer the recovered width to the Order Progress column.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `183` changes the dashboard project table status column from `430px` to `454px`, sets the action column to `138px`, widens the progress tracker from `410px` to `434px`, and tightens the Open Project button footprint so it fits the smaller action column without changing its link behavior.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Refine dashboard project columns"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1057 - Refine dashboard project columns`. Direct `/exec?smoke=1057` returned HTTP `200` with `Development revision 183`, omitted stale revision `182`, referenced the stable deployment ID, and had zero targeted secret/private-link markers; a live source-fragment check confirmed the deployed dashboard CSS has the `454px` status column, `138px` action column, `132px` Open Project button, and `434px` progress tracker. Public `/portal?smoke=1057` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no account/project action was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke a multi-project dashboard and confirm the progress column feels wider while Open Project remains readable and clickable.
+
 ## 2026-06-25 - Approved Tax Document Scroll Fix
 
 - Mode: Full ship scoped approved-tax viewer UI/layout fix.
