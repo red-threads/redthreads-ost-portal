@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Team Mode Document Denial Modal Fix
+
+- Mode: Full ship scoped Team Mode account-document denial UI hardening.
+- Branch/commit/PR: `main`, Apps Script version `1064`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: fix the Team Mode document review path where Deny could appear to do nothing while Approve still worked, with credit-terms as the provided route and sales-tax denial hardened on the same shared pattern.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: credit-terms Team Mode review Back, Approve, Request Changes, Deny, and decision-modal controls now route through the capture-safe workspace click handler before older direct listeners. Sales-tax Team Mode Back, Approve, Deny, and denial decision-modal controls now use the same capture-safe pattern, and the sales-tax denial modal backdrop is fixed above the active document workspace with the standard blur overlay treatment. `Index.html` revision badge advanced to `190`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Fix Team Mode document denial modal"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1064 - Fix Team Mode document denial modal`. Cache-busted direct `/exec?smoke=1064` returned HTTP `200` with `Development revision 190`, omitted stale revision `189`, referenced the stable deployment ID, included the credit/tax denial-control markers and fixed tax decision backdrop marker, and had zero targeted secret/private-link markers. Public `/portal?smoke=1064` returned HTTP `200`, referenced the stable deployment ID, retained wrapper markers, and had zero targeted secret/private-link markers.
+- Runtime data state: no live Team Mode approve/deny/request-changes action was clicked from this shell, no email-review suite was run, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should manually reopen the Team Mode review link and confirm Deny now opens the reason modal; submit denial only when intentionally testing the live account-document workflow.
+
 ## 2026-06-26 - Chat Digest Timing and Styling
 
 - Mode: Full ship scoped chat digest email timing/rendering refinement.

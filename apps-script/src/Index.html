@@ -12362,14 +12362,16 @@
       box-shadow:0 0 0 1px rgba(244,63,94,.22);
     }
     .taxTeamDecisionBackdrop{
-      position:absolute;
+      position:fixed;
       inset:0;
       display:flex;
       align-items:center;
       justify-content:center;
       padding:24px;
       background:rgba(1,4,12,.64);
-      z-index:4;
+      z-index:10128;
+      backdrop-filter:blur(6px);
+      -webkit-backdrop-filter:blur(6px);
     }
     .taxTeamDecisionBackdrop[hidden]{
       display:none !important;
@@ -17801,7 +17803,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 189">189</div>
+  <div class="devRevisionBadge" aria-label="Development revision 190">190</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -32657,6 +32659,49 @@
     if (!event || !isTermsWorkspaceActionSurfaceOpen_()) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
+    if (termsReviewDecisionBackdrop && !termsReviewDecisionBackdrop.hidden && termsReviewDecisionBackdrop.contains(target)) {
+      if (target.closest('#termsReviewDecisionCancelBtn')) {
+        containTermsWorkspaceActionEvent_(event);
+        closeTermsReviewDecisionModal_();
+        return;
+      }
+      if (target.closest('#termsReviewDecisionConfirmBtn')) {
+        containTermsWorkspaceActionEvent_(event);
+        submitCreditTermsTeamDecision_();
+        return;
+      }
+      if (event.target === termsReviewDecisionBackdrop) {
+        containTermsWorkspaceActionEvent_(event);
+        if (!TERMS_DOC_TEAM_DENIAL_IN_FLIGHT) closeTermsReviewDecisionModal_();
+        return;
+      }
+      containTermsWorkspaceActionEvent_(event, { preventDefault: false });
+      return;
+    }
+    if (target.closest('#termsReviewBackBtn')) {
+      if (!isTermsTeamReviewMode_()) return;
+      containTermsWorkspaceActionEvent_(event);
+      closeTermsTeamReviewAndReturn_({ immediate: true });
+      return;
+    }
+    if (target.closest('#termsReviewApproveBtn')) {
+      if (!isTermsTeamReviewMode_()) return;
+      containTermsWorkspaceActionEvent_(event);
+      approveCreditTermsTeamReview_();
+      return;
+    }
+    if (target.closest('#termsReviewRequestChangesBtn')) {
+      if (!isTermsTeamReviewMode_()) return;
+      containTermsWorkspaceActionEvent_(event);
+      openTermsReviewDecisionModal_('request_changes');
+      return;
+    }
+    if (target.closest('#termsReviewDenyBtn')) {
+      if (!isTermsTeamReviewMode_()) return;
+      containTermsWorkspaceActionEvent_(event);
+      openTermsReviewDecisionModal_('deny');
+      return;
+    }
     if (termsReplacementConfirmBackdrop && !termsReplacementConfirmBackdrop.hidden && termsReplacementConfirmBackdrop.contains(target)) {
       if (target.closest('#termsReplacementCancelBtn')) {
         handleTermsReplacementCancelClick_(event);
@@ -34981,6 +35026,43 @@
     if (!event || !isTaxWorkspaceActionSurfaceOpen_()) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
+    if (taxTeamDecisionBackdrop && !taxTeamDecisionBackdrop.hidden && taxTeamDecisionBackdrop.contains(target)) {
+      if (target.closest('#taxTeamDecisionCancelBtn')) {
+        containTaxWorkspaceActionEvent_(event);
+        closeTaxTeamDecisionModal_();
+        return;
+      }
+      if (target.closest('#taxTeamDecisionConfirmBtn')) {
+        containTaxWorkspaceActionEvent_(event);
+        submitTaxExemptTeamDenial_();
+        return;
+      }
+      if (event.target === taxTeamDecisionBackdrop) {
+        containTaxWorkspaceActionEvent_(event);
+        if (!TAX_TEAM_DENIAL_IN_FLIGHT) closeTaxTeamDecisionModal_();
+        return;
+      }
+      containTaxWorkspaceActionEvent_(event, { preventDefault: false });
+      return;
+    }
+    if (target.closest('#taxDocTeamBackBtn')) {
+      if (!isTaxTeamReviewMode_()) return;
+      containTaxWorkspaceActionEvent_(event);
+      closeTaxTeamReviewAndReturn_({ immediate: true });
+      return;
+    }
+    if (target.closest('#taxDocTeamApproveBtn')) {
+      if (!isTaxTeamReviewMode_()) return;
+      containTaxWorkspaceActionEvent_(event);
+      approveTaxExemptTeamReview_();
+      return;
+    }
+    if (target.closest('#taxDocTeamDenyBtn')) {
+      if (!isTaxTeamReviewMode_()) return;
+      containTaxWorkspaceActionEvent_(event);
+      openTaxTeamDecisionModal_();
+      return;
+    }
     if (taxSignatureBackdrop && !taxSignatureBackdrop.hidden && taxSignatureBackdrop.contains(target)) {
       const closeAction = target.closest('#taxSignatureClose, #taxSignatureCancelBtn');
       const clearAction = target.closest('#taxSignatureClearBtn');
