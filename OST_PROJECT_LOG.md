@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Dashboard Progress Alignment Polish
+
+- Mode: Full ship scoped dashboard CSS/layout refinement.
+- Branch/commit/PR: `main`, Apps Script version `1059`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: center the Order Progress bar/helper content visually within the existing dashboard progress column without changing Project Details or Open Project column widths.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `185` keeps the table columns at `58px / 301px / 454px / 138px`, adds a dashboard-row scoped `420px` max-width status host, and constrains non-complete dashboard progress trackers to `width:100%; max-width:420px;` while preserving compact completed bars and project-header status rendering.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Polish dashboard progress alignment"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1059 - Polish dashboard progress alignment`. Initial direct smoke returned cached revision `184`; a cache-busted retry returned HTTP `200` with `Development revision 185`, omitted stale revision `184`, referenced the stable deployment ID, included the dashboard `420px` status-host/tracker CSS fragments, and had zero targeted secret/private-link markers. Public `/portal?smoke=1059` returned HTTP `200`, referenced the stable deployment ID, and had zero targeted secret/private-link markers.
+- Runtime data state: no email-review suite was run, no account/project action was submitted from this shell, no Sheet data was manually mutated, and no `PORTAL_EMAIL_QUEUE` rows were manually touched.
+- Follow-ups: owner should visually smoke an authenticated multi-project dashboard and confirm the Order Progress content now appears centered and balanced between Project Details and Open Project.
+
 ## 2026-06-26 - Sales Tax Upload Deep-Link Hardening
 
 - Mode: Full ship scoped sales-tax email copy and tax workspace UI/event hardening.
