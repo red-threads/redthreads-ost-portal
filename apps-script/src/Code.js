@@ -11306,7 +11306,7 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
     : '';
   const htmlBody = buildPortalNativeEmailShellHtml_({
     eyebrow: 'Red Threads Portal - Notification',
-    heading: definition.label,
+    heading: 'Complete the Red Threads Credit terms application',
     maxWidth: '640px',
     bodyHtml: [
       buildPortalNativeEmailGreenCalloutHtml_(creditTermsNotice),

@@ -17763,7 +17763,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 185">185</div>
+  <div class="devRevisionBadge" aria-label="Development revision 186">186</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -32168,8 +32168,9 @@
 
   function renderTermsDocEmailPanel_(){
     if (termsDocEmailPanel) termsDocEmailPanel.hidden = !TERMS_DOC_EMAIL_PANEL_OPEN;
+    if (termsDocDownloadBtn) termsDocDownloadBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT || ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
     if (termsDocEmailBtn) {
-      termsDocEmailBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT;
+      termsDocEmailBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT || ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
       termsDocEmailBtn.textContent = ACCOUNT_DOC_EMAIL_IN_FLIGHT ? 'Sending…' : 'Send Blank Document via Email';
     }
     if (termsDocEmailSendBtn) {
@@ -32181,21 +32182,22 @@
   }
 
   function renderTermsDocUploadPanel_(){
+    const uploadControlsDisabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT || ACCOUNT_DOC_EMAIL_IN_FLIGHT;
     if (termsDocUploadPanel) termsDocUploadPanel.hidden = !TERMS_DOC_UPLOAD_PANEL_OPEN;
     if (termsDocUploadFocusBtn) {
-      termsDocUploadFocusBtn.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
+      termsDocUploadFocusBtn.disabled = uploadControlsDisabled;
       termsDocUploadFocusBtn.textContent = ACCOUNT_DOC_UPLOAD_IN_FLIGHT ? 'Uploading…' : 'Upload Completed Form';
     }
     if (termsDocUploadChooseBtn) {
-      termsDocUploadChooseBtn.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
+      termsDocUploadChooseBtn.disabled = uploadControlsDisabled;
       termsDocUploadChooseBtn.textContent = TERMS_DOC_SELECTED_FILES.length ? 'Upload Another File' : 'Choose File';
     }
-    if (termsDocUploadInput) termsDocUploadInput.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
+    if (termsDocUploadInput) termsDocUploadInput.disabled = uploadControlsDisabled;
     renderTermsDocSelectedFiles_();
     const showSubmit = TERMS_DOC_SELECTED_FILES.length > 0;
     if (termsDocSubmitBtn) {
       termsDocSubmitBtn.hidden = !showSubmit;
-      termsDocSubmitBtn.disabled = ACCOUNT_DOC_UPLOAD_IN_FLIGHT || !showSubmit;
+      termsDocSubmitBtn.disabled = uploadControlsDisabled || !showSubmit;
       termsDocSubmitBtn.textContent = ACCOUNT_DOC_UPLOAD_IN_FLIGHT ? 'Submitting…' : 'Submit to Red Threads';
     }
     if (termsDocApprovalNote) termsDocApprovalNote.hidden = !showSubmit;
@@ -32208,7 +32210,7 @@
   }
 
   function openTermsDocEmailPanel_(){
-    if (ACCOUNT_DOC_EMAIL_IN_FLIGHT) return;
+    if (ACCOUNT_DOC_EMAIL_IN_FLIGHT || ACCOUNT_DOC_UPLOAD_IN_FLIGHT) return;
     TERMS_DOC_UPLOAD_PANEL_OPEN = false;
     TERMS_DOC_EMAIL_PANEL_OPEN = true;
     renderTermsDocUploadPanel_();
@@ -32228,25 +32230,43 @@
   }
 
   function openTermsDocUploadPanel_(){
-    if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT) return;
+    if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT || ACCOUNT_DOC_EMAIL_IN_FLIGHT) return;
     TERMS_DOC_EMAIL_PANEL_OPEN = false;
     TERMS_DOC_UPLOAD_PANEL_OPEN = true;
     renderTermsDocEmailPanel_();
     renderTermsDocUploadPanel_();
   }
 
-  function openTermsDocUploadPicker_(){
+  function openTermsDocUploadPicker_(options){
     openTermsDocUploadPanel_();
-    requestAnimationFrame(() => {
-      if (!termsDocUploadInput) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    const clickInput = () => {
+      if (!termsDocUploadInput || termsDocUploadInput.disabled) return;
       try {
         termsDocUploadInput.click();
       } catch (_) {}
-    });
+    };
+    if (opts.immediate === true) {
+      clickInput();
+      return;
+    }
+    requestAnimationFrame(clickInput);
+  }
+
+  function handleTermsDocUploadInputChange_(event){
+    const input = event && event.target === termsDocUploadInput ? event.target : termsDocUploadInput;
+    if (!input) return;
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (event && typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    appendTermsDocSelectedFiles_(input.files);
+    input.value = '';
+    TERMS_DOC_UPLOAD_PANEL_OPEN = true;
+    renderTermsDocUploadPanel_();
+    if (TERMS_DOC_SELECTED_FILES.length) setTermsDocMessage_('', 'info');
   }
 
   async function submitTermsDocEmail_(){
-    if (ACCOUNT_DOC_EMAIL_IN_FLIGHT) return;
+    if (ACCOUNT_DOC_EMAIL_IN_FLIGHT || ACCOUNT_DOC_UPLOAD_IN_FLIGHT) return;
     const recipients = parseEmailRecipients(termsDocEmailInput && termsDocEmailInput.value);
     if (!recipients.length) {
       setTermsDocMessage_('Enter at least one valid email address before sending.', 'err');
@@ -32256,6 +32276,7 @@
     ACCOUNT_DOC_EMAIL_IN_FLIGHT = true;
     TERMS_DOC_EMAIL_PANEL_OPEN = false;
     renderTermsDocEmailPanel_();
+    renderTermsDocUploadPanel_();
     setTermsDocMessage_('', 'info');
     try {
       const resp = await callServer('emailAccountDocumentSource', buildAccountDocumentRequestPayload_('credit_terms', {
@@ -32272,6 +32293,7 @@
     } finally {
       ACCOUNT_DOC_EMAIL_IN_FLIGHT = false;
       renderTermsDocEmailPanel_();
+      renderTermsDocUploadPanel_();
     }
   }
 
@@ -32307,7 +32329,7 @@
   }
 
   async function submitTermsDocUploadedDocument_(){
-    if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT) return;
+    if (ACCOUNT_DOC_UPLOAD_IN_FLIGHT || ACCOUNT_DOC_EMAIL_IN_FLIGHT) return;
     if (!TERMS_DOC_SELECTED_FILES.length) {
       openTermsDocUploadPanel_();
       setTermsDocMessage_('Choose a completed document before submitting it for Red Threads review.', 'err');
@@ -32521,6 +32543,141 @@
     clearCreditTermsDocumentForReplacementFromViewer_();
   }
 
+  function containTermsWorkspaceActionEvent_(event, options){
+    if (!event) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (opts.preventDefault !== false && typeof event.preventDefault === 'function') event.preventDefault();
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (opts.stopImmediate !== false && typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function isTermsWorkspaceActionSurfaceOpen_(){
+    return !!(termsReviewBackdrop && !termsReviewBackdrop.hidden && termsReviewBackdrop.classList.contains('open'));
+  }
+
+  function handleTermsDocDownloadClick_(event){
+    if (!isTermsWorkspaceActionSurfaceOpen_() || !isTermsClientWorkspaceMode_()) return;
+    containTermsWorkspaceActionEvent_(event);
+    downloadCreditTermsBlank_();
+  }
+
+  function handleTermsDocEmailToggleClick_(event){
+    if (!isTermsWorkspaceActionSurfaceOpen_() || !isTermsClientWorkspaceMode_()) return;
+    containTermsWorkspaceActionEvent_(event);
+    if (TERMS_DOC_EMAIL_PANEL_OPEN) {
+      closeTermsDocEmailPanel_();
+    } else {
+      openTermsDocEmailPanel_();
+    }
+  }
+
+  function handleTermsDocUploadToggleClick_(event){
+    if (!isTermsWorkspaceActionSurfaceOpen_() || !isTermsClientWorkspaceMode_()) return;
+    containTermsWorkspaceActionEvent_(event);
+    if (TERMS_DOC_UPLOAD_PANEL_OPEN) {
+      closeTermsDocUploadPanel_({ clearFile: false });
+    } else {
+      openTermsDocUploadPanel_();
+    }
+  }
+
+  function handleTermsDocEmailSendClick_(event){
+    if (!isTermsWorkspaceActionSurfaceOpen_() || !isTermsClientWorkspaceMode_()) return;
+    containTermsWorkspaceActionEvent_(event);
+    submitTermsDocEmail_().catch(err => {
+      setTermsDocMessage_(String((err && err.message) || err || 'Unable to email the blank document.'), 'err');
+    });
+  }
+
+  function handleTermsDocUploadSubmitClick_(event){
+    if (!isTermsWorkspaceActionSurfaceOpen_() || !isTermsClientWorkspaceMode_()) return;
+    containTermsWorkspaceActionEvent_(event);
+    submitTermsDocUploadedDocument_().catch(err => {
+      setTermsDocMessage_(String((err && err.message) || err || 'Unable to upload the completed document.'), 'err');
+    });
+  }
+
+  function handleTermsDocSelectedFileClick_(event){
+    if (!isTermsWorkspaceActionSurfaceOpen_() || !isTermsClientWorkspaceMode_()) return;
+    const target = event && event.target;
+    if (!(target instanceof Element)) return;
+    const btn = target.closest('.taxDocUploadRemoveBtn');
+    if (!btn) return;
+    containTermsWorkspaceActionEvent_(event);
+    removeTermsDocSelectedFile_(btn.dataset.fileIndex);
+  }
+
+  function handleTermsWorkspaceActionClick_(event){
+    if (!event || !isTermsWorkspaceActionSurfaceOpen_()) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (termsReplacementConfirmBackdrop && !termsReplacementConfirmBackdrop.hidden && termsReplacementConfirmBackdrop.contains(target)) {
+      if (target.closest('#termsReplacementCancelBtn')) {
+        handleTermsReplacementCancelClick_(event);
+        return;
+      }
+      if (target.closest('#termsReplacementConfirmBtn')) {
+        handleTermsReplacementConfirmClick_(event);
+        return;
+      }
+      if (event.target === termsReplacementConfirmBackdrop) {
+        handleTermsReplacementConfirmBackdropClick_(event);
+        return;
+      }
+      containTermsWorkspaceActionEvent_(event, { preventDefault: false });
+      return;
+    }
+    if (target.closest('#termsReplacementBtn, #termsReplacementSection')) {
+      handleTermsReplacementActionClick_(event);
+      return;
+    }
+    if (target.closest('#termsDocDownloadBtn')) {
+      handleTermsDocDownloadClick_(event);
+      return;
+    }
+    if (target.closest('#termsDocEmailBtn')) {
+      handleTermsDocEmailToggleClick_(event);
+      return;
+    }
+    if (target.closest('#termsDocUploadFocusBtn')) {
+      handleTermsDocUploadToggleClick_(event);
+      return;
+    }
+    if (target.closest('#termsDocUploadChooseBtn')) {
+      if (!isTermsClientWorkspaceMode_()) return;
+      containTermsWorkspaceActionEvent_(event);
+      openTermsDocUploadPicker_({ immediate: true });
+      return;
+    }
+    if (target.closest('#termsDocEmailCancelBtn')) {
+      if (!isTermsClientWorkspaceMode_()) return;
+      containTermsWorkspaceActionEvent_(event);
+      closeTermsDocEmailPanel_();
+      return;
+    }
+    if (target.closest('#termsDocEmailSendBtn')) {
+      handleTermsDocEmailSendClick_(event);
+      return;
+    }
+    if (target.closest('#termsDocSubmitBtn')) {
+      handleTermsDocUploadSubmitClick_(event);
+      return;
+    }
+    if (termsDocUploadSelectedFile && termsDocUploadSelectedFile.contains(target)) {
+      handleTermsDocSelectedFileClick_(event);
+      return;
+    }
+  }
+
+  function handleTermsWorkspaceChange_(event){
+    if (!event || !isTermsWorkspaceActionSurfaceOpen_()) return;
+    if (event.target === termsDocUploadInput) {
+      handleTermsDocUploadInputChange_(event);
+    }
+  }
+
   async function clearCreditTermsDocumentForReplacementFromViewer_(){
     const canClearFromVisibleConfirm = TERMS_DOC_REPLACEMENT_CONFIRM_OPEN === true && isVisibleTermsReplacementAction_();
     if (TERMS_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || (!canClearFromVisibleConfirm && !isTermsReplacementActionAvailable_())) return;
@@ -32608,7 +32765,8 @@
     if (termsReviewClose) termsReviewClose.addEventListener('click', () => handleTermsDocumentCloseRequest_());
     if (termsReviewBackdrop) termsReviewBackdrop.addEventListener('click', handleTermsDocumentBackdropClick_);
     document.addEventListener('keydown', handleTermsDocumentKeydown_);
-    document.addEventListener('click', handleTermsReplacementActionClick_, true);
+    document.addEventListener('click', handleTermsWorkspaceActionClick_, true);
+    document.addEventListener('change', handleTermsWorkspaceChange_, true);
     if (termsReplacementConfirmBackdrop) termsReplacementConfirmBackdrop.addEventListener('click', handleTermsReplacementConfirmBackdropClick_);
     if (termsReplacementCancelBtn) termsReplacementCancelBtn.addEventListener('click', handleTermsReplacementCancelClick_);
     if (termsReplacementConfirmBtn) termsReplacementConfirmBtn.addEventListener('click', handleTermsReplacementConfirmClick_);
@@ -33489,7 +33647,7 @@
       }
       renderTermsDocEmailPanel_();
       renderTermsDocUploadPanel_();
-      if (termsDocDownloadBtn) termsDocDownloadBtn.disabled = false;
+      if (termsDocDownloadBtn) termsDocDownloadBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT || ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
       return;
     }
     const artifact = (TERMS_DOC_TEAM_ARTIFACT && typeof TERMS_DOC_TEAM_ARTIFACT === 'object') ? TERMS_DOC_TEAM_ARTIFACT : {};
@@ -49424,42 +49582,6 @@
         closeTeamAccountAdminModal_();
       });
     }
-    if (termsDocDownloadBtn) termsDocDownloadBtn.addEventListener('click', downloadCreditTermsBlank_);
-    if (termsDocEmailBtn) {
-      termsDocEmailBtn.addEventListener('click', () => {
-        if (TERMS_DOC_EMAIL_PANEL_OPEN) {
-          closeTermsDocEmailPanel_();
-        } else {
-          openTermsDocEmailPanel_();
-        }
-      });
-    }
-    if (termsDocUploadFocusBtn) {
-      termsDocUploadFocusBtn.addEventListener('click', () => {
-        if (TERMS_DOC_UPLOAD_PANEL_OPEN) {
-          closeTermsDocUploadPanel_({ clearFile: false });
-        } else {
-          openTermsDocUploadPanel_();
-        }
-      });
-    }
-    if (termsDocUploadChooseBtn) termsDocUploadChooseBtn.addEventListener('click', openTermsDocUploadPicker_);
-    if (termsDocUploadInput) {
-      termsDocUploadInput.addEventListener('change', () => {
-        appendTermsDocSelectedFiles_(termsDocUploadInput.files);
-        termsDocUploadInput.value = '';
-        TERMS_DOC_UPLOAD_PANEL_OPEN = true;
-        renderTermsDocUploadPanel_();
-      });
-    }
-    if (termsDocUploadSelectedFile) {
-      termsDocUploadSelectedFile.addEventListener('click', e => {
-        const btn = e.target && e.target.closest ? e.target.closest('.taxDocUploadRemoveBtn') : null;
-        if (!btn) return;
-        e.preventDefault();
-        removeTermsDocSelectedFile_(btn.dataset.fileIndex);
-      });
-    }
     if (termsReplacementSection) {
       termsReplacementSection.addEventListener('click', event => {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -49474,9 +49596,6 @@
         openTermsReplacementConfirm_({ fromVisibleAction: true });
       });
     }
-    if (termsDocEmailCancelBtn) termsDocEmailCancelBtn.addEventListener('click', closeTermsDocEmailPanel_);
-    if (termsDocEmailSendBtn) termsDocEmailSendBtn.addEventListener('click', submitTermsDocEmail_);
-    if (termsDocSubmitBtn) termsDocSubmitBtn.addEventListener('click', submitTermsDocUploadedDocument_);
     if (termsDocEmailInput) {
       termsDocEmailInput.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !e.shiftKey) {
