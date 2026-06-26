@@ -17924,7 +17924,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 197">197</div>
+  <div class="devRevisionBadge" aria-label="Development revision 198">198</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24296,9 +24296,12 @@
   let SUMMARY_EXPORT_LIB_PROMISE = null;
   let COLOR_REMOVE_CONFIRM_RESOLVER = null;
   let UNSAVED_LEAVE_ACTION_PENDING = false;
+  let UNSAVED_LEAVE_EVENTS_BOUND = false;
   let SNAPSHOT_DIRTY_BASELINE_KEY = '';
   let SNAPSHOT_DIRTY_BASELINE_FRAME = 0;
   let SNAPSHOT_DIRTY_BASELINE_READY = false;
+  let SNAPSHOT_DIRTY_BASELINE_INITIALIZING = false;
+  let SNAPSHOT_DIRTY_BASELINE_INIT_TIMER = 0;
   let DASHBOARD_VIEW_VISIBLE_AT = 0;
   let DASHBOARD_OPEN_ARMED_BTN = null;
   let DASHBOARD_OPEN_ARMED_AT = 0;
@@ -24328,6 +24331,7 @@
   let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = [];
   let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE = 0;
   let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND = '';
+  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = 650;
   let DASHBOARD_PROJECT_PEEK_DOC_PREWARMED = false;
   let DASHBOARD_STATUS_HYDRATION_SEQ = 0;
   const DASHBOARD_OPEN_ARM_WINDOW_MS = 1500;
@@ -24336,6 +24340,9 @@
   const DASHBOARD_CRITICAL_PROJECT_LIMIT = 6;
   const DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY = 'summary';
   const DASHBOARD_PROJECT_PEEK_PROFILE_FULL = 'full';
+  const DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS = 8000;
+  const DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT = 3;
+  const DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS = 1400;
   const DASHBOARD_READ_MODEL_VERSION = 'v3-draft-1';
   const DASHBOARD_READ_MODEL_SOURCE_LEGACY = 'legacy_live_projection';
   const DASHBOARD_CRITICAL_CACHE_PROFILE = 'criticalTop6PeekSummaryThumbReady';
@@ -24345,6 +24352,7 @@
   const DASHBOARD_CRITICAL_FALLBACK_REASON = 'dashboard-critical-fallback';
   const DASHBOARD_STATUS_VISIBLE_BATCH_SIZE = 8;
   const DASHBOARD_STATUS_BACKGROUND_BATCH_SIZE = 4;
+  const SNAPSHOT_DIRTY_BASELINE_PROJECT_LOAD_DELAY_MS = 420;
   let DASHBOARD_BOOTSTRAP_INTENT_CONSUMED = false;
   let SUMMARY_BOOTSTRAP_INTENT_CONSUMED = false;
   let PORTAL_CLIENT_BOOT_TRACE = null;
@@ -26755,14 +26763,60 @@
   function buildPortalClientTimingExtra_(extra){
     const source = (extra && typeof extra === 'object') ? extra : {};
     const out = {};
-    ['routeType', 'source', 'reason', 'stage', 'cacheType', 'cacheProfile', 'serverLabel'].forEach(key => {
+    [
+      'routeType',
+      'source',
+      'reason',
+      'stage',
+      'cacheType',
+      'cacheProfile',
+      'serverLabel',
+      'readSource',
+      'sourcePreference',
+      'readModelVersion',
+      'fallbackState'
+    ].forEach(key => {
       const value = String(source[key] == null ? '' : source[key]).trim();
       if (value) out[key] = value;
     });
-    ['ok', 'hasToken', 'hasSession', 'cacheHit', 'prefetchHit', 'prefetchInflight', 'embedded'].forEach(key => {
+    [
+      'ok',
+      'hasToken',
+      'hasSession',
+      'cacheHit',
+      'prefetchHit',
+      'prefetchInflight',
+      'embedded',
+      'criticalReady',
+      'criticalStatusReady',
+      'criticalPeekReady',
+      'criticalThumbnailReady',
+      'baselineReady',
+      'baselineInitializing'
+    ].forEach(key => {
       if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key] === true;
     });
-    ['projectCount', 'payloadBytes', 'serverTotalMs', 'tokenCount', 'batchSize', 'requestedCount', 'visibleCount', 'criticalCount', 'readyCount', 'fallbackCount'].forEach(key => {
+    [
+      'projectCount',
+      'payloadBytes',
+      'serverTotalMs',
+      'tokenCount',
+      'batchSize',
+      'requestedCount',
+      'visibleCount',
+      'criticalCount',
+      'readyCount',
+      'fallbackCount',
+      'cacheHits',
+      'cacheMisses',
+      'cacheStores',
+      'cacheSkips',
+      'cacheErrors',
+      'rowCount',
+      'thumbnailReadyCount',
+      'thumbnailFallbackCount',
+      'thumbnailCandidateCount'
+    ].forEach(key => {
       if (!Object.prototype.hasOwnProperty.call(source, key)) return;
       const n = Number(source[key]);
       if (isFinite(n)) out[key] = Math.max(0, Math.round(n));
@@ -26788,12 +26842,53 @@
       ? resp.portalLoadTiming
       : null;
     if (!timing) return null;
-    return {
+    const summary = {
       serverLabel: String(timing.label || ''),
       serverTotalMs: Number(timing.totalMs || 0) || 0,
       cacheHit: timing.cacheHit === true,
       cacheType: String(timing.cacheType || '')
     };
+    [
+      'readSource',
+      'sourcePreference',
+      'routeType',
+      'stage',
+      'readModelVersion',
+      'fallbackState'
+    ].forEach(key => {
+      const value = String(timing[key] == null ? '' : timing[key]).trim();
+      if (value) summary[key] = value;
+    });
+    [
+      'ok',
+      'criticalReady',
+      'criticalStatusReady',
+      'criticalPeekReady',
+      'criticalThumbnailReady'
+    ].forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(timing, key)) summary[key] = timing[key] === true;
+    });
+    [
+      'projectCount',
+      'criticalCount',
+      'batchSize',
+      'rowCount',
+      'cacheHits',
+      'cacheMisses',
+      'cacheStores',
+      'cacheSkips',
+      'cacheErrors',
+      'readyCount',
+      'fallbackCount',
+      'thumbnailReadyCount',
+      'thumbnailFallbackCount',
+      'thumbnailCandidateCount'
+    ].forEach(key => {
+      if (!Object.prototype.hasOwnProperty.call(timing, key)) return;
+      const value = Number(timing[key]);
+      if (isFinite(value)) summary[key] = Math.max(0, Math.round(value));
+    });
+    return summary;
   }
 
   function logPortalClientLoadTiming_(trace, phase, extra){
@@ -27038,6 +27133,43 @@
     return stableStringify(buildComparablePortalState(stateObj));
   }
 
+  function clearSnapshotDirtyBaselineInitTimer_(){
+    if (!SNAPSHOT_DIRTY_BASELINE_INIT_TIMER) return;
+    window.clearTimeout(SNAPSHOT_DIRTY_BASELINE_INIT_TIMER);
+    SNAPSHOT_DIRTY_BASELINE_INIT_TIMER = 0;
+  }
+
+  function beginSnapshotDirtyBaselineInitialization_(reason){
+    clearSnapshotDirtyBaselineInitTimer_();
+    SNAPSHOT_DIRTY_BASELINE_INITIALIZING = true;
+    SNAPSHOT_DIRTY_BASELINE_READY = false;
+    SNAPSHOT_DIRTY_BASELINE_KEY = '';
+    closeUnsavedLeaveModal({ immediate: true });
+    logProjectReturnTimingEvent_('snapshot_baseline_initializing', {
+      routeType: 'project',
+      reason: String(reason || 'project-load'),
+      baselineReady: false,
+      baselineInitializing: true
+    });
+  }
+
+  function scheduleSnapshotDirtyBaselineAfterProjectLoad_(reason){
+    const label = String(reason || 'project-load').trim() || 'project-load';
+    beginSnapshotDirtyBaselineInitialization_(label);
+    SNAPSHOT_DIRTY_BASELINE_INIT_TIMER = window.setTimeout(() => {
+      SNAPSHOT_DIRTY_BASELINE_INIT_TIMER = 0;
+      if (CURRENT_VIEW !== VIEW_SNAPSHOT) {
+        resetSnapshotDirtyBaseline({ clear: true });
+        return;
+      }
+      resetSnapshotDirtyBaseline({
+        defer: false,
+        finishInitializing: true,
+        reason: label
+      });
+    }, SNAPSHOT_DIRTY_BASELINE_PROJECT_LOAD_DELAY_MS);
+  }
+
   function resetSnapshotDirtyBaseline(options){
     const opts = (options && typeof options === 'object') ? options : {};
     const editorLifecycle = getPortalEditorLifecycleUiState_();
@@ -27047,6 +27179,8 @@
     }
     SNAPSHOT_DIRTY_BASELINE_READY = false;
     if (opts.clear === true || CURRENT_VIEW !== VIEW_SNAPSHOT || !editorLifecycle.shouldTrackUnsavedChanges) {
+      clearSnapshotDirtyBaselineInitTimer_();
+      SNAPSHOT_DIRTY_BASELINE_INITIALIZING = false;
       SNAPSHOT_DIRTY_BASELINE_KEY = '';
       closeUnsavedLeaveModal({ immediate: true });
       return;
@@ -27060,6 +27194,16 @@
         SNAPSHOT_DIRTY_BASELINE_KEY = '';
       }
       SNAPSHOT_DIRTY_BASELINE_READY = Boolean(SNAPSHOT_DIRTY_BASELINE_KEY);
+      if (opts.finishInitializing === true) {
+        SNAPSHOT_DIRTY_BASELINE_INITIALIZING = false;
+        clearSnapshotDirtyBaselineInitTimer_();
+        logProjectReturnTimingEvent_('snapshot_baseline_ready', {
+          routeType: 'project',
+          reason: String(opts.reason || 'project-load'),
+          baselineReady: SNAPSHOT_DIRTY_BASELINE_READY,
+          baselineInitializing: false
+        });
+      }
       if (!hasUnsavedSnapshotChanges()) {
         closeUnsavedLeaveModal({ immediate: true });
       }
@@ -27078,6 +27222,7 @@
     const editorLifecycle = getPortalEditorLifecycleUiState_();
     if (CURRENT_VIEW !== VIEW_SNAPSHOT) return false;
     if (!editorLifecycle.shouldTrackUnsavedChanges) return false;
+    if (SNAPSHOT_DIRTY_BASELINE_INITIALIZING) return false;
     if (!SNAPSHOT_DIRTY_BASELINE_READY) return false;
     if (!SNAPSHOT_DIRTY_BASELINE_KEY) return false;
     try {
@@ -27136,6 +27281,20 @@
         unsavedLeaveBackdrop.hidden = true;
       }
     }, 160);
+  }
+
+  function logProjectReturnTimingEvent_(phase, extra){
+    const trace = createPortalClientLoadTimingTrace_('project_to_dashboard_guard');
+    markPortalClientLoadTiming_(trace, String(phase || 'event'), Object.assign({
+      routeType: 'project_to_dashboard',
+      baselineReady: SNAPSHOT_DIRTY_BASELINE_READY,
+      baselineInitializing: SNAPSHOT_DIRTY_BASELINE_INITIALIZING
+    }, extra || {}));
+    logPortalClientLoadTiming_(trace, String(phase || 'event'), Object.assign({
+      routeType: 'project_to_dashboard',
+      baselineReady: SNAPSHOT_DIRTY_BASELINE_READY,
+      baselineInitializing: SNAPSHOT_DIRTY_BASELINE_INITIALIZING
+    }, extra || {}));
   }
 
   function colorRemoveConfirmStorageKey(token){
@@ -27225,8 +27384,20 @@
   }
 
   async function continueHomeWithoutSaving(){
-    closeUnsavedLeaveModal();
-    await goHomeFromPortal();
+    if (UNSAVED_LEAVE_ACTION_PENDING) return;
+    UNSAVED_LEAVE_ACTION_PENDING = true;
+    setUnsavedLeaveButtonsBusy(true);
+    logProjectReturnTimingEvent_('project_return_guard_leave_clicked', {
+      routeType: 'project_to_dashboard',
+      ok: true
+    });
+    closeUnsavedLeaveModal({ immediate: true });
+    try {
+      await goHomeFromPortal();
+    } finally {
+      UNSAVED_LEAVE_ACTION_PENDING = false;
+      setUnsavedLeaveButtonsBusy(false);
+    }
   }
 
   async function saveAndGoToDashboard(){
@@ -27248,11 +27419,51 @@
     }
   }
 
+  function bindUnsavedLeaveModalEvents_(){
+    if (UNSAVED_LEAVE_EVENTS_BOUND) return;
+    if (!unsavedLeaveBackdrop) return;
+    UNSAVED_LEAVE_EVENTS_BOUND = true;
+    unsavedLeaveBackdrop.addEventListener('click', event => {
+      const target = event && event.target;
+      const element = target && typeof target.closest === 'function' ? target : null;
+      const stayBtn = element ? element.closest('#unsavedStayBtn') : null;
+      const leaveBtn = element ? element.closest('#unsavedLeaveBtn') : null;
+      const saveBtn = element ? element.closest('#unsavedSaveAndGoBtn') : null;
+      if (stayBtn || leaveBtn || saveBtn) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      }
+      if (stayBtn) {
+        closeUnsavedLeaveModal({ immediate: true });
+        return;
+      }
+      if (leaveBtn) {
+        continueHomeWithoutSaving();
+        return;
+      }
+      if (saveBtn) {
+        saveAndGoToDashboard();
+        return;
+      }
+      if (target === unsavedLeaveBackdrop) {
+        closeUnsavedLeaveModal();
+      }
+    }, true);
+  }
+
   async function goHomeFromSnapshotGuarded(){
     if (!hasUnsavedSnapshotChanges()) {
+      logProjectReturnTimingEvent_('project_return_guard_clean', {
+        routeType: 'project_to_dashboard',
+        ok: true
+      });
       await goHomeFromPortal();
       return;
     }
+    logProjectReturnTimingEvent_('project_return_guard_opened', {
+      routeType: 'project_to_dashboard',
+      ok: true
+    });
     openUnsavedLeaveModal();
   }
 
@@ -28678,6 +28889,7 @@
   function clearDashboardProjectPeekFullPrefetch_(){
     DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ += 1;
     DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = [];
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = 650;
     if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE) return;
     if (DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND === 'idle' && typeof window.cancelIdleCallback === 'function') {
       window.cancelIdleCallback(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE);
@@ -28840,7 +29052,7 @@
       .catch(() => null)
       .finally(() => {
         if (seq !== DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ) return;
-        scheduleDashboardProjectPeekFullPrefetchDrain_(seq, 650);
+        scheduleDashboardProjectPeekFullPrefetchDrain_(seq, DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS);
       });
   }
 
@@ -28855,6 +29067,10 @@
       DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.slice(0, Math.floor(maxInitial));
     }
     if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length) return;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = Math.max(
+      650,
+      Number(opts.nextDelayMs || DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS || 650)
+    );
     scheduleDashboardProjectPeekFullPrefetchDrain_(seq, Math.max(400, Number(opts.initialDelayMs || 1800)));
   }
 
@@ -30958,21 +31174,38 @@
     if (opts.deferHydration === true) {
       return payload;
     }
-    let peekPrefetchStarted = false;
-    const startPeekPrefetchOnce = () => {
-      if (peekPrefetchStarted) return;
-      peekPrefetchStarted = true;
+    let summaryPeekPrefetchStarted = false;
+    let fullPeekPrefetchStarted = false;
+    const startPeekSummaryPrefetchOnce = () => {
+      if (summaryPeekPrefetchStarted) return;
+      summaryPeekPrefetchStarted = true;
       startDashboardProjectPeekPrefetch_(projects, {
         initialDelayMs: 240
       });
+    };
+    const startFullPeekPrefetchOnce = source => {
+      if (fullPeekPrefetchStarted) return;
+      if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
+      fullPeekPrefetchStarted = true;
       startDashboardProjectPeekFullPrefetch_(getDashboardCriticalProjectTokens_(projects), {
-        initialDelayMs: 1800,
-        maxInitial: DASHBOARD_CRITICAL_PROJECT_LIMIT
+        initialDelayMs: 900,
+        maxInitial: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT,
+        nextDelayMs: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS,
+        source: String(source || 'status-settled')
       });
     };
+    const fullPrefetchFallbackTimer = window.setTimeout(() => {
+      startFullPeekPrefetchOnce('bounded-delay');
+    }, DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS);
     hydrateDashboardProjectStatuses_(projects, {
-      onFirstBatchComplete: startPeekPrefetchOnce
-    }).catch(() => null).finally(startPeekPrefetchOnce);
+      onFirstBatchComplete: startPeekSummaryPrefetchOnce
+    }).catch(() => null).finally(() => {
+      startPeekSummaryPrefetchOnce();
+      if (fullPrefetchFallbackTimer) {
+        window.clearTimeout(fullPrefetchFallbackTimer);
+      }
+      startFullPeekPrefetchOnce('status-settled');
+    });
     return payload;
   }
 
@@ -31462,6 +31695,11 @@
         hasToken: !!dashboardRequestPayload.token,
         hasSession: !!dashboardRequestPayload.sessionId
       });
+      markPortalClientLoadTiming_(trace, 'project_return_start', {
+        routeType: 'project_to_dashboard',
+        hasToken: !!dashboardRequestPayload.token,
+        hasSession: !!dashboardRequestPayload.sessionId
+      });
       const cacheBypassReason = getDashboardHomeReturnCacheBypassReason_();
       if (cacheBypassReason) {
         markPortalClientLoadTiming_(trace, 'cache_bypassed', {
@@ -31478,6 +31716,12 @@
         });
         await renderDashboardHomeFromProjectReturn_(cachedDashboardHomeData, {
           historyMode: 'push'
+        });
+        markPortalClientLoadTiming_(trace, 'project_return_cached_rendered', {
+          routeType: 'project_to_dashboard',
+          ok: true,
+          cacheHit: true,
+          projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
         });
         logPortalClientLoadTiming_(trace, 'cache_rendered', {
           routeType: 'project_to_dashboard',
@@ -31526,6 +31770,12 @@
       await renderDashboardHomeFromProjectReturn_(dashboardHomeData, {
         historyMode: 'push'
       });
+      markPortalClientLoadTiming_(trace, 'project_return_fetched_rendered', {
+        routeType: 'project_to_dashboard',
+        ok: true,
+        cacheHit: false,
+        projectCount: Array.isArray(dashboardHomeData.projects) ? dashboardHomeData.projects.length : 0
+      });
       logPortalClientLoadTiming_(trace, 'fetched_rendered', {
         routeType: 'project_to_dashboard',
         ok: true,
@@ -31545,6 +31795,10 @@
         notifyPortalReady({ reason: 'auth-shell-ready' });
         return;
       }
+      markPortalClientLoadTiming_(trace, 'project_return_failed', {
+        routeType: 'project_to_dashboard',
+        ok: false
+      });
       logPortalClientLoadTiming_(trace, 'failed', {
         routeType: 'project_to_dashboard',
         ok: false
@@ -50811,6 +51065,7 @@
   /* ---------------- Event Wiring + App Bootstrap ---------------- */
 
   function wireEvents(){
+    bindUnsavedLeaveModalEvents_();
     if (PROJECT_EVENTS_BOUND) return;
     PROJECT_EVENTS_BOUND = true;
     if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState());
@@ -51859,13 +52114,12 @@
     wireEvents();
     syncTeamModeUi();
     notifyPortalReady({ reason: 'snapshot-ready' });
-    resetSnapshotDirtyBaseline();
     consumeSnapshotBootstrapIntent_();
     consumeSummaryBootstrapIntent_();
     syncHeaderUtilityOffset();
+    scheduleSnapshotDirtyBaselineAfterProjectLoad_('snapshot-ready');
     requestAnimationFrame(() => {
       syncHeaderUtilityOffset();
-      resetSnapshotDirtyBaseline();
     });
     scheduleTaxFormImagePreload_();
   }

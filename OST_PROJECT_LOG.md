@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-26 - Dashboard Project Return Follow-Up Fix
+
+- Mode: Full ship dashboard project-return and loading telemetry follow-up.
+- Branch/commit/PR: `main`, Apps Script version `1070`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: fix the project-to-dashboard return issues found in live investigation and improve redacted dashboard loading telemetry/background hydration behavior.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` shows revision `198`. Project-load baseline capture now uses a bounded initializing state so load-time render churn does not immediately trigger the unsaved-changes modal on a read-only project open. The unsaved-leave modal now has an early idempotent capture handler for Stay, Leave Without Saving, Save & Go, and backdrop clicks. Project-to-dashboard return records redacted guard/return timing markers. Client timing summaries now preserve safe backend cache/read-source counters. Idle full Project Peek upgrades are delayed and limited so remaining status and summary-thumbnail hydration get priority after first reveal.
+- Validation: `git fetch origin main` plus ahead/behind check returned `0 0`; `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, template-stubbed script parse for `apps-script/src/Index.html` and `web/squarespace-portal-code-block.html`, targeted source assertions for revision `198`, baseline guard, early unsaved modal binding, return timing, cache counters, and full-peek idle limits, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, and `git diff --check` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Fix dashboard project return loading"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1070 - Fix dashboard project return loading`; no new deployment ID was created. Cache-busted direct `/exec?smoke=1070...` returned HTTP `200` with `Development revision 198`, omitted stale revision `197`, included the project-return/baseline/full-peek markers, and passed a value-oriented sensitive marker scan. Public `/portal?smoke=1070...` returned HTTP `200`, referenced the stable deployment ID, retained wrapper and semantic dashboard-ready markers, and passed the same value-oriented scan.
+- Runtime data state: no Sheet schema/data, Script Properties, pricing/Calculator, checkout/payment/ACH/Stripe, email lifecycle, Team Mode permission, account-document workflow state, token lookup, wrapper passthrough, queue data, or deployment ID behavior was intentionally changed, and no sensitive values were logged or added.
+- Follow-ups: authenticated browser smoke for project open then Dashboard return, real-edit unsaved modal behavior, dashboard critical-ready access paths, and background thumbnail settling remains pending owner-side fixture access.
+
 ## 2026-06-26 - Harden Sales Tax Pending Review UI
 
 - Mode: Full ship scoped client-facing sales-tax pending-state UI hardening.
