@@ -11274,7 +11274,7 @@ function buildCreditTermsBlankEmailPayload_(ctx, definition, recipients) {
   const creditTermsBlankEmailFooter = buildStandardNoReplyFooterCopy_();
   const token = resolveAccountDocumentPortalToken_(ctx);
   const uploadUrl = token ? buildDashboardCreditTermsResubmitUrl_(token) : '';
-  const creditTermsNotice = 'Complete the Credit Application process to apply for net 30, 60, 90 day payment terms and gain the ability for your organization to place Purchase Orders.';
+  const creditTermsNotice = 'Complete the Credit Application process to apply for net payment terms and gain the ability for your organization to place Purchase Orders.';
   const uploadInstruction = uploadUrl
     ? 'Complete and sign the attached PDF, then click the button below to open your portal dashboard directly to the credit terms section. Upload your document in the portal, and our team will review your account/application.'
     : 'Complete and sign the attached PDF, then log into your Red Threads portal dashboard and choose Credit Terms to upload the completed file.';
