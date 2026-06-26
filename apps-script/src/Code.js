@@ -27000,6 +27000,9 @@ function shouldRenderPortalLifecycleEmailCta_(milestone, recipientClass) {
         normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_removed) {
       return false;
     }
+    if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied) {
+      return false;
+    }
   }
   return !isAccountDocumentApprovedTeamMilestone_(milestone, recipientClass);
 }
@@ -27024,7 +27027,13 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     : [];
   const details = isTeam ? teamIdentityDetails.slice() : [];
   if (paymentTermsLabel) details.push('Approved payment terms: ' + paymentTermsLabel);
-  if (reason) details.push('Reason: ' + reason);
+  if (reason) {
+    details.push(
+      isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied
+        ? 'Documented Team Reason for Denial: ' + reason
+        : 'Reason: ' + reason
+    );
+  }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_submitted ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted) {
     const creditTermsSubmitted = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_submitted;
@@ -27090,8 +27099,11 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
   }
   if (normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied ||
       normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied) {
+    const taxExemptTeamDenied = isTeam && normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_denied;
     const deniedIntro = normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied
       ? 'The credit terms associated with your Red Threads account was not approved.'
+      : taxExemptTeamDenied
+        ? 'Red Threads reviewed the tax exemption associated with this account.'
       : (!isTeam
         ? 'The tax exemption associated with your Red Threads account was not approved.'
         : 'Red Threads reviewed the tax exemption associated with your account.');
@@ -27101,10 +27113,14 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
     return {
       subject: normalized === PORTAL_LIFECYCLE_EMAIL_MILESTONES.credit_terms_denied
         ? (isTeam ? buildTeamSubject_('Credit terms need attention') : buildActionNeededSubject_('Credit terms need attention'))
-        : (isTeam ? buildTeamSubject_('Sales tax exemption needs attention') : buildActionNeededSubject_('Sales tax exemption needs attention')),
-      heading: isTeam ? (labels.title + ' needs attention') : deniedIntro.replace(/[.]+$/g, ''),
+        : (isTeam ? buildTeamSubject_('Sales tax exemption denied by team') : buildActionNeededSubject_('Sales tax exemption needs attention')),
+      heading: taxExemptTeamDenied
+        ? 'Tax Exemption Was Denied'
+        : (isTeam ? (labels.title + ' needs attention') : deniedIntro.replace(/[.]+$/g, '')),
       intro: isTeam ? ('Red Threads reviewed the ' + labels.noun + ' associated with this account.') : deniedIntro,
-      statusCopy: accountDocumentClientDenied
+      statusCopy: taxExemptTeamDenied
+        ? ''
+        : accountDocumentClientDenied
         ? ''
         : trimString_(meta && meta.hardDenied) === 'true'
         ? (isTeam
@@ -27113,7 +27129,7 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
         : (isTeam
           ? 'A correction is needed before approval. Review the account status in Team Mode.'
           : 'A correction is needed before approval. Review your account dashboard for the next step.'),
-      nextStep: accountDocumentClientDenied ? '' : isTeam
+      nextStep: taxExemptTeamDenied || accountDocumentClientDenied ? '' : isTeam
         ? ('Review the ' + labels.noun + ' workflow in Team Mode.')
         : ('Upload an updated ' + labels.submission + ' from your account dashboard.'),
       details: details

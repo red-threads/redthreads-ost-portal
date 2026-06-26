@@ -12746,12 +12746,14 @@
       box-shadow:0 12px 24px rgba(190,24,93,.26);
       margin-top:10px;
     }
+    #termsDocEmailSendBtn.is-ready,
     #taxDocEmailSendBtn.is-ready{
       background:linear-gradient(135deg,#86efac 0%, #51ffb7 42%, #22c55e 100%);
       border-color:rgba(255,255,255,.2);
       color:#0f172a;
       box-shadow:0 12px 24px rgba(34,197,94,.24);
     }
+    #termsDocEmailSendBtn.is-ready:hover,
     #taxDocEmailSendBtn.is-ready:hover{
       border-color:rgba(255,255,255,.28);
       background:linear-gradient(135deg,#a7f3d0 0%, #5cffbd 42%, #16a34a 100%);
@@ -17843,7 +17845,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 194">194</div>
+  <div class="devRevisionBadge" aria-label="Development revision 195">195</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -33494,6 +33496,7 @@
 
   function renderTermsDocEmailPanel_(){
     if (termsDocEmailPanel) termsDocEmailPanel.hidden = !TERMS_DOC_EMAIL_PANEL_OPEN;
+    const hasValidTermsEmailRecipients = parseEmailRecipients(termsDocEmailInput && termsDocEmailInput.value).length > 0;
     if (termsDocDownloadBtn) termsDocDownloadBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT || ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
     if (termsDocEmailBtn) {
       termsDocEmailBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT || ACCOUNT_DOC_UPLOAD_IN_FLIGHT;
@@ -33501,6 +33504,7 @@
     }
     if (termsDocEmailSendBtn) {
       termsDocEmailSendBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT;
+      termsDocEmailSendBtn.classList.toggle('is-ready', hasValidTermsEmailRecipients);
       termsDocEmailSendBtn.textContent = ACCOUNT_DOC_EMAIL_IN_FLIGHT ? 'Sending…' : 'Send';
     }
     if (termsDocEmailCancelBtn) termsDocEmailCancelBtn.disabled = ACCOUNT_DOC_EMAIL_IN_FLIGHT;
@@ -51023,6 +51027,7 @@
       });
     }
     if (termsDocEmailInput) {
+      termsDocEmailInput.addEventListener('input', renderTermsDocEmailPanel_);
       termsDocEmailInput.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
