@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 200">200</div>
+  <div class="devRevisionBadge" aria-label="Development revision 206">206</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24387,7 +24387,7 @@
 	  const DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE = 6;
 	  const DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY = 'summary';
 	  const DASHBOARD_PROJECT_PEEK_PROFILE_FULL = 'full';
-	  const DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS = 6000;
+		  const DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS = 15000;
 	  const DASHBOARD_ROW_PAIR_HYDRATION_FALLBACK_MS = 2500;
 	  const DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS = 8000;
   const DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT = 3;
@@ -25554,14 +25554,30 @@
 	    });
 	  }
 
-	  function buildDashboardFullPeekBatchRequestPayload_(requestPayload, tokens){
-	    return Object.assign({}, (requestPayload && typeof requestPayload === 'object') ? requestPayload : {}, {
-	      tokens: Array.isArray(tokens) ? tokens.slice(0, DASHBOARD_CRITICAL_PROJECT_LIMIT) : [],
-	      batchLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
-	      criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
-	      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL
-	    });
-	  }
+		  function buildDashboardFullPeekBatchRequestPayload_(requestPayload, tokens){
+		    return Object.assign({}, (requestPayload && typeof requestPayload === 'object') ? requestPayload : {}, {
+		      tokens: Array.isArray(tokens) ? tokens.slice(0, DASHBOARD_CRITICAL_PROJECT_LIMIT) : [],
+		      batchLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+		      criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+		      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL
+		    });
+		  }
+
+		  function buildDashboardFullPeekSingleResult_(token, payload){
+		    const cleanToken = String(token || '').trim();
+		    if (cleanToken && isDashboardProjectPeekFullPayload_(payload)) {
+		      return {
+		        token: cleanToken,
+		        ok: true,
+		        peekPreview: payload
+		      };
+		    }
+		    return {
+		      token: cleanToken,
+		      ok: false,
+		      error: 'Full Project Peek data unavailable.'
+		    };
+		  }
 
   async function requestDashboardProjectCriticalBatch_(requestPayload, tokens, coordinator, attempt){
     const batchTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
@@ -25758,9 +25774,9 @@
 	    return resp;
 	  }
 
-	  async function fetchDashboardProjectFullPeekBatchWithRetry_(requestPayload, tokens, coordinator){
-	    const criticalTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
-	    const responses = [];
+		  async function fetchDashboardProjectFullPeekBatchWithRetry_(requestPayload, tokens, coordinator){
+		    const criticalTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
+		    const responses = [];
 	    let firstError = null;
 	    try {
 	      responses.push(await requestDashboardProjectFullPeekBatch_(requestPayload, criticalTokens, coordinator, 0));
@@ -25787,16 +25803,89 @@
 	        });
 	      }
 	    }
-	    if (!responses.length && firstError) throw firstError;
-	    return mergeDashboardFullPeekBatchResponses_(criticalTokens, responses);
-	  }
+		    if (!responses.length && firstError) throw firstError;
+		    return mergeDashboardFullPeekBatchResponses_(criticalTokens, responses);
+		  }
 
-	  async function fetchDashboardProjectFullPeekBatchBounded_(requestPayload, tokens, coordinator){
-	    let timedOut = false;
-	    const work = fetchDashboardProjectFullPeekBatchWithRetry_(requestPayload, tokens, coordinator);
-	    const timeout = waitMs_(DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS).then(() => {
-	      timedOut = true;
-	      return {
+		  async function requestDashboardProjectFullPeekSingles_(requestPayload, tokens, coordinator, attempt){
+		    const singleTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
+		    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_single_request', {
+		      stage: attempt > 0 ? 'retry' : 'initial',
+		      tokenCount: singleTokens.length,
+		      batchSize: singleTokens.length
+		    });
+		    const responses = await Promise.all(singleTokens.map(token => {
+		      return fetchDashboardProjectPeek_(token, {
+		        source: attempt > 0 ? 'critical-full-single-retry' : 'critical-full-single',
+		        requestPayload: requestPayload,
+		        suppressTiming: true
+		      })
+		        .then(payload => buildDashboardFullPeekSingleResult_(token, payload))
+		        .catch(() => buildDashboardFullPeekSingleResult_(token, null));
+		    }));
+		    const readyCount = responses.filter(item => isDashboardFullPeekResultReady_(item)).length;
+		    const cacheMeta = {
+		      cacheType: 'dashboard_full_peek',
+		      cacheHits: 0,
+		      cacheMisses: 0,
+		      cacheStores: 0,
+		      cacheSkips: 0,
+		      cacheErrors: 0
+		    };
+		    responses.forEach(item => {
+		      const meta = item && item.peekPreview && item.peekPreview.cacheMeta && typeof item.peekPreview.cacheMeta === 'object'
+		        ? item.peekPreview.cacheMeta
+		        : {};
+		      ['cacheHits', 'cacheMisses', 'cacheStores', 'cacheSkips', 'cacheErrors'].forEach(key => {
+		        cacheMeta[key] += Math.max(0, parseInt(String(meta[key] || 0), 10) || 0);
+		      });
+		      if (String(meta.cacheType || '').trim()) cacheMeta.cacheType = String(meta.cacheType || '').trim();
+		    });
+		    const firstReady = responses.find(item => isDashboardFullPeekResultReady_(item));
+		    const firstPayload = firstReady && firstReady.peekPreview && typeof firstReady.peekPreview === 'object'
+		      ? firstReady.peekPreview
+		      : {};
+		    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_single_response', {
+		      stage: attempt > 0 ? 'retry' : 'initial',
+		      ok: readyCount === singleTokens.length,
+		      tokenCount: singleTokens.length,
+		      projectCount: responses.length,
+		      readyCount: readyCount,
+		      fallbackCount: Math.max(0, singleTokens.length - readyCount),
+		      cacheHits: cacheMeta.cacheHits,
+		      cacheMisses: cacheMeta.cacheMisses,
+		      cacheStores: cacheMeta.cacheStores,
+		      cacheSkips: cacheMeta.cacheSkips,
+		      cacheErrors: cacheMeta.cacheErrors
+		    });
+		    return {
+		      ok: true,
+		      dashboardPeekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+		      projectionVersion: String(firstPayload.projectionVersion || ''),
+		      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
+		      peekVersion: String(firstPayload.peekVersion || ''),
+		      cacheMeta: cacheMeta,
+		      projects: responses
+		    };
+		  }
+
+		  async function fetchDashboardProjectFullPeekSinglesWithRetry_(requestPayload, tokens, coordinator){
+		    const criticalTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
+		    const responses = [];
+		    responses.push(await requestDashboardProjectFullPeekSingles_(requestPayload, criticalTokens, coordinator, 0));
+		    const failedTokens = getDashboardFullPeekFailedTokens_(criticalTokens, responses);
+		    if (failedTokens.length) {
+		      responses.push(await requestDashboardProjectFullPeekSingles_(requestPayload, failedTokens, coordinator, 1));
+		    }
+		    return mergeDashboardFullPeekBatchResponses_(criticalTokens, responses);
+		  }
+
+		  async function fetchDashboardProjectFullPeekBatchBounded_(requestPayload, tokens, coordinator){
+		    let timedOut = false;
+		    const work = fetchDashboardProjectFullPeekSinglesWithRetry_(requestPayload, tokens, coordinator);
+		    const timeout = waitMs_(DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS).then(() => {
+		      timedOut = true;
+		      return {
 	        ok: true,
 	        timedOut: true,
 	        projects: (Array.isArray(tokens) ? tokens : []).map(token => ({
@@ -25806,12 +25895,12 @@
 	        }))
 	      };
 	    });
-	    const resp = await Promise.race([work, timeout]);
-	    if (timedOut) {
-	      markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_timeout', {
-	        ok: false,
-	        tokenCount: Array.isArray(tokens) ? tokens.length : 0
-	      });
+		    const resp = await Promise.race([work, timeout]);
+		    if (timedOut) {
+		      markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_single_timeout', {
+		        ok: false,
+		        tokenCount: Array.isArray(tokens) ? tokens.length : 0
+		      });
 	    }
 	    return resp;
 	  }
@@ -29310,8 +29399,11 @@
     authProjectsTitle.textContent = fullName ? (fullName + '\'s Account Dashboard') : 'Your Account Dashboard';
   }
 
-  function buildDashboardProjectPeekRequestPayload_(projectToken){
-    return Object.assign({}, getDashboardContextRequestPayload_() || {}, {
+  function buildDashboardProjectPeekRequestPayload_(projectToken, requestPayload){
+    const basePayload = (requestPayload && typeof requestPayload === 'object')
+      ? requestPayload
+      : (getDashboardContextRequestPayload_() || {});
+    return Object.assign({}, basePayload, {
       projectToken: String(projectToken || '').trim()
     });
   }
@@ -30596,7 +30688,7 @@
       routeType: 'dashboard_peek',
       source: source
     });
-    const request = callServer('getDashboardProjectPeek', buildDashboardProjectPeekRequestPayload_(token))
+    const request = callServer('getDashboardProjectPeek', buildDashboardProjectPeekRequestPayload_(token, opts.requestPayload))
       .then(resp => {
         markPortalClientLoadTiming_(trace, 'response_received', {
           routeType: 'dashboard_peek',
@@ -31973,13 +32065,13 @@
 	    const startFullPeekPrefetchOnce = source => {
 	      if (fullPeekPrefetchStarted) return;
 	      if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
-	      fullPeekPrefetchStarted = true;
-	      startDashboardProjectPeekFullPrefetch_(getDashboardCriticalProjectTokens_(projects), {
-	        initialDelayMs: 1200,
-	        maxInitial: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT,
-	        nextDelayMs: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS,
-	        source: String(source || 'status-settled')
-	      });
+      fullPeekPrefetchStarted = true;
+      startDashboardProjectPeekFullPrefetch_(getDashboardCriticalProjectTokens_(projects), {
+        initialDelayMs: 1200,
+        maxInitial: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+        nextDelayMs: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS,
+        source: String(source || 'status-settled')
+      });
 	    };
 	    const fullPrefetchFallbackTimer = window.setTimeout(() => {
 	      startFullPeekPrefetchOnce('bounded-delay');
