@@ -58,6 +58,10 @@ const DEFAULT_CREDIT_TERMS_FORM_PAGE_5_FILE_ID = '14zA8F2PJXnWjdE3ulEwrIHIb3Nggc
 const DEFAULT_TAX_EXEMPT_FORM_FILE_ID = '1YFX3fr9KQezRY_zkPrI8_A-qTlNnOxTc';
 const DEFAULT_TAX_EXEMPT_FORM_PAGE_1_FILE_ID = '15mx_j0YXlnfdBFkQdc_xpeH8XIXusyf3';
 const DEFAULT_TAX_EXEMPT_FORM_PAGE_2_FILE_ID = '1GYkbUhqaD7t4yDUy8t8FrwhMS0IJqH1l';
+const DEFAULT_SALES_TAX_TIPS_LIGHT_FILE_ID = '1WLXN9nlxx3kS3YVEcBdOguogwnx0rHPV';
+const DEFAULT_SALES_TAX_TIPS_DARK_FILE_ID = '1bcppC2bCl0SxsYoYFKxqtBuJpxv7ANgY';
+const SALES_TAX_TIPS_ATTACHMENT_FILE_NAME = 'Red Threads Sales Tax Tips.png';
+const SALES_TAX_TIPS_APPROVED_EMAIL_NOTE = 'Here is a helpful guide for when sales tax exemption can and cannot be applied. Your organization is responsible for managing when its exemption status applies to each order.';
 const DEFAULT_INVOICE_DRIVE_FOLDER_ID = '1TrrLxq4jOS38kMPs7sQIf_rd3iepwlej';
 const DEFAULT_TERMS_DRIVE_FOLDER_ID = '1uuF9c4DvROk37AoaFrh9qcf9lsFc0uj0';
 const DEFAULT_TAX_EXEMPT_DRIVE_FOLDER_ID = '1ixz5zXLMW5GWBQ0VIhGHy89_JYwKiyyT';
@@ -12891,6 +12895,40 @@ function buildDriveBinaryDataPayload_(fileId, fallbackName, fallbackMimeType) {
   };
 }
 
+function getSalesTaxTipsDriveFileId_(variant) {
+  return trimString_(variant).toLowerCase() === 'light'
+    ? DEFAULT_SALES_TAX_TIPS_LIGHT_FILE_ID
+    : DEFAULT_SALES_TAX_TIPS_DARK_FILE_ID;
+}
+
+function buildSalesTaxTipsAttachmentBlob_(variant) {
+  const fileId = getSalesTaxTipsDriveFileId_(variant);
+  if (!fileId) return null;
+  const file = getDriveFileByIdSafe_(fileId);
+  if (!file) return null;
+  return file.getBlob().setName(SALES_TAX_TIPS_ATTACHMENT_FILE_NAME);
+}
+
+function buildSalesTaxTipsViewerArtifact_(variant) {
+  const fileId = getSalesTaxTipsDriveFileId_(variant);
+  const fallbackName = trimString_(variant).toLowerCase() === 'light'
+    ? 'sales-tax-tips-light.png'
+    : 'sales-tax-tips-dark.png';
+  const inlineAsset = buildDriveBinaryDataPayload_(fileId, fallbackName, 'image/png');
+  const mimeType = trimString_(inlineAsset && inlineAsset.mimeType) || 'image/png';
+  const isImage = /^image\//i.test(mimeType);
+  return {
+    fileId: fileId,
+    fileName: trimString_(inlineAsset && inlineAsset.fileName) || fallbackName,
+    mimeType: mimeType,
+    fileUrl: buildDriveFileViewUrl_(fileId),
+    previewUrl: buildDriveFilePreviewUrl_(fileId),
+    imageUrl: isImage ? buildDriveFilePublicViewAssetUrl_(fileId) : '',
+    imageCandidates: isImage ? buildDriveFilePublicImageCandidates_(fileId) : [],
+    base64Data: trimString_(inlineAsset && inlineAsset.base64Data)
+  };
+}
+
 function isPngByteArray_(bytes) {
   const expected = [137, 80, 78, 71, 13, 10, 26, 10];
   if (!bytes || bytes.length < expected.length) return false;
@@ -14654,6 +14692,28 @@ function getTaxExemptClientViewer_(payload) {
 function getTaxExemptClientViewer(payload) {
   try {
     return getTaxExemptClientViewer_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+}
+
+function getSalesTaxTipsViewerAsset_(payload) {
+  const ctx = buildAccountDocumentContext_(payload);
+  if (!ctx || ctx.ok === false) return ctx;
+  return buildAccountDocumentWorkflowResponse_(
+    ctx,
+    ACCOUNT_DOCUMENT_TYPES.tax_exempt,
+    'Sales tax tips ready.',
+    {
+      viewerArtifact: buildSalesTaxTipsViewerArtifact_('dark'),
+      decision: 'tips'
+    }
+  );
+}
+
+function getSalesTaxTipsViewerAsset(payload) {
+  try {
+    return getSalesTaxTipsViewerAsset_(payload);
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
@@ -27777,11 +27837,11 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
           ? buildTeamSubject_('Review credit terms application')
           : buildTeamSubject_('Review sales tax exemption form'))
         : (creditTermsSubmitted
-          ? 'Credit terms document received'
+          ? 'Red Threads Credit terms application submitted'
           : 'Sales tax exemption document received'),
       heading: isTeam
         ? ('Review ' + labels.submission)
-        : (creditTermsSubmitted ? 'Credit terms document received' : 'Sales tax exemption document received'),
+        : (creditTermsSubmitted ? 'Credit terms application received' : 'Sales tax exemption document received'),
       intro: isTeam
         ? (submittedTeamReview
           ? submittedTeamIntro
@@ -27815,7 +27875,8 @@ function buildAccountDocumentEmailCopy_(milestone, recipientClass, meta) {
           : 'Approved payment terms are now associated with your account.')
         : (isTeam
           ? ''
-          : ''),
+          : (taxExemptClientApproved ? SALES_TAX_TIPS_APPROVED_EMAIL_NOTE : '')),
+      statusCopyTone: taxExemptClientApproved ? 'white' : '',
       nextStep: taxExemptClientApproved
         ? 'You can now toggle sales tax on and off your orders.'
         : creditTermsClientApproved
@@ -28092,6 +28153,7 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   const subjectParts = [];
   let intro = '';
   let statusCopy = '';
+  let statusCopyTone = '';
   let details = [];
   let heading = '';
   let nextStep = '';
@@ -28224,6 +28286,7 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     heading = docCopy && docCopy.heading ? docCopy.heading : '';
     intro = docCopy && docCopy.intro ? docCopy.intro : 'An account document update was recorded.';
     statusCopy = hasDocStatusCopy ? trimString_(docCopy.statusCopy) : 'Review the portal for the current status.';
+    statusCopyTone = trimString_(docCopy && docCopy.statusCopyTone);
     nextStep = hasDocNextStep ? trimString_(docCopy.nextStep) : '';
     nextStepLabel = trimString_(docCopy && docCopy.nextStepLabel);
     details = docCopy && Array.isArray(docCopy.details) ? docCopy.details : details;
@@ -28246,6 +28309,7 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
     actionTitleTone: actionTitleTone,
     intro: intro,
     statusCopy: statusCopy,
+    statusCopyTone: statusCopyTone,
     nextStep: nextStep,
     nextStepLabel: nextStepLabel,
     productionTimingLine: productionTimingLine,
@@ -28257,8 +28321,30 @@ function buildPortalLifecycleEmailCopy_(milestone, recipientClass, emailContext,
   };
 }
 
-function buildPortalLifecycleEmailAttachments_(meta) {
+function appendOptionalSalesTaxTipsLifecycleAttachment_(attachments, options) {
+  const target = Array.isArray(attachments) ? attachments : [];
+  const opts = (options && typeof options === 'object') ? options : {};
+  const milestone = normalizePortalLifecycleEmailMilestone_(opts.milestone);
+  const recipientClass = getPortalLifecycleEmailRecipientClass_(opts.recipientClass);
+  if (milestone !== PORTAL_LIFECYCLE_EMAIL_MILESTONES.tax_exempt_approved || recipientClass !== 'client') {
+    return target;
+  }
+  try {
+    const blob = buildSalesTaxTipsAttachmentBlob_('light');
+    if (blob) {
+      target.push(blob);
+    } else {
+      console.warn('[RT-SALES-TAX-TIPS] Optional approved-tax tips attachment was unavailable.');
+    }
+  } catch (err) {
+    console.warn('[RT-SALES-TAX-TIPS] Optional approved-tax tips attachment failed: ' + String((err && err.message) || err));
+  }
+  return target;
+}
+
+function buildPortalLifecycleEmailAttachments_(meta, options) {
   const source = (meta && typeof meta === 'object') ? meta : {};
+  const opts = (options && typeof options === 'object') ? options : {};
   const attachments = [];
   const fileIds = uniqueTrimmedStrings_(source.attachmentFileIds);
   fileIds.forEach(function(fileId) {
@@ -28271,7 +28357,10 @@ function buildPortalLifecycleEmailAttachments_(meta) {
       )
     ));
   });
-  return attachments;
+  return appendOptionalSalesTaxTipsLifecycleAttachment_(attachments, {
+    milestone: opts.milestone || source.milestone,
+    recipientClass: opts.recipientClass || source.recipientClass
+  });
 }
 
 function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
@@ -28332,6 +28421,7 @@ function buildPortalLifecycleEmailContent_(milestone, orderInfo, options) {
     actionTitleTone: teamActionModel ? '' : copy.actionTitleTone,
     intro: teamActionModel ? teamActionModel.intro : copy.intro,
     statusCopy: teamActionModel ? teamActionModel.statusCopy : copy.statusCopy,
+    statusCopyTone: teamActionModel ? '' : copy.statusCopyTone,
     nextStep: teamActionModel ? teamActionModel.nextStep : resolvedNextStep,
     nextStepLabel: teamActionModel ? teamActionModel.nextStepLabel : copy.nextStepLabel,
     nextStepTone: teamActionModel ? teamActionModel.nextStepTone : '',
@@ -28441,7 +28531,10 @@ function processPortalLifecycleEmailQueueJob_(jobInfo, options) {
   }
   const recipients = parseAchLifecycleEmailQueueRecipients_(row.recipientsjson);
   if (!recipients.toList.length) return { skipped: true, skipReason: 'missing_recipients', invoiceInfo: null };
-  const attachments = buildPortalLifecycleEmailAttachments_(meta);
+  const attachments = buildPortalLifecycleEmailAttachments_(meta, {
+    milestone: milestone,
+    recipientClass: recipientClass
+  });
   if (meta.attachmentRequired === true && !attachments.length) {
     throw new Error('Portal lifecycle attachment could not be found.');
   }
@@ -30902,6 +30995,7 @@ function buildLifecycleEmailShell_(options) {
   const heading = trimString_(opts.heading) || 'Red Threads portal update';
   const intro = shouldSuppressDuplicateLifecycleIntro_(heading, opts.intro) ? '' : trimString_(opts.intro);
   const statusCopy = trimString_(opts.statusCopy);
+  const statusCopyTone = trimString_(opts.statusCopyTone).toLowerCase();
   const nextStep = trimString_(opts.nextStep);
   const nextStepHtml = trimString_(opts.nextStepHtml);
   const attachmentNote = trimString_(opts.attachmentNote);
@@ -31081,7 +31175,7 @@ function buildLifecycleEmailShell_(options) {
     hasOrderContext ? actionCardHtml : (nonOrderNextStepFirst ? nonOrderNextStepHtml : ((nonOrderDetailsFirst || nonOrderCopyFirst) ? '' : primaryCtaHtml)),
     !hasOrderContext && (nonOrderNoActionFirst || nonOrderDetailsFirst) ? accountDetailsHtml : '',
     !hasOrderContext && intro ? ('<p style="margin:0 0 14px;color:' + theme.text + ';">' + escapeHtml_(intro) + '</p>') : '',
-    !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + theme.textMuted + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
+    !hasOrderContext && statusCopy ? ('<p style="margin:0 0 14px;color:' + (statusCopyTone === 'white' ? theme.text : theme.textMuted) + ';">' + escapeHtml_(statusCopy).replace(/\n/g, '<br>') + '</p>') : '',
     !hasOrderContext && nonOrderNextStepFirst && !nonOrderNoActionFirst ? accountDetailsHtml : '',
     !hasOrderContext && nonOrderNextStepFirst ? nonOrderPrimaryCtaHtml : '',
     !hasOrderContext && nonOrderDetailsFirst ? primaryCtaHtml : '',
@@ -38104,7 +38198,10 @@ function sendEmailReviewPortalLifecycleExamples_(results, fixture, recipients) {
       clearedByEmail: item.clearedByEmail || '',
       attachmentRequired: item.attachmentRequired === true
     };
-    const attachments = buildPortalLifecycleEmailAttachments_(meta);
+    const attachments = buildPortalLifecycleEmailAttachments_(meta, {
+      milestone: item.milestone,
+      recipientClass: item.recipientClass
+    });
     sendEmailReviewContent_(results, item.label, 'portal_lifecycle', item.recipientClass, [item.to],
       buildPortalLifecycleEmailContent_(item.milestone, order, {
         cfg: fixture.cfg,

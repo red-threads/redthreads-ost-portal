@@ -7091,14 +7091,14 @@
     }
     .summaryEstimateControlSecondary.isTaxExemptionPending:hover,
     .summaryEstimateControlSecondary.isTaxExemptionPending:focus-visible{
-      border-color:rgba(57,214,255,.72);
-      background:rgba(10,24,28,.24);
-      color:#55dfff;
+      border-color:rgba(57,214,255,.9);
+      background:rgba(57,214,255,.14);
+      color:#8fecff;
       transform:none;
       box-shadow:
-        0 10px 22px rgba(0,0,0,.18),
-        0 0 0 1px rgba(57,214,255,.12),
-        0 0 18px rgba(57,214,255,.12),
+        0 12px 24px rgba(0,0,0,.2),
+        0 0 0 1px rgba(57,214,255,.18),
+        0 0 22px rgba(57,214,255,.2),
         inset 0 1px 0 rgba(255,255,255,.08);
     }
     .summaryEstimateControlPrimary:disabled,
@@ -7114,6 +7114,21 @@
     .summaryEstimateControlSecondary.isTaxExemptionPending:disabled{
       opacity:1;
       filter:none;
+      box-shadow:
+        0 10px 22px rgba(0,0,0,.18),
+        0 0 0 1px rgba(57,214,255,.12),
+        0 0 18px rgba(57,214,255,.12),
+        inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .summaryEstimateControlSecondary.isTaxExemptionPending:disabled:hover{
+      border-color:rgba(57,214,255,.9);
+      background:rgba(57,214,255,.14);
+      color:#8fecff;
+      box-shadow:
+        0 12px 24px rgba(0,0,0,.2),
+        0 0 0 1px rgba(57,214,255,.18),
+        0 0 22px rgba(57,214,255,.2),
+        inset 0 1px 0 rgba(255,255,255,.08);
     }
     .summaryEstimateControlPrimary.isPlaceholder{
       cursor:default;
@@ -11182,6 +11197,10 @@
       grid-template-columns:minmax(0,980px) minmax(260px,320px);
       align-items:stretch;
     }
+    .taxDocModal.is-client-view-mode.is-tax-tips-only .taxDocShell{
+      grid-template-columns:minmax(0,980px);
+      justify-content:center;
+    }
     .taxDocModal.is-client-view-mode .taxDocStage{
       display:block;
       min-height:0;
@@ -11215,6 +11234,37 @@
     }
     .taxDocReplacementRail[hidden]{
       display:none !important;
+    }
+    .taxDocTipsToggleBtn{
+      width:100%;
+      min-height:44px;
+      padding:0 13px;
+      border-radius:13px;
+      border:1px solid rgba(81,255,183,.46);
+      background:linear-gradient(135deg,#86efac 0%, #51ffb7 44%, #22c55e 100%);
+      color:#052e1c;
+      font-size:12px;
+      font-weight:900;
+      line-height:1.2;
+      cursor:pointer;
+      box-shadow:0 12px 24px rgba(34,197,94,.2);
+      transition:transform .08s ease, border-color .16s ease, box-shadow .16s ease, filter .16s ease;
+    }
+    .taxDocTipsToggleBtn:hover{
+      border-color:rgba(187,247,208,.82);
+      transform:translateY(-1px);
+      filter:brightness(1.03);
+      box-shadow:0 16px 28px rgba(34,197,94,.28);
+    }
+    .taxDocTipsToggleBtn[hidden]{
+      display:none !important;
+    }
+    .taxDocTipsToggleBtn[disabled]{
+      opacity:.68;
+      cursor:not-allowed;
+      transform:none;
+      filter:none;
+      box-shadow:none;
     }
     .taxDocReplacementCard{
       border:1px solid rgba(251,113,133,.24);
@@ -13881,6 +13931,21 @@
       color:rgba(55,65,81,.98);
       box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 6px 12px rgba(0,0,0,.1), 0 0 0 1px rgba(255,255,255,.03);
     }
+    .orderFlowAccountActionBtn.isSummaryPlacement.isTaxPendingStatus{
+      cursor:default;
+      pointer-events:auto;
+      font-weight:400;
+      background:rgba(34,211,238,.08);
+      border-color:rgba(34,211,238,.62);
+      color:#0891b2;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 4px 10px rgba(34,211,238,.08);
+    }
+    .orderFlowAccountActionBtn.isSummaryPlacement.isTaxPendingStatus:hover{
+      background:rgba(34,211,238,.13);
+      border-color:rgba(34,211,238,.76);
+      color:#0e7490;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 6px 12px rgba(34,211,238,.12);
+    }
     .orderFlowAccountActionBtn:focus-visible{
       outline:none;
       box-shadow:0 0 0 3px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.08), 0 8px 14px rgba(0,0,0,.16);
@@ -14753,11 +14818,19 @@
       justify-self:end;
       align-self:center;
       display:inline-flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:flex-end;
+      gap:6px;
+      width:100%;
+      max-width:100%;
+    }
+    .orderFlowSummaryTaxToggleControlRow{
+      display:inline-flex;
       align-items:center;
       justify-content:flex-end;
       gap:10px;
       width:100%;
-      max-width:100%;
     }
     .orderFlowSummaryTaxToggleLabel{
       color:#111827;
@@ -14771,6 +14844,26 @@
       min-width:72px;
       height:34px;
       box-shadow:0 8px 18px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    .orderFlowTaxTipsLink{
+      appearance:none;
+      border:0;
+      background:transparent;
+      padding:0;
+      color:#0ea5e9;
+      font-size:11px;
+      line-height:1.2;
+      font-weight:800;
+      text-align:right;
+      text-decoration:underline;
+      text-underline-offset:3px;
+      cursor:pointer;
+      justify-self:end;
+      transition:color .14s ease, opacity .14s ease;
+    }
+    .orderFlowTaxTipsLink:hover,
+    .orderFlowTaxTipsLink:focus-visible{
+      color:#0369a1;
     }
     .orderFlowSummaryPreviewBtn:hover{
       transform:translateY(-1px);
@@ -17966,7 +18059,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 224">224</div>
+  <div class="devRevisionBadge" aria-label="Development revision 225">225</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18776,6 +18869,7 @@
           </div>
         </aside>
         <aside class="taxDocReplacementRail" id="taxDocReplacementRail" hidden>
+          <button class="taxDocTipsToggleBtn" id="taxDocTipsToggleBtn" type="button">View Sales Tax Do's and Don'ts</button>
           <div class="taxDocReplacementCard">
             <div class="taxDocReplacementTitle">Remove tax exemption from account</div>
             <p class="taxDocReplacementCopy">Clear the approved tax certificate on file. Afterwards you will have the ability to upload a replacement for Red Threads review. You will not be able to toggle sales tax on/off without an approved tax exemption on file.</p>
@@ -18952,7 +19046,7 @@
       <div class="orderFlowAccountBanner" id="orderFlowAccountBanner" hidden></div>
       <div class="orderFlowHead">
         <h2 class="orderFlowTitle" id="orderFlowTitle">Place Order</h2>
-        <div class="orderFlowHeadTaxPendingNotice" id="orderFlowTaxPendingNotice" hidden>Sales Tax Exemption Status: Pending Approval</div>
+        <div class="orderFlowHeadTaxPendingNotice" id="orderFlowTaxPendingNotice" hidden></div>
         <button class="orderFlowClose" id="orderFlowClose" type="button" aria-label="Close order modal">X</button>
       </div>
       <div class="orderFlowStatePill" id="orderFlowStatePill">Checkout</div>
@@ -20434,6 +20528,11 @@
   let TAX_DOC_CLIENT_VIEW_MODE = false;
   let TAX_DOC_CLIENT_VIEW_LOADING = false;
   let TAX_DOC_CLIENT_VIEW_ARTIFACT = null;
+  let TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT = null;
+  let TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = null;
+  let TAX_DOC_CLIENT_VIEW_DISPLAY_MODE = 'approved';
+  let TAX_DOC_CLIENT_VIEW_TIPS_ONLY = false;
+  let TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = false;
   let TAX_DOC_CLIENT_VIEW_CACHE = Object.create(null);
   let TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
   let TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
@@ -23879,6 +23978,7 @@
   const taxDocApprovedViewerImage = document.getElementById('taxDocApprovedViewerImage');
   const taxDocApprovedViewerFrame = document.getElementById('taxDocApprovedViewerFrame');
   const taxDocReplacementRail = document.getElementById('taxDocReplacementRail');
+  const taxDocTipsToggleBtn = document.getElementById('taxDocTipsToggleBtn');
   const taxDocReplacementBtn = document.getElementById('taxDocReplacementBtn');
   const taxReplacementConfirmBackdrop = document.getElementById('taxReplacementConfirmBackdrop');
   const taxReplacementConfirmSpinner = document.getElementById('taxReplacementConfirmSpinner');
@@ -24448,6 +24548,8 @@
   const RT_PORTAL_EVENT_LOAD_TOKEN = 'RT_PORTAL_LOAD_TOKEN';
   const RT_PORTAL_EVENT_ROUTE_REPLACE = 'RT_PORTAL_ROUTE_REPLACE';
   const RT_PORTAL_EVENT_NAVIGATE = 'RT_PORTAL_NAVIGATE';
+  const RT_PARENT_WRAPPER_LOADER_FALLBACK_MS = 43000;
+  const RT_PARENT_WRAPPER_LOADER_RELEASE_MS = 350;
   const RT_PORTAL_ROUTE_PARAM_KEYS = [
     't',
     'dashboard',
@@ -24480,6 +24582,10 @@
     'https://redthreads.com'
   ]);
   let PORTAL_PARENT_BRIDGE_BOUND = false;
+  let PARENT_WRAPPER_LOADER_SUPPRESSION_ACTIVE = false;
+  let PARENT_WRAPPER_LOADER_FALLBACK_TIMER = 0;
+  let PARENT_WRAPPER_LOADER_RELEASE_TIMER = 0;
+  let PARENT_WRAPPER_SUPPRESSED_LOADER_STATE = null;
 
   function refreshRuntimeBootFlags(){
     HAS_PORTAL_TOKEN = String(CURRENT_TOKEN || '').trim().length > 0;
@@ -26512,6 +26618,82 @@
     }
   }
 
+  function hasInitialParentWrapperRouteParams_(){
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      if (String(params.get('dashboardAccessToken') || '').trim()) return true;
+      return RT_PORTAL_ROUTE_PARAM_KEYS.some(key => {
+        const queryValue = String(params.get(key) || '').trim();
+        if (queryValue) return true;
+        const metaValue = VM_REQUEST_ROUTE_META && Object.prototype.hasOwnProperty.call(VM_REQUEST_ROUTE_META, key)
+          ? VM_REQUEST_ROUTE_META[key]
+          : '';
+        return String(metaValue || '').trim().length > 0;
+      });
+    } catch (_) {
+      return !!(
+        HAS_PORTAL_TOKEN ||
+        DASHBOARD_DEEPLINK_REQUEST ||
+        ACCOUNT_DOC_DEEPLINK_TYPE ||
+        SUMMARY_DEEPLINK_REQUEST ||
+        SETUP_RETURN_RESULT ||
+        CHECKOUT_RETURN_RESULT ||
+        TEAM_REVIEW_REQUEST ||
+        TEAM_ACTION_REQUEST ||
+        TEAM_ACCESS_REQUEST ||
+        PASSWORD_RESET_RETURN_REQUEST ||
+        PO_RESUME_REQUEST ||
+        PAY_NOW_METHOD
+      );
+    }
+  }
+
+  function releaseParentWrapperLoaderSuppression_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    PARENT_WRAPPER_LOADER_SUPPRESSION_ACTIVE = false;
+    if (PARENT_WRAPPER_LOADER_FALLBACK_TIMER) {
+      window.clearTimeout(PARENT_WRAPPER_LOADER_FALLBACK_TIMER);
+      PARENT_WRAPPER_LOADER_FALLBACK_TIMER = 0;
+    }
+    if (PARENT_WRAPPER_LOADER_RELEASE_TIMER) {
+      window.clearTimeout(PARENT_WRAPPER_LOADER_RELEASE_TIMER);
+      PARENT_WRAPPER_LOADER_RELEASE_TIMER = 0;
+    }
+    const suppressed = PARENT_WRAPPER_SUPPRESSED_LOADER_STATE;
+    PARENT_WRAPPER_SUPPRESSED_LOADER_STATE = null;
+    if (opts.showSuppressedLoader === true && suppressed) {
+      rtShowLoader(suppressed.title, suppressed.sub);
+    }
+  }
+
+  function scheduleParentWrapperLoaderSuppressionRelease_(){
+    if (!PARENT_WRAPPER_LOADER_SUPPRESSION_ACTIVE) return;
+    if (PARENT_WRAPPER_LOADER_RELEASE_TIMER) {
+      window.clearTimeout(PARENT_WRAPPER_LOADER_RELEASE_TIMER);
+    }
+    PARENT_WRAPPER_LOADER_RELEASE_TIMER = window.setTimeout(() => {
+      releaseParentWrapperLoaderSuppression_({ showSuppressedLoader: false });
+    }, RT_PARENT_WRAPPER_LOADER_RELEASE_MS);
+  }
+
+  function activateParentWrapperLoaderSuppression_(){
+    if (PARENT_WRAPPER_LOADER_SUPPRESSION_ACTIVE) return;
+    if (!isEmbeddedPortalContext_()) return;
+    if (!hasInitialParentWrapperRouteParams_()) return;
+    PARENT_WRAPPER_LOADER_SUPPRESSION_ACTIVE = true;
+    PARENT_WRAPPER_SUPPRESSED_LOADER_STATE = null;
+    if (PARENT_WRAPPER_LOADER_FALLBACK_TIMER) {
+      window.clearTimeout(PARENT_WRAPPER_LOADER_FALLBACK_TIMER);
+    }
+    PARENT_WRAPPER_LOADER_FALLBACK_TIMER = window.setTimeout(() => {
+      releaseParentWrapperLoaderSuppression_({ showSuppressedLoader: true });
+    }, RT_PARENT_WRAPPER_LOADER_FALLBACK_MS);
+  }
+
+  function shouldSuppressGlobalLoaderForParentWrapper_(){
+    return PARENT_WRAPPER_LOADER_SUPPRESSION_ACTIVE && isEmbeddedPortalContext_();
+  }
+
   function normalizePortalParentOrigin_(origin){
     try {
       return String(new URL(String(origin || '')).origin || '').trim().toLowerCase();
@@ -26583,6 +26765,7 @@
       }
     }
     postPortalMessageToTop_(buildPortalReadyMessage_(options));
+    scheduleParentWrapperLoaderSuppressionRelease_();
   }
 
   function getTokenFromPortalMessage_(message){
@@ -27331,12 +27514,23 @@
     if (!ov) return;
     const t = document.getElementById('rtLoadingTitle');
     const s = document.getElementById('rtLoadingSub');
-    if (t) t.textContent = title == null ? 'Working…' : String(title);
+    const titleText = title == null ? 'Working…' : String(title);
+    if (t) t.textContent = titleText;
     if (s) {
       const subText = sub == null ? 'Please wait.' : String(sub);
       s.textContent = subText;
       s.hidden = String(subText).trim() === '';
     }
+    if (shouldSuppressGlobalLoaderForParentWrapper_()) {
+      PARENT_WRAPPER_SUPPRESSED_LOADER_STATE = {
+        title: titleText,
+        sub: sub == null ? 'Please wait.' : String(sub)
+      };
+      ov.classList.remove('is-on');
+      ov.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    PARENT_WRAPPER_SUPPRESSED_LOADER_STATE = null;
     ov.classList.add('is-on');
     ov.setAttribute('aria-hidden', 'false');
   }
@@ -27344,6 +27538,7 @@
   function rtHideLoader() {
     const ov = document.getElementById('rtLoadingOverlay');
     if (!ov) return;
+    PARENT_WRAPPER_SUPPRESSED_LOADER_STATE = null;
     ov.classList.remove('is-on');
     ov.setAttribute('aria-hidden', 'true');
   }
@@ -34730,6 +34925,7 @@
     renderOrderFlowAccountBanner_();
     renderOrderFlowPoSection();
     renderOrderFlowSummaryCard();
+    rerenderSummaryEstimateControls_();
     syncTeamModeUi();
     return next;
   }
@@ -38020,9 +38216,20 @@
   }
 
   function renderTaxReplacementAction_(){
-    const showAction = isTaxReplacementActionAvailable_() && TAX_DOC_CLIENT_VIEW_LOADING !== true;
-    if (taxDocModal) taxDocModal.classList.toggle('has-tax-replacement-action', showAction);
-    if (taxDocReplacementRail) taxDocReplacementRail.hidden = !showAction;
+    const showAction = isTaxReplacementActionAvailable_()
+      && TAX_DOC_CLIENT_VIEW_LOADING !== true
+      && TAX_DOC_CLIENT_VIEW_TIPS_ONLY !== true;
+    const showTipsToggle = showAction;
+    const showRail = showAction || showTipsToggle;
+    if (taxDocModal) taxDocModal.classList.toggle('has-tax-replacement-action', showRail);
+    if (taxDocReplacementRail) taxDocReplacementRail.hidden = !showRail;
+    if (taxDocTipsToggleBtn) {
+      taxDocTipsToggleBtn.hidden = !showTipsToggle;
+      taxDocTipsToggleBtn.disabled = TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT === true || !showTipsToggle;
+      taxDocTipsToggleBtn.textContent = TAX_DOC_CLIENT_VIEW_DISPLAY_MODE === 'tips'
+        ? 'View Approved Sales Tax Form'
+        : "View Sales Tax Do's and Don'ts";
+    }
     if (taxDocReplacementBtn) taxDocReplacementBtn.disabled = TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT === true || !showAction;
     if (!showAction && TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT !== true) {
       TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
@@ -38091,14 +38298,24 @@
     TAX_DOC_CLIENT_VIEW_MODE = false;
     TAX_DOC_CLIENT_VIEW_LOADING = false;
     TAX_DOC_CLIENT_VIEW_ARTIFACT = null;
+    TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT = null;
+    TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = null;
+    TAX_DOC_CLIENT_VIEW_DISPLAY_MODE = 'approved';
+    TAX_DOC_CLIENT_VIEW_TIPS_ONLY = false;
+    TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = false;
     TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
     TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
     TAX_DOC_REPLACEMENT_ERROR = '';
-    if (taxDocModal) taxDocModal.classList.remove('is-review-mode', 'is-client-view-mode');
+    if (taxDocModal) taxDocModal.classList.remove('is-review-mode', 'is-client-view-mode', 'is-tax-tips-only');
     if (taxDocModal) taxDocModal.classList.remove('has-tax-replacement-action');
     if (taxDocApprovedViewer) taxDocApprovedViewer.hidden = true;
     if (taxDocClientReviewNotice) taxDocClientReviewNotice.hidden = true;
     if (taxDocReplacementRail) taxDocReplacementRail.hidden = true;
+    if (taxDocTipsToggleBtn) {
+      taxDocTipsToggleBtn.hidden = true;
+      taxDocTipsToggleBtn.disabled = false;
+      taxDocTipsToggleBtn.textContent = "View Sales Tax Do's and Don'ts";
+    }
     renderTaxReplacementConfirm_();
     if (taxDocApprovedViewerCard) {
       taxDocApprovedViewerCard.classList.remove('is-frame', 'is-loading');
@@ -38438,6 +38655,11 @@
       handleTaxReplacementActionClick_(event);
       return;
     }
+    if (target.closest('#taxDocTipsToggleBtn')) {
+      containTaxWorkspaceActionEvent_(event);
+      toggleSalesTaxTipsInApprovedViewer_();
+      return;
+    }
     if (taxDocReplacementRail && taxDocReplacementRail.contains(target)) {
       containTaxWorkspaceActionEvent_(event, { preventDefault: false });
     }
@@ -38701,23 +38923,95 @@
     renderTaxTeamDecisionModal_();
   }
 
+  function normalizeTaxClientViewerArtifact_(artifact, missingMessage){
+    const source = (artifact && typeof artifact === 'object') ? artifact : {};
+    const artifactMimeType = String(source.mimeType || '').trim();
+    const isImage = /^image\//i.test(artifactMimeType);
+    const inlineSrc = buildTaxFormInlineAssetUrl_({
+      mimeType: artifactMimeType,
+      base64Data: String(source.base64Data || '').trim()
+    });
+    const previewSrc = String((!isImage && inlineSrc) || '').trim();
+    if (!inlineSrc && !previewSrc) {
+      throw new Error(String(missingMessage || 'The document preview is unavailable.'));
+    }
+    return Object.assign({}, source, {
+      inlineSrc: inlineSrc
+    });
+  }
+
+  function getTaxClientViewerCurrentArtifact_(){
+    if (TAX_DOC_CLIENT_VIEW_DISPLAY_MODE === 'tips') {
+      return (TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT && typeof TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT === 'object')
+        ? TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT
+        : TAX_DOC_CLIENT_VIEW_ARTIFACT;
+    }
+    return (TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT && typeof TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT === 'object')
+      ? TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT
+      : TAX_DOC_CLIENT_VIEW_ARTIFACT;
+  }
+
+  async function waitForTaxClientViewerArtifactLoad_(artifact){
+    const current = (artifact && typeof artifact === 'object') ? artifact : {};
+    const mimeType = String(current.mimeType || '').trim();
+    const isImage = /^image\//i.test(mimeType);
+    const inlineSrc = String(current.inlineSrc || current.imageUrl || '').trim();
+    const previewSrc = String((!isImage && inlineSrc) || '').trim();
+    if (isImage && inlineSrc && taxDocApprovedViewerImage) {
+      await waitForTaxImageLoad_(taxDocApprovedViewerImage, inlineSrc);
+      return;
+    }
+    if (!isImage && previewSrc && taxDocApprovedViewerFrame) {
+      await waitForTaxFrameLoad_(taxDocApprovedViewerFrame, previewSrc);
+    }
+  }
+
+  async function loadSalesTaxTipsViewerArtifact_(){
+    if (TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT && typeof TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT === 'object') {
+      return TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT;
+    }
+    const resp = await callServer('getSalesTaxTipsViewerAsset', getTaxWorkspaceDocumentRequestPayload_());
+    if (!resp || resp.ok !== true) {
+      throw new Error(String((resp && resp.error) || 'Unable to load the sales tax tips document.'));
+    }
+    const artifact = normalizeTaxClientViewerArtifact_(
+      resp.viewerArtifact,
+      'The sales tax tips document is unavailable.'
+    );
+    TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = artifact;
+    applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForTaxWorkspace_());
+    return artifact;
+  }
+
+  function scrollTaxClientViewerToTop_(){
+    if (taxDocStage) taxDocStage.scrollTop = 0;
+    if (taxDocApprovedViewer) taxDocApprovedViewer.scrollTop = 0;
+  }
+
   function renderTaxClientViewerWorkspace_(){
     if (!taxDocModal) return;
-    const artifact = (TAX_DOC_CLIENT_VIEW_ARTIFACT && typeof TAX_DOC_CLIENT_VIEW_ARTIFACT === 'object')
-      ? TAX_DOC_CLIENT_VIEW_ARTIFACT
+    const currentArtifact = getTaxClientViewerCurrentArtifact_();
+    const artifact = (currentArtifact && typeof currentArtifact === 'object')
+      ? currentArtifact
       : {};
     const workflow = getAccountDocumentWorkflowByType_('tax_exempt', getActiveAccountSummaryForTaxWorkspace_()) || {};
     const statusLabel = getAccountDocumentStatusLabel_(workflow);
+    const isTipsView = TAX_DOC_CLIENT_VIEW_DISPLAY_MODE === 'tips';
     const mimeType = String(artifact.mimeType || '').trim().toLowerCase();
     const isImage = /^image\//i.test(mimeType);
     const inlineSrc = String(artifact.inlineSrc || artifact.imageUrl || '').trim();
     const previewSrc = String((!isImage && inlineSrc) || '').trim();
     const isLoading = TAX_DOC_CLIENT_VIEW_LOADING === true;
-    const showPendingNotice = isSalesTaxExemptionPendingReview_(getActiveAccountSummaryForTaxWorkspace_()) && !isLoading;
+    const showPendingNotice = isSalesTaxExemptionPendingReview_(getActiveAccountSummaryForTaxWorkspace_()) && !isLoading && !isTipsView;
     taxDocModal.classList.add('is-review-mode');
     taxDocModal.classList.add('is-client-view-mode');
     taxDocModal.classList.remove('is-team-review-mode');
-    if (taxDocTitle) taxDocTitle.textContent = 'Michigan Sales and Use Tax Certificate of Exemption • ' + statusLabel;
+    taxDocModal.classList.toggle('is-tax-tips-only', TAX_DOC_CLIENT_VIEW_TIPS_ONLY === true);
+    if (taxDocTitle) {
+      taxDocTitle.textContent = isTipsView
+        ? "Sales Tax Do's and Don'ts"
+        : ('Michigan Sales and Use Tax Certificate of Exemption • ' + statusLabel);
+    }
     if (taxDocSub) taxDocSub.hidden = true;
     if (taxDocTeamBackBtn) taxDocTeamBackBtn.hidden = true;
     if (taxDocTeamApproveBtn) taxDocTeamApproveBtn.hidden = true;
@@ -38753,10 +39047,11 @@
     if (taxDocApprovedViewerLoading) {
       const titleEl = taxDocApprovedViewerLoading.querySelector('.taxDocApprovedViewerLoadingTitle');
       const subEl = taxDocApprovedViewerLoading.querySelector('.taxDocApprovedViewerLoadingSub');
-      if (titleEl) titleEl.textContent = 'Your document is loading...';
+      if (titleEl) titleEl.textContent = isTipsView ? 'Sales tax tips are loading...' : 'Your document is loading...';
       if (subEl) subEl.textContent = '';
     }
     if (taxDocApprovedViewerImage) {
+      taxDocApprovedViewerImage.alt = isTipsView ? 'Sales tax tips document' : 'Tax exemption document preview';
       taxDocApprovedViewerImage.hidden = isLoading || !isImage || !inlineSrc;
       if (!isLoading && isImage && inlineSrc) {
         if (taxDocApprovedViewerImage.getAttribute('src') !== inlineSrc) {
@@ -38767,6 +39062,7 @@
       }
     }
     if (taxDocApprovedViewerFrame) {
+      taxDocApprovedViewerFrame.title = isTipsView ? 'Sales tax tips document' : 'Tax exemption document preview';
       const showFrame = !isLoading && !isImage && !!previewSrc;
       taxDocApprovedViewerFrame.hidden = !showFrame;
       if (showFrame) {
@@ -38778,6 +39074,37 @@
       }
     }
     renderTaxReplacementAction_();
+  }
+
+  async function toggleSalesTaxTipsInApprovedViewer_(){
+    if (!isTaxClientViewMode_() || TAX_DOC_CLIENT_VIEW_TIPS_ONLY === true || TAX_DOC_CLIENT_VIEW_LOADING === true) return;
+    if (TAX_DOC_CLIENT_VIEW_DISPLAY_MODE === 'tips') {
+      TAX_DOC_CLIENT_VIEW_DISPLAY_MODE = 'approved';
+      TAX_DOC_CLIENT_VIEW_ARTIFACT = TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT;
+      renderTaxFormWorkspace_();
+      scrollTaxClientViewerToTop_();
+      return;
+    }
+    TAX_DOC_CLIENT_VIEW_DISPLAY_MODE = 'tips';
+    TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = true;
+    setTaxClientViewerLoading_(true);
+    try {
+      const artifact = await loadSalesTaxTipsViewerArtifact_();
+      TAX_DOC_CLIENT_VIEW_ARTIFACT = artifact;
+      setTaxClientViewerLoading_(false);
+      renderTaxFormWorkspace_();
+      await waitForTaxClientViewerArtifactLoad_(artifact);
+      scrollTaxClientViewerToTop_();
+    } catch (err) {
+      TAX_DOC_CLIENT_VIEW_DISPLAY_MODE = 'approved';
+      TAX_DOC_CLIENT_VIEW_ARTIFACT = TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT;
+      setTaxClientViewerLoading_(false);
+      renderTaxFormWorkspace_();
+      showNotice(String((err && err.message) || err || 'Unable to load the sales tax tips document.'), 'err');
+    } finally {
+      TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = false;
+      renderTaxReplacementAction_();
+    }
   }
 
   function closeTaxTeamReviewAndReturn_(options){
@@ -41082,6 +41409,11 @@
     setTaxDocMessage('', 'info');
     TAX_DOC_CLIENT_VIEW_MODE = true;
     TAX_DOC_CLIENT_VIEW_ARTIFACT = null;
+    TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT = null;
+    TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = null;
+    TAX_DOC_CLIENT_VIEW_DISPLAY_MODE = 'approved';
+    TAX_DOC_CLIENT_VIEW_TIPS_ONLY = false;
+    TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = false;
     setTaxClientViewerLoading_(true);
     renderTaxFormWorkspace_();
     if (ACCOUNT_DOC_MODAL_CONTEXT === 'dashboard') {
@@ -41091,26 +41423,14 @@
     showAccountDocumentLoader_();
     try {
       const resp = await fetchApprovedDocumentViewerResponse_('tax_exempt', 'getTaxExemptClientViewer', requestPayload);
-      const artifact = (resp.viewerArtifact && typeof resp.viewerArtifact === 'object') ? resp.viewerArtifact : {};
-      const artifactMimeType = String(artifact.mimeType || '').trim();
-      const isImage = /^image\//i.test(artifactMimeType);
-      const inlineSrc = buildTaxFormInlineAssetUrl_({
-        mimeType: artifactMimeType,
-        base64Data: String(artifact.base64Data || '').trim()
-      });
-      const previewSrc = String((!isImage && inlineSrc) || '').trim();
-      if (!inlineSrc && !previewSrc) {
-        throw new Error('The approved tax exemption document is unavailable.');
-      }
-      TAX_DOC_CLIENT_VIEW_ARTIFACT = Object.assign({}, artifact, {
-        inlineSrc: inlineSrc
-      });
+      const artifact = normalizeTaxClientViewerArtifact_(
+        resp.viewerArtifact,
+        'The approved tax exemption document is unavailable.'
+      );
+      TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT = artifact;
+      TAX_DOC_CLIENT_VIEW_ARTIFACT = artifact;
       applyReturnedAccountSummary_(resp.accountSummary || getActiveAccountSummaryForTaxWorkspace_());
-      if (isImage && inlineSrc && taxDocApprovedViewerImage) {
-        await waitForTaxImageLoad_(taxDocApprovedViewerImage, inlineSrc);
-      } else if (!isImage && previewSrc && taxDocApprovedViewerFrame) {
-        await waitForTaxFrameLoad_(taxDocApprovedViewerFrame, previewSrc);
-      }
+      await waitForTaxClientViewerArtifactLoad_(artifact);
       setTaxClientViewerLoading_(false);
       renderTaxFormWorkspace_();
       taxDocBackdrop.hidden = false;
@@ -41123,11 +41443,59 @@
         syncOverlayScrollLock();
         if (taxDocClose) taxDocClose.focus();
       });
-      if (taxDocStage) taxDocStage.scrollTop = 0;
+      scrollTaxClientViewerToTop_();
     } catch (err) {
       closeTaxExemptWorkspace({ immediate: true });
       throw err;
     } finally {
+      rtHideLoader();
+    }
+  }
+
+  async function openSalesTaxTipsViewer_(options){
+    if (!taxDocBackdrop) return;
+    const opts = (options && typeof options === 'object') ? options : {};
+    bindTaxDocumentWorkspaceEvents_();
+    TAX_DOC_MODAL_CONTEXT = String(opts.context || (CURRENT_VIEW === VIEW_DASHBOARD ? 'dashboard' : 'project')).trim() || 'project';
+    resetTaxTeamReviewState_();
+    resetTaxClientViewState_();
+    closeAccountDocumentModal({ immediate: true });
+    closeTaxSignatureModal_();
+    closeTaxDocEmailPanel_();
+    closeTaxTeamDecisionModal_();
+    resetTaxFormSubmissionState_();
+    setTaxDocMessage('', 'info');
+    TAX_DOC_CLIENT_VIEW_MODE = true;
+    TAX_DOC_CLIENT_VIEW_DISPLAY_MODE = 'tips';
+    TAX_DOC_CLIENT_VIEW_TIPS_ONLY = true;
+    TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = true;
+    TAX_DOC_CLIENT_VIEW_ARTIFACT = null;
+    setTaxClientViewerLoading_(true);
+    renderTaxFormWorkspace_();
+    showAccountDocumentLoader_();
+    try {
+      const artifact = await loadSalesTaxTipsViewerArtifact_();
+      TAX_DOC_CLIENT_VIEW_ARTIFACT = artifact;
+      setTaxClientViewerLoading_(false);
+      renderTaxFormWorkspace_();
+      taxDocBackdrop.hidden = false;
+      if (TAX_DOC_HIDE_TIMER) {
+        clearTimeout(TAX_DOC_HIDE_TIMER);
+        TAX_DOC_HIDE_TIMER = 0;
+      }
+      requestAnimationFrame(() => {
+        taxDocBackdrop.classList.add('open');
+        syncOverlayScrollLock();
+        if (taxDocClose) taxDocClose.focus();
+      });
+      await waitForTaxClientViewerArtifactLoad_(artifact);
+      scrollTaxClientViewerToTop_();
+    } catch (err) {
+      closeTaxExemptWorkspace({ immediate: true });
+      showNotice(String((err && err.message) || err || 'Unable to load the sales tax tips document.'), 'err');
+    } finally {
+      TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = false;
+      renderTaxReplacementAction_();
       rtHideLoader();
     }
   }
@@ -42079,9 +42447,8 @@
 
   function syncOrderFlowTaxPendingNotice_(){
     if (!orderFlowTaxPendingNotice) return;
-    const shouldShow = ORDER_FLOW_MODE === 'fulfillment' && isSalesTaxExemptionPendingReview_(ACCOUNT_SUMMARY);
-    orderFlowTaxPendingNotice.textContent = 'Sales Tax Exemption Status: Pending Approval';
-    orderFlowTaxPendingNotice.hidden = !shouldShow;
+    orderFlowTaxPendingNotice.textContent = '';
+    orderFlowTaxPendingNotice.hidden = true;
   }
 
   function renderOrderFlowAccountBanner_(){
@@ -42121,16 +42488,32 @@
     if (orderFlowCanToggleSalesTax_()) {
       const presentation = getOrderFlowSummaryPreviewPresentationState_();
       const taxWrap = createEl('div', 'orderFlowSummaryTaxToggleWrap');
-      taxWrap.appendChild(createEl('span', 'orderFlowSummaryTaxToggleLabel', 'Toggle Sales Tax On/Off'));
+      const taxControlRow = createEl('div', 'orderFlowSummaryTaxToggleControlRow');
+      taxControlRow.appendChild(createEl('span', 'orderFlowSummaryTaxToggleLabel', 'Toggle Sales Tax On/Off'));
       const toggleBtn = createEl('button', 'orderFlowTaxControlToggle isSummaryPlacement' + (presentation.salesTaxEnabled ? ' isOn' : ' isOff'));
       toggleBtn.type = 'button';
       toggleBtn.setAttribute('aria-pressed', presentation.salesTaxEnabled ? 'true' : 'false');
       toggleBtn.appendChild(createEl('span', 'orderFlowTaxControlToggleText', presentation.salesTaxEnabled ? 'ON' : 'OFF'));
       toggleBtn.appendChild(createEl('span', 'orderFlowTaxControlToggleKnob'));
       toggleBtn.addEventListener('click', toggleOrderFlowSummarySalesTax_);
-      taxWrap.appendChild(toggleBtn);
+      taxControlRow.appendChild(toggleBtn);
+      taxWrap.appendChild(taxControlRow);
+      const tipsLink = createEl('button', 'orderFlowTaxTipsLink', "View sales tax do's and don'ts");
+      tipsLink.type = 'button';
+      tipsLink.addEventListener('click', event => {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        openSalesTaxTipsViewer_({ context: 'project' }).catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to open the sales tax tips document.'), 'err');
+        });
+      });
+      taxWrap.appendChild(tipsLink);
       actionRow.appendChild(taxWrap);
-    } else if (taxTone !== 'pending') {
+    } else if (taxTone === 'pending') {
+      const pendingTaxPill = createEl('span', 'orderFlowAccountActionBtn isSummaryPlacement isTaxPendingStatus', 'Sales tax exemption pending');
+      pendingTaxPill.setAttribute('role', 'status');
+      actionRow.appendChild(pendingTaxPill);
+    } else {
       const taxBtn = createEl('button', 'orderFlowAccountActionBtn isSummaryPlacement', 'Apply for sales tax exemption');
       taxBtn.type = 'button';
       taxBtn.id = 'orderFlowTaxActionBtn';
@@ -53885,6 +54268,7 @@
       search: window.location.search
     });
     initPortalParentBridge();
+    activateParentWrapperLoaderSuppression_();
     ensureGlobalOverlayMounts_();
     ensureAuthShellBindings();
     const dashboardRouteToken = getDashboardRouteTokenForBoot_();
