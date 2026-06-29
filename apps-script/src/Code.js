@@ -661,6 +661,9 @@ const DASHBOARD_PROJECT_PROJECTION_CACHE_PREFIX = 'rt:dashboardProjectProjection
 const DASHBOARD_PROJECT_PROJECTION_CACHE_MAX_BYTES = 85 * 1024;
 const DASHBOARD_PROJECT_FULL_PEEK_CACHE_CHUNK_CHARS = 70 * 1024;
 const DASHBOARD_PROJECT_FULL_PEEK_CACHE_MAX_CHUNKS = 6;
+const DASHBOARD_READ_MODEL_CACHE_PREFIX = 'rt:dashboardReadModel:v1:';
+const DASHBOARD_READ_MODEL_CACHE_CHUNK_CHARS = 70 * 1024;
+const DASHBOARD_READ_MODEL_CACHE_MAX_CHUNKS = 8;
 const DASHBOARD_PROJECT_PEEK_PROFILE_FULL = 'full';
 const DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY = 'summary';
 const DASHBOARD_PROJECT_PEEK_SUMMARY_SKU_ROW_LIMIT = 3;
@@ -4758,6 +4761,230 @@ function buildDashboardReadModelHydrationHints_(projects, criticalTokens) {
   };
 }
 
+function createDashboardReadModelCacheMeta_() {
+  return {
+    cacheType: 'dashboard_read_model_response',
+    cacheHit: false,
+    cacheHits: 0,
+    cacheMisses: 0,
+    cacheStores: 0,
+    cacheSkips: 0,
+    cacheErrors: 0
+  };
+}
+
+function incrementDashboardReadModelCacheMeta_(cacheMeta, key) {
+  if (!cacheMeta || typeof cacheMeta !== 'object') return;
+  if (!Object.prototype.hasOwnProperty.call(cacheMeta, key)) cacheMeta[key] = 0;
+  cacheMeta[key] += 1;
+  if (key === 'cacheHits') cacheMeta.cacheHit = true;
+}
+
+function buildDashboardReadModelCacheContext_(payload, options) {
+  const p = (payload && typeof payload === 'object') ? payload : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const cfg = opts.cfg || getConfig_();
+  const ss = opts.ss || SpreadsheetApp.openById(cfg.sheetId);
+  const infra = opts.infra || ensurePortalInfrastructure_(ss, cfg);
+  const exportSheet = infra.exportSheet;
+  if (!exportSheet) return { ok: false, error: 'Auth configuration is incomplete.' };
+
+  const sessionId = trimString_(p.sessionId);
+  const dashboardToken = trimString_(p.token);
+  const sourcePreference = getDashboardReadModelSourcePreference_(p);
+  const criticalLimit = getDashboardReadModelCriticalLimit_(p);
+  let identity = null;
+  let userCtx = null;
+
+  if (sessionId && !dashboardToken) {
+    userCtx = getUserContextBySessionId_(ss, sessionId);
+    if (!userCtx || userCtx.ok !== true) return userCtx || { ok: false, error: 'Missing session.' };
+    identity = {
+      mode: 'session',
+      email: normalizeEmail_(userCtx.email),
+      orgId: trimString_(userCtx.user && userCtx.user.rowObjNormalized && userCtx.user.rowObjNormalized.defaultorgid),
+      orgName: trimString_(userCtx.user && userCtx.user.rowObjNormalized && userCtx.user.rowObjNormalized.defaultorgname).toLowerCase()
+    };
+  } else if (hasPortalAccountDirectAccessPayload_(p) && !sessionId && !dashboardToken) {
+    const directAccount = resolvePortalAccountDirectAccess_(p, { cfg: cfg, ss: ss, infra: infra });
+    if (!directAccount || directAccount.ok !== true) return directAccount || { ok: false, error: 'Missing account access.' };
+    const account = directAccount.accountSummary || {};
+    const workflows = account.documentWorkflows || {};
+    identity = {
+      mode: 'account',
+      accountId: trimString_(account.accountId),
+      orgId: trimString_(account.orgId),
+      primaryEmail: normalizeEmail_(account.primaryEmail),
+      billingContactEmail: normalizeEmail_(account.billingContactEmail),
+      accessTokenDigest: buildCacheDigestSegment_(trimString_(p.accountAccessToken)),
+      updatedAt: trimString_(account.updatedAt),
+      termsStatus: trimString_(workflows.creditTerms && workflows.creditTerms.status),
+      taxExemptStatus: trimString_(workflows.taxExempt && workflows.taxExempt.status)
+    };
+  } else if (dashboardToken) {
+    const rowInfo = findRowByToken_(exportSheet, dashboardToken);
+    if (!rowInfo) return { ok: false, error: 'Link not found.' };
+    const row = rowInfo.rowObjNormalized || {};
+    identity = {
+      mode: 'token',
+      tokenDigest: buildCacheDigestSegment_(dashboardToken),
+      email: normalizeEmail_(row[EXPORT_LOG_PERSON_EMAIL_HEADER] || row.personemail || row.personEmail),
+      accountId: trimString_(row.currentaccountid || row.currentAccountId || row.accountid || row.accountId),
+      orgId: trimString_(row.orgid || row.orgId),
+      rowUpdatedAt: trimString_(row.updatedat || row.updatedAt || row.exportedat || row.exportedAt)
+    };
+  } else {
+    return { ok: false, noCache: true, error: 'Missing dashboard context.' };
+  }
+
+  const signature = {
+    cacheVersion: 'v1',
+    dashboardReadModelVersion: DASHBOARD_READ_MODEL_VERSION,
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    peekSummaryVersion: getDashboardProjectPeekSummaryPayloadVersion_(),
+    dashboardEpoch: getDashboardProjectsCacheEpoch_(),
+    sourcePreference: sourcePreference,
+    criticalProjectLimit: criticalLimit,
+    identity: identity
+  };
+  return {
+    ok: true,
+    cfg: cfg,
+    ss: ss,
+    infra: infra,
+    userCtx: userCtx,
+    cacheKey: DASHBOARD_READ_MODEL_CACHE_PREFIX + buildCacheDigestSegment_(JSON.stringify(signature))
+  };
+}
+
+function stripDashboardReadModelResponseForCache_(response) {
+  const payload = cloneJsonValue_(response || {}, {});
+  delete payload.portalLoadTiming;
+  return payload;
+}
+
+function buildDashboardReadModelCacheChunkKey_(cacheKey, index) {
+  const idx = Math.max(0, parseInt(String(index || 0), 10) || 0);
+  return String(cacheKey || '') + ':chunk:' + idx;
+}
+
+function splitDashboardReadModelCacheChunks_(serialized) {
+  const value = String(serialized || '');
+  if (!value) return [];
+  const chunkChars = Math.max(1024, DASHBOARD_READ_MODEL_CACHE_CHUNK_CHARS);
+  const chunks = [];
+  for (let i = 0; i < value.length; i += chunkChars) {
+    chunks.push(value.slice(i, i + chunkChars));
+  }
+  return chunks;
+}
+
+function buildDashboardReadModelCacheManifest_(chunkCount) {
+  return {
+    cacheProfile: 'dashboardReadModelChunked',
+    dashboardReadModelVersion: DASHBOARD_READ_MODEL_VERSION,
+    projectionVersion: getDashboardProjectProjectionVersion_(),
+    peekSummaryVersion: getDashboardProjectPeekSummaryPayloadVersion_(),
+    chunkCount: Math.max(0, parseInt(String(chunkCount || 0), 10) || 0)
+  };
+}
+
+function isValidDashboardReadModelCachePayload_(payload) {
+  return !!(
+    payload &&
+    typeof payload === 'object' &&
+    payload.ok === true &&
+    trimString_(payload.dashboardReadModelVersion) === DASHBOARD_READ_MODEL_VERSION &&
+    Array.isArray(payload.projects) &&
+    payload.dashboardCritical &&
+    typeof payload.dashboardCritical === 'object'
+  );
+}
+
+function readDashboardReadModelResponseCache_(cacheKey, cacheMeta) {
+  const key = trimString_(cacheKey);
+  if (!key) {
+    incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheSkips');
+    return null;
+  }
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get(key);
+    if (!cached) {
+      incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheMisses');
+      return null;
+    }
+    let payload = safeJsonParse_(cached, null);
+    if (payload && trimString_(payload.cacheProfile) === 'dashboardReadModelChunked') {
+      const chunkCount = Math.max(0, parseInt(String(payload.chunkCount || 0), 10) || 0);
+      if (!chunkCount || chunkCount > DASHBOARD_READ_MODEL_CACHE_MAX_CHUNKS) {
+        incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheMisses');
+        return null;
+      }
+      const chunkKeys = [];
+      for (let i = 0; i < chunkCount; i += 1) {
+        chunkKeys.push(buildDashboardReadModelCacheChunkKey_(key, i));
+      }
+      const chunkMap = cache.getAll(chunkKeys);
+      const chunks = chunkKeys.map(function(chunkKey) {
+        return Object.prototype.hasOwnProperty.call(chunkMap, chunkKey) ? String(chunkMap[chunkKey] || '') : '';
+      });
+      if (chunks.some(function(chunk) { return !chunk; })) {
+        incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheMisses');
+        return null;
+      }
+      payload = safeJsonParse_(chunks.join(''), null);
+    }
+    if (!isValidDashboardReadModelCachePayload_(payload)) {
+      incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheMisses');
+      return null;
+    }
+    incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheHits');
+    return payload;
+  } catch (_) {
+    incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheErrors');
+    return null;
+  }
+}
+
+function writeDashboardReadModelResponseCache_(cacheKey, response, cacheMeta) {
+  const key = trimString_(cacheKey);
+  if (!key || !isValidDashboardReadModelCachePayload_(response)) {
+    incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheSkips');
+    return false;
+  }
+  try {
+    const payload = stripDashboardReadModelResponseForCache_(response);
+    const serialized = JSON.stringify(payload);
+    const cache = CacheService.getScriptCache();
+    if (getDashboardProjectProjectionCachePayloadBytes_(serialized) <= DASHBOARD_PROJECT_PROJECTION_CACHE_MAX_BYTES) {
+      cache.put(key, serialized, AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+      incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheStores');
+      return true;
+    }
+    const chunks = splitDashboardReadModelCacheChunks_(serialized);
+    if (!chunks.length || chunks.length > DASHBOARD_READ_MODEL_CACHE_MAX_CHUNKS) {
+      incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheSkips');
+      return false;
+    }
+    for (let i = 0; i < chunks.length; i += 1) {
+      if (getDashboardProjectProjectionCachePayloadBytes_(chunks[i]) > DASHBOARD_PROJECT_PROJECTION_CACHE_MAX_BYTES) {
+        incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheSkips');
+        return false;
+      }
+    }
+    for (let i = 0; i < chunks.length; i += 1) {
+      cache.put(buildDashboardReadModelCacheChunkKey_(key, i), chunks[i], AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+    }
+    cache.put(key, JSON.stringify(buildDashboardReadModelCacheManifest_(chunks.length)), AUTH_POLICY.PROJECT_CACHE_TTL_SEC);
+    incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheStores');
+    return true;
+  } catch (_) {
+    incrementDashboardReadModelCacheMeta_(cacheMeta, 'cacheErrors');
+    return false;
+  }
+}
+
 function buildDashboardReadModelCriticalEnvelope_(criticalResp, criticalTokens) {
   const tokenList = uniqueTrimmedStrings_(criticalTokens);
   const items = (criticalResp && Array.isArray(criticalResp.projects)) ? criticalResp.projects : [];
@@ -5258,8 +5485,13 @@ function buildDashboardReadModel_(options) {
 
 function getDashboardReadModel(payload) {
   const timing = createPortalLoadTimingTrace_('getDashboardReadModel');
+  const readModelCacheMeta = createDashboardReadModelCacheMeta_();
   try {
     const sourcePreference = getDashboardReadModelSourcePreference_(payload);
+    const cacheContext = buildDashboardReadModelCacheContext_(payload, {
+      sourcePreference: sourcePreference,
+      criticalProjectLimit: getDashboardReadModelCriticalLimit_(payload)
+    });
     markPortalLoadTiming_(timing, 'request_received', {
       routeType: 'dashboard_read_model',
       hasSession: !!(payload && payload.sessionId),
@@ -5267,7 +5499,70 @@ function getDashboardReadModel(payload) {
       readSource: sourcePreference,
       criticalProjectLimit: getDashboardReadModelCriticalLimit_(payload)
     });
-    const resp = buildDashboardReadModel_(payload);
+    if (cacheContext && cacheContext.ok === true) {
+      const cachedResp = readDashboardReadModelResponseCache_(cacheContext.cacheKey, readModelCacheMeta);
+      if (cachedResp && cachedResp.ok === true) {
+        const cachedCritical = (cachedResp.critical && typeof cachedResp.critical === 'object') ? cachedResp.critical : {};
+        const cachedCacheMeta = (cachedResp.cacheMeta && typeof cachedResp.cacheMeta === 'object') ? cachedResp.cacheMeta : {};
+        const cachedCriticalCacheMeta = (cachedCacheMeta.critical && typeof cachedCacheMeta.critical === 'object') ? cachedCacheMeta.critical : {};
+        markPortalLoadTiming_(timing, 'response_ready', {
+          routeType: 'dashboard_read_model',
+          ok: true,
+          readSource: trimString_(cachedResp.readSource),
+          sourcePreference: sourcePreference,
+          projectCount: Array.isArray(cachedResp.projects) ? cachedResp.projects.length : 0,
+          criticalCount: Array.isArray(cachedCritical.tokens) ? cachedCritical.tokens.length : 0,
+          criticalReady: cachedCritical.ready === true,
+          cacheType: trimString_(cachedCriticalCacheMeta.cacheType),
+          cacheHits: cachedCriticalCacheMeta.cacheHits,
+          cacheMisses: cachedCriticalCacheMeta.cacheMisses,
+          cacheStores: cachedCriticalCacheMeta.cacheStores,
+          cacheSkips: cachedCriticalCacheMeta.cacheSkips,
+          cacheErrors: cachedCriticalCacheMeta.cacheErrors,
+          readModelCacheType: readModelCacheMeta.cacheType,
+          readModelCacheHit: readModelCacheMeta.cacheHit === true,
+          readModelCacheHits: readModelCacheMeta.cacheHits,
+          readModelCacheMisses: readModelCacheMeta.cacheMisses,
+          readModelCacheStores: readModelCacheMeta.cacheStores,
+          readModelCacheSkips: readModelCacheMeta.cacheSkips,
+          readModelCacheErrors: readModelCacheMeta.cacheErrors
+        });
+        return attachPortalLoadTiming_(cachedResp, timing, {
+          routeType: 'dashboard_read_model',
+          ok: true,
+          readSource: trimString_(cachedResp.readSource),
+          projectCount: Array.isArray(cachedResp.projects) ? cachedResp.projects.length : 0,
+          criticalReady: cachedCritical.ready === true,
+          cacheType: trimString_(cachedCriticalCacheMeta.cacheType),
+          cacheHits: cachedCriticalCacheMeta.cacheHits,
+          cacheMisses: cachedCriticalCacheMeta.cacheMisses,
+          cacheStores: cachedCriticalCacheMeta.cacheStores,
+          cacheSkips: cachedCriticalCacheMeta.cacheSkips,
+          cacheErrors: cachedCriticalCacheMeta.cacheErrors,
+          readModelCacheType: readModelCacheMeta.cacheType,
+          readModelCacheHit: true,
+          readModelCacheHits: readModelCacheMeta.cacheHits,
+          readModelCacheMisses: readModelCacheMeta.cacheMisses,
+          readModelCacheStores: readModelCacheMeta.cacheStores,
+          readModelCacheSkips: readModelCacheMeta.cacheSkips,
+          readModelCacheErrors: readModelCacheMeta.cacheErrors
+        });
+      }
+    } else if (cacheContext && cacheContext.noCache !== true) {
+      incrementDashboardReadModelCacheMeta_(readModelCacheMeta, 'cacheSkips');
+    }
+    const buildOptions = cacheContext && cacheContext.ok === true
+      ? Object.assign({}, (payload && typeof payload === 'object') ? payload : {}, {
+        cfg: cacheContext.cfg,
+        ss: cacheContext.ss,
+        infra: cacheContext.infra,
+        userCtx: cacheContext.userCtx
+      })
+      : payload;
+    const resp = buildDashboardReadModel_(buildOptions);
+    if (cacheContext && cacheContext.ok === true && resp && resp.ok === true) {
+      writeDashboardReadModelResponseCache_(cacheContext.cacheKey, resp, readModelCacheMeta);
+    }
     const critical = (resp && resp.critical && typeof resp.critical === 'object') ? resp.critical : {};
     const cacheMeta = (resp && resp.cacheMeta && typeof resp.cacheMeta === 'object') ? resp.cacheMeta : {};
     const criticalCacheMeta = (cacheMeta.critical && typeof cacheMeta.critical === 'object') ? cacheMeta.critical : {};
@@ -5284,7 +5579,14 @@ function getDashboardReadModel(payload) {
       cacheMisses: criticalCacheMeta.cacheMisses,
       cacheStores: criticalCacheMeta.cacheStores,
       cacheSkips: criticalCacheMeta.cacheSkips,
-      cacheErrors: criticalCacheMeta.cacheErrors
+      cacheErrors: criticalCacheMeta.cacheErrors,
+      readModelCacheType: readModelCacheMeta.cacheType,
+      readModelCacheHit: readModelCacheMeta.cacheHit === true,
+      readModelCacheHits: readModelCacheMeta.cacheHits,
+      readModelCacheMisses: readModelCacheMeta.cacheMisses,
+      readModelCacheStores: readModelCacheMeta.cacheStores,
+      readModelCacheSkips: readModelCacheMeta.cacheSkips,
+      readModelCacheErrors: readModelCacheMeta.cacheErrors
     });
     return attachPortalLoadTiming_(resp, timing, {
       routeType: 'dashboard_read_model',
@@ -5297,7 +5599,14 @@ function getDashboardReadModel(payload) {
       cacheMisses: criticalCacheMeta.cacheMisses,
       cacheStores: criticalCacheMeta.cacheStores,
       cacheSkips: criticalCacheMeta.cacheSkips,
-      cacheErrors: criticalCacheMeta.cacheErrors
+      cacheErrors: criticalCacheMeta.cacheErrors,
+      readModelCacheType: readModelCacheMeta.cacheType,
+      readModelCacheHit: readModelCacheMeta.cacheHit === true,
+      readModelCacheHits: readModelCacheMeta.cacheHits,
+      readModelCacheMisses: readModelCacheMeta.cacheMisses,
+      readModelCacheStores: readModelCacheMeta.cacheStores,
+      readModelCacheSkips: readModelCacheMeta.cacheSkips,
+      readModelCacheErrors: readModelCacheMeta.cacheErrors
     });
   } catch (err) {
     return attachPortalLoadTiming_({
@@ -9889,6 +10198,9 @@ function buildPortalLoadTimingExtra_(extra) {
     'mode',
     'stage',
     'cacheType',
+    'readModelCacheType',
+    'readSource',
+    'sourcePreference',
     'queueNudge',
     'source',
     'reason'
@@ -9901,6 +10213,8 @@ function buildPortalLoadTimingExtra_(extra) {
     'hasToken',
     'hasSession',
     'cacheHit',
+    'readModelCacheHit',
+    'criticalReady',
     'readOnlyAccount',
     'embedded',
     'scheduled'
@@ -9919,7 +10233,12 @@ function buildPortalLoadTimingExtra_(extra) {
     'cacheMisses',
     'cacheStores',
     'cacheSkips',
-    'cacheErrors'
+    'cacheErrors',
+    'readModelCacheHits',
+    'readModelCacheMisses',
+    'readModelCacheStores',
+    'readModelCacheSkips',
+    'readModelCacheErrors'
   ].forEach(function(key) {
     if (!Object.prototype.hasOwnProperty.call(source, key)) return;
     const n = Number(source[key]);

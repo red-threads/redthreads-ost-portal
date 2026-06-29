@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 214">214</div>
+  <div class="devRevisionBadge" aria-label="Development revision 215">215</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -27403,6 +27403,11 @@
       'cacheStores',
       'cacheSkips',
       'cacheErrors',
+      'readModelCacheHits',
+      'readModelCacheMisses',
+      'readModelCacheStores',
+      'readModelCacheSkips',
+      'readModelCacheErrors',
       'rowCount',
       'thumbnailReadyCount',
       'thumbnailFallbackCount',
@@ -27466,7 +27471,8 @@
       'criticalReady',
       'criticalStatusReady',
       'criticalPeekReady',
-      'criticalThumbnailReady'
+      'criticalThumbnailReady',
+      'readModelCacheHit'
     ].forEach(key => {
       if (Object.prototype.hasOwnProperty.call(timing, key)) summary[key] = timing[key] === true;
     });
@@ -27480,6 +27486,11 @@
       'cacheStores',
       'cacheSkips',
       'cacheErrors',
+      'readModelCacheHits',
+      'readModelCacheMisses',
+      'readModelCacheStores',
+      'readModelCacheSkips',
+      'readModelCacheErrors',
       'readyCount',
       'fallbackCount',
       'thumbnailReadyCount',
