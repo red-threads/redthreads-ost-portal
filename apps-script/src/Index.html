@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 215">215</div>
+  <div class="devRevisionBadge" aria-label="Development revision 217">217</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24359,6 +24359,7 @@
   const DASHBOARD_PEEK_IMAGE_PREWARM_CACHE = new Map();
   const DASHBOARD_HOME_RESPONSE_CACHE = new Map();
   const DASHBOARD_HOME_BACKGROUND_INFLIGHT = new Map();
+  const PROJECT_DASHBOARD_RETURN_PREWARM_INFLIGHT = new Map();
   let DASHBOARD_PROJECT_PAYLOAD_PREFETCH_SEQ = 0;
   let DASHBOARD_HOME_RESPONSE_CACHE_SEQ = 0;
   let DASHBOARD_HOME_BACKGROUND_SEQ = 0;
@@ -25417,6 +25418,60 @@
 	    return state;
 	  }
 
+	  function startProjectDashboardReturnPrewarm_(reason){
+	    const token = String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim();
+	    if (!token) return Promise.resolve(null);
+	    const payload = buildDashboardHomeSummaryPayload_({ token: token });
+	    const cacheKey = getDashboardHomeResponseCacheKey_(payload);
+	    if (!cacheKey) return Promise.resolve(null);
+	    const cached = getDashboardHomeCacheEntry_(payload);
+	    if (cached && isDashboardHomeCriticalReady_(cached)) return Promise.resolve(cached);
+	    const existing = PROJECT_DASHBOARD_RETURN_PREWARM_INFLIGHT.get(cacheKey);
+	    if (existing) return existing;
+	    const coordinator = createDashboardLoadingCoordinator_(payload, {
+	      routeType: 'project_dashboard_prewarm'
+	    });
+	    markDashboardCoordinatorPhase_(coordinator, 'dashboard_project_return_prewarm_start', {
+	      routeType: 'project_dashboard_prewarm',
+	      source: String(reason || 'project-loaded')
+	    });
+	    const pending = (async () => {
+	      const readModelHomeData = await fetchDashboardReadModelForRequest_(payload, coordinator, {
+	        skipContextCheck: true
+	      });
+	      if (!readModelHomeData) return null;
+	      const criticalMeta = readModelHomeData.dashboardCritical || {};
+	      const criticalTokens = Array.isArray(criticalMeta.criticalTokens)
+	        ? criticalMeta.criticalTokens.slice()
+	        : getDashboardCriticalProjectTokens_(readModelHomeData.projects);
+	      await applyDashboardCriticalThumbnailReadiness_(readModelHomeData, criticalTokens, coordinator);
+	      rememberDashboardHomeResponse_(payload, readModelHomeData);
+	      logDashboardCoordinator_(coordinator, 'dashboard_project_return_prewarm_ready', {
+	        ok: true,
+	        routeType: 'project_dashboard_prewarm',
+	        source: String(reason || 'project-loaded'),
+	        projectCount: Array.isArray(readModelHomeData.projects) ? readModelHomeData.projects.length : 0,
+	        criticalCount: criticalTokens.length,
+	        thumbnailReadyCount: readModelHomeData.dashboardCritical && readModelHomeData.dashboardCritical.thumbnailReadyCount,
+	        thumbnailFallbackCount: readModelHomeData.dashboardCritical && readModelHomeData.dashboardCritical.thumbnailFallbackCount
+	      });
+	      return readModelHomeData;
+	    })().catch(() => {
+	      logDashboardCoordinator_(coordinator, 'dashboard_project_return_prewarm_failed', {
+	        ok: false,
+	        routeType: 'project_dashboard_prewarm',
+	        source: String(reason || 'project-loaded')
+	      });
+	      return null;
+	    }).finally(() => {
+	      if (PROJECT_DASHBOARD_RETURN_PREWARM_INFLIGHT.get(cacheKey) === pending) {
+	        PROJECT_DASHBOARD_RETURN_PREWARM_INFLIGHT.delete(cacheKey);
+	      }
+	    });
+	    PROJECT_DASHBOARD_RETURN_PREWARM_INFLIGHT.set(cacheKey, pending);
+	    return pending;
+	  }
+
 	  function getDashboardReturnRequestPayload_(){
 	    const preserved = DASHBOARD_RETURN_CONTEXT_PAYLOAD &&
 	      typeof DASHBOARD_RETURN_CONTEXT_PAYLOAD === 'object'
@@ -25424,6 +25479,10 @@
 	      : null;
 	    if (preserved && hasResumableMountedDashboardForContext_(preserved)) {
 	      return clonePlainObject(preserved);
+	    }
+	    const projectToken = String(CURRENT_TOKEN || INITIAL_TOKEN || (VM && VM.token) || '').trim();
+	    if (CURRENT_VIEW === VIEW_SNAPSHOT && projectToken) {
+	      return buildDashboardHomeSummaryPayload_({ token: projectToken });
 	    }
 	    return buildDashboardHomeSummaryPayload_(getDashboardContextRequestPayload_());
 	  }
@@ -53578,6 +53637,9 @@
     wireEvents();
     syncTeamModeUi();
     notifyPortalReady({ reason: 'snapshot-ready' });
+    window.setTimeout(() => {
+      startProjectDashboardReturnPrewarm_('snapshot-ready').catch(() => {});
+    }, 500);
     consumeSnapshotBootstrapIntent_();
     consumeSummaryBootstrapIntent_();
     syncHeaderUtilityOffset();
