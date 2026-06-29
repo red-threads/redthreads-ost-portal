@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-29 - Account Document Deeplink Foreground Loading Fix
+
+- Mode: Full ship live loading audit/edit/smoke loop.
+- Branch/commit/PR: `main`, Apps Script version `1089`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: continue the dashboard loading proof loop and remove confirmed foreground blockers around account-document deeplink entry while preserving the five-phase dashboard hierarchy.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` shows revision `219`. Account-document upload/resubmit deeplinks now set the dashboard shell and open the Credit Terms or Sales Tax upload workspace from the resolved route context before waiting for account-document boot or dashboard background hydration. Account status/account summary and dashboard critical hydration continue afterward, so direct deeplink close still reaches the complete six-row dashboard and already-mounted dashboard overlay resume remains the fast path.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, template-stubbed parse for `apps-script/src/Index.html` and `web/squarespace-portal-code-block.html`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and added-diff sensitive marker scan passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Open doc deeplink before dashboard hydration"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1089 - Open doc deeplink before dashboard hydration`; no new deployment ID was created. Cache-busted direct `/exec` returned HTTP `200` with `Development revision 219`, and public `/portal` returned HTTP `200` with the stable deployment marker. Headless Chrome smoke confirmed Credit Terms foreground visibility around `14.3s`, Sales Tax foreground visibility around `11.8s`, token-dashboard first reveal with six rows/six thumbnails/six progress trackers, `Load older jobs` appending six rows in about `32ms`, older rows hydrating to twelve thumbnails and twelve progress trackers, top peek opening in about `106ms`, lower peek opening in about `55ms`, project-to-dashboard return in about `142ms`, and direct document close paths returning to a complete six-row dashboard after background hydration.
+- Runtime data state: no backend endpoint, wrapper, Sheet schema/data, Script Properties, pricing/Calculator, checkout/payment/ACH/Stripe, email lifecycle, Team Mode permission, account-document workflow state, token lookup, queue data, or deployment ID behavior was intentionally changed. No raw credentials, tokens, private URLs, account links, snapshot/state JSON, payload bodies, or sheet dumps were added to tracked files.
+- Follow-ups: cold login reached the correct six-row dashboard state but remained slow in headless smoke, about `41.7s`; keep login/cold read-model performance on the next tuning pass. Direct document deeplink close can still wait for background dashboard readiness when no mounted dashboard existed before opening the document, which is expected under the current hierarchy.
+
 ## 2026-06-29 - Dashboard Loading Live Proof And Completion Audit On Version 1082
 
 - Mode: Full ship runtime loading proof and completion-audit readiness.

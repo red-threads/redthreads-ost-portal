@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 217">217</div>
+  <div class="devRevisionBadge" aria-label="Development revision 219">219</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -28587,22 +28587,31 @@
       return null;
     }
     if (isAccountDocumentUploadBootstrapIntent_()) {
-      const bootResp = await loadAccountDocumentDashboardBoot_(requestPayload);
       setView(VIEW_DASHBOARD, { focus: false, preserveMessage: true });
-      if (!bootResp) {
-        notifyPortalReady({ reason: 'dashboard-load-failed' });
-        return null;
-      }
       syncCurrentPortalDashboardRoute_({ historyMode: 'replace' });
       const dashboardHomePayload = getDashboardContextRequestPayload_() || requestPayload;
-      startDashboardHomeBackgroundLoad_(dashboardHomePayload, 'account_document_deeplink', {
-        showPlaceholder: false
-      }).catch(() => {});
+      const bootPromise = loadAccountDocumentDashboardBoot_(requestPayload)
+        .catch(err => {
+          showDashboardWorkflowError_(String((err && err.message) || err || 'Unable to load the account document workflow.'));
+          return null;
+        });
       await new Promise(resolve => requestAnimationFrame(resolve));
       showSetupReturnDashboardMessage_(opts.setupReturnResult);
-      await consumeDashboardBootstrapIntent_();
+      await consumeDashboardBootstrapIntent_({
+        requestPayload: requestPayload,
+        skipContextHydration: true
+      });
       notifyPortalReady({ reason: 'account-document-upload-ready' });
-      return bootResp;
+      bootPromise.then(bootResp => {
+        if (!bootResp || bootResp.ok !== true) return null;
+        setTimeout(() => {
+          startDashboardHomeBackgroundLoad_(dashboardHomePayload, 'account_document_deeplink', {
+            showPlaceholder: false
+          }).catch(() => {});
+        }, 0);
+        return bootResp;
+      });
+      return bootPromise;
     }
     const dashboardHomeResp = await loadProjectsForHome({
       requestPayload: requestPayload,
@@ -28622,7 +28631,8 @@
     return dashboardHomeResp;
   }
 
-  async function consumeDashboardBootstrapIntent_(){
+  async function consumeDashboardBootstrapIntent_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
     if (DASHBOARD_BOOTSTRAP_INTENT_CONSUMED) return false;
     if (CURRENT_VIEW !== VIEW_DASHBOARD) return false;
     if (!DASHBOARD_DEEPLINK_REQUEST && !ACCOUNT_DOC_DEEPLINK_TYPE) return false;
@@ -28632,7 +28642,9 @@
     clearDashboardBootstrapQueryParams_();
     if (type !== 'credit_terms' && type !== 'tax_exempt') return false;
     try {
-      const requestPayload = await ensureDashboardAccountDocumentContextReady_();
+      const requestPayload = opts.skipContextHydration === true
+        ? (opts.requestPayload || getDashboardContextRequestPayload_())
+        : await ensureDashboardAccountDocumentContextReady_();
       if (!requestPayload) return false;
       if (type === 'tax_exempt') {
         if (action === 'resubmit' || action === 'upload') {
