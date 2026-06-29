@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-29 - Checkout Invoice Artifact Prewarm
+
+- Mode: Full ship live loading audit/edit/smoke loop.
+- Branch/commit/PR: `main`, Apps Script version `1092`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: exercise the payment/checkout loading boundary last, then remove avoidable client-side wait before Stripe Checkout navigation.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` shows revision `222`. Hosted card/ACH payment selection now starts a background rendered-invoice artifact prewarm using the existing checkout invoice PDF builder. `startOrderFlowCheckout()` reuses a matching ready or in-flight artifact keyed by token, comparable portal state, fulfillment, shipping charge/mode, and payment method. Stale prepared artifacts are cleared on fulfillment/method changes, clear selections, and order-flow reset.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, template-stubbed parse for `apps-script/src/Index.html` and `web/squarespace-portal-code-block.html`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and added-diff sensitive marker scan passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Prewarm checkout invoice artifact"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1092 - Prewarm checkout invoice artifact`; no new deployment ID was created. Cache-busted direct `/exec` returned HTTP `200` with `Development revision 222`, omitted stale revision `221`, and included checkout prewarm markers. Public `/portal` returned HTTP `200` with stable deployment and wrapper markers. Browser checkout smoke confirmed loader paint around `23ms-24ms`; with an intentional card-selection prewarm wait, the client invoice artifact wait at confirm dropped from about `7.6s` to `0ms` with `prewarmSource=ready`.
+- Runtime data state: no Sheet schema/data, Script Properties, pricing/Calculator, Stripe checkout semantics, order persistence, payment/ACH lifecycle, email lifecycle, Team Mode permission, account-document workflow state, token lookup, wrapper contract, queue data, or deployment ID behavior was intentionally changed. No raw credentials, account links, tokens, private URLs, checkout URLs, payload bodies, snapshot/state JSON, or sheet dumps were added to tracked files.
+- Follow-ups: total checkout click-to-Stripe navigation remained about `29.7s` in the post-ship run because backend checkout work was about `25.9s`. Next checkout optimization should inspect server-side context/infrastructure setup, Stripe payload/session construction, invoice artifact storage, and order persistence without changing payment correctness.
+
 ## 2026-06-29 - Login Dashboard Account-Context Optimization
 
 - Mode: Full ship live loading audit/edit/smoke loop.

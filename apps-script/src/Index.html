@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 221">221</div>
+  <div class="devRevisionBadge" aria-label="Development revision 222">222</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24309,6 +24309,11 @@
   let ORDER_FLOW_MANUAL_ARTIFACT_READY_KEY = '';
   let ORDER_FLOW_MANUAL_ARTIFACT_READY_RESULT = null;
   let ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER = 0;
+  let ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_PROMISE = null;
+  let ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_KEY = '';
+  let ORDER_FLOW_CHECKOUT_ARTIFACT_READY_KEY = '';
+  let ORDER_FLOW_CHECKOUT_ARTIFACT_READY_RESULT = null;
+  let ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER = 0;
   let ORDER_FLOW_MANUAL_STATUS = { tone: '', message: '' };
   let ORDER_FLOW_PO_EMAIL_ASYNC_ERROR = '';
   let ORDER_FLOW_PO_EMAIL_ASYNC_RECIPIENTS = '';
@@ -42641,6 +42646,16 @@
     return cleanToken + '|' + fallback;
   }
 
+  function buildCheckoutOrderInvoiceArtifactPrepKey_(portalState, method){
+    return [
+      String(method || '').trim().toLowerCase(),
+      String(ORDER_FLOW_SELECTED_FULFILLMENT || '').trim().toLowerCase(),
+      String(ORDER_FLOW_SHIPPING_CHARGE_CENTS || 0),
+      String(ORDER_FLOW_SHIPPING_MODE_LABEL || '').trim(),
+      buildManualOrderInvoiceArtifactPrepKey_(portalState)
+    ].join('|');
+  }
+
   function clearManualOrderInvoiceArtifactPrepState_(options){
     const opts = (options && typeof options === 'object') ? options : {};
     ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE = null;
@@ -42652,6 +42667,20 @@
     if (ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER) {
       clearTimeout(ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER);
       ORDER_FLOW_MANUAL_ARTIFACT_PREP_TIMER = 0;
+    }
+  }
+
+  function clearCheckoutOrderInvoiceArtifactPrepState_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_PROMISE = null;
+    ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_KEY = '';
+    if (opts.preserveReady !== true) {
+      ORDER_FLOW_CHECKOUT_ARTIFACT_READY_KEY = '';
+      ORDER_FLOW_CHECKOUT_ARTIFACT_READY_RESULT = null;
+    }
+    if (ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER) {
+      clearTimeout(ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER);
+      ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER = 0;
     }
   }
 
@@ -42754,7 +42783,7 @@
     return prepareManualOrderInvoiceArtifactClient_(options);
   }
 
-  async function buildOrderFlowCheckoutInvoiceArtifactPayload_(){
+  async function buildOrderFlowCheckoutInvoiceArtifactPayloadInternal_(){
     const friendlyArtifactFailure = 'Unable to create the final invoice artifact needed to start checkout. Please try again.';
     const pdfResult = await buildOrderFlowSummaryViewerPdf_({
       fileName: buildOrderFlowPurchaseOrderFileName_(),
@@ -42772,6 +42801,77 @@
         base64Data: base64Data
       }
     };
+  }
+
+  async function prepareCheckoutOrderInvoiceArtifactClient_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const method = String(opts.method || ORDER_FLOW_SELECTED_METHOD || '').trim().toLowerCase();
+    const clickedPortalState = (opts.portalState && typeof opts.portalState === 'object')
+      ? clonePlainObject(opts.portalState)
+      : buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    const prepKey = buildCheckoutOrderInvoiceArtifactPrepKey_(clickedPortalState, method);
+    if (opts.force !== true) {
+      if (ORDER_FLOW_CHECKOUT_ARTIFACT_READY_RESULT && ORDER_FLOW_CHECKOUT_ARTIFACT_READY_KEY === prepKey) {
+        return Object.assign({}, ORDER_FLOW_CHECKOUT_ARTIFACT_READY_RESULT, {
+          prewarmed: true,
+          prewarmSource: 'ready'
+        });
+      }
+      if (ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_PROMISE && ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_KEY === prepKey) {
+        const inflightResult = await ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_PROMISE;
+        return Object.assign({}, inflightResult, {
+          prewarmed: true,
+          prewarmSource: 'inflight'
+        });
+      }
+    }
+    const prepPromise = buildOrderFlowCheckoutInvoiceArtifactPayloadInternal_()
+      .then(result => {
+        ORDER_FLOW_CHECKOUT_ARTIFACT_READY_KEY = prepKey;
+        ORDER_FLOW_CHECKOUT_ARTIFACT_READY_RESULT = result;
+        return result;
+      })
+      .finally(() => {
+        if (ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_PROMISE === prepPromise) {
+          ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_PROMISE = null;
+          ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_KEY = '';
+        }
+      });
+    ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_PROMISE = prepPromise;
+    ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_KEY = prepKey;
+    const result = await prepPromise;
+    return Object.assign({}, result, {
+      prewarmed: false,
+      prewarmSource: 'fresh'
+    });
+  }
+
+  function scheduleCheckoutOrderInvoiceArtifactPrep_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const method = String(opts.method || ORDER_FLOW_SELECTED_METHOD || '').trim().toLowerCase();
+    if (method !== 'card' && method !== PAYMENT_METHODS.ach) return;
+    if (!ORDER_FLOW_SELECTED_FULFILLMENT) return;
+    if (ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER) {
+      clearTimeout(ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER);
+      ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER = 0;
+    }
+    const clickedPortalState = (opts.portalState && typeof opts.portalState === 'object')
+      ? clonePlainObject(opts.portalState)
+      : buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+    const delay = Number.isFinite(Number(opts.delayMs)) ? Math.max(0, Number(opts.delayMs)) : 180;
+    ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER = window.setTimeout(() => {
+      ORDER_FLOW_CHECKOUT_ARTIFACT_PREP_TIMER = 0;
+      prepareCheckoutOrderInvoiceArtifactClient_({
+        portalState: clickedPortalState,
+        method: method
+      }).catch(err => {
+        console.warn('Checkout invoice artifact prewarm failed.', normalizeUiErrorMessage_(err, 'Unable to prepare checkout invoice artifact.'));
+      });
+    }, delay);
+  }
+
+  async function buildOrderFlowCheckoutInvoiceArtifactPayload_(options){
+    return prepareCheckoutOrderInvoiceArtifactClient_(options);
   }
 
   function buildOrderFlowPurchaseOrderFileName_(){
@@ -43975,8 +44075,10 @@
     ORDER_FLOW_SHIPPING_CHARGE_CENTS = fulfillment.shippingChargeCents;
     ORDER_FLOW_SHIPPING_MODE_LABEL = fulfillment.shippingModeLabel;
     ORDER_FLOW_FULFILLMENT_ERROR = false;
+    clearCheckoutOrderInvoiceArtifactPrepState_();
     renderOrderFlowFulfillmentSection();
     renderOrderFlowSummaryCard();
+    scheduleCheckoutOrderInvoiceArtifactPrep_({ method: ORDER_FLOW_SELECTED_METHOD });
     return fulfillment;
   }
 
@@ -44009,7 +44111,9 @@
     } else if (ORDER_FLOW_SELECTED_METHOD) {
       setSummaryOptions({ creditCardFeeEnabled: false });
     }
+    clearCheckoutOrderInvoiceArtifactPrepState_();
     renderOrderFlowFulfillmentSection();
+    scheduleCheckoutOrderInvoiceArtifactPrep_({ method: ORDER_FLOW_SELECTED_METHOD });
   }
 
   function clearOrderFlowSelections_(){
@@ -44022,6 +44126,7 @@
     ORDER_FLOW_FULFILLMENT_ERROR = false;
     ORDER_FLOW_METHOD_ERROR = false;
     ORDER_FLOW_PO_UNLOCK_ERROR = false;
+    clearCheckoutOrderInvoiceArtifactPrepState_();
     clearNotice();
     setSummaryOptions({ creditCardFeeEnabled: false });
     renderOrderFlowFulfillmentSection();
@@ -44986,6 +45091,7 @@
     ORDER_FLOW_MANUAL_EMAIL_ASYNC_IN_FLIGHT = false;
     clearOrderFlowManualStatus_();
     if (orderFlowManualSubmitSuccessBackdrop) orderFlowManualSubmitSuccessBackdrop.hidden = true;
+    clearCheckoutOrderInvoiceArtifactPrepState_();
     clearManualOrderInvoiceArtifactPrepState_();
     closeOrderFlowSummaryViewer({ immediate: true });
     setOrderFlowButtonsBusy(false);
@@ -45247,9 +45353,14 @@
         bytes: clickedPortalStateJson.length
       });
       markClientCheckoutTiming_(checkoutTiming, 'invoice_artifact_build_start');
-      const artifact = await buildOrderFlowCheckoutInvoiceArtifactPayload_();
+      const artifact = await buildOrderFlowCheckoutInvoiceArtifactPayload_({
+        portalState: clickedPortalState,
+        method: normalizedMethod
+      });
       markClientCheckoutTiming_(checkoutTiming, 'invoice_artifact_build_end', {
-        ok: !!(artifact && artifact.payload && artifact.payload.base64Data)
+        ok: !!(artifact && artifact.payload && artifact.payload.base64Data),
+        prewarmed: artifact && artifact.prewarmed === true,
+        prewarmSource: artifact && artifact.prewarmSource ? String(artifact.prewarmSource).slice(0, 24) : ''
       });
       markClientCheckoutTiming_(checkoutTiming, 'google_script_run_round_trip_start');
       const requestPayload = {
