@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-29 - Checkout Return URL Config Read Reduction
+
+- Mode: Full ship live loading audit/edit/smoke loop.
+- Branch/commit/PR: `main`, Apps Script version `1093`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: continue payment-boundary loading optimization after `1092` proved client invoice prewarm worked but backend checkout remained slow.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Code.js` now avoids repeated config reads in `buildStripeReturnBaseUrl_()` when an explicit/public portal return URL is already available, and `buildStripeCheckoutSessionRequestData_()` reuses `cfg.stripePriceCurrency` instead of calling `getConfig_()` again. `Index.html` shows revision `223`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, template-stubbed parse for `apps-script/src/Index.html` and `web/squarespace-portal-code-block.html`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and added-diff sensitive marker scan passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Reduce checkout return URL config reads"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1093 - Reduce checkout return URL config reads`; no new deployment ID was created. Cache-busted direct `/exec` returned HTTP `200` with `Development revision 223` and omitted stale revision `222`. Public `/portal` returned HTTP `200` with stable deployment and wrapper markers. Browser checkout smoke confirmed project readiness around `13.0s`, loader paint around `22ms`, prewarmed invoice artifact reuse, and latest card checkout click-to-Stripe navigation around `14.7s` with server total around `10.2s`; the prior post-`1092` checkout run was about `29.7s` with server total about `25.9s`.
+- Runtime data state: no return URL shape, Stripe session payload semantics, invoice PDF shape, order persistence, Sheet schema/data, Script Properties, pricing/Calculator, payment/ACH lifecycle, email lifecycle, Team Mode permission, account-document workflow state, token lookup, wrapper contract, queue data, or deployment ID behavior was intentionally changed. No raw credentials, account links, tokens, private URLs, checkout URLs, payload bodies, snapshot/state JSON, or sheet dumps were added to tracked files.
+- Follow-ups: remaining checkout cost is concentrated in portal infrastructure/context setup, invoice artifact storage, order write, and export pointer write. Continue dashboard/login/document smoke in the next loop before treating the broader loading goal as complete.
+
 ## 2026-06-29 - Checkout Invoice Artifact Prewarm
 
 - Mode: Full ship live loading audit/edit/smoke loop.

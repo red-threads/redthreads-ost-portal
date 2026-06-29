@@ -21231,10 +21231,13 @@ function appendQueryParamsToUrl_(baseUrl, params) {
 
 function buildStripeReturnBaseUrl_(token, options) {
   const opts = (options && typeof options === 'object') ? options : {};
-  const cfg = getConfig_();
   const overrideUrl = normalizePublicPortalReturnUrl_(opts.returnUrl);
-  const configReturnUrl = normalizePublicPortalReturnUrl_(cfg.stripeReturnUrl);
-  const base = trimString_(overrideUrl || buildExternalPortalUrl_(token) || configReturnUrl || buildPortalDirectUrl_(token));
+  let base = trimString_(overrideUrl || buildExternalPortalUrl_(token));
+  if (!base) {
+    const cfg = opts.cfg || getConfig_();
+    const configReturnUrl = normalizePublicPortalReturnUrl_(cfg.stripeReturnUrl);
+    base = trimString_(configReturnUrl || buildPortalDirectUrl_(token));
+  }
   if (!base) return '';
   const tokenValue = trimString_(token);
   if (!tokenValue) return base;
@@ -39520,7 +39523,7 @@ function buildStripeCheckoutSessionRequestData_(orderDraft, options) {
       paymentOrigin: isApPaymentLink ? 'ap' : ''
     }
   });
-  const currency = trimString_(orderDraft.currency || getConfig_().stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY).toLowerCase();
+  const currency = trimString_(orderDraft.currency || cfg.stripePriceCurrency || DEFAULT_STRIPE_PRICE_CURRENCY).toLowerCase();
   const fulfillmentMethod = normalizeFulfillmentMethod_(orderDraft && orderDraft.fulfillmentMethod);
   const shippingChargeCents = Math.max(0, parseInt(String(orderDraft && orderDraft.shippingChargeCents || 0), 10) || 0);
   const shippingModeLabel = trimString_(orderDraft && orderDraft.shippingModeLabel);
