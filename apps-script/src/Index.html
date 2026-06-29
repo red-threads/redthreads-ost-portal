@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 223">223</div>
+  <div class="devRevisionBadge" aria-label="Development revision 224">224</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24349,6 +24349,8 @@
   let SNAPSHOT_DIRTY_BASELINE_READY = false;
   let SNAPSHOT_DIRTY_BASELINE_INITIALIZING = false;
   let SNAPSHOT_DIRTY_BASELINE_INIT_TIMER = 0;
+  let SNAPSHOT_USER_MUTATION_SINCE_BASELINE = false;
+  let SNAPSHOT_USER_MUTATION_EVENTS_BOUND = false;
   let DASHBOARD_VIEW_VISIBLE_AT = 0;
   let DASHBOARD_OPEN_ARMED_BTN = null;
   let DASHBOARD_OPEN_ARMED_AT = 0;
@@ -27445,6 +27447,7 @@
       'criticalThumbnailReady',
       'baselineReady',
       'baselineInitializing',
+      'userMutationSinceBaseline',
       'fallback',
       'withinBudget',
       'budgetExceeded'
@@ -27821,6 +27824,7 @@
     SNAPSHOT_DIRTY_BASELINE_INITIALIZING = true;
     SNAPSHOT_DIRTY_BASELINE_READY = false;
     SNAPSHOT_DIRTY_BASELINE_KEY = '';
+    SNAPSHOT_USER_MUTATION_SINCE_BASELINE = false;
     closeUnsavedLeaveModal({ immediate: true });
     logProjectReturnTimingEvent_('snapshot_baseline_initializing', {
       routeType: 'project',
@@ -27859,6 +27863,7 @@
       clearSnapshotDirtyBaselineInitTimer_();
       SNAPSHOT_DIRTY_BASELINE_INITIALIZING = false;
       SNAPSHOT_DIRTY_BASELINE_KEY = '';
+      SNAPSHOT_USER_MUTATION_SINCE_BASELINE = false;
       closeUnsavedLeaveModal({ immediate: true });
       return;
     }
@@ -27873,6 +27878,7 @@
       SNAPSHOT_DIRTY_BASELINE_READY = Boolean(SNAPSHOT_DIRTY_BASELINE_KEY);
       if (opts.finishInitializing === true) {
         SNAPSHOT_DIRTY_BASELINE_INITIALIZING = false;
+        SNAPSHOT_USER_MUTATION_SINCE_BASELINE = false;
         clearSnapshotDirtyBaselineInitTimer_();
         logProjectReturnTimingEvent_('snapshot_baseline_ready', {
           routeType: 'project',
@@ -27895,6 +27901,48 @@
     });
   }
 
+  function markSnapshotUserMutationSinceBaseline_(source){
+    if (CURRENT_VIEW !== VIEW_SNAPSHOT) return;
+    if (!SNAPSHOT_DIRTY_BASELINE_READY || SNAPSHOT_DIRTY_BASELINE_INITIALIZING) return;
+    SNAPSHOT_USER_MUTATION_SINCE_BASELINE = true;
+    logProjectReturnTimingEvent_('snapshot_user_mutation', {
+      routeType: 'project',
+      source: String(source || 'project-edit')
+    });
+    setSaveControls();
+  }
+
+  function isSnapshotUserMutationTarget_(target, eventType){
+    if (!(target instanceof HTMLElement)) return false;
+    if (!projectView || !projectView.contains(target)) return false;
+    if (target.closest('#unsavedLeaveBackdrop, #rtLoadingOverlay, #introModal, #lightbox, #chatDrawer, #teamGateBackdrop')) return false;
+    const type = String(eventType || '').trim().toLowerCase();
+    const field = target.closest('input, textarea, select');
+    if (type === 'input' || type === 'change') {
+      if (!(field instanceof HTMLElement)) return false;
+      if (field.closest('#chatPanel, #teamGateBackdrop')) return false;
+      return true;
+    }
+    if (type === 'click') {
+      return !!target.closest(
+        '.colorRowRemoveBtn, .addOnRemove, .addOnReset, .printJobTabRestore, .summaryEstimateRestoreJobBtn, .mockupBtn, .lightboxUploadBtn'
+      );
+    }
+    return false;
+  }
+
+  function bindSnapshotUserMutationEvents_(){
+    if (SNAPSHOT_USER_MUTATION_EVENTS_BOUND) return;
+    SNAPSHOT_USER_MUTATION_EVENTS_BOUND = true;
+    ['input', 'change', 'click'].forEach(type => {
+      document.addEventListener(type, event => {
+        if (!event || event.isTrusted !== true) return;
+        if (!isSnapshotUserMutationTarget_(event.target, type)) return;
+        markSnapshotUserMutationSinceBaseline_(type);
+      }, true);
+    });
+  }
+
   function hasUnsavedSnapshotChanges(){
     const editorLifecycle = getPortalEditorLifecycleUiState_();
     if (CURRENT_VIEW !== VIEW_SNAPSHOT) return false;
@@ -27902,6 +27950,7 @@
     if (SNAPSHOT_DIRTY_BASELINE_INITIALIZING) return false;
     if (!SNAPSHOT_DIRTY_BASELINE_READY) return false;
     if (!SNAPSHOT_DIRTY_BASELINE_KEY) return false;
+    if (!SNAPSHOT_USER_MUTATION_SINCE_BASELINE) return false;
     try {
       const currentState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
       const currentKey = getComparablePortalStateKey(currentState);
@@ -27965,12 +28014,14 @@
     markPortalClientLoadTiming_(trace, String(phase || 'event'), Object.assign({
       routeType: 'project_to_dashboard',
       baselineReady: SNAPSHOT_DIRTY_BASELINE_READY,
-      baselineInitializing: SNAPSHOT_DIRTY_BASELINE_INITIALIZING
+      baselineInitializing: SNAPSHOT_DIRTY_BASELINE_INITIALIZING,
+      userMutationSinceBaseline: SNAPSHOT_USER_MUTATION_SINCE_BASELINE
     }, extra || {}));
     logPortalClientLoadTiming_(trace, String(phase || 'event'), Object.assign({
       routeType: 'project_to_dashboard',
       baselineReady: SNAPSHOT_DIRTY_BASELINE_READY,
-      baselineInitializing: SNAPSHOT_DIRTY_BASELINE_INITIALIZING
+      baselineInitializing: SNAPSHOT_DIRTY_BASELINE_INITIALIZING,
+      userMutationSinceBaseline: SNAPSHOT_USER_MUTATION_SINCE_BASELINE
     }, extra || {}));
   }
 
@@ -52757,6 +52808,7 @@
 
   function wireEvents(){
     bindUnsavedLeaveModalEvents_();
+    bindSnapshotUserMutationEvents_();
     if (PROJECT_EVENTS_BOUND) return;
     PROJECT_EVENTS_BOUND = true;
     if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState());

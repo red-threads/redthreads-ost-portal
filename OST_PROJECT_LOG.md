@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-29 - Project Dashboard Return Guard Fix
+
+- Mode: Full ship live loading audit/edit/smoke loop.
+- Branch/commit/PR: `main`, Apps Script version `1094`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: fix the live direct-project-to-dashboard return blocker found during the route loading audit while preserving real unsaved-edit protection.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `224` adds a project user-mutation signal to the snapshot dirty baseline. A clean project load no longer lets post-render normalization open the unsaved-changes guard, while trusted project input/change and known mutating project controls still allow the guard to block Dashboard return after a real edit. Redacted project-return timing now includes `userMutationSinceBaseline`.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, template-stubbed parse for `apps-script/src/Index.html` and `web/squarespace-portal-code-block.html`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and added-diff sensitive marker scan passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Fix project dashboard return guard"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1094 - Fix project dashboard return guard`; no new deployment ID was created. Cache-busted direct `/exec` returned HTTP `200` with `Development revision 224`, omitted stale revision `223`, and public `/portal` returned HTTP `200` with stable deployment and wrapper markers. Browser smoke confirmed login-to-dashboard, direct document deeplink close-to-dashboard, clean project return via the Dashboard control, real-edit unsaved guard preservation, and `Load older jobs` expanding to twelve rows with progress and thumbnails.
+- Runtime data state: no backend endpoint, wrapper, Sheet schema/data, Script Properties, pricing/Calculator, checkout/payment/ACH/Stripe, email lifecycle, Team Mode permission, account-document workflow state, token lookup, queue data, or deployment ID behavior was intentionally changed. No raw credentials, account links, tokens, private URLs, checkout URLs, payload bodies, snapshot/state JSON, or sheet dumps were added to tracked files.
+- Follow-ups: login auth remains the slowest non-checkout path before dashboard reveal. Direct document deeplink close waits for dashboard hydration when no dashboard was mounted behind the document, which matches current hierarchy but remains a perceived-speed tuning candidate. Direct project return falls back to a dashboard fetch if prewarm has not completed yet.
+
 ## 2026-06-29 - Checkout Return URL Config Read Reduction
 
 - Mode: Full ship live loading audit/edit/smoke loop.
