@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-29 - Login Dashboard Account-Context Optimization
+
+- Mode: Full ship live loading audit/edit/smoke loop.
+- Branch/commit/PR: `main`, Apps Script version `1091`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: reduce the slow login-to-dashboard path found in the live loading matrix without restoring full dashboard construction inside `loginUser`.
+- Files changed: `apps-script/src/Code.js`, `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` shows revision `221`. `loginUser({ skipDashboardHomeData:true })` now returns a lightweight sanitized account summary with account dashboard context when available, and the client applies it before calling the dashboard coordinator. This moves post-login dashboard loading from a new session-keyed request toward the faster account-context read-model/cache path. Added redacted `login_dashboard` timing marks with duration-only auth/dashboard phases.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, template-stubbed parse for `apps-script/src/Index.html` and `web/squarespace-portal-code-block.html`, `npm run validate:runtime`, `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate`, `git diff --check`, and added-diff sensitive marker scan passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Add login dashboard timing"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1091 - Add login dashboard timing`; no new deployment ID was created. Cache-busted direct `/exec` returned HTTP `200` with `Development revision 221`, and public `/portal` returned HTTP `200` with the stable deployment marker. Headless Chrome login smoke confirmed click-to-six-rows around `20.0s`, improved from the prior `36.6s` click-to-rows run; dashboard critical reveal was around `7.6s` with a read-model cache hit, six rows, six thumbnails, six progress trackers, no skeletons, and `Load older jobs` visible.
+- Runtime data state: no Sheet schema/data, Script Properties, pricing/Calculator, checkout/payment/ACH/Stripe, email lifecycle, Team Mode permission, account-document workflow state, token lookup, wrapper contract, queue data, or deployment ID behavior was intentionally changed. No raw credentials, account links, tokens, private URLs, payload bodies, snapshot/state JSON, or sheet dumps were added to tracked files.
+- Follow-ups: remaining login wait is mostly before dashboard load; redacted timing showed login response around `12.1s` elapsed and server total around `8.9s`. A future auth-RPC pass can inspect sheet-open/user-lookup/session creation timing if further login speed is required.
+
 ## 2026-06-29 - Account Document Deeplink Foreground Loading Fix
 
 - Mode: Full ship live loading audit/edit/smoke loop.

@@ -2057,6 +2057,7 @@ function loginUser(payload) {
     findMs: 0,
     verifyMs: 0,
     sessionMs: 0,
+    accountContextMs: 0,
     dashboardMs: 0,
     totalMs: 0
   };
@@ -2068,6 +2069,7 @@ function loginUser(payload) {
         findMs: timings.findMs,
         verifyMs: timings.verifyMs,
         sessionMs: timings.sessionMs,
+        accountContextMs: timings.accountContextMs,
         dashboardMs: timings.dashboardMs,
         totalMs: timings.totalMs
       };
@@ -2165,6 +2167,31 @@ function loginUser(payload) {
     }
     const skipDashboardHomeData = p.skipDashboardHomeData === true;
     let dashboardHomeData = null;
+    let loginAccountSummary = null;
+    const accountContextStart = Date.now();
+    if (skipDashboardHomeData) {
+      try {
+        const identity = resolveClientIdentityFromExportLog_(infra.exportSheet, {
+          personEmail: email
+        });
+        let accountInfo = createPortalAccountIfMissing_(Object.assign({}, identity, {
+          cfg: cfg,
+          ss: ss,
+          infra: infra
+        }));
+        if (accountInfo && accountInfo.rowInfo) {
+          accountInfo = ensurePortalAccountAccessToken_(accountInfo, {
+            cfg: cfg,
+            ss: ss,
+            infra: infra
+          }) || accountInfo;
+        }
+        loginAccountSummary = accountInfo ? accountInfo.summary : buildEphemeralAccountSummary_(identity, cfg);
+      } catch (_) {
+        loginAccountSummary = null;
+      }
+    }
+    timings.accountContextMs = Date.now() - accountContextStart;
     const dashboardStart = Date.now();
     if (!skipDashboardHomeData) {
       try {
@@ -2190,7 +2217,7 @@ function loginUser(payload) {
     };
     const accountSummary = dashboardHomeData && dashboardHomeData.accountSummary
       ? dashboardHomeData.accountSummary
-      : null;
+      : loginAccountSummary;
     const currentUser = (user && user.rowObjNormalized && typeof user.rowObjNormalized === 'object')
       ? user.rowObjNormalized
       : {};
@@ -2208,6 +2235,7 @@ function loginUser(payload) {
       ok: true,
       sessionId: session.sessionId,
       email: email,
+      accountSummary: accountSummary,
       dashboardHomeData: dashboardHomeData
     });
   } catch (err) {

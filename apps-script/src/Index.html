@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 219">219</div>
+  <div class="devRevisionBadge" aria-label="Development revision 221">221</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -32763,14 +32763,35 @@
           setAuthMessage('Email and password are required.', true, { view: VIEW_LOGIN, timeoutMs: 5000 });
           return;
         }
+        const loginTrace = createPortalClientLoadTimingTrace_('login_dashboard');
+        markPortalClientLoadTiming_(loginTrace, 'login_request_start', {
+          routeType: 'login'
+        });
         rtShowLoader('Logging you in', '');
         setButtonBusy(authLoginBtn, true, 'Logging in...', 'Log in');
         setAuthMessage('', false);
+        let loadedDashboardHomeData = null;
         try {
           const resp = await callServer('loginUser', {
             email: email,
             password: password,
             skipDashboardHomeData: true
+          });
+          const authTiming = (resp && resp.timings && typeof resp.timings === 'object') ? resp.timings : {};
+          markPortalClientLoadTiming_(loginTrace, 'login_response', {
+            routeType: 'login',
+            ok: !!(resp && resp.ok === true),
+            openMs: Number(authTiming.openMs || 0),
+            findMs: Number(authTiming.findMs || 0),
+            verifyMs: Number(authTiming.verifyMs || 0),
+            sessionMs: Number(authTiming.sessionMs || 0),
+            accountContextMs: Number(authTiming.accountContextMs || 0),
+            dashboardMs: Number(authTiming.dashboardMs || 0),
+            serverTotalMs: Number(authTiming.totalMs || 0),
+            hasAccountContext: !!(resp && resp.accountSummary && (
+              String(resp.accountSummary.accountAccessToken || '').trim() ||
+              String(resp.accountSummary.accountId || '').trim()
+            ))
           });
           if (resp && resp.needsReset === true) {
             if (authForgotEmail) authForgotEmail.value = email;
@@ -32788,6 +32809,9 @@
           }
           AUTH_SESSION_ID = String(resp.sessionId || '');
           setDashboardSessionContext_();
+          if (resp && resp.accountSummary) {
+            applyReturnedAccountSummary_(resp.accountSummary);
+          }
           writeStoredSessionId(AUTH_SESSION_ID);
           if (authLoginPassword) authLoginPassword.value = '';
           setLoginPasswordVisibility(false);
@@ -32795,7 +32819,12 @@
           const dashboardHomeData = resp && resp.dashboardHomeData && resp.dashboardHomeData.ok === true
             ? resp.dashboardHomeData
             : null;
-          let loadedDashboardHomeData = null;
+          markPortalClientLoadTiming_(loginTrace, 'login_dashboard_load_start', {
+            routeType: 'dashboard',
+            hasInlineDashboardHomeData: !!dashboardHomeData,
+            hasAccountContext: hasDashboardAccountContext_(),
+            hasSession: !!AUTH_SESSION_ID
+          });
           if (dashboardHomeData && isDashboardHomeCriticalReady_(dashboardHomeData)) {
             resetDashboardHomeTransientState_();
             rememberDashboardHomeResponse_(getDashboardContextRequestPayload_(), dashboardHomeData);
@@ -32818,7 +32847,23 @@
           if (loadedDashboardHomeData) {
             notifyDashboardCriticalReady_(loadedDashboardHomeData);
           }
+          logPortalClientLoadTiming_(loginTrace, 'login_dashboard_ready', {
+            routeType: 'login',
+            ok: !!loadedDashboardHomeData,
+            projectCount: loadedDashboardHomeData && Array.isArray(loadedDashboardHomeData.projects)
+              ? loadedDashboardHomeData.projects.length
+              : 0,
+            hasAccountContext: hasDashboardAccountContext_()
+          });
         } catch (err) {
+          logPortalClientLoadTiming_(loginTrace, 'login_dashboard_failed', {
+            routeType: 'login',
+            ok: false,
+            hasAccountContext: hasDashboardAccountContext_(),
+            projectCount: loadedDashboardHomeData && Array.isArray(loadedDashboardHomeData.projects)
+              ? loadedDashboardHomeData.projects.length
+              : 0
+          });
           setAuthMessage(String((err && err.message) || err), true, { view: VIEW_LOGIN });
         } finally {
           setButtonBusy(authLoginBtn, false, 'Logging in...', 'Log in');
