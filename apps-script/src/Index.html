@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 212">212</div>
+  <div class="devRevisionBadge" aria-label="Development revision 214">214</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24961,7 +24961,10 @@
     const nextAccountId = String(account.accountId || DASHBOARD_CONTEXT_ACCOUNT_ID || '').trim();
     const nextAccessToken = String(account.accountAccessToken || DASHBOARD_CONTEXT_ACCOUNT_ACCESS_TOKEN || '').trim();
     if (!nextAccountId && !nextAccessToken) return;
-    if (hasDashboardAccountContext_() || hasDashboardTokenContext_() || DASHBOARD_CONTEXT_MODE === 'session') {
+    if (hasDashboardTokenContext_() && !hasDashboardAccountContext_()) {
+      return;
+    }
+    if (hasDashboardAccountContext_() || DASHBOARD_CONTEXT_MODE === 'session') {
       setDashboardAccountContext_(nextAccountId, nextAccessToken);
     }
   }
@@ -25445,6 +25448,7 @@
 	  function setDashboardActiveProjects_(payload){
 	    const data = (payload && typeof payload === 'object') ? payload : {};
 	    const projects = Array.isArray(data.projects) ? data.projects : [];
+	    const requestedVisibleCount = Math.max(0, Number(data.visibleCount || 0) || 0);
 	    const contextKey = getDashboardContextKey_(getDashboardContextRequestPayload_());
 	    const existing = getDashboardActiveStateForCurrentContext_();
 	    const state = existing || createDashboardActiveState_(contextKey);
@@ -25481,7 +25485,7 @@
 	      projects.length,
 	      Math.max(
 	        Math.min(projects.length, DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE),
-	        existingVisibleCount || DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE
+	        requestedVisibleCount || existingVisibleCount || DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE
 	      )
 	    );
 	    state.storedAt = Date.now();
@@ -32095,13 +32099,25 @@
 	    return true;
 	  }
 
-	  function renderProjectRows(projects){
+	  function renderProjectRows(projects, options){
 	    if (!authProjectsBody || !authProjectsEmpty) return;
+	    const opts = (options && typeof options === 'object') ? options : {};
 	    DASHBOARD_PROJECTS_LOADING_VISIBLE = false;
 	    authProjectsBody.innerHTML = '';
 	    const list = Array.isArray(projects) ? projects : [];
-	    const state = setDashboardActiveProjects_({ projects: list });
-	    const visibleCount = getDashboardVisibleProjectCount_(list.length);
+	    const requestedVisibleCount = Math.max(0, Number(opts.visibleCount || 0) || 0);
+	    const state = setDashboardActiveProjects_({
+	      projects: list,
+	      visibleCount: requestedVisibleCount
+	    });
+	    const stateVisibleCount = state ? Number(state.visibleCount || 0) : 0;
+	    const visibleCount = Math.min(
+	      list.length,
+	      Math.max(
+	        Math.min(list.length, DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE),
+	        requestedVisibleCount || stateVisibleCount || getDashboardVisibleProjectCount_(list.length)
+	      )
+	    );
 	    updateDashboardProjectsTitle(list);
 
 	    if (!list.length) {
@@ -32146,7 +32162,9 @@
 	      visibleCount: oldVisibleCount
 	    });
 	    state.visibleCount = nextVisibleCount;
-	    renderProjectRows(state.projects);
+	    renderProjectRows(state.projects, {
+	      visibleCount: nextVisibleCount
+	    });
 	    const revealedTokens = state.projects
 	      .slice(oldVisibleCount, nextVisibleCount)
 	      .map(project => String(project && project.token || '').trim())
