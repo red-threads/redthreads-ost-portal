@@ -17,6 +17,18 @@ Append-only project memory for decisions, session summaries, validation results,
 - Follow-ups:
 ```
 
+## 2026-06-29 - Sales Tax Tips Viewer Preload
+
+- Mode: Full ship focused runtime UI performance fix.
+- Branch/commit/PR: `main`, Apps Script version `1096`, existing deployment `AKfycbz9qDgp65f5S3RWhSxGftioMXKKU9O1N0mpHh3waoKY2YyvE72F-cJk-0XYr5YXg4bw`.
+- Goal: make the approved-tax viewer `View Sales Tax Do's and Don'ts` button switch immediately after the viewer has had time to preload the dark tips asset.
+- Files changed: `apps-script/src/Index.html`, `docs/CURRENT_BUILD_STATE.md`, `OST_PROJECT_LOG.md`.
+- Implementation: `Index.html` revision `226` adds non-blocking background tips preload state, offscreen image decode, and a per-open generation guard. The approved-tax viewer starts preloading the dark tips asset after the request payload is known without delaying the approved certificate first paint. The toggle uses the prepared artifact immediately, promotes an in-flight preload to a visible viewer loading state on early click, retries a failed preload once on click, and keeps the approved-form toggle-back immediate. The order-flow tips viewer reuses the prepared artifact when available.
+- Validation: `node --check apps-script/src/Code.js`, `node --check tools/validate-repo.mjs`, `git diff --check`, `npm run validate:runtime`, and `VALIDATE_ALLOW_RUNTIME_CHANGES=1 npm run validate` passed.
+- Deployment/smoke: `clasp status`, `clasp push --force`, `clasp version "Preload sales tax tips viewer"`, and `clasp deploy` to the existing stable deployment ID succeeded. `clasp deployments` confirmed `@1096 - Preload sales tax tips viewer`; no new deployment ID was created. Direct `/exec` returned HTTP `200` with `Development revision 226`, omitted stale revision `225`, referenced the stable deployment ID, and included the tips preload/toggle source markers. Public `/portal` returned HTTP `200`, referenced the stable deployment ID, and retained wrapper markers.
+- Runtime data state: no Sheet schema/data, Script Properties, pricing/Calculator, immutable `snapshotJson`, checkout/payment/ACH/Stripe behavior, email lifecycle, Team Mode permission, account-document workflow state, token lookup, queue data, or deployment ID behavior was intentionally changed. No email-review suite was run and no account-document action was clicked from this shell.
+- Follow-ups: owner-side authenticated smoke should verify the approved tax document viewer swaps to tips immediately after a brief preload window and shows the loading state only on an intentionally early click.
+
 ## 2026-06-29 - Project Dashboard Return Guard Fix
 
 - Mode: Full ship live loading audit/edit/smoke loop.
