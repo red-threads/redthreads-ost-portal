@@ -17966,7 +17966,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 208">208</div>
+  <div class="devRevisionBadge" aria-label="Development revision 212">212</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24348,6 +24348,7 @@
   let DASHBOARD_OPEN_ARMED_BTN = null;
   let DASHBOARD_OPEN_ARMED_AT = 0;
   let DASHBOARD_OPEN_ARMED_SOURCE = '';
+  let PORTAL_VIEW_TRANSITION_SEQ = 0;
 	  const DASHBOARD_PROJECT_PEEK_CACHE = new Map();
 	  const DASHBOARD_PROJECT_PEEK_INFLIGHT = new Map();
 	  const DASHBOARD_PROJECT_PEEK_SUMMARY_INFLIGHT = new Map();
@@ -24372,16 +24373,25 @@
   let DASHBOARD_PROJECT_PEEK_PREFETCH_HANDLE = 0;
   let DASHBOARD_PROJECT_PEEK_PREFETCH_HANDLE_KIND = '';
   let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ = 0;
-  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = [];
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = [];
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT = 0;
 	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE = 0;
 	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND = '';
 	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = 650;
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE = null;
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_STARTED_COUNT = 0;
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_COUNT = 0;
+	  let DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_COUNT = 0;
+	  const DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_TOKENS = new Set();
+	  const DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_TOKENS = new Set();
+	  const DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SOURCE_BY_TOKEN = new Map();
 	  let DASHBOARD_PROJECT_PEEK_DOC_PREWARMED = false;
-	  let DASHBOARD_STATUS_HYDRATION_SEQ = 0;
 	  let DASHBOARD_ROW_PAIR_HYDRATION_SEQ = 0;
 	  let DASHBOARD_ACTIVE_STATE = null;
+	  let DASHBOARD_RETURN_CONTEXT_PAYLOAD = null;
   const DASHBOARD_OPEN_ARM_WINDOW_MS = 1500;
   const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_TTL_MS = 30000;
+  const DASHBOARD_PROJECT_OPEN_INFLIGHT_LOADER_DELAY_MS = 220;
 	  const DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS = 60000;
 	  const DASHBOARD_PROJECT_PEEK_SESSION_CACHE_TTL_MS = 5 * 60 * 1000;
 	  const DASHBOARD_PROJECT_PEEK_SESSION_CACHE_PREFIX = 'rt:dashboardFullPeek:v1:';
@@ -24390,20 +24400,36 @@
 	  const DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE = 6;
 	  const DASHBOARD_PROJECT_PEEK_PROFILE_SUMMARY = 'summary';
 	  const DASHBOARD_PROJECT_PEEK_PROFILE_FULL = 'full';
-		  const DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS = 15000;
 	  const DASHBOARD_ROW_PAIR_HYDRATION_FALLBACK_MS = 2500;
-	  const DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS = 8000;
   const DASHBOARD_FULL_PEEK_PREFETCH_IDLE_LIMIT = 3;
   const DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS = 1400;
+  const DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY = 2;
+  const PORTAL_LOADING_BUDGETS_MS = Object.freeze({
+    dashboard_first_reveal: 10000,
+    dashboard_return_mounted: 650,
+    dashboard_return_cache: 1500,
+    dashboard_return_fetch: 10000,
+    account_document_resume_mounted: 650,
+    account_document_resume_cache: 1500,
+    account_document_resume_fetch: 10000,
+    project_open_prefetch_hit: 500,
+    project_open_prefetch_inflight: DASHBOARD_PROJECT_OPEN_INFLIGHT_LOADER_DELAY_MS,
+    project_open_fetch: 9000,
+    load_older_batch_reveal: 600,
+    paired_row_hydration: 3500,
+    peek_open_cached: 500,
+    peek_open_summary: 700,
+    peek_open_fetch: 7000,
+    full_peek_hydration_token: 9000,
+    full_peek_hydration_queue: 30000
+  });
   const DASHBOARD_READ_MODEL_VERSION = 'v3-draft-1';
   const DASHBOARD_READ_MODEL_SOURCE_LEGACY = 'legacy_live_projection';
-	  const DASHBOARD_CRITICAL_CACHE_PROFILE = 'criticalSixFullPeekRowsReadyV3';
-	  const DASHBOARD_CRITICAL_FALLBACK_PROFILE = 'criticalSixFullPeekRowsFallbackV3';
+	  const DASHBOARD_CRITICAL_CACHE_PROFILE = 'criticalSixPeekSummaryRowsReadyV4';
+	  const DASHBOARD_CRITICAL_FALLBACK_PROFILE = 'criticalSixPeekSummaryRowsFallbackV4';
   const DASHBOARD_CRITICAL_THUMBNAIL_WAIT_MS = 2500;
   const DASHBOARD_CRITICAL_READY_REASON = 'dashboard-critical-ready';
   const DASHBOARD_CRITICAL_FALLBACK_REASON = 'dashboard-critical-fallback';
-  const DASHBOARD_STATUS_VISIBLE_BATCH_SIZE = 8;
-  const DASHBOARD_STATUS_BACKGROUND_BATCH_SIZE = 4;
   const SNAPSHOT_DIRTY_BASELINE_PROJECT_LOAD_DELAY_MS = 420;
   let DASHBOARD_BOOTSTRAP_INTENT_CONSUMED = false;
   let SUMMARY_BOOTSTRAP_INTENT_CONSUMED = false;
@@ -24962,6 +24988,28 @@
     return fallbackToken ? { token: fallbackToken } : null;
   }
 
+  function applyDashboardContextFromRequestPayload_(requestPayload){
+    const payload = (requestPayload && typeof requestPayload === 'object') ? requestPayload : {};
+    const accountAccessToken = String(payload.accountAccessToken || payload.dashboardAccessToken || '').trim();
+    const accountId = String(payload.accountId || '').trim();
+    const token = String(payload.token || payload.t || '').trim();
+    const sessionId = String(payload.sessionId || '').trim();
+    if (accountAccessToken || accountId) {
+      setDashboardAccountContext_(accountId, accountAccessToken);
+      return true;
+    }
+    if (token) {
+      setDashboardTokenContext_(token);
+      return true;
+    }
+    if (sessionId) {
+      AUTH_SESSION_ID = sessionId;
+      setDashboardSessionContext_();
+      return true;
+    }
+    return false;
+  }
+
   function getDashboardContextKey_(payload){
     const req = (payload && typeof payload === 'object') ? payload : {};
     if (req.accountAccessToken) return 'accountAccessToken:' + String(req.accountAccessToken).trim();
@@ -25028,13 +25076,16 @@
     return requestPayload || null;
   }
 
-  function clearStoredPortalPayload(){
+  function clearStoredPortalPayload(options){
+    const opts = (options && typeof options === 'object') ? options : {};
     try {
       localStorage.removeItem(AUTH_PORTAL_PAYLOAD_STORAGE_KEY);
       localStorage.removeItem(AUTH_PORTAL_BOOT_ONCE_KEY);
       sessionStorage.removeItem(AUTH_PORTAL_BOOT_INTENT_KEY);
       sessionStorage.removeItem(AUTH_PORTAL_DIRECT_OPEN_TOKEN_KEY);
-      clearDashboardProjectPeekSessionCache_();
+      if (opts.preserveDashboardPeekCache !== true) {
+        clearDashboardProjectPeekSessionCache_();
+      }
     } catch (_) {}
   }
 
@@ -25098,7 +25149,6 @@
 	    DASHBOARD_PROJECT_PEEK_CACHE.clear();
 	    DASHBOARD_PROJECT_PEEK_INFLIGHT.clear();
 	    DASHBOARD_PROJECT_PEEK_SUMMARY_INFLIGHT.clear();
-    DASHBOARD_STATUS_HYDRATION_SEQ += 1;
     clearDashboardProjectPayloadPrefetch_();
     clearDashboardProjectPeekPrefetch_();
     clearDashboardProjectPeekFullPrefetch_();
@@ -25185,6 +25235,7 @@
 	      statusByToken: new Map(),
 	      pairedReadyTokens: new Set(),
 	      visibleCount: DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE,
+	      scrollY: 0,
 	      backgroundHydrationState: 'idle',
 	      backgroundHydrationStarted: false,
 	      storedAt: Date.now()
@@ -25193,6 +25244,7 @@
 
 	  function resetDashboardActiveState_(){
 	    DASHBOARD_ACTIVE_STATE = null;
+	    DASHBOARD_RETURN_CONTEXT_PAYLOAD = null;
 	    DASHBOARD_ROW_PAIR_HYDRATION_SEQ += 1;
 	    DASHBOARD_PROJECT_STATUS_INFLIGHT.clear();
 	    DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT.clear();
@@ -25264,6 +25316,132 @@
 	    if (state && cleanToken) state.pairedReadyTokens.add(cleanToken);
 	  }
 
+	  function createPortalViewTransition_(fromView, toView, requestPayload, options){
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const transition = {
+	      seq: ++PORTAL_VIEW_TRANSITION_SEQ,
+	      fromView: String(fromView || CURRENT_VIEW || '').trim(),
+	      toView: String(toView || '').trim(),
+	      contextKey: getDashboardContextKey_(requestPayload || getDashboardContextRequestPayload_()),
+	      hasMountedSurface: opts.hasMountedSurface === true,
+	      cacheHit: opts.cacheHit === true,
+	      prefetchHit: opts.prefetchHit === true,
+	      loaderPolicy: String(opts.loaderPolicy || '').trim(),
+	      trace: createPortalClientLoadTimingTrace_('view_transition')
+	    };
+	    markPortalViewTransition_(transition, 'view_transition_start', {
+	      routeType: opts.routeType || 'view_transition',
+	      source: opts.source || '',
+	      hasMountedSurface: transition.hasMountedSurface,
+	      cacheHit: transition.cacheHit,
+	      prefetchHit: transition.prefetchHit,
+	      loaderPolicy: transition.loaderPolicy
+	    });
+	    return transition;
+	  }
+
+	  function markPortalViewTransition_(transition, phase, extra){
+	    if (!transition || !transition.trace) return null;
+	    const opts = (extra && typeof extra === 'object') ? extra : {};
+	    return markPortalClientLoadTiming_(transition.trace, phase, Object.assign({
+	      routeType: opts.routeType || 'view_transition',
+	      fromView: transition.fromView,
+	      toView: transition.toView,
+	      hasMountedSurface: transition.hasMountedSurface,
+	      cacheHit: transition.cacheHit,
+	      prefetchHit: transition.prefetchHit,
+	      loaderPolicy: transition.loaderPolicy
+	    }, opts));
+	  }
+
+	  function markPortalViewTransitionBudget_(transition, phase, budgetName, extra){
+	    if (!transition || !transition.trace) return null;
+	    const opts = (extra && typeof extra === 'object') ? extra : {};
+	    return markPortalClientLoadBudget_(transition.trace, phase, budgetName, Object.assign({
+	      routeType: opts.routeType || 'view_transition',
+	      fromView: transition.fromView,
+	      toView: transition.toView,
+	      hasMountedSurface: transition.hasMountedSurface,
+	      cacheHit: transition.cacheHit,
+	      prefetchHit: transition.prefetchHit,
+	      loaderPolicy: transition.loaderPolicy
+	    }, opts));
+	  }
+
+	  function logPortalViewTransition_(transition, phase, extra){
+	    if (!transition || !transition.trace) return null;
+	    const opts = (extra && typeof extra === 'object') ? extra : {};
+	    return logPortalClientLoadTiming_(transition.trace, phase, Object.assign({
+	      routeType: opts.routeType || 'view_transition',
+	      fromView: transition.fromView,
+	      toView: transition.toView,
+	      hasMountedSurface: transition.hasMountedSurface,
+	      cacheHit: transition.cacheHit,
+	      prefetchHit: transition.prefetchHit,
+	      loaderPolicy: transition.loaderPolicy
+	    }, opts));
+	  }
+
+	  function logPortalViewTransitionBudget_(transition, phase, budgetName, extra){
+	    if (!transition || !transition.trace) return null;
+	    const opts = (extra && typeof extra === 'object') ? extra : {};
+	    return logPortalClientLoadBudget_(transition.trace, phase, budgetName, Object.assign({
+	      routeType: opts.routeType || 'view_transition',
+	      fromView: transition.fromView,
+	      toView: transition.toView,
+	      hasMountedSurface: transition.hasMountedSurface,
+	      cacheHit: transition.cacheHit,
+	      prefetchHit: transition.prefetchHit,
+	      loaderPolicy: transition.loaderPolicy
+	    }, opts));
+	  }
+
+	  function captureDashboardMountedStateForTransition_(){
+	    const state = getDashboardActiveStateForCurrentContext_();
+	    if (!state || CURRENT_VIEW !== VIEW_DASHBOARD) return null;
+	    const returnPayload = buildDashboardHomeSummaryPayload_(getDashboardContextRequestPayload_());
+	    DASHBOARD_RETURN_CONTEXT_PAYLOAD = returnPayload ? clonePlainObject(returnPayload) : null;
+	    state.visibleCount = Math.max(
+	      DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE,
+	      Number(state.visibleCount || 0) || getDashboardRenderedProjectRowCount_()
+	    );
+	    try {
+	      state.scrollY = Math.max(0, Number(window.scrollY || window.pageYOffset || 0) || 0);
+	    } catch (_) {
+	      state.scrollY = 0;
+	    }
+	    state.storedAt = Date.now();
+	    return state;
+	  }
+
+	  function getDashboardReturnRequestPayload_(){
+	    const preserved = DASHBOARD_RETURN_CONTEXT_PAYLOAD &&
+	      typeof DASHBOARD_RETURN_CONTEXT_PAYLOAD === 'object'
+	      ? DASHBOARD_RETURN_CONTEXT_PAYLOAD
+	      : null;
+	    if (preserved && hasResumableMountedDashboardForContext_(preserved)) {
+	      return clonePlainObject(preserved);
+	    }
+	    return buildDashboardHomeSummaryPayload_(getDashboardContextRequestPayload_());
+	  }
+
+	  function hasResumableMountedDashboardForContext_(requestPayload){
+	    const payload = (requestPayload && typeof requestPayload === 'object')
+	      ? requestPayload
+	      : getDashboardContextRequestPayload_();
+	    const contextKey = getDashboardContextKey_(payload);
+	    const state = DASHBOARD_ACTIVE_STATE;
+	    return !!(
+	      state &&
+	      state.contextKey &&
+	      contextKey &&
+	      state.contextKey === contextKey &&
+	      Array.isArray(state.projects) &&
+	      state.projects.length &&
+	      hasDashboardProjectRows_()
+	    );
+	  }
+
 	  function setDashboardActiveProjects_(payload){
 	    const data = (payload && typeof payload === 'object') ? payload : {};
 	    const projects = Array.isArray(data.projects) ? data.projects : [];
@@ -25330,7 +25508,6 @@
 	      criticalTokens: [],
 	      criticalStatusReady: false,
 	      criticalPeekReady: false,
-	      criticalFullPeekReady: false,
 	      criticalThumbnailReady: false,
       criticalReadyEmitted: false,
       backgroundStatusState: 'idle',
@@ -25354,9 +25531,25 @@
     }, extra || {}));
   }
 
+  function markDashboardCoordinatorBudget_(coordinator, phase, budgetName, extra){
+    if (!coordinator) return null;
+    return markPortalClientLoadBudget_(coordinator.trace, phase, budgetName, Object.assign({
+      routeType: coordinator.routeType,
+      cacheProfile: coordinator.cacheProfile
+    }, extra || {}));
+  }
+
   function logDashboardCoordinator_(coordinator, phase, extra){
     if (!coordinator) return null;
     return logPortalClientLoadTiming_(coordinator.trace, phase, Object.assign({
+      routeType: coordinator.routeType,
+      cacheProfile: coordinator.cacheProfile
+    }, extra || {}));
+  }
+
+  function logDashboardCoordinatorBudget_(coordinator, phase, budgetName, extra){
+    if (!coordinator) return null;
+    return logPortalClientLoadBudget_(coordinator.trace, phase, budgetName, Object.assign({
       routeType: coordinator.routeType,
       cacheProfile: coordinator.cacheProfile
     }, extra || {}));
@@ -25689,31 +25882,6 @@
 	    });
 	  }
 
-		  function buildDashboardFullPeekBatchRequestPayload_(requestPayload, tokens){
-		    return Object.assign({}, (requestPayload && typeof requestPayload === 'object') ? requestPayload : {}, {
-		      tokens: Array.isArray(tokens) ? tokens.slice(0, DASHBOARD_CRITICAL_PROJECT_LIMIT) : [],
-		      batchLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
-		      criticalProjectLimit: DASHBOARD_CRITICAL_PROJECT_LIMIT,
-		      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL
-		    });
-		  }
-
-		  function buildDashboardFullPeekSingleResult_(token, payload){
-		    const cleanToken = String(token || '').trim();
-		    if (cleanToken && isDashboardProjectPeekFullPayload_(payload)) {
-		      return {
-		        token: cleanToken,
-		        ok: true,
-		        peekPreview: payload
-		      };
-		    }
-		    return {
-		      token: cleanToken,
-		      ok: false,
-		      error: 'Full Project Peek data unavailable.'
-		    };
-		  }
-
   async function requestDashboardProjectCriticalBatch_(requestPayload, tokens, coordinator, attempt){
     const batchTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
     markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_batch_request', {
@@ -25830,216 +25998,6 @@
 	    return mergeDashboardCriticalBatchResponses_(criticalTokens, responses);
 	  }
 
-	  function getDashboardFullPeekResultMap_(resp){
-	    const map = new Map();
-	    const list = resp && Array.isArray(resp.projects) ? resp.projects : [];
-	    list.forEach(item => {
-	      const token = String(item && item.token || '').trim();
-	      if (token) map.set(token, item);
-	    });
-	    return map;
-	  }
-
-	  function isDashboardFullPeekResultReady_(result){
-	    const item = (result && typeof result === 'object') ? result : null;
-	    return !!(
-	      item &&
-	      item.ok === true &&
-	      isDashboardProjectPeekFullPayload_(item.peekPreview)
-	    );
-	  }
-
-	  function getDashboardFullPeekFailedTokens_(tokens, responses){
-	    const latestByToken = new Map();
-	    (Array.isArray(responses) ? responses : []).forEach(resp => {
-	      const map = getDashboardFullPeekResultMap_(resp);
-	      map.forEach((value, token) => {
-	        latestByToken.set(token, value);
-	      });
-	    });
-	    return (Array.isArray(tokens) ? tokens : []).filter(token => {
-	      return !isDashboardFullPeekResultReady_(latestByToken.get(token));
-	    });
-	  }
-
-	  function mergeDashboardFullPeekBatchResponses_(tokens, responses){
-	    const byToken = new Map();
-	    (Array.isArray(responses) ? responses : []).forEach(resp => {
-	      const map = getDashboardFullPeekResultMap_(resp);
-	      map.forEach((value, token) => {
-	        const current = byToken.get(token);
-	        if (!current || isDashboardFullPeekResultReady_(value) || !isDashboardFullPeekResultReady_(current)) {
-	          byToken.set(token, value);
-	        }
-	      });
-	    });
-	    const firstResponse = Array.isArray(responses) && responses.length ? responses[0] : {};
-	    return {
-	      ok: true,
-	      dashboardPeekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
-	      projectionVersion: String(firstResponse && firstResponse.projectionVersion || '').trim(),
-	      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
-	      peekVersion: String(firstResponse && firstResponse.peekVersion || '').trim(),
-	      projects: (Array.isArray(tokens) ? tokens : []).map(token => byToken.get(token) || {
-	        token: token,
-	        ok: false,
-	        error: 'Full Project Peek data unavailable.'
-	      })
-	    };
-	  }
-
-	  async function requestDashboardProjectFullPeekBatch_(requestPayload, tokens, coordinator, attempt){
-	    const batchTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
-	    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_request', {
-	      stage: attempt > 0 ? 'retry' : 'initial',
-	      tokenCount: batchTokens.length,
-	      batchSize: batchTokens.length
-	    });
-	    const resp = await callServer('getDashboardProjectFullPeekBatch', buildDashboardFullPeekBatchRequestPayload_(requestPayload, batchTokens));
-	    const serverTiming = getServerPortalLoadTimingSummary_(resp);
-	    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_response', Object.assign({
-	      stage: attempt > 0 ? 'retry' : 'initial',
-	      ok: !!(resp && resp.ok === true),
-	      tokenCount: batchTokens.length,
-	      projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
-	    }, serverTiming || {}));
-	    if (!resp || resp.ok !== true) {
-	      throw new Error(String((resp && resp.error) || 'Unable to load full Project Peek data.'));
-	    }
-	    return resp;
-	  }
-
-		  async function fetchDashboardProjectFullPeekBatchWithRetry_(requestPayload, tokens, coordinator){
-		    const criticalTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
-		    const responses = [];
-	    let firstError = null;
-	    try {
-	      responses.push(await requestDashboardProjectFullPeekBatch_(requestPayload, criticalTokens, coordinator, 0));
-	    } catch (err) {
-	      firstError = err;
-	      markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_failed', {
-	        stage: 'initial',
-	        ok: false,
-	        tokenCount: criticalTokens.length
-	      });
-	    }
-	    const failedTokens = responses.length
-	      ? getDashboardFullPeekFailedTokens_(criticalTokens, responses)
-	      : criticalTokens.slice();
-	    if (failedTokens.length) {
-	      try {
-	        responses.push(await requestDashboardProjectFullPeekBatch_(requestPayload, failedTokens, coordinator, 1));
-	      } catch (err) {
-	        if (!firstError) firstError = err;
-	        markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_failed', {
-	          stage: 'retry',
-	          ok: false,
-	          tokenCount: failedTokens.length
-	        });
-	      }
-	    }
-		    if (!responses.length && firstError) throw firstError;
-		    return mergeDashboardFullPeekBatchResponses_(criticalTokens, responses);
-		  }
-
-		  async function requestDashboardProjectFullPeekSingles_(requestPayload, tokens, coordinator, attempt){
-		    const singleTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
-		    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_single_request', {
-		      stage: attempt > 0 ? 'retry' : 'initial',
-		      tokenCount: singleTokens.length,
-		      batchSize: singleTokens.length
-		    });
-		    const responses = await Promise.all(singleTokens.map(token => {
-		      return fetchDashboardProjectPeek_(token, {
-		        source: attempt > 0 ? 'critical-full-single-retry' : 'critical-full-single',
-		        requestPayload: requestPayload,
-		        suppressTiming: true
-		      })
-		        .then(payload => buildDashboardFullPeekSingleResult_(token, payload))
-		        .catch(() => buildDashboardFullPeekSingleResult_(token, null));
-		    }));
-		    const readyCount = responses.filter(item => isDashboardFullPeekResultReady_(item)).length;
-		    const cacheMeta = {
-		      cacheType: 'dashboard_full_peek',
-		      cacheHits: 0,
-		      cacheMisses: 0,
-		      cacheStores: 0,
-		      cacheSkips: 0,
-		      cacheErrors: 0
-		    };
-		    responses.forEach(item => {
-		      const meta = item && item.peekPreview && item.peekPreview.cacheMeta && typeof item.peekPreview.cacheMeta === 'object'
-		        ? item.peekPreview.cacheMeta
-		        : {};
-		      ['cacheHits', 'cacheMisses', 'cacheStores', 'cacheSkips', 'cacheErrors'].forEach(key => {
-		        cacheMeta[key] += Math.max(0, parseInt(String(meta[key] || 0), 10) || 0);
-		      });
-		      if (String(meta.cacheType || '').trim()) cacheMeta.cacheType = String(meta.cacheType || '').trim();
-		    });
-		    const firstReady = responses.find(item => isDashboardFullPeekResultReady_(item));
-		    const firstPayload = firstReady && firstReady.peekPreview && typeof firstReady.peekPreview === 'object'
-		      ? firstReady.peekPreview
-		      : {};
-		    markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_single_response', {
-		      stage: attempt > 0 ? 'retry' : 'initial',
-		      ok: readyCount === singleTokens.length,
-		      tokenCount: singleTokens.length,
-		      projectCount: responses.length,
-		      readyCount: readyCount,
-		      fallbackCount: Math.max(0, singleTokens.length - readyCount),
-		      cacheHits: cacheMeta.cacheHits,
-		      cacheMisses: cacheMeta.cacheMisses,
-		      cacheStores: cacheMeta.cacheStores,
-		      cacheSkips: cacheMeta.cacheSkips,
-		      cacheErrors: cacheMeta.cacheErrors
-		    });
-		    return {
-		      ok: true,
-		      dashboardPeekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
-		      projectionVersion: String(firstPayload.projectionVersion || ''),
-		      peekProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
-		      peekVersion: String(firstPayload.peekVersion || ''),
-		      cacheMeta: cacheMeta,
-		      projects: responses
-		    };
-		  }
-
-		  async function fetchDashboardProjectFullPeekSinglesWithRetry_(requestPayload, tokens, coordinator){
-		    const criticalTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [];
-		    const responses = [];
-		    responses.push(await requestDashboardProjectFullPeekSingles_(requestPayload, criticalTokens, coordinator, 0));
-		    const failedTokens = getDashboardFullPeekFailedTokens_(criticalTokens, responses);
-		    if (failedTokens.length) {
-		      responses.push(await requestDashboardProjectFullPeekSingles_(requestPayload, failedTokens, coordinator, 1));
-		    }
-		    return mergeDashboardFullPeekBatchResponses_(criticalTokens, responses);
-		  }
-
-		  async function fetchDashboardProjectFullPeekBatchBounded_(requestPayload, tokens, coordinator){
-		    let timedOut = false;
-		    const work = fetchDashboardProjectFullPeekSinglesWithRetry_(requestPayload, tokens, coordinator);
-		    const timeout = waitMs_(DASHBOARD_CRITICAL_FULL_PEEK_WAIT_MS).then(() => {
-		      timedOut = true;
-		      return {
-	        ok: true,
-	        timedOut: true,
-	        projects: (Array.isArray(tokens) ? tokens : []).map(token => ({
-	          token: token,
-	          ok: false,
-	          error: 'Full Project Peek timed out.'
-	        }))
-	      };
-	    });
-		    const resp = await Promise.race([work, timeout]);
-		    if (timedOut) {
-		      markDashboardCoordinatorPhase_(coordinator, 'dashboard_critical_full_peek_single_timeout', {
-		        ok: false,
-		        tokenCount: Array.isArray(tokens) ? tokens.length : 0
-		      });
-	    }
-	    return resp;
-	  }
-
   function markDashboardHomeResponseCriticalMeta_(payload, meta){
     const response = (payload && typeof payload === 'object') ? payload : {};
     const critical = (meta && typeof meta === 'object') ? meta : {};
@@ -26051,14 +26009,8 @@
         criticalReady: false,
 	        criticalStatusReady: false,
 	        criticalPeekReady: false,
-	        criticalFullPeekReady: false,
 	        criticalThumbnailReady: false,
 	        criticalThumbnailFallback: false,
-	        fullPeekReadyTokens: [],
-	        fullPeekFallbackTokens: [],
-	        fullPeekReadyCount: 0,
-	        fullPeekFallbackCount: 0,
-	        fullPeekTimeout: false,
 	        thumbnailReadyTokens: [],
         thumbnailFallbackTokens: [],
         thumbnailReadyCount: 0,
@@ -26134,8 +26086,7 @@
         : {};
 	      const statusReady = critical.criticalStatusReady === true;
 	      const peekReady = critical.criticalPeekReady === true;
-	      const fullPeekReady = critical.criticalFullPeekReady === true;
-	      const allReady = statusReady && peekReady && fullPeekReady && thumbnailReady;
+	      const allReady = statusReady && peekReady && thumbnailReady;
       const profile = allReady ? DASHBOARD_CRITICAL_CACHE_PROFILE : DASHBOARD_CRITICAL_FALLBACK_PROFILE;
       payload.dashboardCacheProfile = profile;
       payload.dashboardCritical = Object.assign({}, critical, {
@@ -26223,76 +26174,6 @@
 	    });
 	  }
 
-		  function applyDashboardCriticalFullPeekDataToHomeData_(homeData, fullResp, criticalTokens){
-		    const payload = (homeData && typeof homeData === 'object') ? homeData : {};
-	    const projects = Array.isArray(payload.projects) ? payload.projects : [];
-	    const tokens = Array.isArray(criticalTokens) ? criticalTokens.slice() : [];
-	    const resultMap = getDashboardFullPeekResultMap_(fullResp);
-	    const readyTokens = [];
-	    const fallbackTokens = [];
-	    tokens.forEach(token => {
-	      const result = resultMap.get(token) || null;
-	      if (isDashboardFullPeekResultReady_(result)) {
-	        rememberDashboardProjectPeekPayload_(token, result.peekPreview, {
-	          source: 'critical-full'
-	        });
-		        const project = getDashboardProjectByToken_(projects, token);
-		        if (project) {
-		          project.fullPeekInline = true;
-		          project.fullPeekProfile = DASHBOARD_PROJECT_PEEK_PROFILE_FULL;
-		          project.fullPeekPreview = clonePlainObject(result.peekPreview);
-		        }
-		        readyTokens.push(token);
-	      } else {
-	        const project = getDashboardProjectByToken_(projects, token);
-	        if (project) project.criticalFullPeekFallback = true;
-	        fallbackTokens.push(token);
-	      }
-	    });
-	    const critical = payload.dashboardCritical && typeof payload.dashboardCritical === 'object'
-	      ? payload.dashboardCritical
-	      : {};
-	    const fullReady = fallbackTokens.length === 0;
-	    const allReady = critical.criticalStatusReady === true &&
-	      critical.criticalPeekReady === true &&
-	      critical.criticalThumbnailReady === true &&
-	      fullReady;
-	    const profile = allReady ? DASHBOARD_CRITICAL_CACHE_PROFILE : DASHBOARD_CRITICAL_FALLBACK_PROFILE;
-	    payload.dashboardCacheProfile = profile;
-	    payload.dashboardCritical = Object.assign({}, critical, {
-	      profile: profile,
-	      criticalReady: allReady,
-	      criticalFullPeekReady: fullReady,
-	      fullPeekReadyTokens: readyTokens,
-	      fullPeekFallbackTokens: fallbackTokens,
-	      fullPeekReadyCount: readyTokens.length,
-	      fullPeekFallbackCount: fallbackTokens.length,
-	      fullPeekTimeout: fullResp && fullResp.timedOut === true,
-	      fallback: !allReady,
-	      peekFullProfile: DASHBOARD_PROJECT_PEEK_PROFILE_FULL,
-	      peekFullVersion: String(fullResp && fullResp.peekVersion || ''),
-	      storedAt: Date.now()
-	    });
-		    return payload;
-		  }
-
-		  function hasDashboardHomeInlineFullPeekPayloads_(data, tokens){
-		    const payload = (data && typeof data === 'object') ? data : null;
-		    const projects = payload && Array.isArray(payload.projects) ? payload.projects : [];
-		    const requiredTokens = uniqueDashboardProjectPeekTokens_(
-		      Array.isArray(tokens) && tokens.length
-		        ? tokens
-		        : getDashboardCriticalProjectTokens_(projects)
-		    );
-		    if (!requiredTokens.length) return true;
-		    return requiredTokens.every(token => {
-		      const project = getDashboardProjectByToken_(projects, token);
-		      if (!project) return false;
-		      if (project.fullPeekInline === true && isDashboardProjectPeekFullPayload_(project.fullPeekPreview)) return true;
-		      return project.peekInline === true && isDashboardProjectPeekFullPayload_(project.peekPreview);
-		    });
-		  }
-
 		  function isDashboardHomeCriticalReady_(data){
     const payload = (data && typeof data === 'object') ? data : null;
     const critical = payload && payload.dashboardCritical && typeof payload.dashboardCritical === 'object'
@@ -26307,12 +26188,9 @@
 	      critical.criticalReady === true &&
 	      critical.criticalStatusReady === true &&
 	      critical.criticalPeekReady === true &&
-		      critical.criticalFullPeekReady === true &&
 		      critical.criticalThumbnailReady === true &&
-		      critical.fullPeekFallbackCount === 0 &&
 		      critical.criticalThumbnailFallback !== true &&
-		      critical.fallback !== true &&
-		      hasDashboardHomeInlineFullPeekPayloads_(payload, critical.criticalTokens)
+		      critical.fallback !== true
 		    );
 	  }
 
@@ -27419,6 +27297,46 @@
     };
   }
 
+  function getPortalLoadingBudgetMs_(budgetName){
+    const key = String(budgetName || '').trim();
+    if (!key || !Object.prototype.hasOwnProperty.call(PORTAL_LOADING_BUDGETS_MS, key)) return 0;
+    const value = Number(PORTAL_LOADING_BUDGETS_MS[key]);
+    return isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  }
+
+  function buildPortalLoadingBudgetMeta_(trace, budgetName, extra){
+    const key = String(budgetName || '').trim();
+    const budgetMs = getPortalLoadingBudgetMs_(key);
+    if (!key || !budgetMs) return extra || {};
+    const elapsedMs = trace && trace.startedAt
+      ? Math.round(nowPortalLoadTimingMs_() - trace.startedAt)
+      : Math.max(0, Math.round(Number(extra && extra.budgetElapsedMs || 0) || 0));
+    return Object.assign({
+      budgetName: key,
+      budgetMs: budgetMs,
+      budgetElapsedMs: elapsedMs,
+      withinBudget: elapsedMs <= budgetMs,
+      budgetExceeded: elapsedMs > budgetMs,
+      budgetStatus: elapsedMs <= budgetMs ? 'within_budget' : 'over_budget'
+    }, extra || {});
+  }
+
+  function markPortalClientLoadBudget_(trace, phase, budgetName, extra){
+    return markPortalClientLoadTiming_(
+      trace,
+      phase,
+      buildPortalLoadingBudgetMeta_(trace, budgetName, extra)
+    );
+  }
+
+  function logPortalClientLoadBudget_(trace, phase, budgetName, extra){
+    return logPortalClientLoadTiming_(
+      trace,
+      phase,
+      buildPortalLoadingBudgetMeta_(trace, budgetName, extra)
+    );
+  }
+
   function buildPortalClientTimingExtra_(extra){
     const source = (extra && typeof extra === 'object') ? extra : {};
     const out = {};
@@ -27427,13 +27345,18 @@
       'source',
       'reason',
       'stage',
+      'fromView',
+      'toView',
+      'loaderPolicy',
       'cacheType',
       'cacheProfile',
       'serverLabel',
       'readSource',
       'sourcePreference',
       'readModelVersion',
-      'fallbackState'
+      'fallbackState',
+      'budgetName',
+      'budgetStatus'
     ].forEach(key => {
       const value = String(source[key] == null ? '' : source[key]).trim();
       if (value) out[key] = value;
@@ -27445,13 +27368,18 @@
       'cacheHit',
       'prefetchHit',
       'prefetchInflight',
+      'hasMountedSurface',
+      'loaderShown',
       'embedded',
       'criticalReady',
       'criticalStatusReady',
       'criticalPeekReady',
       'criticalThumbnailReady',
       'baselineReady',
-      'baselineInitializing'
+      'baselineInitializing',
+      'fallback',
+      'withinBudget',
+      'budgetExceeded'
     ].forEach(key => {
       if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key] === true;
     });
@@ -27474,7 +27402,18 @@
       'rowCount',
       'thumbnailReadyCount',
       'thumbnailFallbackCount',
-      'thumbnailCandidateCount'
+      'thumbnailCandidateCount',
+      'queueDepth',
+      'activeCount',
+      'priority',
+      'completedCount',
+      'failedCount',
+      'budgetMs',
+      'budgetElapsedMs',
+      'loaderDelayMs',
+      'statusReadyCount',
+      'peekReadyCount',
+      'fullPeekActiveLimit'
     ].forEach(key => {
       if (!Object.prototype.hasOwnProperty.call(source, key)) return;
       const n = Number(source[key]);
@@ -28468,7 +28407,20 @@
 	    const routeType = String(reason || 'account_document_close').trim() || 'account_document_close';
 	    const hasMountedDashboard = hasUsableMountedDashboardForCurrentContext_();
 	    const bypassReason = getDashboardHomeReturnCacheBypassReason_();
+	    const transition = createPortalViewTransition_('account_document', VIEW_DASHBOARD, payload, {
+	      routeType: 'account_document_to_dashboard',
+	      source: routeType,
+	      hasMountedSurface: hasMountedDashboard,
+	      loaderPolicy: hasMountedDashboard ? 'mounted_resume' : 'cache_or_fetch'
+	    });
 	    if (hasMountedDashboard) {
+	      markPortalViewTransitionBudget_(transition, 'dashboard_resume_mounted', 'account_document_resume_mounted', {
+	        routeType: 'account_document_to_dashboard',
+	        source: routeType,
+	        hasMountedSurface: true,
+	        projectCount: DASHBOARD_ACTIVE_STATE && Array.isArray(DASHBOARD_ACTIVE_STATE.projects) ? DASHBOARD_ACTIVE_STATE.projects.length : 0,
+	        visibleCount: DASHBOARD_ACTIVE_STATE ? Number(DASHBOARD_ACTIVE_STATE.visibleCount || 0) : 0
+	      });
 	      debugLog('dashboardAccountDocumentOverlayResume', {
 	        reason: routeType,
 	        mounted: true,
@@ -28485,13 +28437,40 @@
 	          preserveTransientState: true
 	        }).catch(() => {});
 	      }
+	      logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'account_document_resume_mounted', {
+	        routeType: 'account_document_to_dashboard',
+	        source: routeType,
+	        ok: true,
+	        hasMountedSurface: true,
+	        loaderShown: false
+	      });
 	      return;
 	    }
 	    const cached = getDashboardHomeCacheEntry_(buildDashboardHomeSummaryPayload_(payload));
 	    if (cached && isDashboardHomeCriticalReady_(cached)) {
+	      markPortalViewTransitionBudget_(transition, 'dashboard_resume_cache', 'account_document_resume_cache', {
+	        routeType: 'account_document_to_dashboard',
+	        source: routeType,
+	        cacheHit: true,
+	        projectCount: Array.isArray(cached.projects) ? cached.projects.length : 0
+	      });
 	      applyDashboardHomeData(cached);
+	      logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'account_document_resume_cache', {
+	        routeType: 'account_document_to_dashboard',
+	        source: routeType,
+	        ok: true,
+	        cacheHit: true,
+	        loaderShown: false,
+	        projectCount: Array.isArray(cached.projects) ? cached.projects.length : 0
+	      });
 	      return;
 	    }
+	    markPortalViewTransitionBudget_(transition, 'dashboard_resume_fetch', 'account_document_resume_fetch', {
+	      routeType: 'account_document_to_dashboard',
+	      source: routeType,
+	      cacheHit: false,
+	      loaderPolicy: 'show_global_loader'
+	    });
 	    rtShowLoader('Loading dashboard', 'Finishing your account view.');
 	    loadDashboardHomeCriticalReady_({
 	      requestPayload: payload,
@@ -28499,7 +28478,25 @@
 	      awaitPaint: true,
 	      showPlaceholder: true,
 	      routeType: routeType
-	    }).catch(() => null).finally(() => {
+	    }).then(resp => {
+	      logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'account_document_resume_fetch', {
+	        routeType: 'account_document_to_dashboard',
+	        source: routeType,
+	        ok: !!(resp && resp.ok === true),
+	        cacheHit: false,
+	        loaderShown: true,
+	        projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
+	      });
+	      return resp;
+	    }).catch(() => {
+	      logPortalViewTransition_(transition, 'failed', {
+	        routeType: 'account_document_to_dashboard',
+	        source: routeType,
+	        ok: false,
+	        loaderShown: true
+	      });
+	      return null;
+	    }).finally(() => {
 	      rtHideLoader();
 	    });
 	  }
@@ -28691,7 +28688,6 @@
 	      criticalReady: ready,
 	      criticalStatusReady: statusReady,
 	      criticalPeekReady: peekReady,
-	      criticalFullPeekReady: false,
 	      fallback: !ready,
       readyCount: Number(critical.readyCount || 0) || 0,
       fallbackCount: Number(critical.fallbackCount || 0) || 0,
@@ -28795,12 +28791,11 @@
       ? getDashboardHomeCacheEntry_(dashboardHomePayload)
       : null;
     if (cachedCritical && isDashboardHomeCriticalReady_(cachedCritical)) {
-      coordinator.cacheProfile = DASHBOARD_CRITICAL_CACHE_PROFILE;
-      coordinator.metadataReady = true;
+	      coordinator.cacheProfile = DASHBOARD_CRITICAL_CACHE_PROFILE;
+	      coordinator.metadataReady = true;
 	      coordinator.criticalTokens = getDashboardCriticalProjectTokens_(cachedCritical.projects);
 	      coordinator.criticalStatusReady = true;
 	      coordinator.criticalPeekReady = true;
-	      coordinator.criticalFullPeekReady = true;
 	      coordinator.criticalThumbnailReady = true;
       hideDashboardProjectsLoadingPlaceholder_();
       applyDashboardHomeData(cachedCritical);
@@ -28808,6 +28803,14 @@
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
       setAuthMessage('', false, { view: VIEW_DASHBOARD });
+      markDashboardCoordinatorBudget_(coordinator, 'dashboard_first_reveal_budget', 'dashboard_first_reveal', {
+        ok: true,
+        cacheHit: true,
+        criticalCount: coordinator.criticalTokens.length,
+        projectCount: Array.isArray(cachedCritical.projects) ? cachedCritical.projects.length : 0,
+        visibleCount: getDashboardRenderedProjectRowCount_(),
+        thumbnailReadyCount: cachedCritical.dashboardCritical && cachedCritical.dashboardCritical.thumbnailReadyCount
+      });
       logDashboardCoordinator_(coordinator, 'dashboard_critical_ready_cache', {
         ok: true,
         cacheHit: true,
@@ -28834,10 +28837,6 @@
 	            const readModelCriticalTokens = readModelHomeData.dashboardCritical && Array.isArray(readModelHomeData.dashboardCritical.criticalTokens)
 	              ? readModelHomeData.dashboardCritical.criticalTokens.slice()
 	              : getDashboardCriticalProjectTokens_(readModelHomeData.projects);
-	            const fullPeekResp = readModelCriticalTokens.length
-	              ? await fetchDashboardProjectFullPeekBatchBounded_(dashboardHomePayload, readModelCriticalTokens, coordinator)
-	              : { ok: true, projects: [] };
-	            criticalReadyHomeData = applyDashboardCriticalFullPeekDataToHomeData_(criticalReadyHomeData, fullPeekResp, readModelCriticalTokens);
 	            await applyDashboardCriticalThumbnailReadiness_(criticalReadyHomeData, readModelCriticalTokens, coordinator);
 	            const criticalMeta = criticalReadyHomeData.dashboardCritical || {};
 	            const projects = Array.isArray(criticalReadyHomeData.projects) ? criticalReadyHomeData.projects : [];
@@ -28850,28 +28849,54 @@
 	            coordinator.cacheProfile = criticalReadyHomeData.dashboardCacheProfile || 'metadataOnly';
 	            coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
 	            coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
-	            coordinator.criticalFullPeekReady = criticalMeta.criticalFullPeekReady === true;
 	            coordinator.criticalThumbnailReady = criticalMeta.criticalThumbnailReady === true;
             coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
-            markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_critical_fallback' : 'dashboard_read_model_critical_ready', {
-              ok: criticalMeta.fallback !== true,
-              readSource: coordinator.readModelSource,
-              projectCount: projects.length,
-              criticalCount: criticalTokens.length,
-              readyCount: criticalMeta.readyCount,
-              fallbackCount: criticalMeta.fallbackCount,
-              thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
-              thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
-            });
+	            markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_critical_fallback' : 'dashboard_read_model_critical_ready', {
+	              ok: criticalMeta.fallback !== true,
+	              readSource: coordinator.readModelSource,
+	              projectCount: projects.length,
+	              criticalCount: criticalTokens.length,
+	              readyCount: criticalMeta.readyCount,
+	              fallbackCount: criticalMeta.fallbackCount,
+	              thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+	              thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+	            });
+	            markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_summary_critical_fallback' : 'dashboard_summary_critical_ready', {
+	              ok: criticalMeta.fallback !== true,
+	              readSource: coordinator.readModelSource,
+	              projectCount: projects.length,
+	              criticalCount: criticalTokens.length,
+	              readyCount: criticalMeta.readyCount,
+	              fallbackCount: criticalMeta.fallbackCount,
+	              thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+	              thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+	            });
 	          rememberDashboardHomeResponse_(dashboardHomePayload, criticalReadyHomeData);
 	          hideDashboardProjectsLoadingPlaceholder_();
 	          applyDashboardHomeData(criticalReadyHomeData);
           if (opts.awaitPaint) {
             await new Promise(resolve => requestAnimationFrame(resolve));
           }
-          setAuthMessage('', false, { view: VIEW_DASHBOARD });
-          consumeDashboardBootstrapIntent_().catch(() => {});
-          logDashboardCoordinator_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_revealed_fallback' : 'dashboard_read_model_revealed', {
+	          setAuthMessage('', false, { view: VIEW_DASHBOARD });
+	          consumeDashboardBootstrapIntent_().catch(() => {});
+	          markDashboardCoordinatorPhase_(coordinator, 'dashboard_revealed_summary_ready', {
+	            ok: true,
+	            readSource: coordinator.readModelSource,
+	            projectCount: projects.length,
+	            criticalCount: criticalTokens.length
+	          });
+	          markDashboardCoordinatorBudget_(coordinator, 'dashboard_first_reveal_budget', 'dashboard_first_reveal', {
+	            ok: true,
+	            readSource: coordinator.readModelSource,
+	            projectCount: projects.length,
+	            criticalCount: criticalTokens.length,
+	            visibleCount: getDashboardRenderedProjectRowCount_(),
+	            readyCount: criticalMeta.readyCount,
+	            fallbackCount: criticalMeta.fallbackCount,
+	            thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+	            thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+	          });
+	          logDashboardCoordinator_(coordinator, criticalMeta.fallback === true ? 'dashboard_read_model_revealed_fallback' : 'dashboard_read_model_revealed', {
             ok: true,
             readSource: coordinator.readModelSource,
               projectCount: projects.length,
@@ -28951,10 +28976,6 @@
       }
 
 	      let criticalHomeData = applyDashboardCriticalDataToHomeData_(resp, criticalResp, criticalTokens);
-	      const fullPeekResp = criticalTokens.length
-	        ? await fetchDashboardProjectFullPeekBatchBounded_(dashboardHomePayload, criticalTokens, coordinator)
-	        : { ok: true, projects: [] };
-	      criticalHomeData = applyDashboardCriticalFullPeekDataToHomeData_(criticalHomeData, fullPeekResp, criticalTokens);
 	      criticalHomeData = await applyDashboardCriticalThumbnailReadiness_(
 	        criticalHomeData,
 	        criticalTokens,
@@ -28964,11 +28985,19 @@
 	      coordinator.cacheProfile = criticalHomeData.dashboardCacheProfile || 'metadataOnly';
 	      coordinator.criticalStatusReady = criticalMeta.criticalStatusReady === true;
 	      coordinator.criticalPeekReady = criticalMeta.criticalPeekReady === true;
-	      coordinator.criticalFullPeekReady = criticalMeta.criticalFullPeekReady === true;
 	      coordinator.criticalThumbnailReady = criticalMeta.criticalThumbnailReady === true;
 	      coordinator.fallbackState = criticalMeta.fallback === true ? 'bounded_fallback' : '';
 	      markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_critical_fallback' : 'dashboard_critical_ready', {
 	        ok: criticalMeta.fallback !== true,
+	        criticalCount: criticalTokens.length,
+	        readyCount: criticalMeta.readyCount,
+	        fallbackCount: criticalMeta.fallbackCount,
+	        thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+	        thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+	      });
+	      markDashboardCoordinatorPhase_(coordinator, criticalMeta.fallback === true ? 'dashboard_summary_critical_fallback' : 'dashboard_summary_critical_ready', {
+	        ok: criticalMeta.fallback !== true,
+	        projectCount: Array.isArray(criticalHomeData.projects) ? criticalHomeData.projects.length : 0,
 	        criticalCount: criticalTokens.length,
 	        readyCount: criticalMeta.readyCount,
 	        fallbackCount: criticalMeta.fallbackCount,
@@ -28982,9 +29011,24 @@
       if (opts.awaitPaint) {
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
-      setAuthMessage('', false, { view: VIEW_DASHBOARD });
-      consumeDashboardBootstrapIntent_().catch(() => {});
-      logDashboardCoordinator_(coordinator, criticalMeta.fallback === true ? 'dashboard_critical_revealed_fallback' : 'dashboard_critical_revealed', {
+	      setAuthMessage('', false, { view: VIEW_DASHBOARD });
+	      consumeDashboardBootstrapIntent_().catch(() => {});
+	      markDashboardCoordinatorPhase_(coordinator, 'dashboard_revealed_summary_ready', {
+	        ok: true,
+	        projectCount: Array.isArray(criticalHomeData.projects) ? criticalHomeData.projects.length : 0,
+	        criticalCount: criticalTokens.length
+	      });
+	      markDashboardCoordinatorBudget_(coordinator, 'dashboard_first_reveal_budget', 'dashboard_first_reveal', {
+	        ok: true,
+	        projectCount: Array.isArray(criticalHomeData.projects) ? criticalHomeData.projects.length : 0,
+	        criticalCount: criticalTokens.length,
+	        visibleCount: getDashboardRenderedProjectRowCount_(),
+	        readyCount: criticalMeta.readyCount,
+	        fallbackCount: criticalMeta.fallbackCount,
+	        thumbnailReadyCount: criticalMeta.thumbnailReadyCount,
+	        thumbnailFallbackCount: criticalMeta.thumbnailFallbackCount
+	      });
+	      logDashboardCoordinator_(coordinator, criticalMeta.fallback === true ? 'dashboard_critical_revealed_fallback' : 'dashboard_critical_revealed', {
         ok: true,
 	        projectCount: Array.isArray(criticalHomeData.projects) ? criticalHomeData.projects.length : 0,
 	        criticalCount: criticalTokens.length,
@@ -29372,12 +29416,58 @@
       : '';
     const methodName = requireAuthSession ? 'authLoadProject' : 'getSnapshotByToken';
     const prefetchKey = buildDashboardProjectPayloadPrefetchKey_(cleanToken, requireAuthSession, requestSessionId);
+    let prefetchHit = false;
+    let prefetchInflight = false;
+    let resp = prefetchKey ? getDashboardProjectPayloadPrefetchEntry_(prefetchKey) : null;
+    if (resp) {
+      prefetchHit = true;
+    } else if (prefetchKey && DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.has(prefetchKey)) {
+      prefetchInflight = true;
+    }
+    const transition = (CURRENT_VIEW === VIEW_DASHBOARD || source === 'dashboard')
+      ? createPortalViewTransition_(CURRENT_VIEW, VIEW_SNAPSHOT, getDashboardContextRequestPayload_(), {
+        routeType: 'dashboard_to_project',
+        source: source,
+        prefetchHit: prefetchHit,
+        loaderPolicy: prefetchHit ? 'skip_global_loader' : (prefetchInflight ? 'delay_global_loader' : 'show_global_loader')
+      })
+      : null;
+    if (source === 'dashboard' || CURRENT_VIEW === VIEW_DASHBOARD) {
+      captureDashboardMountedStateForTransition_();
+    }
 
     setButtonBusy(openBtn, true, 'Opening...', 'Open');
     if (CURRENT_VIEW !== VIEW_SNAPSHOT) {
       setAuthMessage('', false, { view: CURRENT_VIEW || VIEW_LOGIN });
     }
-    rtShowLoader(loadingTitle, loadingSub);
+    const trace = createPortalClientLoadTimingTrace_('project_open');
+    const shouldShowLoader = !prefetchHit && !prefetchInflight;
+    let loaderShown = false;
+    let loaderTimer = 0;
+    const showProjectOpenLoaderIfNeeded_ = () => {
+      if (loaderShown) return;
+      rtShowLoader(loadingTitle, loadingSub);
+      loaderShown = true;
+      markPortalClientLoadTiming_(trace, 'project_open_loader_shown', {
+        routeType: 'project',
+        source: source,
+        prefetchHit: prefetchHit,
+        prefetchInflight: prefetchInflight,
+        loaderShown: true
+      });
+      markPortalViewTransition_(transition, 'project_open_loader_shown', {
+        routeType: 'dashboard_to_project',
+        source: source,
+        prefetchHit: prefetchHit,
+        prefetchInflight: prefetchInflight,
+        loaderShown: true
+      });
+    };
+    if (shouldShowLoader) {
+      showProjectOpenLoaderIfNeeded_();
+    } else if (prefetchInflight) {
+      loaderTimer = window.setTimeout(showProjectOpenLoaderIfNeeded_, DASHBOARD_PROJECT_OPEN_INFLIGHT_LOADER_DELAY_MS);
+    }
     rtDebugStep('OPEN:start', {
       source: source,
       token: shortToken(cleanToken),
@@ -29386,8 +29476,7 @@
 
     resetProjectViewState();
     const requestSeq = PROJECT_OPEN_REQUEST_SEQ;
-    clearStoredPortalPayload();
-    const trace = createPortalClientLoadTimingTrace_('project_open');
+    clearStoredPortalPayload({ preserveDashboardPeekCache: source === 'dashboard' || !!transition });
     try {
       sessionStorage.setItem('selectedToken', cleanToken);
       sessionStorage.setItem('currentToken', cleanToken);
@@ -29405,15 +29494,44 @@
         hasToken: true,
         hasSession: requireAuthSession
       });
-      let prefetchHit = false;
-      let prefetchInflight = false;
-      let resp = prefetchKey ? getDashboardProjectPayloadPrefetchEntry_(prefetchKey) : null;
       if (resp) {
-        prefetchHit = true;
+        markPortalClientLoadBudget_(trace, 'project_open_prefetch_hit', 'project_open_prefetch_hit', {
+          routeType: 'project',
+          source: source,
+          prefetchHit: true
+        });
+        markPortalViewTransitionBudget_(transition, 'project_open_prefetch_hit', 'project_open_prefetch_hit', {
+          routeType: 'dashboard_to_project',
+          source: source,
+          prefetchHit: true
+        });
       } else if (prefetchKey && DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.has(prefetchKey)) {
-        prefetchInflight = true;
+        markPortalClientLoadBudget_(trace, 'project_open_prefetch_inflight', 'project_open_prefetch_inflight', {
+          routeType: 'project',
+          source: source,
+          prefetchInflight: true,
+          loaderShown: loaderShown,
+          loaderDelayMs: DASHBOARD_PROJECT_OPEN_INFLIGHT_LOADER_DELAY_MS
+        });
+        markPortalViewTransitionBudget_(transition, 'project_open_prefetch_inflight', 'project_open_prefetch_inflight', {
+          routeType: 'dashboard_to_project',
+          source: source,
+          prefetchInflight: true,
+          loaderShown: loaderShown,
+          loaderDelayMs: DASHBOARD_PROJECT_OPEN_INFLIGHT_LOADER_DELAY_MS
+        });
         resp = await DASHBOARD_PROJECT_PAYLOAD_PREFETCH_INFLIGHT.get(prefetchKey);
       } else {
+        markPortalClientLoadBudget_(trace, 'project_open_fetch', 'project_open_fetch', {
+          routeType: 'project',
+          source: source,
+          loaderShown: loaderShown
+        });
+        markPortalViewTransitionBudget_(transition, 'project_open_fetch', 'project_open_fetch', {
+          routeType: 'dashboard_to_project',
+          source: source,
+          loaderShown: loaderShown
+        });
         resp = await callServer(
           methodName,
           requireAuthSession
@@ -29467,7 +29585,10 @@
         prefetchHit: prefetchHit,
         prefetchInflight: prefetchInflight
       });
-      logPortalClientLoadTiming_(trace, 'complete', Object.assign({
+      const projectOpenBudgetName = prefetchHit
+        ? 'project_open_prefetch_hit'
+        : (prefetchInflight ? 'project_open_prefetch_inflight' : 'project_open_fetch');
+      logPortalClientLoadBudget_(trace, 'complete', projectOpenBudgetName, Object.assign({
         routeType: 'project',
         source: source,
         ok: true,
@@ -29475,6 +29596,14 @@
         prefetchHit: prefetchHit,
         prefetchInflight: prefetchInflight
       }, serverTiming || {}));
+      logPortalViewTransitionBudget_(transition, 'view_transition_ready', projectOpenBudgetName, {
+        routeType: 'dashboard_to_project',
+        source: source,
+        ok: true,
+        prefetchHit: prefetchHit,
+        prefetchInflight: prefetchInflight,
+        loaderShown: loaderShown
+      });
       rtDebugStep('OPEN:done', {
         source: source,
         token: shortToken(cleanToken),
@@ -29494,6 +29623,14 @@
         source: source,
         ok: false
       });
+      logPortalViewTransition_(transition, 'failed', {
+        routeType: 'dashboard_to_project',
+        source: source,
+        ok: false,
+        prefetchHit: prefetchHit,
+        prefetchInflight: prefetchInflight,
+        loaderShown: loaderShown
+      });
       if (requireAuthSession && /session|unauthorized/i.test(message)) {
         writeStoredSessionId('');
         AUTH_SESSION_ID = '';
@@ -29503,8 +29640,12 @@
       showProjectLoadErrorMessage(message);
       return false;
     } finally {
+      if (loaderTimer) {
+        window.clearTimeout(loaderTimer);
+        loaderTimer = 0;
+      }
       setButtonBusy(openBtn, false, 'Opening...', 'Open');
-      rtHideLoader();
+      if (loaderShown) rtHideLoader();
     }
   }
 
@@ -29596,7 +29737,15 @@
   function clearDashboardProjectPeekFullPrefetch_(){
     DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ += 1;
     DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = [];
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT = 0;
     DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = 650;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE = null;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_STARTED_COUNT = 0;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_COUNT = 0;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_COUNT = 0;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_TOKENS.clear();
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_TOKENS.clear();
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SOURCE_BY_TOKEN.clear();
     if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE) return;
     if (DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND === 'idle' && typeof window.cancelIdleCallback === 'function') {
       window.cancelIdleCallback(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE);
@@ -29718,6 +29867,74 @@
     );
   }
 
+  function isDashboardRowPairHydrationActive_(){
+    return DASHBOARD_ROW_PAIR_HYDRATION_INFLIGHT.size > 0;
+  }
+
+  function getDashboardProjectFullPrefetchPriority_(options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    if (Number.isFinite(Number(opts.priority))) {
+      return Math.max(1, Math.min(9, Math.round(Number(opts.priority))));
+    }
+    const source = String(opts.source || '').trim().toLowerCase();
+    if (source.indexOf('open') !== -1 || source.indexOf('upgrade') !== -1) return 1;
+    if (source.indexOf('hover') !== -1 || source.indexOf('focus') !== -1) return 2;
+    if (opts.immediate === true) return 2;
+    if (source.indexOf('post-reveal') !== -1 || source.indexOf('critical') !== -1) return 3;
+    return 4;
+  }
+
+  function sortDashboardProjectPeekFullPrefetchQueue_(){
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.sort((a, b) => {
+      const priorityDelta = (Number(a.priority || 9) || 9) - (Number(b.priority || 9) || 9);
+      if (priorityDelta) return priorityDelta;
+      return (Number(a.requestedAt || 0) || 0) - (Number(b.requestedAt || 0) || 0);
+    });
+  }
+
+  function applyDashboardProjectFullPeekPayload_(token, payload, source){
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken || !isDashboardProjectPeekFullPayload_(payload)) return false;
+    const project = getDashboardActiveProjectByToken_(cleanToken);
+    if (project) {
+      project.fullPeekInline = true;
+      project.fullPeekPreview = clonePlainObject(payload);
+      project.peekInline = true;
+      project.peekProfile = DASHBOARD_PROJECT_PEEK_PROFILE_FULL;
+      project.peekPreview = clonePlainObject(payload);
+    }
+    if (
+      DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN === cleanToken &&
+      dashboardPeekBackdrop &&
+      dashboardPeekBackdrop.hidden !== true
+    ) {
+      renderDashboardProjectPeek(payload);
+    }
+    return true;
+  }
+
+  function markDashboardProjectPeekFullPrefetchQueueReady_(){
+    if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE) return;
+    if (DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length || DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT > 0) return;
+    logPortalClientLoadBudget_(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE, 'dashboard_full_peek_hydration_queue_ready', 'full_peek_hydration_queue', {
+      routeType: 'dashboard_full_peek_hydration',
+      ok: true,
+      tokenCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_STARTED_COUNT,
+      completedCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_COUNT,
+      failedCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_COUNT,
+      queueDepth: 0,
+      activeCount: 0,
+      fullPeekActiveLimit: DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY
+    });
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE = null;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_STARTED_COUNT = 0;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_COUNT = 0;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_COUNT = 0;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_TOKENS.clear();
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_TOKENS.clear();
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SOURCE_BY_TOKEN.clear();
+  }
+
   function scheduleDashboardProjectPeekFullPrefetchDrain_(seq, delayMs){
     if (seq !== DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ) return;
     if (DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE) {
@@ -29734,63 +29951,205 @@
       DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND = '';
       drainDashboardProjectPeekFullPrefetchQueue_(seq);
     };
+    const waitMs = Math.max(80, Number(delayMs) || 500);
     if (typeof window.requestIdleCallback === 'function') {
       DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND = 'idle';
       DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE = window.requestIdleCallback(run, {
-        timeout: Math.max(400, Number(delayMs) || 1800)
+        timeout: Math.max(250, waitMs + 350)
       });
       return;
     }
     DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE_KIND = 'timeout';
-    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE = window.setTimeout(run, Math.max(120, Number(delayMs) || 500));
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_HANDLE = window.setTimeout(run, waitMs);
+  }
+
+  function getNextDashboardProjectPeekFullPrefetchItem_(){
+    sortDashboardProjectPeekFullPrefetchQueue_();
+    while (DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length) {
+      const item = DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.shift();
+      const token = String(item && item.token || '').trim();
+      if (!token) continue;
+      if (hasDashboardProjectPeekCachedPayload_(token, { requireFull: true })) {
+        DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_TOKENS.add(token);
+        continue;
+      }
+      return Object.assign({}, item, { token: token });
+    }
+    return null;
   }
 
   function drainDashboardProjectPeekFullPrefetchQueue_(seq){
     if (seq !== DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ) return;
-    if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length) return;
-    const token = String(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.shift() || '').trim();
-    if (!token || hasDashboardProjectPeekCachedPayload_(token, { requireFull: true })) {
-      scheduleDashboardProjectPeekFullPrefetchDrain_(seq, 120);
-      return;
+    const activeLimit = Math.max(1, DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY);
+    if (
+      DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT > 0 ||
+      DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length
+    ) {
+      const nextPriority = DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.reduce((min, item) => {
+        const priority = Math.max(1, Math.round(Number(item && item.priority || 9) || 9));
+        return Math.min(min, priority);
+      }, 9);
+      if (nextPriority > 2 && isDashboardRowPairHydrationActive_()) {
+        scheduleDashboardProjectPeekFullPrefetchDrain_(seq, DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS);
+        return;
+      }
     }
-    fetchDashboardProjectPeek_(token, {
-      source: 'full-prefetch'
-    })
-      .catch(() => null)
-      .finally(() => {
-        if (seq !== DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ) return;
-        scheduleDashboardProjectPeekFullPrefetchDrain_(seq, DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS);
+    while (
+      seq === DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ &&
+      DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT < activeLimit
+    ) {
+      const item = getNextDashboardProjectPeekFullPrefetchItem_();
+      if (!item) break;
+      const token = item.token;
+      const priority = getDashboardProjectFullPrefetchPriority_(item);
+      const source = String(item.source || 'full-prefetch').trim() || 'full-prefetch';
+      DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT += 1;
+      markPortalClientLoadTiming_(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE, 'dashboard_full_peek_hydration_token_start', {
+        routeType: 'dashboard_full_peek_hydration',
+        source: source,
+        priority: priority,
+        queueDepth: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length,
+        activeCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT,
+        fullPeekActiveLimit: DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY
       });
+      fetchDashboardProjectPeek_(token, {
+        source: source
+      })
+        .then(resp => {
+          if (seq !== DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ) return null;
+          if (isDashboardProjectPeekFullPayload_(resp)) {
+            applyDashboardProjectFullPeekPayload_(token, resp, source);
+            if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_TOKENS.has(token)) {
+              DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_TOKENS.add(token);
+              DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_COUNT += 1;
+            }
+            markPortalClientLoadBudget_(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE, 'dashboard_full_peek_hydration_token_ready', 'full_peek_hydration_token', {
+              routeType: 'dashboard_full_peek_hydration',
+              source: source,
+              priority: priority,
+              queueDepth: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length,
+              activeCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT,
+              completedCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_COMPLETED_COUNT,
+              fullPeekActiveLimit: DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY
+            });
+          }
+          return resp;
+        })
+        .catch(() => {
+          if (seq !== DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ) return null;
+          if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_TOKENS.has(token)) {
+            DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_TOKENS.add(token);
+            DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_COUNT += 1;
+          }
+          markPortalClientLoadTiming_(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE, 'dashboard_full_peek_hydration_token_failed', {
+            routeType: 'dashboard_full_peek_hydration',
+            source: source,
+            priority: priority,
+            queueDepth: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length,
+            activeCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT,
+            failedCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_FAILED_COUNT,
+            fullPeekActiveLimit: DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY
+          });
+          return null;
+        })
+        .finally(() => {
+          if (seq !== DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ) return;
+          DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT = Math.max(0, DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT - 1);
+          if (DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length) {
+            scheduleDashboardProjectPeekFullPrefetchDrain_(seq, DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS);
+          } else {
+            markDashboardProjectPeekFullPrefetchQueueReady_();
+          }
+        });
+    }
+    markDashboardProjectPeekFullPrefetchQueueReady_();
+  }
+
+  function enqueueDashboardProjectPeekFullPrefetch_(token, options){
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken || hasDashboardProjectPeekCachedPayload_(cleanToken, { requireFull: true })) return false;
+    const opts = (options && typeof options === 'object') ? options : {};
+    const priority = getDashboardProjectFullPrefetchPriority_(opts);
+    const source = String(opts.source || 'full-prefetch').trim() || 'full-prefetch';
+    const existingIndex = DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.findIndex(item => String(item && item.token || '').trim() === cleanToken);
+    const existing = existingIndex >= 0 ? DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE[existingIndex] : null;
+    if (existing) {
+      const existingPriority = Math.max(1, Math.round(Number(existing.priority || priority) || priority));
+      if (priority < existingPriority) {
+        existing.priority = priority;
+        existing.source = source;
+      }
+      existing.requestedAt = Math.min(Number(existing.requestedAt || Date.now()) || Date.now(), Date.now());
+    } else {
+      DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.push({
+        token: cleanToken,
+        priority: priority,
+        source: source,
+        requestedAt: Date.now()
+      });
+      DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_STARTED_COUNT += 1;
+    }
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SOURCE_BY_TOKEN.set(cleanToken, source);
+    sortDashboardProjectPeekFullPrefetchQueue_();
+    return true;
+  }
+
+  function ensureDashboardProjectPeekFullPrefetchTrace_(source){
+    if (DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE) return;
+    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE = createPortalClientLoadTimingTrace_('dashboard_full_peek_hydration');
+    markPortalClientLoadTiming_(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE, 'dashboard_full_peek_hydration_queue_start', {
+      routeType: 'dashboard_full_peek_hydration',
+      source: String(source || 'post-reveal').trim() || 'post-reveal',
+      queueDepth: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length,
+      activeCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT,
+      tokenCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_STARTED_COUNT,
+      fullPeekActiveLimit: DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY
+    });
   }
 
   function startDashboardProjectPeekFullPrefetch_(tokens, options){
     clearDashboardProjectPeekFullPrefetch_();
     const seq = DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ;
     const opts = (options && typeof options === 'object') ? options : {};
-    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = uniqueDashboardProjectPeekTokens_(tokens)
-      .filter(token => !hasDashboardProjectPeekCachedPayload_(token, { requireFull: true }));
     const maxInitial = Number(opts.maxInitial || 0);
+    let requestTokens = uniqueDashboardProjectPeekTokens_(tokens)
+      .filter(token => !hasDashboardProjectPeekCachedPayload_(token, { requireFull: true }));
     if (maxInitial > 0) {
-      DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.slice(0, Math.floor(maxInitial));
+      requestTokens = requestTokens.slice(0, Math.floor(maxInitial));
     }
+    requestTokens.forEach(token => {
+      enqueueDashboardProjectPeekFullPrefetch_(token, Object.assign({}, opts, {
+        priority: getDashboardProjectFullPrefetchPriority_(opts)
+      }));
+    });
     if (!DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length) return;
+    ensureDashboardProjectPeekFullPrefetchTrace_(opts.source || 'post-reveal');
+    markPortalClientLoadTiming_(DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_TRACE, 'dashboard_full_peek_hydration_start', {
+      routeType: 'dashboard_full_peek_hydration',
+      source: String(opts.source || 'post-reveal').trim() || 'post-reveal',
+      tokenCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_STARTED_COUNT,
+      queueDepth: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.length,
+      activeCount: DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_ACTIVE_COUNT,
+      fullPeekActiveLimit: DASHBOARD_FULL_PEEK_PREFETCH_MAX_CONCURRENCY
+    });
     DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS = Math.max(
-      650,
+      220,
       Number(opts.nextDelayMs || DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_DRAIN_DELAY_MS || 650)
     );
-    scheduleDashboardProjectPeekFullPrefetchDrain_(seq, Math.max(400, Number(opts.initialDelayMs || 1800)));
+    scheduleDashboardProjectPeekFullPrefetchDrain_(seq, Math.max(120, Number(opts.initialDelayMs || 900)));
   }
 
   function promoteDashboardProjectPeekFullPrefetch_(token, options){
     const cleanToken = String(token || '').trim();
     if (!cleanToken || hasDashboardProjectPeekCachedPayload_(cleanToken, { requireFull: true })) return;
     const opts = (options && typeof options === 'object') ? options : {};
-    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE = DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE
-      .filter(item => String(item || '').trim() !== cleanToken);
-    DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_QUEUE.unshift(cleanToken);
+    const source = String(opts.source || 'promote').trim() || 'promote';
+    if (enqueueDashboardProjectPeekFullPrefetch_(cleanToken, opts)) {
+      ensureDashboardProjectPeekFullPrefetchTrace_(source);
+    }
     scheduleDashboardProjectPeekFullPrefetchDrain_(
       DASHBOARD_PROJECT_PEEK_FULL_PREFETCH_SEQ,
-      opts.immediate === true ? 80 : 500
+      opts.immediate === true ? 40 : 240
     );
   }
 
@@ -31338,19 +31697,35 @@
   function upgradeDashboardProjectPeekToFull_(token, requestSeq, source){
     const cleanToken = String(token || '').trim();
     if (!cleanToken) return Promise.resolve(null);
+    const upgradeSource = String(source || 'open-upgrade').trim() || 'open-upgrade';
+    const trace = createPortalClientLoadTimingTrace_('dashboard_full_peek_open_upgrade');
+    markPortalClientLoadTiming_(trace, 'dashboard_full_peek_open_upgrade_start', {
+      routeType: 'dashboard_full_peek_open_upgrade',
+      source: upgradeSource
+    });
     return fetchDashboardProjectPeek_(cleanToken, {
-      source: source || 'open-upgrade'
+      source: upgradeSource
     })
       .then(resp => {
         if (requestSeq !== DASHBOARD_PROJECT_PEEK_REQUEST_SEQ || DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN !== cleanToken) return resp;
         if (isDashboardProjectPeekFullPayload_(resp)) {
           renderDashboardProjectPeek(resp);
+          logPortalClientLoadBudget_(trace, 'dashboard_full_peek_open_upgrade_ready', 'full_peek_hydration_token', {
+            routeType: 'dashboard_full_peek_open_upgrade',
+            source: upgradeSource,
+            ok: true
+          });
         }
         return resp;
       })
       .catch(err => {
+        logPortalClientLoadBudget_(trace, 'failed', 'full_peek_hydration_token', {
+          routeType: 'dashboard_full_peek_open_upgrade',
+          source: upgradeSource,
+          ok: false
+        });
         console.warn('Dashboard full Project Peek upgrade failed.', {
-          source: String(source || 'open-upgrade').trim() || 'open-upgrade'
+          source: upgradeSource
         });
         return null;
       });
@@ -31359,50 +31734,63 @@
   async function openDashboardProjectPeek(project, triggerEl){
     const token = String(project && project.token || '').trim();
     if (!token || !triggerEl) return;
+    const trace = createPortalClientLoadTimingTrace_('dashboard_peek_open');
     DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN = token;
     DASHBOARD_PROJECT_PEEK_ACTIVE_TRIGGER = triggerEl;
     const requestSeq = ++DASHBOARD_PROJECT_PEEK_REQUEST_SEQ;
     const cachedFull = getDashboardProjectPeekCachedPayload_(token, { requireFull: true });
-    if (cachedFull) {
-      renderDashboardProjectPeek(cachedFull);
-      return;
-    }
     const cachedRenderable = getDashboardProjectPeekCachedPayload_(token);
-    if (cachedRenderable) {
-      renderDashboardProjectPeek(cachedRenderable);
-      if (!isDashboardProjectPeekFullPayload_(cachedRenderable)) {
-        promoteDashboardProjectPeekFullPrefetch_(token, {
-          immediate: true,
-          source: 'open-upgrade'
-        });
-        upgradeDashboardProjectPeekToFull_(token, requestSeq, 'open-upgrade');
-      }
-      return;
-    }
     const inlinePeek = isDashboardProjectPeekRenderablePayload_(project && project.peekPreview)
       ? project.peekPreview
       : null;
+    markPortalClientLoadTiming_(trace, 'start', {
+      routeType: 'dashboard_peek_open',
+      source: 'thumbnail',
+      cacheHit: !!(cachedFull || cachedRenderable),
+      prefetchHit: !!inlinePeek
+    });
+    if (cachedFull) {
+      renderDashboardProjectPeek(cachedFull);
+      logPortalClientLoadBudget_(trace, 'cached_full_rendered', 'peek_open_cached', {
+        routeType: 'dashboard_peek_open',
+        source: 'full-cache',
+        ok: true,
+        cacheHit: true
+      });
+      return;
+    }
+    if (cachedRenderable) {
+      renderDashboardProjectPeek(cachedRenderable);
+      if (!isDashboardProjectPeekFullPayload_(cachedRenderable)) {
+        upgradeDashboardProjectPeekToFull_(token, requestSeq, 'open-upgrade');
+      }
+      logPortalClientLoadBudget_(trace, 'cached_summary_rendered', 'peek_open_summary', {
+        routeType: 'dashboard_peek_open',
+        source: 'summary-cache',
+        ok: true,
+        cacheHit: true
+      });
+      return;
+    }
     if (inlinePeek) {
       rememberDashboardProjectPeekPayload_(token, inlinePeek, {
         source: 'inline'
       });
       renderDashboardProjectPeek(inlinePeek);
       if (!isDashboardProjectPeekFullPayload_(inlinePeek)) {
-        promoteDashboardProjectPeekFullPrefetch_(token, {
-          immediate: true,
-          source: 'inline-upgrade'
-        });
         upgradeDashboardProjectPeekToFull_(token, requestSeq, 'inline-upgrade');
       }
+      logPortalClientLoadBudget_(trace, 'inline_summary_rendered', 'peek_open_summary', {
+        routeType: 'dashboard_peek_open',
+        source: 'inline-summary',
+        ok: true,
+        prefetchHit: true
+      });
       return;
     }
     promoteDashboardProjectPeekPrefetch_(token, {
       immediate: true,
       source: project && project.criticalPeekFallback === true ? 'critical-cache-miss' : 'open'
-    });
-    promoteDashboardProjectPeekFullPrefetch_(token, {
-      immediate: true,
-      source: 'open'
     });
     if (project && project.criticalPeekFallback === true) {
       console.warn('Dashboard critical peek cache miss; fetching redacted project payload on demand.', {
@@ -31412,11 +31800,22 @@
     }
     showDashboardProjectPeekLoading(project);
     try {
+      markPortalClientLoadBudget_(trace, 'fetch_start', 'peek_open_fetch', {
+        routeType: 'dashboard_peek_open',
+        source: 'open',
+        cacheHit: false
+      });
       const resp = await fetchDashboardProjectPeek_(token, {
         source: 'open'
       });
       if (requestSeq !== DASHBOARD_PROJECT_PEEK_REQUEST_SEQ || DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN !== token) return;
       renderDashboardProjectPeek(resp);
+      logPortalClientLoadBudget_(trace, 'fetched_rendered', 'peek_open_fetch', {
+        routeType: 'dashboard_peek_open',
+        source: 'open',
+        ok: true,
+        cacheHit: false
+      });
     } catch (err) {
       if (requestSeq !== DASHBOARD_PROJECT_PEEK_REQUEST_SEQ || DASHBOARD_PROJECT_PEEK_ACTIVE_TOKEN !== token) return;
       if (dashboardPeekBody) {
@@ -31424,6 +31823,12 @@
         dashboardPeekBody.innerHTML = '';
         dashboardPeekBody.appendChild(createEl('div', 'dashboardPeekEmpty', String((err && err.message) || err || 'Unable to load project details.')));
       }
+      logPortalClientLoadBudget_(trace, 'failed', 'peek_open_fetch', {
+        routeType: 'dashboard_peek_open',
+        source: 'open',
+        ok: false,
+        cacheHit: false
+      });
       requestAnimationFrame(positionDashboardProjectPeek);
     }
   }
@@ -31453,6 +31858,14 @@
         source: 'peek-focus'
       }).catch(() => {});
     });
+    dashboardPeekOpenBtn.addEventListener('touchstart', () => {
+      const token = String(dashboardPeekOpenBtn.dataset.projectToken || '').trim();
+      if (!token) return;
+      prefetchDashboardProjectPayload_(token, {
+        requireAuthSession: !hasDashboardTokenContext_(),
+        source: 'peek-touch'
+      }).catch(() => {});
+    }, { passive: true });
     dashboardPeekOpenBtn.addEventListener('click', event => {
       if (!isPlainLeftClick_(event)) return;
       if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -31610,6 +32023,9 @@
 	      if (!isPlainLeftClick_(event)) return;
 	      armDashboardProjectOpen(openBtn, 'pointer');
 	    });
+	    openBtn.addEventListener('touchstart', () => {
+	      armDashboardProjectOpen(openBtn, 'touch');
+	    }, { passive: true });
 	    openBtn.addEventListener('keydown', event => {
 	      if (!event) return;
 	      if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -31706,6 +32122,7 @@
 	  function revealNextDashboardProjectBatch_(){
 	    const state = getDashboardActiveStateForCurrentContext_() || DASHBOARD_ACTIVE_STATE;
 	    if (!state || !Array.isArray(state.projects) || !state.projects.length) return;
+	    const trace = createPortalClientLoadTimingTrace_('dashboard_load_older_batch');
 	    const totalCount = state.projects.length;
 	    const renderedCount = getDashboardRenderedProjectRowCount_();
 	    const storedVisibleCount = Math.max(0, Number(state.visibleCount || 0) || 0);
@@ -31721,6 +32138,13 @@
 	      oldVisibleCount + DASHBOARD_VISIBLE_PROJECT_BATCH_SIZE
 	    );
 	    if (nextVisibleCount <= oldVisibleCount) return;
+	    markPortalClientLoadTiming_(trace, 'start', {
+	      routeType: 'dashboard_load_older',
+	      source: 'load-older',
+	      projectCount: totalCount,
+	      rowCount: renderedCount,
+	      visibleCount: oldVisibleCount
+	    });
 	    state.visibleCount = nextVisibleCount;
 	    renderProjectRows(state.projects);
 	    const revealedTokens = state.projects
@@ -31737,23 +32161,16 @@
 	        scrollDashboardProjectRowIntoView_(firstRevealedToken);
 	      });
 	    }
+	    logPortalClientLoadBudget_(trace, 'revealed', 'load_older_batch_reveal', {
+	      routeType: 'dashboard_load_older',
+	      source: 'load-older',
+	      ok: true,
+	      projectCount: totalCount,
+	      tokenCount: revealedTokens.length,
+	      rowCount: getDashboardRenderedProjectRowCount_(),
+	      visibleCount: nextVisibleCount
+	    });
 	  }
-
-  function getDashboardProjectsNeedingStatusHydration_(projects){
-    const list = Array.isArray(projects) ? projects : [];
-    const seen = new Set();
-    const tokens = [];
-    list.forEach(project => {
-      const token = String(project && project.token || '').trim();
-      const statusSeed = project && project.statusSeed && typeof project.statusSeed === 'object'
-        ? project.statusSeed
-        : null;
-      if (!token || statusSeed || seen.has(token)) return;
-      seen.add(token);
-      tokens.push(token);
-    });
-    return tokens;
-  }
 
   function getDashboardProjectRowForToken_(token){
     if (!authProjectsBody) return null;
@@ -31776,45 +32193,6 @@
     return true;
   }
 
-  function orderDashboardStatusHydrationTokens_(tokens){
-    const list = Array.isArray(tokens) ? tokens.map(token => String(token || '').trim()).filter(Boolean) : [];
-    if (!list.length || typeof window === 'undefined') return list;
-    const viewportHeight = Math.max(1, Number(window.innerHeight || document.documentElement.clientHeight || 0) || 0);
-    const bufferPx = Math.max(160, Math.round(viewportHeight * 0.35));
-    const visible = [];
-    const pending = [];
-    list.forEach((token, index) => {
-      const row = getDashboardProjectRowForToken_(token);
-      if (!row || typeof row.getBoundingClientRect !== 'function') {
-        pending.push({ token: token, top: Number.MAX_SAFE_INTEGER, index: index });
-        return;
-      }
-      const rect = row.getBoundingClientRect();
-      const isVisible = rect.bottom >= -bufferPx && rect.top <= viewportHeight + bufferPx;
-      const entry = { token: token, top: Number(rect.top || 0), index: index };
-      if (isVisible) visible.push(entry);
-      else pending.push(entry);
-    });
-    const sortByPosition = (a, b) => {
-      if (a.top !== b.top) return a.top - b.top;
-      return a.index - b.index;
-    };
-    return visible.sort(sortByPosition).concat(pending.sort(sortByPosition)).map(entry => entry.token);
-  }
-
-  function buildDashboardStatusHydrationBatches_(tokens){
-    const ordered = orderDashboardStatusHydrationTokens_(tokens);
-    const batches = [];
-    if (!ordered.length) return batches;
-    const firstSize = Math.max(1, DASHBOARD_STATUS_VISIBLE_BATCH_SIZE);
-    const backgroundSize = Math.max(1, DASHBOARD_STATUS_BACKGROUND_BATCH_SIZE);
-    batches.push(ordered.slice(0, firstSize));
-    for (let i = firstSize; i < ordered.length; i += backgroundSize) {
-      batches.push(ordered.slice(i, i + backgroundSize));
-    }
-    return batches.filter(batch => batch.length);
-  }
-
   function waitForDashboardBackgroundHydrationTurn_(delayMs){
     const delay = Math.max(80, Number(delayMs || 160) || 160);
     return new Promise(resolve => {
@@ -31826,29 +32204,6 @@
       window.setTimeout(done, delay);
     });
   }
-
-	  function applyDashboardProjectStatusBatchResponse_(tokens, resp){
-	    const batchTokens = Array.isArray(tokens) ? tokens : [];
-	    if (!resp || resp.ok !== true || !Array.isArray(resp.projects)) {
-      batchTokens.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
-      return;
-    }
-    const returned = new Set();
-    resp.projects.forEach(projectStatus => {
-      const token = String(projectStatus && projectStatus.token || '').trim();
-      if (!token) return;
-	      returned.add(token);
-	      if (projectStatus.ok === true && Array.isArray(projectStatus.steps) && projectStatus.steps.length) {
-	        rememberDashboardProjectStatusSeed_(token, projectStatus);
-	        renderDashboardProjectStatusIntoRow_(token, projectStatus);
-	      } else {
-        renderDashboardProjectStatusFallback_(token, String(projectStatus && projectStatus.fallbackStatus || ''));
-      }
-    });
-    batchTokens.forEach(token => {
-      if (!returned.has(token)) renderDashboardProjectStatusFallback_(token, '');
-	    });
-	  }
 
 	  function fetchDashboardProjectStatusBatchForTokens_(tokens, options){
 	    const batchTokens = uniqueDashboardProjectPeekTokens_(tokens);
@@ -31939,7 +32294,8 @@
 	    });
 	  }
 
-	  function commitDashboardPairedRowHydration_(tokens, statusMap){
+	  function commitDashboardPairedRowHydration_(tokens, statusMap, options){
+	    const opts = (options && typeof options === 'object') ? options : {};
 	    const batchTokens = uniqueDashboardProjectPeekTokens_(tokens);
 	    batchTokens.forEach(token => {
 	      const project = getDashboardActiveProjectByToken_(token);
@@ -31958,6 +32314,12 @@
 	      }
 	      if (seed && cachedPeek && getDashboardThumbnailMetaFromPeekPayload_(cachedPeek)) {
 	        markDashboardProjectPairedRowReady_(token);
+	        if (row && !hasDashboardProjectPeekCachedPayload_(token, { requireFull: true })) {
+	          promoteDashboardProjectPeekFullPrefetch_(token, {
+	            priority: 4,
+	            source: String(opts.source || 'paired-row-ready').trim() || 'paired-row-ready'
+	          });
+	        }
 	      }
 	    });
 	  }
@@ -32005,14 +32367,18 @@
 	        })
 	      ]);
 	      if (seq !== DASHBOARD_ROW_PAIR_HYDRATION_SEQ) return null;
-	      commitDashboardPairedRowHydration_(batchTokens, statusMap);
+	      commitDashboardPairedRowHydration_(batchTokens, statusMap, {
+	        source: source
+	      });
 	      if (timedOut) {
 	        Promise.all([statusPromise, summaryPromise]).then(() => {
 	          if (seq !== DASHBOARD_ROW_PAIR_HYDRATION_SEQ) return;
-	          commitDashboardPairedRowHydration_(batchTokens, statusMap);
+	          commitDashboardPairedRowHydration_(batchTokens, statusMap, {
+	            source: source + '-settled'
+	          });
 	        }).catch(() => {});
 	      }
-	      logPortalClientLoadTiming_(trace, timedOut ? 'fallback_commit' : 'complete', {
+	      logPortalClientLoadBudget_(trace, timedOut ? 'fallback_commit' : 'complete', 'paired_row_hydration', {
 	        routeType: 'dashboard_paired_rows',
 	        source: source,
 	        ok: true,
@@ -32065,77 +32431,6 @@
 	      if (current) current.backgroundHydrationState = 'failed';
 	    });
 	  }
-
-	  async function hydrateDashboardProjectStatuses_(projects, options){
-    const opts = (options && typeof options === 'object') ? options : {};
-    const tokens = getDashboardProjectsNeedingStatusHydration_(projects);
-    if (!tokens.length) return null;
-    const requestPayload = getDashboardContextRequestPayload_();
-    const requestKey = getDashboardContextKey_(requestPayload);
-    if (!requestKey) return null;
-    const seq = ++DASHBOARD_STATUS_HYDRATION_SEQ;
-    const batches = buildDashboardStatusHydrationBatches_(tokens);
-    const trace = createPortalClientLoadTimingTrace_('dashboard_status_hydration');
-    markPortalClientLoadTiming_(trace, 'start', {
-      routeType: 'dashboard_status',
-      tokenCount: tokens.length,
-      batchSize: batches.length ? batches[0].length : 0,
-      visibleCount: batches.length ? batches[0].length : 0
-    });
-    let firstBatchCompleted = false;
-    for (let i = 0; i < batches.length; i += 1) {
-      const batch = batches[i];
-      if (seq !== DASHBOARD_STATUS_HYDRATION_SEQ || getDashboardContextKey_(getDashboardContextRequestPayload_()) !== requestKey) {
-        return null;
-      }
-      if (i > 0) await waitForDashboardBackgroundHydrationTurn_(180);
-      const payload = Object.assign({}, requestPayload, { tokens: batch });
-      markPortalClientLoadTiming_(trace, 'batch_request', {
-        routeType: 'dashboard_status',
-        batchSize: batch.length,
-        tokenCount: batch.length,
-        requestedCount: tokens.length,
-        stage: i === 0 ? 'visible' : 'background'
-      });
-      try {
-        const resp = await callServer('getDashboardProjectStatusBatch', payload);
-        if (seq !== DASHBOARD_STATUS_HYDRATION_SEQ || getDashboardContextKey_(getDashboardContextRequestPayload_()) !== requestKey) {
-          return null;
-        }
-        const serverTiming = getServerPortalLoadTimingSummary_(resp);
-        markPortalClientLoadTiming_(trace, 'batch_response', Object.assign({
-          routeType: 'dashboard_status',
-          ok: !!(resp && resp.ok === true),
-          batchSize: batch.length,
-          projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0,
-          stage: i === 0 ? 'visible' : 'background'
-        }, serverTiming || {}));
-        applyDashboardProjectStatusBatchResponse_(batch, resp);
-      } catch (_) {
-        if (seq !== DASHBOARD_STATUS_HYDRATION_SEQ) return null;
-        batch.forEach(token => renderDashboardProjectStatusFallback_(token, ''));
-        markPortalClientLoadTiming_(trace, 'batch_failed', {
-          routeType: 'dashboard_status',
-          ok: false,
-          batchSize: batch.length,
-          stage: i === 0 ? 'visible' : 'background'
-        });
-      }
-      if (!firstBatchCompleted) {
-        firstBatchCompleted = true;
-        if (typeof opts.onFirstBatchComplete === 'function') {
-          try { opts.onFirstBatchComplete(); } catch (_) {}
-        }
-      }
-    }
-    logPortalClientLoadTiming_(trace, 'complete', {
-      routeType: 'dashboard_status',
-      ok: true,
-      tokenCount: tokens.length,
-      projectCount: tokens.length
-    });
-    return null;
-  }
 
   async function loadProjectsForHome(options){
     const opts = (options && typeof options === 'object') ? options : {};
@@ -32205,25 +32500,21 @@
 	    const startFullPeekPrefetchOnce = source => {
 	      if (fullPeekPrefetchStarted) return;
 	      if (CURRENT_VIEW !== VIEW_DASHBOARD) return;
-      fullPeekPrefetchStarted = true;
-      startDashboardProjectPeekFullPrefetch_(getDashboardCriticalProjectTokens_(projects), {
-        initialDelayMs: 1200,
-        maxInitial: DASHBOARD_CRITICAL_PROJECT_LIMIT,
-        nextDelayMs: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS,
-        source: String(source || 'status-settled')
-      });
+	      fullPeekPrefetchStarted = true;
+	      startDashboardProjectPeekFullPrefetch_(getDashboardCriticalProjectTokens_(projects), {
+	        initialDelayMs: 900,
+	        maxInitial: DASHBOARD_CRITICAL_PROJECT_LIMIT,
+	        nextDelayMs: DASHBOARD_FULL_PEEK_PREFETCH_IDLE_GAP_MS,
+	        source: String(source || 'status-settled')
+	      });
 	    };
-	    const fullPrefetchFallbackTimer = window.setTimeout(() => {
-	      startFullPeekPrefetchOnce('bounded-delay');
-	    }, DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS);
 	    startDashboardPairedBackgroundHydration_(projects, {
 	      source: 'post-reveal'
 	    });
-	    waitMs_(Math.min(DASHBOARD_FULL_PEEK_PREFETCH_SETTLE_DELAY_MS, 2200)).then(() => {
-	      if (fullPrefetchFallbackTimer) {
-	        window.clearTimeout(fullPrefetchFallbackTimer);
-	      }
-	      startFullPeekPrefetchOnce('paired-hydration-started');
+	    requestAnimationFrame(() => {
+	      requestAnimationFrame(() => {
+	        startFullPeekPrefetchOnce('post-reveal-summary-ready');
+	      });
 	    });
 	    return payload;
 	  }
@@ -32680,6 +32971,7 @@
 
     resetDashboardHomeTransientState_();
     applyDashboardHomeData(dashboardHomeData);
+    applyDashboardContextFromRequestPayload_(opts.requestPayload);
     syncCurrentPortalDashboardRoute_({ historyMode: opts.historyMode || 'push' });
     setView(VIEW_DASHBOARD, { focus: false });
     if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
@@ -32693,13 +32985,43 @@
     }
   }
 
+  async function resumeMountedDashboardFromProjectReturn_(requestPayload, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const state = DASHBOARD_ACTIVE_STATE;
+    clearStoredPortalPayload({ preserveDashboardPeekCache: true });
+    teardownProjectView();
+    applyAuthShellRuntimeState();
+    resetSnapshotDirtyBaseline({ clear: true });
+    applyDashboardContextFromRequestPayload_(requestPayload);
+    syncCurrentPortalDashboardRoute_({ historyMode: opts.historyMode || 'push' });
+    setView(VIEW_DASHBOARD, { focus: false });
+    syncDashboardAccountContextFromSummary_(DASHBOARD_ACCOUNT_SUMMARY || ACCOUNT_SUMMARY || {});
+    renderDashboardAccountStatus(DASHBOARD_ACCOUNT_SUMMARY || ACCOUNT_SUMMARY || {});
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const scrollY = Math.max(0, Number(state && state.scrollY || 0) || 0);
+    if (scrollY > 0 && typeof window.scrollTo === 'function') {
+      try {
+        window.scrollTo(0, scrollY);
+      } catch (_) {}
+    }
+    setAuthMessage('', false, { view: VIEW_DASHBOARD });
+    consumeDashboardBootstrapIntent_().catch(() => {});
+    notifyPortalReady({
+      reason: opts.readyReason || DASHBOARD_CRITICAL_READY_REASON,
+      readyStage: opts.readyReason || DASHBOARD_CRITICAL_READY_REASON,
+      routeType: 'dashboard'
+    });
+    return true;
+  }
+
   async function goHomeFromPortal(){
     closeUnsavedLeaveModal({ immediate: true });
-    rtShowLoader('Returning to dashboard…', 'Refreshing your project list.');
     const trace = createPortalClientLoadTimingTrace_('project_to_dashboard');
+    let transition = null;
+    let loaderShown = false;
     try {
       if (!AUTH_SESSION_ID) AUTH_SESSION_ID = readStoredSessionId();
-      const dashboardRequestPayload = buildDashboardHomeSummaryPayload_(getDashboardContextRequestPayload_());
+      const dashboardRequestPayload = getDashboardReturnRequestPayload_();
       if (!dashboardRequestPayload) {
         teardownProjectView();
         applyAuthShellRuntimeState();
@@ -32708,6 +33030,12 @@
         notifyPortalReady({ reason: 'auth-shell-ready' });
         return;
       }
+      transition = createPortalViewTransition_(CURRENT_VIEW, VIEW_DASHBOARD, dashboardRequestPayload, {
+        routeType: 'project_to_dashboard',
+        source: 'dashboard_button',
+        hasMountedSurface: hasResumableMountedDashboardForContext_(dashboardRequestPayload),
+        loaderPolicy: 'defer_until_cache_miss'
+      });
 
       markPortalClientLoadTiming_(trace, 'return_start', {
         routeType: 'project_to_dashboard',
@@ -32726,15 +33054,69 @@
           reason: cacheBypassReason
         });
       }
+      if (hasResumableMountedDashboardForContext_(dashboardRequestPayload)) {
+        markPortalClientLoadBudget_(trace, 'dashboard_resume_mounted', 'dashboard_return_mounted', {
+          routeType: 'project_to_dashboard',
+          hasMountedSurface: true,
+          projectCount: DASHBOARD_ACTIVE_STATE && Array.isArray(DASHBOARD_ACTIVE_STATE.projects) ? DASHBOARD_ACTIVE_STATE.projects.length : 0,
+          visibleCount: DASHBOARD_ACTIVE_STATE ? Number(DASHBOARD_ACTIVE_STATE.visibleCount || 0) : 0
+        });
+        markPortalViewTransitionBudget_(transition, 'dashboard_resume_mounted', 'dashboard_return_mounted', {
+          routeType: 'project_to_dashboard',
+          hasMountedSurface: true,
+          projectCount: DASHBOARD_ACTIVE_STATE && Array.isArray(DASHBOARD_ACTIVE_STATE.projects) ? DASHBOARD_ACTIVE_STATE.projects.length : 0,
+          visibleCount: DASHBOARD_ACTIVE_STATE ? Number(DASHBOARD_ACTIVE_STATE.visibleCount || 0) : 0
+        });
+        await resumeMountedDashboardFromProjectReturn_(dashboardRequestPayload, {
+          historyMode: 'push'
+        });
+        logPortalClientLoadBudget_(trace, 'mounted_resumed', 'dashboard_return_mounted', {
+          routeType: 'project_to_dashboard',
+          ok: true,
+          hasMountedSurface: true,
+          projectCount: DASHBOARD_ACTIVE_STATE && Array.isArray(DASHBOARD_ACTIVE_STATE.projects) ? DASHBOARD_ACTIVE_STATE.projects.length : 0,
+          visibleCount: DASHBOARD_ACTIVE_STATE ? Number(DASHBOARD_ACTIVE_STATE.visibleCount || 0) : 0
+        });
+        logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'dashboard_return_mounted', {
+          routeType: 'project_to_dashboard',
+          ok: true,
+          hasMountedSurface: true,
+          loaderShown: false
+        });
+        loadDashboardHomeCriticalReady_({
+          requestPayload: dashboardRequestPayload,
+          suppressLoadingMessage: true,
+          awaitPaint: false,
+          skipContextCheck: true,
+          allowCriticalCache: false,
+          preserveTransientState: true,
+          renderMetadataBehindLoader: false,
+          routeType: cacheBypassReason ? 'project_to_dashboard_mounted_fresh_refresh' : 'project_to_dashboard_mounted_refresh'
+        }).then(freshDashboardHomeData => {
+          if (!freshDashboardHomeData || CURRENT_VIEW !== VIEW_DASHBOARD) return;
+          if (getDashboardContextKey_(getDashboardContextRequestPayload_()) !== getDashboardContextKey_(dashboardRequestPayload)) return;
+          setAuthMessage('', false, { view: VIEW_DASHBOARD });
+          notifyDashboardCriticalReady_(freshDashboardHomeData);
+        }).catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to refresh dashboard.'), 'err');
+        });
+        return;
+      }
       const cachedDashboardHomeData = cacheBypassReason ? null : getDashboardHomeCacheEntry_(dashboardRequestPayload);
       if (cachedDashboardHomeData && isDashboardHomeCriticalReady_(cachedDashboardHomeData)) {
-        markPortalClientLoadTiming_(trace, 'cache_render_start', {
+        markPortalClientLoadBudget_(trace, 'cache_render_start', 'dashboard_return_cache', {
           routeType: 'project_to_dashboard',
           cacheHit: true,
           projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
         });
         await renderDashboardHomeFromProjectReturn_(cachedDashboardHomeData, {
-          historyMode: 'push'
+          historyMode: 'push',
+          requestPayload: dashboardRequestPayload
+        });
+        markPortalViewTransitionBudget_(transition, 'dashboard_resume_cache', 'dashboard_return_cache', {
+          routeType: 'project_to_dashboard',
+          cacheHit: true,
+          projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
         });
         markPortalClientLoadTiming_(trace, 'project_return_cached_rendered', {
           routeType: 'project_to_dashboard',
@@ -32742,10 +33124,17 @@
           cacheHit: true,
           projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
         });
-        logPortalClientLoadTiming_(trace, 'cache_rendered', {
+        logPortalClientLoadBudget_(trace, 'cache_rendered', 'dashboard_return_cache', {
           routeType: 'project_to_dashboard',
           ok: true,
           cacheHit: true,
+          projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
+        });
+        logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'dashboard_return_cache', {
+          routeType: 'project_to_dashboard',
+          ok: true,
+          cacheHit: true,
+          loaderShown: false,
           projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
         });
         loadDashboardHomeCriticalReady_({
@@ -32774,6 +33163,17 @@
         });
       }
 
+      markPortalClientLoadTiming_(trace, 'dashboard_resume_fetch', {
+        routeType: 'project_to_dashboard',
+        cacheHit: false
+      });
+      markPortalViewTransitionBudget_(transition, 'dashboard_resume_fetch', 'dashboard_return_fetch', {
+        routeType: 'project_to_dashboard',
+        cacheHit: false,
+        loaderPolicy: 'show_global_loader'
+      });
+      rtShowLoader('Returning to dashboard…', 'Refreshing your project list.');
+      loaderShown = true;
       const dashboardHomeData = await loadDashboardHomeCriticalReady_({
         requestPayload: dashboardRequestPayload,
         suppressLoadingMessage: true,
@@ -32787,7 +33187,8 @@
       }
 
       await renderDashboardHomeFromProjectReturn_(dashboardHomeData, {
-        historyMode: 'push'
+        historyMode: 'push',
+        requestPayload: dashboardRequestPayload
       });
       markPortalClientLoadTiming_(trace, 'project_return_fetched_rendered', {
         routeType: 'project_to_dashboard',
@@ -32795,10 +33196,17 @@
         cacheHit: false,
         projectCount: Array.isArray(dashboardHomeData.projects) ? dashboardHomeData.projects.length : 0
       });
-      logPortalClientLoadTiming_(trace, 'fetched_rendered', {
+      logPortalClientLoadBudget_(trace, 'fetched_rendered', 'dashboard_return_fetch', {
         routeType: 'project_to_dashboard',
         ok: true,
         cacheHit: false,
+        projectCount: Array.isArray(dashboardHomeData.projects) ? dashboardHomeData.projects.length : 0
+      });
+      logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'dashboard_return_fetch', {
+        routeType: 'project_to_dashboard',
+        ok: true,
+        cacheHit: false,
+        loaderShown: loaderShown,
         projectCount: Array.isArray(dashboardHomeData.projects) ? dashboardHomeData.projects.length : 0
       });
     } catch (err) {
@@ -32822,9 +33230,14 @@
         routeType: 'project_to_dashboard',
         ok: false
       });
+      logPortalViewTransition_(transition, 'failed', {
+        routeType: 'project_to_dashboard',
+        ok: false,
+        loaderShown: loaderShown
+      });
       showNotice(msg, 'err', { persist: true });
     } finally {
-      rtHideLoader();
+      if (loaderShown) rtHideLoader();
     }
   }
 
