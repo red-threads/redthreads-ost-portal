@@ -16561,19 +16561,15 @@
       min-width:0;
       margin:0;
     }
-    #projectView .printJobTab{
-      background:var(--rt-glass);
-      border:1px solid var(--rt-glassBorder);
-      color:var(--rt-text);
-      backdrop-filter:blur(18px) saturate(140%);
-      -webkit-backdrop-filter:blur(18px) saturate(140%);
-      box-shadow:0 8px 16px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.07);
-      transition:background-color .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease;
-    }
-    #projectView .printJobTab:hover{
-      background:rgba(255,255,255,.12);
-      border-color:rgba(225,29,72,.44);
-    }
+	    #projectView .printJobTab{
+	      background:var(--rt-glass);
+	      border:1px solid var(--rt-glassBorder);
+	      color:var(--rt-text);
+	      backdrop-filter:blur(18px) saturate(140%);
+	      -webkit-backdrop-filter:blur(18px) saturate(140%);
+	      box-shadow:0 8px 16px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.07);
+	      transition:background .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease, transform .16s ease;
+	    }
     #projectView .printJobTab[aria-selected="true"]{
       border-color:var(--rt-red);
       background:rgba(255,255,255,.12);
@@ -16634,81 +16630,67 @@
       border-color:rgba(225,29,72,.62);
       color:#fff;
     }
-    #projectView .printJobTab{
-      background:rgba(2,6,14,.9);
-      border:1px solid var(--rt-glassBorder);
-      color:var(--rt-text);
-      box-shadow:0 10px 18px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.06);
+	    #projectView .printJobTab{
+	      background:rgba(2,6,14,.9);
+	      border:1px solid var(--rt-glassBorder);
+	      color:var(--rt-text);
+	      box-shadow:0 10px 18px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.06);
       display:flex;
       align-items:stretch;
-      gap:8px;
-      padding:2px 10px;
-      min-height:56px;
-    }
-    /* Inactive-only tab brightening (do not affect active/removed). */
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]),
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]){
-      background:rgba(255,255,255,.13) !important;
-      border-color:rgba(255,255,255,.24) !important;
-      box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.12);
-      backdrop-filter:blur(18px) saturate(140%);
-      -webkit-backdrop-filter:blur(18px) saturate(140%);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]) .printJobTabTitle,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabTitle{
-      color:rgba(255,255,255,.9);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]) .printJobTabSummary,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabSummary{
-      color:rgba(255,255,255,.82);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]) .pjMetricLabel,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricLabel{
-      color:rgba(255,255,255,.8);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]) .pjMetricNum,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricNum{
-      color:rgba(255,255,255,.9);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]) .printJobTabHide,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabHide{
-      border-color:rgba(255,255,255,.42);
-      background:rgba(255,255,255,.13);
-      color:rgba(255,255,255,.84);
-    }
-    #projectView .printJobTab:hover{
-      background:rgba(9,14,26,.94);
-      border-color:rgba(255,255,255,.28);
-      box-shadow:0 12px 20px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.08);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]):hover,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]):hover{
-      background:rgba(255,255,255,.1);
-      border-color:rgba(255,255,255,.22);
-      box-shadow:0 12px 22px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.1);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]):hover .printJobTabTitle,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabTitle{
-      color:rgba(255,255,255,.84);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]):hover .printJobTabSummary,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabSummary{
-      color:rgba(255,255,255,.76);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]):hover .pjMetricLabel,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .pjMetricLabel{
-      color:rgba(255,255,255,.72);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]):hover .pjMetricNum,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .pjMetricNum{
-      color:rgba(255,255,255,.84);
-    }
-    #projectView .printJobTabsList .printJobTab[aria-selected="false"]:not([data-hidden="true"]):hover .printJobTabHide,
-    #projectView .printJobTabsList .printJobTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabHide{
-      background:rgba(255,255,255,.1);
-      border-color:rgba(255,255,255,.32);
-      color:rgba(255,255,255,.72);
-    }
+	      gap:8px;
+	      padding:2px 10px;
+	      min-height:56px;
+	      transform:translateY(0);
+	    }
+	    /* Inactive job tabs: base and hover stay below the selected treatment. */
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]){
+	      background:rgba(255,255,255,.13);
+	      border-color:rgba(255,255,255,.24);
+	      box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.12);
+	      backdrop-filter:blur(18px) saturate(140%);
+	      -webkit-backdrop-filter:blur(18px) saturate(140%);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabTitle{
+	      color:rgba(255,255,255,.9);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabSummary{
+	      color:rgba(255,255,255,.82);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricLabel{
+	      color:rgba(255,255,255,.8);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricNum{
+	      color:rgba(255,255,255,.9);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabHide{
+	      border-color:rgba(255,255,255,.42);
+	      background:rgba(255,255,255,.13);
+	      color:rgba(255,255,255,.84);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]):hover{
+	      background:rgba(225,29,72,.16);
+	      border-color:rgba(225,29,72,.54);
+	      box-shadow:0 14px 30px rgba(0,0,0,.42), 0 0 0 1px rgba(225,29,72,.16), 0 0 20px rgba(225,29,72,.14), inset 0 1px 0 rgba(255,255,255,.13);
+	      transform:translateY(-1px);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabTitle{
+	      color:#fff;
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabSummary,
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabArtStatus{
+	      color:rgba(255,255,255,.88);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]):hover .pjMetricLabel{
+	      color:rgba(255,232,239,.84);
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]):hover .pjMetricNum{
+	      color:#fff;
+	    }
+	    #projectView .printJobTabsList .printJobTab[data-panel="job"]:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabHide{
+	      background:rgba(225,29,72,.16);
+	      border-color:rgba(225,29,72,.62);
+	      color:#ffe9ef;
+	    }
     #projectView .printJobTab[aria-selected="true"]{
       background:linear-gradient(135deg,#f43f5e 0%, var(--rt-red) 58%, #be123c 100%);
       border-color:rgba(255,255,255,.24);
@@ -16863,48 +16845,43 @@
       border-color:rgba(255,255,255,.18);
       color:var(--rt-text);
     }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]),
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]){
-      background:rgba(255,255,255,.13) !important;
-      border-color:rgba(255,255,255,.24) !important;
-      box-shadow:
-        0 10px 30px rgba(0,0,0,.45),
-        inset 0 1px 0 rgba(255,255,255,.12);
-      backdrop-filter:blur(22px) saturate(145%);
-      -webkit-backdrop-filter:blur(22px) saturate(145%);
-    }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]):hover,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover{
-      background:rgba(255,255,255,.1);
-      border-color:rgba(81,255,183,.42);
-      box-shadow:
-        0 12px 22px rgba(0,0,0,.4),
-        inset 0 1px 0 rgba(255,255,255,.1);
-    }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]) .printJobTabTitle,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabTitle{
-      color:rgba(255,255,255,.9);
-    }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]) .printJobTabSummary,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabSummary{
-      color:rgba(255,255,255,.82);
-    }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]) .printJobTabMeta,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabMeta{
-      color:#51ffb7;
-    }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]) .pjMetricLabel,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricLabel{
-      color:#51ffb7;
-    }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]) .pjMetricNum,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricNum{
-      color:#51ffb7;
-    }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]) .printJobTabSpecialLabel,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabSpecialLabel{
-      background:rgba(81,255,183,.1);
-      border-color:rgba(81,255,183,.28);
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]){
+	      background:rgba(255,255,255,.13);
+	      border-color:rgba(255,255,255,.24);
+	      box-shadow:
+	        0 10px 30px rgba(0,0,0,.45),
+	        inset 0 1px 0 rgba(255,255,255,.12);
+	      backdrop-filter:blur(22px) saturate(145%);
+	      -webkit-backdrop-filter:blur(22px) saturate(145%);
+	    }
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover{
+	      background:rgba(81,255,183,.14);
+	      border-color:rgba(81,255,183,.52);
+	      box-shadow:
+	        0 14px 30px rgba(0,0,0,.42),
+	        0 0 0 1px rgba(81,255,183,.16),
+	        0 0 20px rgba(81,255,183,.14),
+	        inset 0 1px 0 rgba(255,255,255,.13);
+	      transform:translateY(-1px);
+	    }
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabTitle{
+	      color:rgba(255,255,255,.9);
+	    }
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabSummary{
+	      color:rgba(255,255,255,.82);
+	    }
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabMeta{
+	      color:#51ffb7;
+	    }
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricLabel{
+	      color:#51ffb7;
+	    }
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .pjMetricNum{
+	      color:#51ffb7;
+	    }
+	    #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]) .printJobTabSpecialLabel{
+	      background:rgba(81,255,183,.1);
+	      border-color:rgba(81,255,183,.28);
       color:#51ffb7;
       box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
     }
@@ -16979,25 +16956,19 @@
     #projectView .printJobTab.isSummaryTab:not([aria-selected="true"]) .summaryTabDivider{
       color:rgba(255,255,255,.82) !important;
     }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]):hover .printJobTabTitle,
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]):hover .printJobTabMeta,
     #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabTitle,
     #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabMeta{
       color:#9dffd6;
     }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]):hover .printJobTabSummary,
     #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .printJobTabSummary{
       color:rgba(255,255,255,.76);
     }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]):hover .summaryTabHeaderAccent,
     #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .summaryTabHeaderAccent{
       color:rgba(255,255,255,.84) !important;
     }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]):hover .summaryTabAccent,
     #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .summaryTabAccent{
       color:rgba(255,255,255,.76) !important;
     }
-    #projectView .printJobTabsList .printJobTab.isSummaryTab[aria-selected="false"]:not([data-hidden="true"]):hover .summaryTabDivider,
     #projectView .printJobTabsList .printJobTab.isSummaryTab:not([aria-selected="true"]):not([data-hidden="true"]):hover .summaryTabDivider{
       color:rgba(255,255,255,.76) !important;
     }
@@ -18463,7 +18434,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 241">241</div>
+  <div class="devRevisionBadge" aria-label="Development revision 242">242</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
