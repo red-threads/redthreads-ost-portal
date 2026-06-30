@@ -7283,6 +7283,28 @@
       line-height:1.2;
       letter-spacing:.01em;
     }
+    .summaryEstimateTaxTipsLink{
+      appearance:none;
+      border:0;
+      background:transparent;
+      padding:0 2px;
+      color:rgba(60,232,171,.96);
+      font-size:10px;
+      font-weight:800;
+      line-height:1.2;
+      letter-spacing:.01em;
+      text-align:left;
+      text-decoration:underline;
+      text-underline-offset:3px;
+      cursor:pointer;
+      transition:color .14s ease, opacity .14s ease, text-shadow .14s ease;
+    }
+    .summaryEstimateTaxTipsLink:hover,
+    .summaryEstimateTaxTipsLink:focus-visible{
+      color:rgba(112,255,211,.98);
+      text-shadow:0 0 14px rgba(46,216,155,.26);
+      outline:none;
+    }
     .summaryEstimateInlineEmailPanel{
       display:flex;
       flex-direction:column;
@@ -14881,26 +14903,6 @@
       height:34px;
       box-shadow:0 8px 18px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.18);
     }
-    .orderFlowTaxTipsLink{
-      appearance:none;
-      border:0;
-      background:transparent;
-      padding:0;
-      color:#0ea5e9;
-      font-size:11px;
-      line-height:1.2;
-      font-weight:800;
-      text-align:right;
-      text-decoration:underline;
-      text-underline-offset:3px;
-      cursor:pointer;
-      justify-self:end;
-      transition:color .14s ease, opacity .14s ease;
-    }
-    .orderFlowTaxTipsLink:hover,
-    .orderFlowTaxTipsLink:focus-visible{
-      color:#0369a1;
-    }
     .orderFlowSummaryPreviewBtn:hover{
       transform:translateY(-1px);
       box-shadow:0 14px 24px rgba(46,216,155,.24), inset 0 1px 0 rgba(255,255,255,.52);
@@ -18101,7 +18103,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 228">228</div>
+  <div class="devRevisionBadge" aria-label="Development revision 229">229</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -21929,6 +21931,36 @@
     const account = normalizeAccountSummary(summary);
     if (!isDashboardSalesTaxTipsPrewarmEligible_(account)) return;
     const requestPayload = getDashboardContextRequestPayload_();
+    if (!requestPayload) return;
+    const prewarmKey = buildDashboardSalesTaxTipsPrewarmKey_(account, requestPayload);
+    if (!prewarmKey) return;
+    if (
+      prewarmKey === DASHBOARD_TAX_TIPS_PREWARM_KEY &&
+      (TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_ARTIFACT || DASHBOARD_TAX_TIPS_PREWARM_PROMISE || DASHBOARD_TAX_TIPS_PREWARM_ERROR)
+    ) {
+      return;
+    }
+    clearDashboardSalesTaxTipsPrewarmTimer_();
+    DASHBOARD_TAX_TIPS_PREWARM_KEY = prewarmKey;
+    DASHBOARD_TAX_TIPS_PREWARM_ERROR = null;
+    const run = () => {
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE = 0;
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = '';
+      startDashboardSalesTaxTipsPrewarm_(requestPayload, prewarmKey).catch(() => {});
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = 'idle';
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE = window.requestIdleCallback(run, { timeout: 900 });
+      return;
+    }
+    DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = 'timeout';
+    DASHBOARD_TAX_TIPS_PREWARM_HANDLE = window.setTimeout(run, 180);
+  }
+
+  function scheduleProjectSalesTaxTipsPrewarm_(){
+    const account = normalizeAccountSummary(ACCOUNT_SUMMARY);
+    if (!isDashboardSalesTaxTipsPrewarmEligible_(account)) return;
+    const requestPayload = getTaxWorkspaceDocumentRequestPayload_();
     if (!requestPayload) return;
     const prewarmKey = buildDashboardSalesTaxTipsPrewarmKey_(account, requestPayload);
     if (!prewarmKey) return;
@@ -42815,16 +42847,6 @@
       toggleBtn.addEventListener('click', toggleOrderFlowSummarySalesTax_);
       taxControlRow.appendChild(toggleBtn);
       taxWrap.appendChild(taxControlRow);
-      const tipsLink = createEl('button', 'orderFlowTaxTipsLink', "View sales tax do's and don'ts");
-      tipsLink.type = 'button';
-      tipsLink.addEventListener('click', event => {
-        if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
-        openSalesTaxTipsViewer_({ context: 'project' }).catch(err => {
-          showNotice(String((err && err.message) || err || 'Unable to open the sales tax tips document.'), 'err');
-        });
-      });
-      taxWrap.appendChild(tipsLink);
       actionRow.appendChild(taxWrap);
     } else if (taxTone === 'pending') {
       const pendingTaxPill = createEl('span', 'orderFlowAccountActionBtn isSummaryPlacement isTaxPendingStatus', 'Sales tax exemption pending');
@@ -51901,17 +51923,27 @@
     );
 
     if (canToggleSalesTax) {
-      card.appendChild(
-        buildToggleRow(
-          'Sales Tax',
-          presentation.salesTaxEnabled,
-          () => setSummaryOptions({ salesTaxEnabled: !presentation.salesTaxEnabled }),
-          'ON',
-          'OFF',
-          'isSalesTaxToggle',
-          ''
-        )
+      const salesTaxGroup = buildToggleRow(
+        'Sales Tax',
+        presentation.salesTaxEnabled,
+        () => setSummaryOptions({ salesTaxEnabled: !presentation.salesTaxEnabled }),
+        'ON',
+        'OFF',
+        'isSalesTaxToggle',
+        ''
       );
+      const tipsLink = createEl('button', 'summaryEstimateTaxTipsLink', "View sales tax do's and don'ts");
+      tipsLink.type = 'button';
+      tipsLink.addEventListener('click', event => {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        openSalesTaxTipsViewer_({ context: 'project' }).catch(err => {
+          showNotice(String((err && err.message) || err || 'Unable to open the sales tax tips document.'), 'err');
+        });
+      });
+      salesTaxGroup.appendChild(tipsLink);
+      card.appendChild(salesTaxGroup);
+      scheduleProjectSalesTaxTipsPrewarm_();
     }
 
     if (!canToggleSalesTax && isSalesTaxExemptionPendingReview_(ACCOUNT_SUMMARY)) {
