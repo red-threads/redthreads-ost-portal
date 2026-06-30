@@ -4722,8 +4722,7 @@
       transform:translate(0px,0px) scale(1);
       transform-origin:center center;
       touch-action:none;
-      cursor:move;
-      cursor:grab;
+      cursor:zoom-in;
       user-select:none;
     }
     .lightboxImg.isDragging{
@@ -4808,7 +4807,7 @@
       z-index:3;
       display:flex;
       align-items:center;
-      justify-content:space-between;
+      justify-content:flex-start;
       gap:18px;
       pointer-events:none;
       color:#fff;
@@ -4823,6 +4822,17 @@
     .lightboxDraftStatus,
     .lightboxImageCount{
       white-space:nowrap;
+    }
+    .lightboxImageMeta.isFinalDraft .lightboxDraftStatus{
+      color:rgba(255,255,255,.98);
+      transition:color .14s ease, text-shadow .14s ease;
+    }
+    .lightboxImgWrap:hover .lightboxImageMeta.isFinalDraft .lightboxDraftStatus{
+      color:#51ffb7;
+      text-shadow:0 2px 8px rgba(0,0,0,.82), 0 0 18px rgba(81,255,183,.28);
+    }
+    .lightboxImageMeta.isRoughDraft .lightboxDraftStatus{
+      color:rgba(203,213,225,.82);
     }
     .lightboxBtn{
       width:42px;height:42px;
@@ -7413,6 +7423,16 @@
     .summaryEstimateTaxTipsLink:focus-visible{
       color:rgba(112,255,211,.98);
       text-shadow:0 0 14px rgba(46,216,155,.26);
+      outline:none;
+    }
+    .summaryEstimateTaxTipsLink:disabled,
+    .summaryEstimateTaxTipsLink:disabled:hover,
+    .summaryEstimateTaxTipsLink:disabled:focus-visible{
+      color:rgba(203,213,225,.62);
+      text-decoration-color:rgba(203,213,225,.38);
+      text-shadow:none;
+      cursor:default;
+      opacity:1;
       outline:none;
     }
     .summaryEstimateInlineEmailPanel{
@@ -13813,8 +13833,7 @@
       transform:translate(0px,0px) scale(1);
       transform-origin:center center;
       touch-action:none;
-      cursor:move;
-      cursor:grab;
+      cursor:zoom-in;
     }
     .artworkPreviewImage.isDragging{
       cursor:grabbing;
@@ -13827,7 +13846,7 @@
       z-index:2;
       display:flex;
       align-items:center;
-      justify-content:space-between;
+      justify-content:flex-start;
       gap:18px;
       pointer-events:none;
       color:#fff;
@@ -13842,6 +13861,17 @@
     .artworkPreviewDraftStatus,
     .artworkPreviewImageCount{
       white-space:nowrap;
+    }
+    .artworkPreviewMeta.isFinalDraft .artworkPreviewDraftStatus{
+      color:rgba(255,255,255,.98);
+      transition:color .14s ease, text-shadow .14s ease;
+    }
+    .artworkPreviewImageWrap:hover .artworkPreviewMeta.isFinalDraft .artworkPreviewDraftStatus{
+      color:#51ffb7;
+      text-shadow:0 2px 8px rgba(0,0,0,.82), 0 0 18px rgba(81,255,183,.28);
+    }
+    .artworkPreviewMeta.isRoughDraft .artworkPreviewDraftStatus{
+      color:rgba(203,213,225,.82);
     }
     .artworkPreviewNavBtn{
       position:absolute;
@@ -17477,7 +17507,12 @@
       background:rgba(255,255,255,.05);
       backdrop-filter:blur(14px) saturate(140%);
       -webkit-backdrop-filter:blur(14px) saturate(140%);
+      cursor:pointer;
       transition:background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease;
+    }
+    #projectView .detailsActions .approvalBtn:disabled,
+    #projectView .detailsActions .revisionBtn:disabled{
+      cursor:default;
     }
     #projectView .detailsActions .approvalBtn{
       border:1px solid rgba(81,255,183,.85);
@@ -18272,7 +18307,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 236">236</div>
+  <div class="devRevisionBadge" aria-label="Development revision 237">237</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18606,8 +18641,8 @@
           <button class="lightboxSideNav prev hidden" id="lightboxSidePrevBtn" type="button" aria-label="Previous image">&#9664;</button>
           <button class="lightboxSideNav next hidden" id="lightboxSideNextBtn" type="button" aria-label="Next image">&#9654;</button>
           <div class="lightboxImageMeta" id="lightboxImageMeta" aria-live="polite" hidden>
-            <span class="lightboxDraftStatus" id="lightboxDraftStatus">Final Draft Art</span>
-            <span class="lightboxImageCount" id="lightboxImageCount">Image 1 of 1</span>
+            <span class="lightboxDraftStatus" id="lightboxDraftStatus">Final Draft Art 1/1</span>
+            <span class="lightboxImageCount" id="lightboxImageCount" hidden></span>
           </div>
         </div>
         <div class="lightboxControls" id="lightboxControls">
@@ -19255,8 +19290,8 @@
       <div class="artworkPreviewImageWrap" id="artworkPreviewImageWrap">
         <img class="artworkPreviewImage" id="artworkPreviewImage" alt="Artwork preview fullscreen" referrerpolicy="no-referrer" draggable="false">
         <div class="artworkPreviewMeta" id="artworkPreviewMeta" aria-live="polite" hidden>
-          <span class="artworkPreviewDraftStatus" id="artworkPreviewDraftStatus">Final Draft Art</span>
-          <span class="artworkPreviewImageCount" id="artworkPreviewImageCount">Image 1 of 1</span>
+          <span class="artworkPreviewDraftStatus" id="artworkPreviewDraftStatus">Final Draft Art 1/1</span>
+          <span class="artworkPreviewImageCount" id="artworkPreviewImageCount" hidden></span>
         </div>
       </div>
       <button class="artworkPreviewNavBtn next" id="artworkPreviewNext" type="button" aria-label="Next image">
@@ -21363,7 +21398,9 @@
 
   function getSummaryCommercialDocumentFingerprint_(){
     try {
-      return getComparablePortalStateKey(buildPortalStateFromUI({ messageLog: CHAT_MESSAGES }));
+      const comparable = buildComparablePortalState(buildPortalStateFromUI({ messageLog: CHAT_MESSAGES }));
+      delete comparable.documentReferences;
+      return stableStringify(comparable);
     } catch (_) {
       return '';
     }
@@ -21389,7 +21426,7 @@
     const existingVersion = parsedEstimate
       ? parsedEstimate.version
       : Math.max(1, parseInt(String(existing.version || 1), 10) || 1);
-    const existingFingerprint = String(existing.currentComparableKey || '').trim();
+    const existingFingerprint = String(existing.currentComparableKey || existing.currentFingerprint || existing.fingerprint || '').trim();
     const version = existingFingerprint && fingerprint && existingFingerprint !== fingerprint
       ? existingVersion + 1
       : existingVersion;
@@ -21433,7 +21470,8 @@
       documentRef: String(ref.documentRef || '').trim(),
       displayLabel: String(ref.displayLabel || '').trim(),
       fileName: String(ref.fileName || '').trim(),
-      currentComparableKey: String(ref.currentComparableKey || '').trim()
+      currentComparableKey: String(ref.currentComparableKey || '').trim(),
+      currentFingerprint: String(ref.currentComparableKey || '').trim()
     };
   }
 
@@ -42353,10 +42391,12 @@
     const anchorRect = anchorEl.getBoundingClientRect();
     const tooltipRect = tooltip.getBoundingClientRect();
     const viewportPad = 10;
-    const preferredLeft = anchorRect.left + ((anchorRect.width - tooltipRect.width) / 2);
+    const preferredLeft = anchorRect.right - tooltipRect.width;
     const maxLeft = Math.max(viewportPad, window.innerWidth - tooltipRect.width - viewportPad);
     const left = Math.max(viewportPad, Math.min(maxLeft, preferredLeft));
-    const top = Math.max(viewportPad, anchorRect.top - tooltipRect.height - 8);
+    const preferredTop = anchorRect.bottom + 8;
+    const maxTop = Math.max(viewportPad, window.innerHeight - tooltipRect.height - viewportPad);
+    const top = Math.max(viewportPad, Math.min(maxTop, preferredTop));
     tooltip.style.left = left + 'px';
     tooltip.style.top = top + 'px';
     return true;
@@ -42988,7 +43028,7 @@
     if (!artworkPreviewImage) return;
     artworkPreviewImage.style.transform = 'translate(' + ARTWORK_PREVIEW_PAN_X + 'px,' + ARTWORK_PREVIEW_PAN_Y + 'px) scale(' + ARTWORK_PREVIEW_ZOOM_LEVEL + ')';
     artworkPreviewImage.classList.toggle('isDragging', ARTWORK_PREVIEW_DRAGGING || ARTWORK_PREVIEW_POINTER_ACTIVE);
-    artworkPreviewImage.style.cursor = (ARTWORK_PREVIEW_DRAGGING || ARTWORK_PREVIEW_POINTER_ACTIVE) ? 'grabbing' : 'grab';
+    artworkPreviewImage.style.cursor = (ARTWORK_PREVIEW_DRAGGING || ARTWORK_PREVIEW_POINTER_ACTIVE) ? 'grabbing' : 'zoom-in';
   }
 
   function resetArtworkPreviewPointerState_(){
@@ -43006,7 +43046,16 @@
   }
 
   function setArtworkPreviewZoom_(next){
-    ARTWORK_PREVIEW_ZOOM_LEVEL = clampArtworkViewerNumber_(next, ARTWORK_VIEWER_MIN_ZOOM, ARTWORK_VIEWER_MAX_ZOOM);
+    ARTWORK_PREVIEW_ZOOM_LEVEL = setArtworkViewerZoomClamped_(next);
+    if (ARTWORK_PREVIEW_ZOOM_LEVEL === 1) {
+      ARTWORK_PREVIEW_PAN_X = 0;
+      ARTWORK_PREVIEW_PAN_Y = 0;
+    }
+    applyArtworkPreviewZoomPan_();
+  }
+
+  function cycleArtworkPreviewZoom_(direction){
+    ARTWORK_PREVIEW_ZOOM_LEVEL = getNextArtworkViewerZoomCycle_(ARTWORK_PREVIEW_ZOOM_LEVEL, direction);
     if (ARTWORK_PREVIEW_ZOOM_LEVEL === 1) {
       ARTWORK_PREVIEW_PAN_X = 0;
       ARTWORK_PREVIEW_PAN_Y = 0;
@@ -43017,10 +43066,15 @@
   function syncArtworkPreviewMeta_(){
     const total = Array.isArray(ARTWORK_PREVIEW_SLIDES) ? ARTWORK_PREVIEW_SLIDES.length : 0;
     if (artworkPreviewMeta) artworkPreviewMeta.hidden = total <= 0;
-    if (artworkPreviewDraftStatus) artworkPreviewDraftStatus.textContent = getArtworkDraftArtLabelForJob_(getArtworkPreviewJob_());
+    const job = getArtworkPreviewJob_();
+    applyArtworkViewerMetaState_(artworkPreviewMeta, job);
     if (artworkPreviewImageCount) {
       const safeIndex = total > 0 ? (((ARTWORK_PREVIEW_INDEX % total) + total) % total) : 0;
-      artworkPreviewImageCount.textContent = 'Image ' + String(safeIndex + 1) + ' of ' + String(Math.max(1, total));
+      if (artworkPreviewDraftStatus) artworkPreviewDraftStatus.textContent = getArtworkViewerMetaText_(job, safeIndex, total || 1);
+      artworkPreviewImageCount.textContent = '';
+      artworkPreviewImageCount.hidden = true;
+    } else if (artworkPreviewDraftStatus) {
+      artworkPreviewDraftStatus.textContent = getArtworkViewerMetaText_(job, 0, total || 1);
     }
   }
 
@@ -52536,9 +52590,12 @@
       );
       const tipsLink = createEl('button', 'summaryEstimateTaxTipsLink', "View sales tax do's and don'ts");
       tipsLink.type = 'button';
+      tipsLink.disabled = isBusy;
+      if (isBusy) tipsLink.setAttribute('aria-disabled', 'true');
       tipsLink.addEventListener('click', event => {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        if (isBusy) return;
         openSalesTaxTipsViewer_({ context: 'project' }).catch(err => {
           showNotice(String((err && err.message) || err || 'Unable to open the sales tax tips document.'), 'err');
         });
@@ -53986,6 +54043,7 @@
   const ARTWORK_VIEWER_ZOOM_STEP = 0.5;
   const ARTWORK_VIEWER_MIN_ZOOM = 1;
   const ARTWORK_VIEWER_MAX_ZOOM = 4;
+  const ARTWORK_VIEWER_ZOOM_CYCLE = Object.freeze([1, 1.5, 2, 2.5, 3, 3.5, 4]);
   const ARTWORK_VIEWER_CLICK_MOVE_THRESHOLD = 5;
 
   function clampArtworkViewerNumber_(value, min, max){
@@ -53998,6 +54056,45 @@
 
   function formatArtworkViewerZoomLabel_(value){
     return (Math.round(Number(value || 1) * 10) / 10).toString().replace(/\.0$/, '') + 'x';
+  }
+
+  function setArtworkViewerZoomClamped_(next){
+    return clampArtworkViewerNumber_(next, ARTWORK_VIEWER_MIN_ZOOM, ARTWORK_VIEWER_MAX_ZOOM);
+  }
+
+  function normalizeArtworkViewerZoomCycleStep_(value){
+    const current = setArtworkViewerZoomClamped_(Math.round(Number(value || 1) * 10) / 10);
+    let best = ARTWORK_VIEWER_ZOOM_CYCLE[0];
+    let bestDistance = Infinity;
+    ARTWORK_VIEWER_ZOOM_CYCLE.forEach(step => {
+      const distance = Math.abs(step - current);
+      if (distance < bestDistance) {
+        best = step;
+        bestDistance = distance;
+      }
+    });
+    return best;
+  }
+
+  function getNextArtworkViewerZoomCycle_(current, direction){
+    const dir = Number(direction) < 0 ? -1 : 1;
+    const currentStep = normalizeArtworkViewerZoomCycleStep_(current);
+    let index = ARTWORK_VIEWER_ZOOM_CYCLE.indexOf(currentStep);
+    if (index < 0) index = 0;
+    return ARTWORK_VIEWER_ZOOM_CYCLE[(index + dir + ARTWORK_VIEWER_ZOOM_CYCLE.length) % ARTWORK_VIEWER_ZOOM_CYCLE.length];
+  }
+
+  function getArtworkViewerMetaText_(job, index, total){
+    const safeTotal = Math.max(1, Number(total) || 1);
+    const safeIndex = Math.max(0, Math.min(safeTotal - 1, Number(index) || 0));
+    return getArtworkDraftArtLabelForJob_(job) + ' ' + String(safeIndex + 1) + '/' + String(safeTotal);
+  }
+
+  function applyArtworkViewerMetaState_(metaEl, job){
+    if (!metaEl) return;
+    const isRough = getArtworkDraftStateForJob_(job) === 'rough';
+    metaEl.classList.toggle('isRoughDraft', isRough);
+    metaEl.classList.toggle('isFinalDraft', !isRough);
   }
 
   function isProjectLightboxOpen_(){
@@ -54055,11 +54152,13 @@
       btn.classList.toggle('hidden', !showArrows);
     });
     if (lightboxImageMeta) lightboxImageMeta.hidden = total <= 0;
-    if (lightboxDraftStatus) lightboxDraftStatus.textContent = getArtworkDraftArtLabelForJob_(job);
+    applyArtworkViewerMetaState_(lightboxImageMeta, job);
+    let pos = available.indexOf(LIGHTBOX.index);
+    if (pos < 0) pos = 0;
+    if (lightboxDraftStatus) lightboxDraftStatus.textContent = getArtworkViewerMetaText_(job, pos, total || 1);
     if (lightboxImageCount) {
-      let pos = available.indexOf(LIGHTBOX.index);
-      if (pos < 0) pos = 0;
-      lightboxImageCount.textContent = 'Image ' + String(pos + 1) + ' of ' + String(Math.max(1, total));
+      lightboxImageCount.textContent = '';
+      lightboxImageCount.hidden = true;
     }
     requestAnimationFrame(updateLightboxOverlayGeometry_);
   }
@@ -54068,7 +54167,7 @@
     lightboxImg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
     zoomLabel.textContent = formatArtworkViewerZoomLabel_(zoomLevel);
     lightboxImg.classList.toggle('isDragging', dragging || lightboxPointerActive);
-    lightboxImg.style.cursor = (dragging || lightboxPointerActive) ? 'grabbing' : 'grab';
+    lightboxImg.style.cursor = (dragging || lightboxPointerActive) ? 'grabbing' : 'zoom-in';
     requestAnimationFrame(updateLightboxOverlayGeometry_);
   }
 
@@ -54087,7 +54186,16 @@
   }
 
   function setZoom(next){
-    zoomLevel = clampArtworkViewerNumber_(next, ARTWORK_VIEWER_MIN_ZOOM, ARTWORK_VIEWER_MAX_ZOOM);
+    zoomLevel = setArtworkViewerZoomClamped_(next);
+    if (zoomLevel === 1) {
+      panX = 0;
+      panY = 0;
+    }
+    applyZoomPan();
+  }
+
+  function cycleLightboxZoom_(direction){
+    zoomLevel = getNextArtworkViewerZoomCycle_(zoomLevel, direction);
     if (zoomLevel === 1) {
       panX = 0;
       panY = 0;
@@ -54354,13 +54462,13 @@
       lightboxUploadInput.addEventListener('change', handleLightboxUploadSelection);
     }
 
-    zoomInBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel + ARTWORK_VIEWER_ZOOM_STEP); });
-    zoomOutBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel - ARTWORK_VIEWER_ZOOM_STEP); });
+    zoomInBtn.addEventListener('click', e => { e.stopPropagation(); cycleLightboxZoom_(1); });
+    zoomOutBtn.addEventListener('click', e => { e.stopPropagation(); cycleLightboxZoom_(-1); });
 
     lightboxImg.addEventListener('contextmenu', e => {
       e.preventDefault();
       if (!isProjectLightboxOpen_() || !lightboxImg.getAttribute('src')) return;
-      setZoom(zoomLevel - ARTWORK_VIEWER_ZOOM_STEP);
+      cycleLightboxZoom_(-1);
     });
     lightboxImg.addEventListener('dragstart', e => e.preventDefault());
     if (lightboxImgWrap) {
@@ -54404,7 +54512,7 @@
       resetLightboxPointerState_();
       applyZoomPan();
       try { lightboxImg.releasePointerCapture(e.pointerId); } catch (_) {}
-      if (shouldZoomIn) setZoom(zoomLevel + ARTWORK_VIEWER_ZOOM_STEP);
+      if (shouldZoomIn) cycleLightboxZoom_(1);
     });
 
     lightboxImg.addEventListener('pointercancel', () => {
@@ -54861,7 +54969,7 @@
       artworkPreviewImage.addEventListener('contextmenu', evt => {
         evt.preventDefault();
         if (!isArtworkPreviewOpen() || !artworkPreviewImage.getAttribute('src')) return;
-        setArtworkPreviewZoom_(ARTWORK_PREVIEW_ZOOM_LEVEL - ARTWORK_VIEWER_ZOOM_STEP);
+        cycleArtworkPreviewZoom_(-1);
       });
       artworkPreviewImage.addEventListener('pointerdown', evt => {
         if (evt.button !== 0 || !artworkPreviewImage.getAttribute('src')) return;
@@ -54894,7 +55002,7 @@
         resetArtworkPreviewPointerState_();
         applyArtworkPreviewZoomPan_();
         try { artworkPreviewImage.releasePointerCapture(evt.pointerId); } catch (_) {}
-        if (shouldZoomIn) setArtworkPreviewZoom_(ARTWORK_PREVIEW_ZOOM_LEVEL + ARTWORK_VIEWER_ZOOM_STEP);
+        if (shouldZoomIn) cycleArtworkPreviewZoom_(1);
       });
       artworkPreviewImage.addEventListener('pointercancel', () => {
         resetArtworkPreviewPointerState_();
