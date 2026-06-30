@@ -4318,11 +4318,30 @@
     }
     .mockupFrame.clickable{cursor:zoom-in}
     .mockupFrame.disabled{cursor:default; opacity:.7}
+    .mockupFrame.clickable:focus-visible{
+      outline:2px solid rgba(81,255,183,.78);
+      outline-offset:3px;
+    }
+    .mockupFrame::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      z-index:2;
+      pointer-events:none;
+      opacity:0;
+      background:rgba(226,232,240,.16);
+      transition:opacity .18s ease;
+    }
+    .mockupFrame.clickable:hover::after,
+    .mockupFrame.clickable:focus-visible::after,
+    .mockupFrame.clickable:focus-within::after{
+      opacity:1;
+    }
     .mockupFrame .artDraftBadge{
       position:absolute;
       top:10px;
       right:10px;
-      z-index:4;
+      z-index:6;
       border-radius:999px;
       padding:6px 10px;
       min-height:28px;
@@ -4397,45 +4416,93 @@
       background:var(--c-surface-soft);
       text-align:center;
       padding:0 10px;
+      z-index:1;
     }
-
-    .mockupControls{
+    .mockupZoomHint{
       position:absolute;
-      left:10px;
-      right:10px;
-      bottom:10px;
-      height:36px;
-      background:var(--c-comp-rgba-255-255-255-0p8);
+      right:12px;
+      bottom:12px;
+      z-index:4;
+      width:34px;
+      height:34px;
       border-radius:999px;
-      display:grid;
-      grid-template-columns:auto 1fr auto 1fr auto;
+      border:1.5px solid rgba(203,213,225,.84);
+      color:rgba(203,213,225,.9);
+      background:rgba(4,7,16,.08);
+      display:flex;
       align-items:center;
-      padding:0 10px;
-      gap:8px;
+      justify-content:center;
+      pointer-events:none;
+      box-shadow:0 0 18px rgba(203,213,225,.2), inset 0 1px 0 rgba(255,255,255,.16);
+      backdrop-filter:blur(6px) saturate(130%);
+      -webkit-backdrop-filter:blur(6px) saturate(130%);
+      transform:translate(0,0) scale(1);
+      transition:right .24s ease, bottom .24s ease, transform .24s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
     }
-    .mockupControls.hidden{display:none}
-    .mockupSlot{display:flex;align-items:center;justify-content:center;}
-    .mockupSlot.left{justify-content:flex-start}
-    .mockupSlot.right{justify-content:flex-end}
-    .mockupLabel{
-      font-size:13px;
-      font-weight:900;
-      letter-spacing:.08em;
-      text-transform:uppercase;
-      color:var(--c-comp-hex-111111);
+    .mockupFrame.disabled .mockupZoomHint{
+      display:none;
     }
-    .mockupBtn{
-      width:30px;height:30px;
+    .mockupZoomHint svg{
+      width:18px;
+      height:18px;
+      display:block;
+      stroke:currentColor;
+    }
+    .mockupFrame.clickable:hover .mockupZoomHint,
+    .mockupFrame.clickable:focus-visible .mockupZoomHint,
+    .mockupFrame.clickable:focus-within .mockupZoomHint{
+      right:50%;
+      bottom:50%;
+      color:#51ffb7;
+      border-color:rgba(81,255,183,.94);
+      background:rgba(4,20,14,.14);
+      box-shadow:0 0 24px rgba(81,255,183,.34), 0 10px 22px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.18);
+      transform:translate(50%,50%) scale(1.48);
+    }
+    .mockupNavBtn{
+      position:absolute;
+      top:50%;
+      z-index:5;
+      width:38px;
+      height:38px;
       border-radius:999px;
-      border:1px solid var(--c-comp-hex-111111);
-      background:var(--c-surface);
-      font-weight:900;
+      border:1px solid rgba(203,213,225,.54);
+      background:rgba(4,7,16,.34);
+      color:rgba(226,232,240,.92);
       cursor:pointer;
-      display:flex;align-items:center;justify-content:center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:15px;
+      font-weight:900;
+      line-height:1;
+      opacity:0;
+      pointer-events:none;
+      box-shadow:0 10px 22px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.1);
+      backdrop-filter:blur(10px) saturate(130%);
+      -webkit-backdrop-filter:blur(10px) saturate(130%);
+      transform:translateY(-50%) scale(.94);
+      transition:opacity .16s ease, transform .16s ease, color .14s ease, border-color .14s ease, background-color .14s ease, box-shadow .14s ease;
     }
-    .mockupBtn:active{transform:scale(0.98)}
-    .mockupBtn.hidden{display:none}
-    .mockupBtn.disabled{opacity:.5;cursor:not-allowed}
+    .mockupNavBtn.prev{left:12px}
+    .mockupNavBtn.next{right:12px}
+    .mockupNavBtn.hidden{display:none}
+    .mockupFrame.clickable:hover .mockupNavBtn:not(.hidden),
+    .mockupFrame.clickable:focus-visible .mockupNavBtn:not(.hidden),
+    .mockupFrame.clickable:focus-within .mockupNavBtn:not(.hidden){
+      opacity:1;
+      pointer-events:auto;
+      transform:translateY(-50%) scale(1);
+    }
+    .mockupNavBtn:hover,
+    .mockupNavBtn:focus-visible{
+      color:#51ffb7;
+      border-color:rgba(81,255,183,.78);
+      background:rgba(4,20,14,.48);
+      box-shadow:0 14px 28px rgba(0,0,0,.34), 0 0 18px rgba(81,255,183,.22), inset 0 1px 0 rgba(255,255,255,.14);
+      outline:none;
+    }
+    .mockupNavBtn:active{transform:translateY(-50%) scale(.96)}
 
     .detailsCard{
       display:flex;
@@ -5738,14 +5805,6 @@
     }
     .mockupFrame{height:265px}
     .detailsCard{min-height:265px;height:auto}
-    .mockupControls{
-      left:12px;
-      right:12px;
-      bottom:12px;
-      border:1px solid var(--c-border);
-      background:var(--c-comp-rgba-255-255-255-0p92);
-      backdrop-filter: blur(3px);
-    }
     .projectHeader{
       border-bottom:1px solid var(--c-comp-hex-e2e8f0);
       padding-bottom:8px;
@@ -17030,26 +17089,6 @@
       border:1px solid rgba(255,255,255,.24);
       box-shadow:none;
     }
-    #projectView .mockupControls{
-      background:rgba(10,12,19,.74);
-      border-color:rgba(255,255,255,.18);
-      backdrop-filter:blur(12px) saturate(130%);
-      -webkit-backdrop-filter:blur(12px) saturate(130%);
-    }
-    #projectView .mockupLabel{
-      color:var(--rt-text);
-    }
-    #projectView .mockupBtn{
-      background:rgba(255,255,255,.1);
-      border-color:rgba(255,255,255,.32);
-      color:var(--rt-red);
-      text-shadow:0 0 0 rgba(0,0,0,0);
-      transition:color .14s ease, text-shadow .14s ease;
-    }
-    #projectView .mockupBtn:hover{
-      color:var(--rt-red);
-      text-shadow:0 0 10px var(--rt-redRing);
-    }
     #projectView .lightbox .lightboxControls{
       background:rgba(4,7,16,.82);
       border:1px solid var(--rt-glassBorder);
@@ -18307,7 +18346,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 237">237</div>
+  <div class="devRevisionBadge" aria-label="Development revision 238">238</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -28741,7 +28780,7 @@
     }
     if (type === 'click') {
       return !!target.closest(
-        '.colorRowRemoveBtn, .addOnRemove, .addOnReset, .printJobTabRestore, .summaryEstimateRestoreJobBtn, .mockupBtn, .lightboxUploadBtn'
+        '.colorRowRemoveBtn, .addOnRemove, .addOnReset, .printJobTabRestore, .summaryEstimateRestoreJobBtn, .lightboxUploadBtn'
       );
     }
     return false;
@@ -48532,16 +48571,33 @@
     const frame = dom.mockup.frame;
     const canOpenLightbox = !!(slides.length && isTeamArtworkUploadEnabled_());
 
+    function setFrameCanOpen(allowViewer){
+      frame.classList.toggle('disabled', !allowViewer);
+      frame.classList.toggle('clickable', !!allowViewer);
+      if (allowViewer) {
+        frame.setAttribute('role', 'button');
+        frame.setAttribute('tabindex', '0');
+        frame.setAttribute('aria-label', 'Open expanded artwork viewer');
+      } else {
+        frame.removeAttribute('role');
+        frame.removeAttribute('tabindex');
+        frame.removeAttribute('aria-label');
+      }
+    }
+
+    function syncPreviewArrows(showArrows){
+      [dom.mockup.prevBtn, dom.mockup.nextBtn].forEach(btn => {
+        if (btn) btn.classList.toggle('hidden', !showArrows);
+      });
+    }
+
     function showUnavailable(allowViewer){
       img.removeAttribute('src');
       img.style.display = 'none';
       empty.style.display = 'flex';
-      frame.classList.toggle('disabled', !allowViewer);
-      frame.classList.toggle('clickable', !!allowViewer);
-      dom.mockup.zoomBtn.classList.toggle('disabled', !allowViewer);
+      setFrameCanOpen(allowViewer);
       const showArrows = !!allowViewer && slides.length > 1;
-      dom.mockup.prevBtn.classList.toggle('hidden', !showArrows);
-      dom.mockup.nextBtn.classList.toggle('hidden', !showArrows);
+      syncPreviewArrows(showArrows);
     }
 
     if (!slides.length) {
@@ -48567,9 +48623,8 @@
     }
 
     const showArrows = availableIndexes.length > 1;
-    dom.mockup.prevBtn.classList.toggle('hidden', !showArrows);
-    dom.mockup.nextBtn.classList.toggle('hidden', !showArrows);
-    dom.mockup.zoomBtn.classList.toggle('disabled', !canOpenLightbox && !candidateIndexes.length);
+    syncPreviewArrows(showArrows);
+    setFrameCanOpen(!!(canOpenLightbox || candidateIndexes.length));
 
     const slide = slides[state.index];
     if (!slide || !slide.candidates || !slide.candidates.length) {
@@ -48583,8 +48638,7 @@
       () => {
         img.style.display = 'block';
         empty.style.display = 'none';
-        frame.classList.remove('disabled');
-        frame.classList.add('clickable');
+        setFrameCanOpen(true);
       },
       () => {
         state.failed[state.index] = true;
@@ -48642,42 +48696,27 @@
 
     const mockupEmpty = createEl('div', 'mockupEmpty', 'Mockup unavailable');
 
-    const mockupControls = createEl('div', 'mockupControls');
     const artworkDraftBadge = buildArtworkDraftBadge_(job);
-    const slotLeft = createEl('div', 'mockupSlot left');
-    const prevBtn = createEl('button', 'mockupBtn', '\u25c0');
+    const mockupZoomHint = createEl('div', 'mockupZoomHint');
+    mockupZoomHint.setAttribute('aria-hidden', 'true');
+    mockupZoomHint.innerHTML = '<svg class="mockupZoomIcon" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.25"></circle><path d="M15.2 15.2 20 20"></path><path d="M10.5 7.7v5.6"></path><path d="M7.7 10.5h5.6"></path></svg>';
+
+    const prevBtn = createEl('button', 'mockupNavBtn prev hidden', '\u25c0');
     prevBtn.type = 'button';
+    prevBtn.tabIndex = -1;
     prevBtn.setAttribute('aria-label', 'Previous image');
-    slotLeft.appendChild(prevBtn);
 
-    const slotProject = createEl('div', 'mockupSlot');
-    slotProject.appendChild(createEl('span', 'mockupLabel', 'IMAGE'));
-
-    const slotZoom = createEl('div', 'mockupSlot center');
-    const zoomBtn = createEl('button', 'mockupBtn', '+');
-    zoomBtn.type = 'button';
-    zoomBtn.setAttribute('aria-label', 'Open fullscreen');
-    slotZoom.appendChild(zoomBtn);
-
-    const slotMockups = createEl('div', 'mockupSlot');
-    slotMockups.appendChild(createEl('span', 'mockupLabel', 'MOCKUPS'));
-
-    const slotRight = createEl('div', 'mockupSlot right');
-    const nextBtn = createEl('button', 'mockupBtn', '\u25b6');
+    const nextBtn = createEl('button', 'mockupNavBtn next hidden', '\u25b6');
     nextBtn.type = 'button';
+    nextBtn.tabIndex = -1;
     nextBtn.setAttribute('aria-label', 'Next image');
-    slotRight.appendChild(nextBtn);
-
-    mockupControls.appendChild(slotLeft);
-    mockupControls.appendChild(slotProject);
-    mockupControls.appendChild(slotZoom);
-    mockupControls.appendChild(slotMockups);
-    mockupControls.appendChild(slotRight);
 
     mockupFrame.appendChild(mockupImg);
     mockupFrame.appendChild(mockupEmpty);
     mockupFrame.appendChild(artworkDraftBadge);
-    mockupFrame.appendChild(mockupControls);
+    mockupFrame.appendChild(mockupZoomHint);
+    mockupFrame.appendChild(prevBtn);
+    mockupFrame.appendChild(nextBtn);
     mockupBlock.appendChild(mockupFrame);
 
     const detailsCard = createEl('div', 'pjOverviewCard card detailsCard');
@@ -49162,22 +49201,33 @@
         img: mockupImg,
         empty: mockupEmpty,
         prevBtn: prevBtn,
-        nextBtn: nextBtn,
-        zoomBtn: zoomBtn
+        nextBtn: nextBtn
       }
     });
 
     prevBtn.addEventListener('click', e => { e.stopPropagation(); stepPreview(job, -1); });
     nextBtn.addEventListener('click', e => { e.stopPropagation(); stepPreview(job, 1); });
-    zoomBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (zoomBtn.classList.contains('disabled')) return;
-      openLightbox(job.printJobId);
-    });
 
     mockupFrame.addEventListener('click', e => {
-      if (e.target.closest('.mockupBtn')) return;
-      if (zoomBtn.classList.contains('disabled')) return;
+      if (e.target.closest('.mockupNavBtn')) return;
+      if (!mockupFrame.classList.contains('clickable')) return;
+      openLightbox(job.printJobId);
+    });
+    mockupFrame.addEventListener('keydown', e => {
+      if (e.target.closest('.mockupNavBtn')) return;
+      if (e.key === 'ArrowLeft' && !prevBtn.classList.contains('hidden')) {
+        e.preventDefault();
+        stepPreview(job, -1);
+        return;
+      }
+      if (e.key === 'ArrowRight' && !nextBtn.classList.contains('hidden')) {
+        e.preventDefault();
+        stepPreview(job, 1);
+        return;
+      }
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (!mockupFrame.classList.contains('clickable')) return;
+      e.preventDefault();
       openLightbox(job.printJobId);
     });
 
