@@ -4722,8 +4722,12 @@
       transform:translate(0px,0px) scale(1);
       transform-origin:center center;
       touch-action:none;
-      cursor:default;
+      cursor:move;
+      cursor:grab;
       user-select:none;
+    }
+    .lightboxImg.isDragging{
+      cursor:grabbing;
     }
     .lightboxEmpty{
       display:none;
@@ -4776,6 +4780,50 @@
     .lightboxSlot{display:flex;align-items:center;justify-content:center}
     .lightboxSlot.left{justify-content:flex-start}
     .lightboxSlot.right{justify-content:flex-end}
+    .lightboxSideNav{
+      position:absolute;
+      top:50%;
+      width:48px;
+      height:48px;
+      border-radius:999px;
+      border:1px solid rgba(225,29,72,.62);
+      background:rgba(225,29,72,.12);
+      color:#ff8da0;
+      font-size:18px;
+      font-weight:900;
+      line-height:1;
+      cursor:pointer;
+      z-index:3;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
+    }
+    .lightboxSideNav.hidden{
+      display:none !important;
+    }
+    .lightboxImageMeta{
+      position:absolute;
+      z-index:3;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:18px;
+      pointer-events:none;
+      color:#fff;
+      font-size:15px;
+      font-weight:800;
+      line-height:1.15;
+      text-shadow:0 2px 8px rgba(0,0,0,.82), 0 0 18px rgba(0,0,0,.42);
+    }
+    .lightboxImageMeta[hidden]{
+      display:none !important;
+    }
+    .lightboxDraftStatus,
+    .lightboxImageCount{
+      white-space:nowrap;
+    }
     .lightboxBtn{
       width:42px;height:42px;
       border-radius:999px;
@@ -13740,6 +13788,7 @@
       transform:scale(0.98);
     }
     .artworkPreviewImageWrap{
+      position:relative;
       width:min(1200px, 100%);
       height:min(86vh, 100%);
       border-radius:16px;
@@ -13761,6 +13810,38 @@
       user-select:none;
       -webkit-user-drag:none;
       background:rgba(0,0,0,.18);
+      transform:translate(0px,0px) scale(1);
+      transform-origin:center center;
+      touch-action:none;
+      cursor:move;
+      cursor:grab;
+    }
+    .artworkPreviewImage.isDragging{
+      cursor:grabbing;
+    }
+    .artworkPreviewMeta{
+      position:absolute;
+      left:24px;
+      right:24px;
+      bottom:18px;
+      z-index:2;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:18px;
+      pointer-events:none;
+      color:#fff;
+      font-size:15px;
+      font-weight:800;
+      line-height:1.15;
+      text-shadow:0 2px 8px rgba(0,0,0,.82), 0 0 18px rgba(0,0,0,.42);
+    }
+    .artworkPreviewMeta[hidden]{
+      display:none !important;
+    }
+    .artworkPreviewDraftStatus,
+    .artworkPreviewImageCount{
+      white-space:nowrap;
     }
     .artworkPreviewNavBtn{
       position:absolute;
@@ -13779,9 +13860,9 @@
       transition:background-color .14s ease, border-color .14s ease, box-shadow .14s ease, transform .08s ease;
     }
     .artworkPreviewNavBtn:hover{
-      background:rgba(225,29,72,.24);
-      border-color:#ff6a8f;
-      box-shadow:0 0 0 1px var(--rt-redRing), 0 14px 28px rgba(0,0,0,.36);
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
     }
     .artworkPreviewNavBtn:focus-visible{
       outline:none;
@@ -13812,6 +13893,12 @@
     .artworkPreviewNavGlyph.right{
       border-left:16px solid var(--rt-red);
       margin-right:-2px;
+    }
+    .artworkPreviewNavBtn:hover .artworkPreviewNavGlyph.left{
+      border-right-color:#fff;
+    }
+    .artworkPreviewNavBtn:hover .artworkPreviewNavGlyph.right{
+      border-left-color:#fff;
     }
     @media (max-width: 980px){
       .artworkPreviewStage{
@@ -16941,20 +17028,28 @@
       -webkit-backdrop-filter:blur(18px) saturate(140%);
     }
     #projectView .lightbox .lightboxBtn{
-      background:rgba(225,29,72,.14);
-      border:1px solid rgba(225,29,72,.58);
-      color:var(--rt-red);
+      background:rgba(225,29,72,.12);
+      border:1px solid rgba(225,29,72,.62);
+      color:#ff8da0;
       text-shadow:0 1px 0 rgba(0,0,0,.35);
-      box-shadow:0 0 0 1px rgba(225,29,72,.22), 0 8px 16px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.08);
-      transition:background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease, transform .08s ease;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
     }
-    #projectView .lightbox .lightboxBtn:hover{
-      background:var(--rt-glass);
-      border-color:var(--rt-glassBorder);
-      color:var(--rt-muted);
-      box-shadow:0 10px 18px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.1);
+    #projectView .lightbox .lightboxBtn:hover,
+    #projectView .lightbox .lightboxSideNav:hover{
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
+      color:#fff;
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
+    }
+    #projectView .lightbox .lightboxSideNav:focus-visible{
+      outline:none;
+      box-shadow:0 0 0 3px var(--rt-redRing);
     }
     #projectView .lightbox .lightboxBtn:active{
+      transform:scale(0.98);
+    }
+    #projectView .lightbox .lightboxSideNav:active{
       transform:scale(0.98);
     }
     #projectView .lightbox .lightboxBtn:focus-visible{
@@ -16970,28 +17065,26 @@
     #projectView .lightbox .lightboxClose{
       top:18px;
       right:20px;
-      width:64px;
-      height:64px;
+      width:42px;
+      height:42px;
       border-radius:999px;
-      border:1px solid rgba(225,29,72,.72);
-      background:rgba(4,7,16,.74);
-      color:var(--rt-red);
-      font-size:32px;
+      border:1px solid rgba(225,29,72,.62);
+      background:rgba(225,29,72,.12);
+      color:#ff8da0;
+      font-size:18px;
       font-weight:900;
       line-height:1;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      box-shadow:0 14px 26px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08);
-      backdrop-filter:blur(12px) saturate(130%);
-      -webkit-backdrop-filter:blur(12px) saturate(130%);
-      transition:background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease, transform .08s ease;
+      display:grid;
+      place-items:center;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
     }
     #projectView .lightbox .lightboxClose:hover{
-      background:rgba(225,29,72,.2);
-      border-color:#ff5f83;
-      color:#ff6a8b;
-      box-shadow:0 0 0 1px var(--rt-redRing), 0 16px 30px rgba(0,0,0,.36);
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
+      color:#fff;
+      transform:translateY(-1px);
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
     }
     #projectView .lightbox .lightboxClose:active{
       transform:scale(0.98);
@@ -17486,9 +17579,11 @@
     #projectView .printJobShipByLead{
       color:var(--rt-blueCta);
     }
-    #projectView .printJobShipByText,
-    #projectView .printJobWorkflowArrow{
+    #projectView .printJobShipByText{
       color:var(--rt-muted);
+    }
+    #projectView .printJobWorkflowArrow{
+      color:#ffffff;
     }
     #projectView .printJobShipByDate{
       color:var(--rt-red);
@@ -18165,7 +18260,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 234">234</div>
+  <div class="devRevisionBadge" aria-label="Development revision 235">235</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18496,6 +18591,12 @@
         <div class="lightboxImgWrap" id="lightboxImgWrap">
           <img id="lightboxImg" class="lightboxImg" alt="Mockup Fullscreen" referrerpolicy="no-referrer" draggable="false">
           <div class="lightboxEmpty" id="lightboxEmpty">Mockup unavailable</div>
+          <button class="lightboxSideNav prev hidden" id="lightboxSidePrevBtn" type="button" aria-label="Previous image">&#9664;</button>
+          <button class="lightboxSideNav next hidden" id="lightboxSideNextBtn" type="button" aria-label="Next image">&#9654;</button>
+          <div class="lightboxImageMeta" id="lightboxImageMeta" aria-live="polite" hidden>
+            <span class="lightboxDraftStatus" id="lightboxDraftStatus">Final Draft Art</span>
+            <span class="lightboxImageCount" id="lightboxImageCount">Image 1 of 1</span>
+          </div>
         </div>
         <div class="lightboxControls" id="lightboxControls">
           <div class="lightboxSlot left">
@@ -19141,6 +19242,10 @@
       </button>
       <div class="artworkPreviewImageWrap" id="artworkPreviewImageWrap">
         <img class="artworkPreviewImage" id="artworkPreviewImage" alt="Artwork preview fullscreen" referrerpolicy="no-referrer" draggable="false">
+        <div class="artworkPreviewMeta" id="artworkPreviewMeta" aria-live="polite" hidden>
+          <span class="artworkPreviewDraftStatus" id="artworkPreviewDraftStatus">Final Draft Art</span>
+          <span class="artworkPreviewImageCount" id="artworkPreviewImageCount">Image 1 of 1</span>
+        </div>
       </div>
       <button class="artworkPreviewNavBtn next" id="artworkPreviewNext" type="button" aria-label="Next image">
         <span class="artworkPreviewNavGlyph right" aria-hidden="true"></span>
@@ -19926,6 +20031,10 @@
 
   function getArtworkDraftStateForJob_(job){
     return normalizeArtworkDraftStateValue_(job && job.artworkDraftState, 'artworkDraftState') || 'final';
+  }
+
+  function getArtworkDraftArtLabelForJob_(job){
+    return getArtworkDraftStateForJob_(job) === 'rough' ? 'Rough Draft Art' : 'Final Draft Art';
   }
 
   function isRoughDraftArtworkJob_(job){
@@ -24116,11 +24225,17 @@
 
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightboxImg');
+  const lightboxImgWrap = document.getElementById('lightboxImgWrap');
   const lightboxEmpty = document.getElementById('lightboxEmpty');
   const lightboxClose = document.getElementById('lightboxClose');
   const lightboxControls = document.getElementById('lightboxControls');
   const lightboxPrevBtn = document.getElementById('lightboxPrevBtn');
   const lightboxNextBtn = document.getElementById('lightboxNextBtn');
+  const lightboxSidePrevBtn = document.getElementById('lightboxSidePrevBtn');
+  const lightboxSideNextBtn = document.getElementById('lightboxSideNextBtn');
+  const lightboxImageMeta = document.getElementById('lightboxImageMeta');
+  const lightboxDraftStatus = document.getElementById('lightboxDraftStatus');
+  const lightboxImageCount = document.getElementById('lightboxImageCount');
   const lightboxUploadRow = document.getElementById('lightboxUploadRow');
   const lightboxUploadInput = document.getElementById('lightboxUploadInput');
   const lightboxUploadBtn = document.getElementById('lightboxUploadBtn');
@@ -24413,6 +24528,9 @@
   const artworkPreviewNext = document.getElementById('artworkPreviewNext');
   const artworkPreviewImage = document.getElementById('artworkPreviewImage');
   const artworkPreviewImageWrap = document.getElementById('artworkPreviewImageWrap');
+  const artworkPreviewMeta = document.getElementById('artworkPreviewMeta');
+  const artworkPreviewDraftStatus = document.getElementById('artworkPreviewDraftStatus');
+  const artworkPreviewImageCount = document.getElementById('artworkPreviewImageCount');
   const orderFlowBackdrop = document.getElementById('orderFlowBackdrop');
   const orderFlowModal = document.getElementById('orderFlowModal');
   const orderFlowAchDecisionModal = document.getElementById('orderFlowAchDecisionModal');
@@ -24717,6 +24835,16 @@
   let ARTWORK_PREVIEW_SLIDES = [];
   let ARTWORK_PREVIEW_INDEX = 0;
   let ARTWORK_PREVIEW_HIDE_TIMER = 0;
+  let ARTWORK_PREVIEW_ZOOM_LEVEL = 1;
+  let ARTWORK_PREVIEW_PAN_X = 0;
+  let ARTWORK_PREVIEW_PAN_Y = 0;
+  let ARTWORK_PREVIEW_DRAGGING = false;
+  let ARTWORK_PREVIEW_POINTER_ACTIVE = false;
+  let ARTWORK_PREVIEW_POINTER_ID = null;
+  let ARTWORK_PREVIEW_DRAG_START_X = 0;
+  let ARTWORK_PREVIEW_DRAG_START_Y = 0;
+  let ARTWORK_PREVIEW_START_PAN_X = 0;
+  let ARTWORK_PREVIEW_START_PAN_Y = 0;
   let ORDER_FLOW_MODE = 'fulfillment';
   let ORDER_FLOW_BLOCKING_JOBS = [];
   let ORDER_FLOW_BLOCKING_KIND = 'artwork';
@@ -42839,6 +42967,51 @@
     return !!(artworkPreviewLightbox && !artworkPreviewLightbox.hidden && artworkPreviewLightbox.classList.contains('open'));
   }
 
+  function getArtworkPreviewJob_(){
+    const targetJobId = String(ARTWORK_APPROVE_JOB_ID || activePrintJobId || '').trim();
+    return targetJobId ? getJobById(targetJobId) : null;
+  }
+
+  function applyArtworkPreviewZoomPan_(){
+    if (!artworkPreviewImage) return;
+    artworkPreviewImage.style.transform = 'translate(' + ARTWORK_PREVIEW_PAN_X + 'px,' + ARTWORK_PREVIEW_PAN_Y + 'px) scale(' + ARTWORK_PREVIEW_ZOOM_LEVEL + ')';
+    artworkPreviewImage.classList.toggle('isDragging', ARTWORK_PREVIEW_DRAGGING || ARTWORK_PREVIEW_POINTER_ACTIVE);
+    artworkPreviewImage.style.cursor = (ARTWORK_PREVIEW_DRAGGING || ARTWORK_PREVIEW_POINTER_ACTIVE) ? 'grabbing' : 'grab';
+  }
+
+  function resetArtworkPreviewPointerState_(){
+    ARTWORK_PREVIEW_POINTER_ACTIVE = false;
+    ARTWORK_PREVIEW_POINTER_ID = null;
+    ARTWORK_PREVIEW_DRAGGING = false;
+  }
+
+  function resetArtworkPreviewZoom_(){
+    ARTWORK_PREVIEW_ZOOM_LEVEL = 1;
+    ARTWORK_PREVIEW_PAN_X = 0;
+    ARTWORK_PREVIEW_PAN_Y = 0;
+    resetArtworkPreviewPointerState_();
+    applyArtworkPreviewZoomPan_();
+  }
+
+  function setArtworkPreviewZoom_(next){
+    ARTWORK_PREVIEW_ZOOM_LEVEL = clampArtworkViewerNumber_(next, ARTWORK_VIEWER_MIN_ZOOM, ARTWORK_VIEWER_MAX_ZOOM);
+    if (ARTWORK_PREVIEW_ZOOM_LEVEL === 1) {
+      ARTWORK_PREVIEW_PAN_X = 0;
+      ARTWORK_PREVIEW_PAN_Y = 0;
+    }
+    applyArtworkPreviewZoomPan_();
+  }
+
+  function syncArtworkPreviewMeta_(){
+    const total = Array.isArray(ARTWORK_PREVIEW_SLIDES) ? ARTWORK_PREVIEW_SLIDES.length : 0;
+    if (artworkPreviewMeta) artworkPreviewMeta.hidden = total <= 0;
+    if (artworkPreviewDraftStatus) artworkPreviewDraftStatus.textContent = getArtworkDraftArtLabelForJob_(getArtworkPreviewJob_());
+    if (artworkPreviewImageCount) {
+      const safeIndex = total > 0 ? (((ARTWORK_PREVIEW_INDEX % total) + total) % total) : 0;
+      artworkPreviewImageCount.textContent = 'Image ' + String(safeIndex + 1) + ' of ' + String(Math.max(1, total));
+    }
+  }
+
   function getArtworkPreviewSlides(){
     if (!artworkApproveGrid) return [];
     const panels = Array.from(artworkApproveGrid.querySelectorAll('.artworkApprovePanel'));
@@ -42872,6 +43045,8 @@
     artworkPreviewImage.alt = slide.alt || 'Artwork preview fullscreen';
     if (artworkPreviewPrev) artworkPreviewPrev.hidden = total <= 1;
     if (artworkPreviewNext) artworkPreviewNext.hidden = total <= 1;
+    resetArtworkPreviewZoom_();
+    syncArtworkPreviewMeta_();
   }
 
   function stepArtworkPreview(delta){
@@ -42912,6 +43087,8 @@
     if (immediate) {
       artworkPreviewLightbox.hidden = true;
       if (artworkPreviewImage) artworkPreviewImage.removeAttribute('src');
+      if (artworkPreviewMeta) artworkPreviewMeta.hidden = true;
+      resetArtworkPreviewZoom_();
       ARTWORK_PREVIEW_INDEX = 0;
       ARTWORK_PREVIEW_SLIDES = [];
       return;
@@ -42921,6 +43098,8 @@
       if (!artworkPreviewLightbox.classList.contains('open')) {
         artworkPreviewLightbox.hidden = true;
         if (artworkPreviewImage) artworkPreviewImage.removeAttribute('src');
+        if (artworkPreviewMeta) artworkPreviewMeta.hidden = true;
+        resetArtworkPreviewZoom_();
         ARTWORK_PREVIEW_INDEX = 0;
         ARTWORK_PREVIEW_SLIDES = [];
       }
@@ -53784,29 +53963,119 @@
   let panX = 0;
   let panY = 0;
   let dragging = false;
+  let lightboxPointerActive = false;
+  let lightboxPointerId = null;
   let dragStartX = 0;
   let dragStartY = 0;
   let startPanX = 0;
   let startPanY = 0;
   let LIGHTBOX_UPLOAD_IN_FLIGHT = false;
 
+  const ARTWORK_VIEWER_ZOOM_STEP = 0.5;
+  const ARTWORK_VIEWER_MIN_ZOOM = 1;
+  const ARTWORK_VIEWER_MAX_ZOOM = 4;
+  const ARTWORK_VIEWER_CLICK_MOVE_THRESHOLD = 5;
+
+  function clampArtworkViewerNumber_(value, min, max){
+    const n = Number(value);
+    const low = Math.min(Number(min), Number(max));
+    const high = Math.max(Number(min), Number(max));
+    if (!Number.isFinite(n)) return low;
+    return Math.max(low, Math.min(high, n));
+  }
+
+  function formatArtworkViewerZoomLabel_(value){
+    return (Math.round(Number(value || 1) * 10) / 10).toString().replace(/\.0$/, '') + 'x';
+  }
+
+  function isProjectLightboxOpen_(){
+    return !!(lightbox && lightbox.classList.contains('open'));
+  }
+
+  function getLightboxAvailableIndexes_(job, state){
+    const slides = job && Array.isArray(job.slides) ? job.slides : [];
+    const safeState = (state && typeof state === 'object') ? state : { failed: {} };
+    const keepAllSlotsReachable = isTeamArtworkUploadEnabled_();
+    return slides.map((_, i) => i).filter(i => keepAllSlotsReachable || !(safeState.failed && safeState.failed[i]));
+  }
+
+  function updateLightboxOverlayGeometry_(){
+    if (!lightboxImgWrap) return;
+    const sourceEl = lightboxImg && lightboxImg.getAttribute('src')
+      ? lightboxImg
+      : ((lightboxEmpty && lightboxEmpty.style.display !== 'none') ? lightboxEmpty : null);
+    const wrapRect = lightboxImgWrap.getBoundingClientRect();
+    if (!sourceEl || !wrapRect.width || !wrapRect.height) return;
+    const imageRect = sourceEl.getBoundingClientRect();
+    const navSize = 48;
+    const navGap = 16;
+    const minPad = 12;
+    const maxNavLeft = Math.max(minPad, wrapRect.width - navSize - minPad);
+    const navTop = clampArtworkViewerNumber_(imageRect.top - wrapRect.top + (imageRect.height / 2) - (navSize / 2), minPad, Math.max(minPad, wrapRect.height - navSize - minPad));
+    const prevLeft = clampArtworkViewerNumber_(imageRect.left - wrapRect.left - navSize - navGap, minPad, maxNavLeft);
+    const nextLeft = clampArtworkViewerNumber_(imageRect.right - wrapRect.left + navGap, minPad, maxNavLeft);
+    if (lightboxSidePrevBtn) {
+      lightboxSidePrevBtn.style.left = Math.round(prevLeft) + 'px';
+      lightboxSidePrevBtn.style.top = Math.round(navTop) + 'px';
+    }
+    if (lightboxSideNextBtn) {
+      lightboxSideNextBtn.style.left = Math.round(nextLeft) + 'px';
+      lightboxSideNextBtn.style.top = Math.round(navTop) + 'px';
+    }
+    if (lightboxImageMeta) {
+      const metaPad = 18;
+      const maxMetaLeft = Math.max(metaPad, wrapRect.width - 178);
+      const visibleLeft = clampArtworkViewerNumber_(imageRect.left - wrapRect.left + metaPad, metaPad, maxMetaLeft);
+      const visibleRight = clampArtworkViewerNumber_(imageRect.right - wrapRect.left - metaPad, visibleLeft + 160, Math.max(visibleLeft + 160, wrapRect.width - metaPad));
+      const metaTop = clampArtworkViewerNumber_(imageRect.bottom - wrapRect.top - 34, metaPad, Math.max(metaPad, wrapRect.height - 34));
+      lightboxImageMeta.style.left = Math.round(visibleLeft) + 'px';
+      lightboxImageMeta.style.top = Math.round(metaTop) + 'px';
+      lightboxImageMeta.style.width = Math.round(Math.max(160, visibleRight - visibleLeft)) + 'px';
+    }
+  }
+
+  function syncLightboxViewerOverlays_(job, availableIndexes){
+    const available = Array.isArray(availableIndexes) ? availableIndexes : [];
+    const total = available.length;
+    const showArrows = total > 1;
+    [lightboxSidePrevBtn, lightboxSideNextBtn].forEach(btn => {
+      if (!btn) return;
+      btn.classList.toggle('hidden', !showArrows);
+    });
+    if (lightboxImageMeta) lightboxImageMeta.hidden = total <= 0;
+    if (lightboxDraftStatus) lightboxDraftStatus.textContent = getArtworkDraftArtLabelForJob_(job);
+    if (lightboxImageCount) {
+      let pos = available.indexOf(LIGHTBOX.index);
+      if (pos < 0) pos = 0;
+      lightboxImageCount.textContent = 'Image ' + String(pos + 1) + ' of ' + String(Math.max(1, total));
+    }
+    requestAnimationFrame(updateLightboxOverlayGeometry_);
+  }
+
   function applyZoomPan(){
     lightboxImg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomLevel + ')';
-    const label = (Math.round(zoomLevel * 10) / 10).toString().replace(/\.0$/, '');
-    zoomLabel.textContent = label + 'x';
-    lightboxImg.style.cursor = (zoomLevel > 1) ? (dragging ? 'grabbing' : 'grab') : 'default';
+    zoomLabel.textContent = formatArtworkViewerZoomLabel_(zoomLevel);
+    lightboxImg.classList.toggle('isDragging', dragging || lightboxPointerActive);
+    lightboxImg.style.cursor = (dragging || lightboxPointerActive) ? 'grabbing' : 'grab';
+    requestAnimationFrame(updateLightboxOverlayGeometry_);
+  }
+
+  function resetLightboxPointerState_(){
+    lightboxPointerActive = false;
+    lightboxPointerId = null;
+    dragging = false;
   }
 
   function resetZoom(){
     zoomLevel = 1;
     panX = 0;
     panY = 0;
-    dragging = false;
+    resetLightboxPointerState_();
     applyZoomPan();
   }
 
   function setZoom(next){
-    zoomLevel = Math.max(1, Math.min(4, next));
+    zoomLevel = clampArtworkViewerNumber_(next, ARTWORK_VIEWER_MIN_ZOOM, ARTWORK_VIEWER_MAX_ZOOM);
     if (zoomLevel === 1) {
       panX = 0;
       panY = 0;
@@ -53826,11 +54095,12 @@
     const slides = job.slides || [];
     const keepAllSlotsReachable = isTeamArtworkUploadEnabled_();
 
-    const available = slides.map((_, i) => i).filter(i => keepAllSlotsReachable || !state.failed[i]);
+    const available = getLightboxAvailableIndexes_(job, state);
     if (!available.length) {
       lightboxImg.removeAttribute('src');
       if (lightboxEmpty) lightboxEmpty.style.display = 'flex';
       lightboxControls.classList.add('hidden');
+      syncLightboxViewerOverlays_(job, []);
       renderLightboxUploadControls(job, null);
       return;
     }
@@ -53847,10 +54117,12 @@
     const showArrows = available.length > 1;
     lightboxPrevBtn.classList.toggle('hidden', !showArrows);
     lightboxNextBtn.classList.toggle('hidden', !showArrows);
+    syncLightboxViewerOverlays_(job, available);
     if (!slide || !slide.candidates || !slide.candidates.length || (keepAllSlotsReachable && state.failed[LIGHTBOX.index])) {
       lightboxImg.removeAttribute('src');
       if (lightboxEmpty) lightboxEmpty.style.display = 'flex';
       resetZoom();
+      syncLightboxViewerOverlays_(job, available);
       return;
     }
 
@@ -53860,6 +54132,7 @@
       () => {
         if (lightboxEmpty) lightboxEmpty.style.display = 'none';
         resetZoom();
+        syncLightboxViewerOverlays_(job, available);
       },
       () => {
         state.failed[LIGHTBOX.index] = true;
@@ -53903,6 +54176,10 @@
     lightbox.setAttribute('aria-hidden', 'true');
     lightboxImg.removeAttribute('src');
     if (lightboxEmpty) lightboxEmpty.style.display = 'none';
+    if (lightboxImageMeta) lightboxImageMeta.hidden = true;
+    [lightboxSidePrevBtn, lightboxSideNextBtn].forEach(btn => {
+      if (btn) btn.classList.add('hidden');
+    });
     LIGHTBOX_UPLOAD_IN_FLIGHT = false;
     setLightboxUploadStatus('', '');
     renderLightboxUploadControls(null, null);
@@ -54040,8 +54317,22 @@
     }
 
     lightboxClose.addEventListener('click', closeLightbox);
-    lightboxPrevBtn.addEventListener('click', e => { e.stopPropagation(); stepLightbox(-1); });
-    lightboxNextBtn.addEventListener('click', e => { e.stopPropagation(); stepLightbox(1); });
+    [lightboxPrevBtn, lightboxSidePrevBtn].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        stepLightbox(-1);
+      });
+    });
+    [lightboxNextBtn, lightboxSideNextBtn].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        stepLightbox(1);
+      });
+    });
     if (lightboxUploadBtn && lightboxUploadInput) {
       lightboxUploadBtn.addEventListener('click', e => {
         e.stopPropagation();
@@ -54051,15 +54342,28 @@
       lightboxUploadInput.addEventListener('change', handleLightboxUploadSelection);
     }
 
-    zoomInBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel + 0.5); });
-    zoomOutBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel - 0.5); });
+    zoomInBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel + ARTWORK_VIEWER_ZOOM_STEP); });
+    zoomOutBtn.addEventListener('click', e => { e.stopPropagation(); setZoom(zoomLevel - ARTWORK_VIEWER_ZOOM_STEP); });
 
-    lightboxImg.addEventListener('contextmenu', e => e.preventDefault());
+    lightboxImg.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if (!isProjectLightboxOpen_() || !lightboxImg.getAttribute('src')) return;
+      setZoom(zoomLevel - ARTWORK_VIEWER_ZOOM_STEP);
+    });
     lightboxImg.addEventListener('dragstart', e => e.preventDefault());
+    if (lightboxImgWrap) {
+      lightboxImgWrap.addEventListener('wheel', e => {
+        if (!isProjectLightboxOpen_() || !lightboxImg.getAttribute('src')) return;
+        e.preventDefault();
+        setZoom(zoomLevel + (e.deltaY > 0 ? -ARTWORK_VIEWER_ZOOM_STEP : ARTWORK_VIEWER_ZOOM_STEP));
+      }, { passive: false });
+    }
 
     lightboxImg.addEventListener('pointerdown', e => {
-      if (zoomLevel <= 1) return;
-      dragging = true;
+      if (e.button !== 0 || !lightboxImg.getAttribute('src')) return;
+      lightboxPointerActive = true;
+      lightboxPointerId = e.pointerId;
+      dragging = false;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
       startPanX = panX;
@@ -54069,6 +54373,10 @@
     });
 
     lightboxImg.addEventListener('pointermove', e => {
+      if (!lightboxPointerActive || e.pointerId !== lightboxPointerId) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      if (zoomLevel > 1 && !dragging && Math.hypot(dx, dy) >= ARTWORK_VIEWER_CLICK_MOVE_THRESHOLD) dragging = true;
       if (!dragging) return;
       panX = startPanX + (e.clientX - dragStartX);
       panY = startPanY + (e.clientY - dragStartY);
@@ -54076,21 +54384,32 @@
     });
 
     lightboxImg.addEventListener('pointerup', e => {
-      dragging = false;
+      if (!lightboxPointerActive || e.pointerId !== lightboxPointerId) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      const wasDragging = dragging;
+      const shouldZoomIn = !wasDragging && Math.hypot(dx, dy) < ARTWORK_VIEWER_CLICK_MOVE_THRESHOLD;
+      resetLightboxPointerState_();
       applyZoomPan();
       try { lightboxImg.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (shouldZoomIn) setZoom(zoomLevel + ARTWORK_VIEWER_ZOOM_STEP);
     });
 
     lightboxImg.addEventListener('pointercancel', () => {
-      dragging = false;
+      resetLightboxPointerState_();
       applyZoomPan();
     });
 
     lightboxStage.addEventListener('click', e => {
       if (e.target.closest('#lightboxImg')) return;
       if (e.target.closest('.lightboxControls')) return;
+      if (e.target.closest('.lightboxSideNav')) return;
       if (e.target.closest('#lightboxClose')) return;
       closeLightbox();
+    });
+    window.addEventListener('resize', () => {
+      if (!isProjectLightboxOpen_()) return;
+      requestAnimationFrame(updateLightboxOverlayGeometry_);
     });
 
     document.addEventListener('keydown', e => {
@@ -54527,7 +54846,55 @@
     }
     if (artworkPreviewImage) {
       artworkPreviewImage.addEventListener('dragstart', evt => evt.preventDefault());
-      artworkPreviewImage.addEventListener('contextmenu', evt => evt.preventDefault());
+      artworkPreviewImage.addEventListener('contextmenu', evt => {
+        evt.preventDefault();
+        if (!isArtworkPreviewOpen() || !artworkPreviewImage.getAttribute('src')) return;
+        setArtworkPreviewZoom_(ARTWORK_PREVIEW_ZOOM_LEVEL - ARTWORK_VIEWER_ZOOM_STEP);
+      });
+      artworkPreviewImage.addEventListener('pointerdown', evt => {
+        if (evt.button !== 0 || !artworkPreviewImage.getAttribute('src')) return;
+        ARTWORK_PREVIEW_POINTER_ACTIVE = true;
+        ARTWORK_PREVIEW_POINTER_ID = evt.pointerId;
+        ARTWORK_PREVIEW_DRAGGING = false;
+        ARTWORK_PREVIEW_DRAG_START_X = evt.clientX;
+        ARTWORK_PREVIEW_DRAG_START_Y = evt.clientY;
+        ARTWORK_PREVIEW_START_PAN_X = ARTWORK_PREVIEW_PAN_X;
+        ARTWORK_PREVIEW_START_PAN_Y = ARTWORK_PREVIEW_PAN_Y;
+        applyArtworkPreviewZoomPan_();
+        artworkPreviewImage.setPointerCapture(evt.pointerId);
+      });
+      artworkPreviewImage.addEventListener('pointermove', evt => {
+        if (!ARTWORK_PREVIEW_POINTER_ACTIVE || evt.pointerId !== ARTWORK_PREVIEW_POINTER_ID) return;
+        const dx = evt.clientX - ARTWORK_PREVIEW_DRAG_START_X;
+        const dy = evt.clientY - ARTWORK_PREVIEW_DRAG_START_Y;
+        if (ARTWORK_PREVIEW_ZOOM_LEVEL > 1 && !ARTWORK_PREVIEW_DRAGGING && Math.hypot(dx, dy) >= ARTWORK_VIEWER_CLICK_MOVE_THRESHOLD) ARTWORK_PREVIEW_DRAGGING = true;
+        if (!ARTWORK_PREVIEW_DRAGGING) return;
+        ARTWORK_PREVIEW_PAN_X = ARTWORK_PREVIEW_START_PAN_X + dx;
+        ARTWORK_PREVIEW_PAN_Y = ARTWORK_PREVIEW_START_PAN_Y + dy;
+        applyArtworkPreviewZoomPan_();
+      });
+      artworkPreviewImage.addEventListener('pointerup', evt => {
+        if (!ARTWORK_PREVIEW_POINTER_ACTIVE || evt.pointerId !== ARTWORK_PREVIEW_POINTER_ID) return;
+        const dx = evt.clientX - ARTWORK_PREVIEW_DRAG_START_X;
+        const dy = evt.clientY - ARTWORK_PREVIEW_DRAG_START_Y;
+        const wasDragging = ARTWORK_PREVIEW_DRAGGING;
+        const shouldZoomIn = !wasDragging && Math.hypot(dx, dy) < ARTWORK_VIEWER_CLICK_MOVE_THRESHOLD;
+        resetArtworkPreviewPointerState_();
+        applyArtworkPreviewZoomPan_();
+        try { artworkPreviewImage.releasePointerCapture(evt.pointerId); } catch (_) {}
+        if (shouldZoomIn) setArtworkPreviewZoom_(ARTWORK_PREVIEW_ZOOM_LEVEL + ARTWORK_VIEWER_ZOOM_STEP);
+      });
+      artworkPreviewImage.addEventListener('pointercancel', () => {
+        resetArtworkPreviewPointerState_();
+        applyArtworkPreviewZoomPan_();
+      });
+    }
+    if (artworkPreviewImageWrap) {
+      artworkPreviewImageWrap.addEventListener('wheel', evt => {
+        if (!isArtworkPreviewOpen() || !artworkPreviewImage || !artworkPreviewImage.getAttribute('src')) return;
+        evt.preventDefault();
+        setArtworkPreviewZoom_(ARTWORK_PREVIEW_ZOOM_LEVEL + (evt.deltaY > 0 ? -ARTWORK_VIEWER_ZOOM_STEP : ARTWORK_VIEWER_ZOOM_STEP));
+      }, { passive: false });
     }
     if (artworkPreviewLightbox) {
       artworkPreviewLightbox.addEventListener('click', evt => {
