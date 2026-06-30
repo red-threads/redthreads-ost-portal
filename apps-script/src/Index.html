@@ -15512,6 +15512,9 @@
     .orderFlowChoiceFoot.is-red{
       color:#ff4065;
     }
+    .orderFlowChoiceFoot.is-blue{
+      color:var(--rt-blueCta, #00c8ff);
+    }
     .orderFlowChoiceBtn.is-selected .orderFlowChoiceTitle,
     .orderFlowChoiceBtn.is-selected .orderFlowChoiceBody,
     .orderFlowChoiceBtn.is-selected .orderFlowChoiceAccentGreen{
@@ -15521,7 +15524,7 @@
     .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot{
       text-shadow:none;
     }
-    .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot:not(.is-green):not(.is-red){
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot:not(.is-green):not(.is-red):not(.is-blue){
       color:#032317 !important;
     }
     .orderFlowChoiceBtn.is-selected .orderFlowChoiceAccentBlue{
@@ -15533,6 +15536,9 @@
     }
     .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot.is-red{
       color:#ff4065 !important;
+    }
+    .orderFlowChoiceBtn.is-selected .orderFlowChoiceFoot.is-blue{
+      color:#0d7db1 !important;
     }
     .orderFlowChoiceBtn.is-selected .orderFlowChoiceAccentRed{
       color:#ff4065 !important;
@@ -18435,7 +18441,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 246">246</div>
+  <div class="devRevisionBadge" aria-label="Development revision 247">247</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19458,12 +19464,13 @@
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowCardBtn" type="button" aria-pressed="false">
               <span class="orderFlowChoiceTitle">Pay now: Credit / Debit Card</span>
               <span class="orderFlowChoiceFoot is-green">Turn time begins immediately</span>
+              <span class="orderFlowChoiceBody is-muted">Pay securely with a card through Stripe.</span>
               <span class="orderFlowChoiceBody orderFlowChoiceAccentRed" id="orderFlowCardFeeLabel" hidden></span>
             </button>
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowAchBtn" type="button" aria-pressed="false">
               <span class="orderFlowChoiceTitle">ACH Bank Payment</span>
-              <span class="orderFlowChoiceFoot is-red">Production begins after payment clears</span>
-              <span class="orderFlowChoiceBody is-muted">Securely pay from your bank account. Red Threads never sees or stores your full bank account number.</span>
+              <span class="orderFlowChoiceFoot is-red">Turn time begins after payment clears (1-4 days)</span>
+              <span class="orderFlowChoiceBody is-muted">Pay securely from a bank account through Stripe.</span>
             </button>
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowCheckBtn" type="button" aria-pressed="false">
               <span class="orderFlowChoiceTitle">Submit: Physical check or cash</span>
@@ -19472,8 +19479,8 @@
             </button>
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowPoBtn" type="button" aria-pressed="false">
               <span class="orderFlowChoiceTitle">Submit: Purchase Order</span>
-              <span class="orderFlowChoiceFoot is-red">Turn time begins on PO Submission.</span>
-              <span class="orderFlowChoiceBody is-muted">Final cost determined by payment terms.</span>
+              <span class="orderFlowChoiceFoot is-blue">Turn time begins on PO Submission</span>
+              <span class="orderFlowChoiceBody is-muted">Payment due within approved terms of PO submission.</span>
             </button>
           </div>
         </div>
@@ -25001,13 +25008,14 @@
   let ARTWORK_APPROVE_HIDE_TIMER = 0;
   let ORDER_FLOW_HIDE_TIMER = 0;
   let ARTWORK_APPROVED_BY_JOB_ID = Object.assign({}, INITIAL_ARTWORK_APPROVED_BY_JOB_ID);
-  let ARTWORK_APPROVE_SAVE_IN_FLIGHT = false;
   let ARTWORK_APPROVE_MODE = 'review';
   let ARTWORK_APPROVE_JOB_ID = '';
   let ARTWORK_APPROVE_JUST_APPROVED = false;
   let ARTWORK_APPROVE_NEXT_JOB_ID = '';
-  let ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
   let ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW = false;
+  let ARTWORK_APPROVE_MUTATION_SEQ = 0;
+  let ARTWORK_APPROVE_UNLOAD_BOUND = false;
+  const ARTWORK_APPROVE_PENDING_MUTATIONS = new Map();
   let ARTWORK_PREVIEW_SLIDES = [];
   let ARTWORK_PREVIEW_INDEX = 0;
   let ARTWORK_PREVIEW_HIDE_TIMER = 0;
@@ -42588,49 +42596,194 @@
 
   /* ---------------- Artwork Approval Persistence ---------------- */
 
-  async function persistArtworkApproval(jobId){
+  function refreshArtworkApprovalUiState_(){
+    refreshArtworkApprovedButtons();
+    updatePrintJobTabSummaries();
+    renderProjectHeaderStatusMirror_();
+  }
+
+  function getArtworkApprovalPostUrl_(){
+    return String((VM && VM.postUrl) || '').trim();
+  }
+
+  function buildArtworkApprovalAuditText_(jobId, approved, printJobIndex){
+    const job = getJobById(jobId) || {};
+    const number = getPrintJobDisplayNumber(jobId) || printJobIndex || '';
+    const name = String(job.printJobName || job.projectName || job.name || '').trim();
+    const label = name
+      ? ('Print Job ' + String(number || '').trim() + ': ' + name)
+      : ('Print Job ' + String(number || printJobIndex || '').trim());
+    return 'Artwork ' + (approved ? 'approved' : 'disapproved') + ' for ' + label + '.';
+  }
+
+  function createArtworkApprovalMutation_(jobId, approved){
     const token = String(CURRENT_TOKEN || '').trim();
     if (!token) {
-      return { ok: false, error: 'Missing token.' };
+      throw new Error('Missing token.');
     }
     const printJobIndex = getPrintJobIndexById(jobId);
     if (!printJobIndex) {
-      return { ok: false, error: 'Missing print job context.' };
+      throw new Error('Missing print job context.');
     }
-    const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
-    const resp = await callServer('setArtworkApproval', {
+    const changedAt = new Date().toISOString();
+    ARTWORK_APPROVE_MUTATION_SEQ += 1;
+    return {
+      clientMutationId: [
+        'artwork',
+        approved ? 'approved' : 'disapproved',
+        String(printJobIndex),
+        String(Date.now()),
+        String(ARTWORK_APPROVE_MUTATION_SEQ)
+      ].join('_'),
       token: token,
-      status: 'approved',
+      jobId: String(jobId || '').trim(),
       printJobIndex: printJobIndex,
-      portalState: JSON.stringify(nextState)
-    });
+      approved: approved === true,
+      changedAt: changedAt,
+      systemMessage: buildArtworkApprovalAuditText_(jobId, approved === true, printJobIndex),
+      promise: null,
+      unloadFallbackSent: false
+    };
+  }
+
+  function buildArtworkApprovalMutationPayload_(mutation, options){
+    const opts = (options && typeof options === 'object') ? options : {};
+    const payload = {
+      action: mutation.approved ? 'set_artwork_approval' : 'clear_artwork_approval',
+      token: mutation.token,
+      printJobIndex: mutation.printJobIndex,
+      changedAt: mutation.changedAt,
+      systemMessage: mutation.systemMessage,
+      clientMutationId: mutation.clientMutationId
+    };
+    if (mutation.approved) payload.status = 'approved';
+    if (opts.includePortalState === true) {
+      const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+      payload.portalState = JSON.stringify(nextState);
+    }
+    return payload;
+  }
+
+  async function persistArtworkApprovalMutation_(mutation){
+    const methodName = mutation.approved ? 'setArtworkApproval' : 'clearArtworkApproval';
+    const payload = buildArtworkApprovalMutationPayload_(mutation, { includePortalState: true });
+    delete payload.action;
+    const resp = await callServer(methodName, payload);
     if (!resp || resp.ok !== true) {
-      throw new Error(String((resp && resp.error) || 'Could not save artwork approval.'));
+      throw new Error(String((resp && resp.error) || (mutation.approved ? 'Could not save artwork approval.' : 'Could not clear artwork approval.')));
     }
     requireFreshDashboardHomeReturn_('project_mutation');
     return resp;
   }
 
-  async function persistArtworkDisapproval(jobId){
-    const token = String(CURRENT_TOKEN || '').trim();
-    if (!token) {
-      return { ok: false, error: 'Missing token.' };
-    }
-    const printJobIndex = getPrintJobIndexById(jobId);
-    if (!printJobIndex) {
-      return { ok: false, error: 'Missing print job context.' };
-    }
-    const nextState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
-    const resp = await callServer('clearArtworkApproval', {
-      token: token,
-      printJobIndex: printJobIndex,
-      portalState: JSON.stringify(nextState)
+  function sendArtworkApprovalMutationUnloadFallback_(mutation){
+    if (!mutation || mutation.unloadFallbackSent === true) return false;
+    const postUrl = getArtworkApprovalPostUrl_();
+    if (!postUrl) return false;
+    const payload = buildArtworkApprovalMutationPayload_(mutation, { includePortalState: false });
+    const body = JSON.stringify(payload);
+    mutation.unloadFallbackSent = true;
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function' && typeof Blob !== 'undefined') {
+        const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
+        if (navigator.sendBeacon(postUrl, blob)) return true;
+      }
+    } catch (_) {}
+    try {
+      if (typeof fetch === 'function') {
+        fetch(postUrl, {
+          method: 'POST',
+          body: body,
+          keepalive: true,
+          mode: 'no-cors'
+        }).catch(() => {});
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function flushPendingArtworkApprovalMutationsForUnload_(){
+    ARTWORK_APPROVE_PENDING_MUTATIONS.forEach(mutation => {
+      sendArtworkApprovalMutationUnloadFallback_(mutation);
     });
-    if (!resp || resp.ok !== true) {
-      throw new Error(String((resp && resp.error) || 'Could not clear artwork approval.'));
+  }
+
+  function bindArtworkApprovalUnloadFallback_(){
+    if (ARTWORK_APPROVE_UNLOAD_BOUND) return;
+    ARTWORK_APPROVE_UNLOAD_BOUND = true;
+    window.addEventListener('pagehide', flushPendingArtworkApprovalMutationsForUnload_);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPendingArtworkApprovalMutationsForUnload_();
+    });
+  }
+
+  function handleArtworkApprovalMutationFailure_(mutation, err){
+    const targetJobId = String(mutation && mutation.jobId || '').trim();
+    if (!targetJobId) return;
+    if (mutation.approved && isArtworkApprovedForJob(targetJobId)) {
+      setArtworkApprovedForJob(targetJobId, false);
+      if (String(ARTWORK_APPROVE_JOB_ID || '').trim() === targetJobId) {
+        ARTWORK_APPROVE_JUST_APPROVED = false;
+        if (ARTWORK_APPROVE_MODE === 'success') setArtworkApproveMode('review');
+      }
+      refreshArtworkApprovalUiState_();
+      showNotice('Could not save artwork approval. Please try again.', 'err', { persist: true });
+      return;
     }
-    requireFreshDashboardHomeReturn_('project_mutation');
-    return resp;
+    if (!mutation.approved && !isArtworkApprovedForJob(targetJobId)) {
+      setArtworkApprovedForJob(targetJobId, true);
+      refreshArtworkApprovalUiState_();
+      showNotice('Could not clear artwork approval. Please try again.', 'err', { persist: true });
+    }
+  }
+
+  function startArtworkApprovalMutation_(mutation){
+    ARTWORK_APPROVE_PENDING_MUTATIONS.set(mutation.clientMutationId, mutation);
+    const savePromise = persistArtworkApprovalMutation_(mutation)
+      .then(resp => {
+        if (ARTWORK_APPROVE_PENDING_MUTATIONS.get(mutation.clientMutationId) === mutation) {
+          ARTWORK_APPROVE_PENDING_MUTATIONS.delete(mutation.clientMutationId);
+        }
+        syncChatAuditTrailFromResponse(resp);
+        return resp;
+      })
+      .catch(err => {
+        if (ARTWORK_APPROVE_PENDING_MUTATIONS.get(mutation.clientMutationId) === mutation) {
+          ARTWORK_APPROVE_PENDING_MUTATIONS.delete(mutation.clientMutationId);
+        }
+        handleArtworkApprovalMutationFailure_(mutation, err);
+        throw err;
+      });
+    mutation.promise = savePromise;
+    savePromise.catch(() => {});
+    return savePromise;
+  }
+
+  async function waitForPendingArtworkApprovalSaves_(options){
+    const pending = Array.from(ARTWORK_APPROVE_PENDING_MUTATIONS.values())
+      .map(mutation => mutation && mutation.promise)
+      .filter(Boolean);
+    if (!pending.length) return true;
+    const results = await Promise.allSettled(pending);
+    const failed = results.some(result => result.status === 'rejected');
+    if (failed) {
+      const opts = (options && typeof options === 'object') ? options : {};
+      const message = String(opts.errorMessage || 'Artwork approval is still saving. Please try again.').trim();
+      showNotice(message, 'err', { persist: true });
+      return false;
+    }
+    return true;
+  }
+
+  function approveArtworkOptimistically_(jobId){
+    setArtworkApprovedForJob(jobId, true);
+    refreshArtworkApprovalUiState_();
+  }
+
+  function disapproveArtworkOptimistically_(jobId){
+    setArtworkApprovedForJob(jobId, false);
+    refreshArtworkApprovalUiState_();
   }
 
   function syncChatAuditTrailFromResponse(resp){
@@ -42918,22 +43071,14 @@
     return getOrderFlowArtworkBlockerCandidates_().map(item => item.job);
   }
 
-  function queueArtworkApprovalContinue_(){
-    ARTWORK_APPROVE_CONTINUE_REQUESTED = true;
-    if (artworkApproveDoneBtn) {
-      artworkApproveDoneBtn.disabled = true;
-      artworkApproveDoneBtn.textContent = ARTWORK_APPROVE_NEXT_JOB_ID ? 'Loading Next Job...' : 'Continuing to Order...';
-    }
-  }
-
   function syncArtworkApproveActionButtons_(){
     if (artworkApproveBackBtn) {
-      artworkApproveBackBtn.disabled = !!ARTWORK_APPROVE_SAVE_IN_FLIGHT;
+      artworkApproveBackBtn.disabled = false;
       artworkApproveBackBtn.textContent = 'Go Back to Job';
     }
     if (artworkApproveConfirmBtn) {
-      artworkApproveConfirmBtn.disabled = !!ARTWORK_APPROVE_SAVE_IN_FLIGHT;
-      artworkApproveConfirmBtn.textContent = ARTWORK_APPROVE_SAVE_IN_FLIGHT ? 'Approving...' : 'Approve Artwork';
+      artworkApproveConfirmBtn.disabled = false;
+      artworkApproveConfirmBtn.textContent = 'Approve Artwork';
     }
     if (artworkApproveDoneBtn) {
       let doneText = 'Go Back to Job';
@@ -42955,14 +43100,13 @@
         && isArtworkApprovedForJob(targetJobId)
         && !ARTWORK_APPROVE_JUST_APPROVED;
       artworkApproveDisapproveBtn.hidden = !showDisapprove;
-      artworkApproveDisapproveBtn.disabled = !!ARTWORK_APPROVE_SAVE_IN_FLIGHT;
-      artworkApproveDisapproveBtn.textContent = ARTWORK_APPROVE_SAVE_IN_FLIGHT ? 'Saving...' : 'Disapprove Art';
+      artworkApproveDisapproveBtn.disabled = false;
+      artworkApproveDisapproveBtn.textContent = 'Disapprove Art';
     }
   }
 
   async function handleArtworkApprovalConfirm(){
     if (!CAN_EDIT()) return;
-    if (ARTWORK_APPROVE_SAVE_IN_FLIGHT) return;
     const targetJobId = String(ARTWORK_APPROVE_JOB_ID || activePrintJobId || '').trim();
     if (!targetJobId) return;
     if (isArtworkApprovedForJob(targetJobId)) {
@@ -42974,67 +43118,42 @@
       setArtworkApproveMode('success');
       return;
     }
-    ARTWORK_APPROVE_SAVE_IN_FLIGHT = true;
-    ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
-    syncArtworkApproveActionButtons_();
-
-    setArtworkApprovedForJob(targetJobId, true);
-    refreshArtworkApprovedButtons();
-    updatePrintJobTabSummaries();
-    renderProjectHeaderStatusMirror_();
-    ARTWORK_APPROVE_JUST_APPROVED = true;
+    let mutation = null;
     try {
-      const resp = await persistArtworkApproval(targetJobId);
-      syncChatAuditTrailFromResponse(resp);
-      ARTWORK_APPROVE_SAVE_IN_FLIGHT = false;
+      mutation = createArtworkApprovalMutation_(targetJobId, true);
+      approveArtworkOptimistically_(targetJobId);
+      ARTWORK_APPROVE_JUST_APPROVED = true;
       setArtworkApproveMode('success');
-      if (ARTWORK_APPROVE_CONTINUE_REQUESTED && ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW) {
-        ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
-        continueArtworkApprovalOrderFlow_();
-        return;
-      }
+      startArtworkApprovalMutation_(mutation);
     } catch (err) {
       setArtworkApprovedForJob(targetJobId, false);
-      refreshArtworkApprovedButtons();
-      updatePrintJobTabSummaries();
-      renderProjectHeaderStatusMirror_();
+      refreshArtworkApprovalUiState_();
       ARTWORK_APPROVE_JUST_APPROVED = false;
-      ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
       setArtworkApproveMode('review');
-      showNotice('Could not save artwork approval. Please try again.', 'err');
-    } finally {
-      ARTWORK_APPROVE_SAVE_IN_FLIGHT = false;
+      showNotice('Could not save artwork approval. Please try again.', 'err', { persist: true });
       syncArtworkApproveActionButtons_();
     }
   }
 
   async function handleArtworkApprovalDisapprove(){
     if (!CAN_EDIT()) return;
-    if (ARTWORK_APPROVE_SAVE_IN_FLIGHT) return;
     const targetJobId = String(ARTWORK_APPROVE_JOB_ID || activePrintJobId || '').trim();
     if (!targetJobId) return;
     if (!isArtworkApprovedForJob(targetJobId)) {
       closeArtworkApproveModal();
       return;
     }
-    ARTWORK_APPROVE_SAVE_IN_FLIGHT = true;
-    syncArtworkApproveActionButtons_();
-    setArtworkApprovedForJob(targetJobId, false);
-    refreshArtworkApprovedButtons();
-    updatePrintJobTabSummaries();
-    renderProjectHeaderStatusMirror_();
+    let mutation = null;
     try {
-      const resp = await persistArtworkDisapproval(targetJobId);
-      syncChatAuditTrailFromResponse(resp);
+      mutation = createArtworkApprovalMutation_(targetJobId, false);
+      disapproveArtworkOptimistically_(targetJobId);
+      ARTWORK_APPROVE_JUST_APPROVED = false;
       closeArtworkApproveModal();
+      startArtworkApprovalMutation_(mutation);
     } catch (err) {
       setArtworkApprovedForJob(targetJobId, true);
-      refreshArtworkApprovedButtons();
-      updatePrintJobTabSummaries();
-      renderProjectHeaderStatusMirror_();
-      showNotice('Could not clear artwork approval. Please try again.', 'err');
-    } finally {
-      ARTWORK_APPROVE_SAVE_IN_FLIGHT = false;
+      refreshArtworkApprovalUiState_();
+      showNotice('Could not clear artwork approval. Please try again.', 'err', { persist: true });
       syncArtworkApproveActionButtons_();
     }
   }
@@ -43061,7 +43180,6 @@
     ARTWORK_APPROVE_JOB_ID = '';
     ARTWORK_APPROVE_JUST_APPROVED = false;
     ARTWORK_APPROVE_NEXT_JOB_ID = '';
-    ARTWORK_APPROVE_CONTINUE_REQUESTED = false;
     ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW = false;
     ARTWORK_PREVIEW_SLIDES = [];
     ARTWORK_PREVIEW_INDEX = 0;
@@ -45515,6 +45633,9 @@
       focusOrderFlowPoShippingField_(shippingValidation.missingKey);
       return;
     }
+    if (!(await waitForPendingArtworkApprovalSaves_({
+      errorMessage: 'Artwork approval is still saving. Please wait a moment before submitting the purchase order.'
+    }))) return;
     setOrderFlowPoBusyAction_('submit_po');
     try {
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
@@ -46002,18 +46123,34 @@
       const achBody = orderFlowAchBtn.querySelector('.orderFlowChoiceBody');
       if (achTitle) achTitle.textContent = 'ACH Bank Payment';
       if (achFoot) {
-        achFoot.textContent = 'Production begins after payment clears';
+        achFoot.textContent = 'Turn time begins after payment clears (1-4 days)';
         achFoot.classList.toggle('is-green', false);
         achFoot.classList.toggle('is-red', true);
+        achFoot.classList.toggle('is-blue', false);
       }
       if (achBody) {
-        achBody.textContent = 'Pay securely from a US bank account through Stripe. Stripe may ask you to confirm or connect a bank before payment is initiated.';
+        achBody.textContent = 'Pay securely from a bank account through Stripe.';
       }
     }
     if (orderFlowCheckBtn) orderFlowCheckBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || selectionLocked;
     if (orderFlowPoBtn) {
       orderFlowPoBtn.hidden = !poAvailable;
       orderFlowPoBtn.disabled = ORDER_FLOW_REQUEST_IN_FLIGHT || (selectionLocked && !poResumeOnly);
+      const poTitle = orderFlowPoBtn.querySelector('.orderFlowChoiceTitle');
+      const poFoot = orderFlowPoBtn.querySelector('.orderFlowChoiceFoot');
+      const poBody = orderFlowPoBtn.querySelector('.orderFlowChoiceBody');
+      const termsWorkflow = getAccountDocumentWorkflowByType_('credit_terms', ACCOUNT_SUMMARY);
+      const paymentTermsLabel = getApprovedPaymentTermsLabel_(ACCOUNT_SUMMARY)
+        || getApprovedPaymentTermsLabel_(termsWorkflow)
+        || 'approved terms';
+      if (poTitle) poTitle.textContent = 'Submit: Purchase Order';
+      if (poFoot) {
+        poFoot.textContent = 'Turn time begins on PO Submission';
+        poFoot.classList.toggle('is-green', false);
+        poFoot.classList.toggle('is-red', false);
+        poFoot.classList.toggle('is-blue', true);
+      }
+      if (poBody) poBody.textContent = 'Payment due within ' + paymentTermsLabel + ' of PO submission.';
     }
     if (orderFlowSelectionConfirmBtn) {
       orderFlowSelectionConfirmBtn.hidden = false;
@@ -46779,6 +46916,13 @@
     if (ORDER_FLOW_REQUEST_IN_FLIGHT) return;
     const method = ORDER_FLOW_SELECTED_METHOD === PAYMENT_METHODS.cash ? PAYMENT_METHODS.cash : PAYMENT_METHODS.check;
     clearOrderFlowManualStatus_();
+    if (!(await waitForPendingArtworkApprovalSaves_({
+      errorMessage: 'Artwork approval is still saving. Please wait a moment before placing the manual payment order.'
+    }))) {
+      setOrderFlowManualStatus_('Artwork approval is still saving. Please wait a moment before placing the manual payment order.', 'error');
+      renderOrderFlowSummaryViewer_();
+      return;
+    }
     setOrderFlowButtonsBusy(true);
     renderOrderFlowSummaryViewer_();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -46881,6 +47025,22 @@
     if (!ORDER_FLOW_SELECTED_FULFILLMENT) {
       setOrderFlowStatePill('Fulfillment');
       setOrderFlowMode('fulfillment');
+      logClientCheckoutTimingSummary_(checkoutTiming, {
+        launched: false,
+        checkoutReady: false
+      });
+      return;
+    }
+    if (!(await waitForPendingArtworkApprovalSaves_({
+      errorMessage: 'Artwork approval is still saving. Please wait a moment before starting checkout.'
+    }))) {
+      logClientCheckoutTimingSummary_(checkoutTiming, {
+        launched: false,
+        checkoutReady: false
+      });
+      return;
+    }
+    if (maybeBlockOrderFlow()) {
       logClientCheckoutTimingSummary_(checkoutTiming, {
         launched: false,
         checkoutReady: false
@@ -51944,6 +52104,9 @@
       focusSummaryPoShippingField(shippingValidation.missingKey);
       return;
     }
+    if (!(await waitForPendingArtworkApprovalSaves_({
+      errorMessage: 'Artwork approval is still saving. Please wait a moment before submitting the purchase order.'
+    }))) return;
     setOrderFlowPoBusyAction_('submit_po');
     try {
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
@@ -54526,6 +54689,7 @@
   function wireEvents(){
     bindUnsavedLeaveModalEvents_();
     bindSnapshotUserMutationEvents_();
+    bindArtworkApprovalUnloadFallback_();
     if (PROJECT_EVENTS_BOUND) return;
     PROJECT_EVENTS_BOUND = true;
     if (saveBtnMini) saveBtnMini.addEventListener('click', () => savePortalState());
@@ -55065,12 +55229,6 @@
     }
     if (artworkApproveDoneBtn) {
       artworkApproveDoneBtn.addEventListener('click', () => {
-        if (ARTWORK_APPROVE_SAVE_IN_FLIGHT) {
-          if (ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW && ARTWORK_APPROVE_MODE === 'success' && ARTWORK_APPROVE_JUST_APPROVED) {
-            queueArtworkApprovalContinue_();
-          }
-          return;
-        }
         if (ARTWORK_APPROVE_RETURN_TO_ORDER_FLOW && ARTWORK_APPROVE_MODE === 'success' && ARTWORK_APPROVE_JUST_APPROVED) {
           continueArtworkApprovalOrderFlow_();
           return;

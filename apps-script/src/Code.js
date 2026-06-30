@@ -1860,6 +1860,12 @@ function doPost(e) {
       const result = savePortalState(token, payload.portalState);
       return jsonOutput_(result);
     }
+    if (action === 'set_artwork_approval') {
+      return jsonOutput_(setArtworkApproval(payload));
+    }
+    if (action === 'clear_artwork_approval') {
+      return jsonOutput_(clearArtworkApproval(payload));
+    }
     if (action === 'finalize_after_payment' || action === 'finalizeafterpayment') {
       return jsonOutput_(finalizePortalAfterPayment(payload));
     }
