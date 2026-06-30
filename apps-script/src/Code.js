@@ -1887,6 +1887,9 @@ function doPost(e) {
     if (action === 'queue_purchase_order_invoice_email') {
       return jsonOutput_(queuePurchaseOrderInvoiceEmail(payload));
     }
+    if (action === 'get_order_flow_invoice_reference') {
+      return jsonOutput_(getOrderFlowInvoiceReference(payload));
+    }
     if (action === 'generate_invoice') {
       return jsonOutput_(generateInvoice(payload));
     }
@@ -11066,11 +11069,19 @@ function buildOrderInvoiceArtifacts_(ctx, payload) {
     : [];
   let invoiceInfo;
   if (base64Data) {
-    const invoiceReference = buildPortalDocumentReference_({
-      projectNumber: getPortalDocumentProjectNumber_(ctx && ctx.orderDraft),
-      documentKind: PORTAL_DOCUMENT_KINDS.invoice,
-      version: deriveNextInvoiceVersion_(ctx && ctx.orderDraft, { orderRevision: ctx && ctx.orderRevision })
-    });
+    const paymentMethod = trimString_(p.paymentMethodSelected || (ctx && ctx.payload && ctx.payload.paymentMethodSelected)).toLowerCase();
+    const explicitReference = getExplicitOrderFlowInvoiceReference_(p);
+    const invoiceReference = explicitReference
+      ? buildPortalDocumentReference_(explicitReference)
+      : (
+          paymentMethod === PAYMENT_METHODS.check || paymentMethod === PAYMENT_METHODS.cash
+            ? resolveOrderFlowInvoiceReferenceForContext_(ctx, p)
+            : buildPortalDocumentReference_({
+              projectNumber: getPortalDocumentProjectNumber_(ctx && ctx.orderDraft),
+              documentKind: PORTAL_DOCUMENT_KINDS.invoice,
+              version: deriveNextInvoiceVersion_(ctx && ctx.orderDraft, { orderRevision: ctx && ctx.orderRevision })
+            })
+        );
     const storedInvoice = storePortalPdfBlobInInvoiceFolder_({
       cfg: ctx.cfg,
       base64Data: base64Data,
@@ -24622,7 +24633,7 @@ function buildPortalDocumentReference_(input) {
   const documentRef = prefix + '-' + versionLabel;
   const baseLabel = invoiceKind === PORTAL_DOCUMENT_KINDS.estimate
     ? ('Estimate ' + versionLabel)
-    : ('Invoice ' + versionLabel);
+    : buildOrderFlowInvoiceDisplayLabel_(projectNumber, version);
   const displayLabel = documentKind === PORTAL_DOCUMENT_KINDS.receipt
     ? ('Receipt for ' + baseLabel)
     : baseLabel;
@@ -24640,6 +24651,20 @@ function buildPortalDocumentReference_(input) {
     }),
     legacyInvoiceNumber: trimString_(source.legacyInvoiceNumber)
   };
+}
+
+function buildOrderFlowInvoiceDisplayNumber_(projectNumber, version) {
+  const project = normalizePortalDocumentProjectNumber_(projectNumber);
+  const parsedVersion = Math.max(1, parseInt(String(version || 1), 10) || 1);
+  return parsedVersion <= 1 ? project : (project + '.' + (parsedVersion - 1));
+}
+
+function buildOrderFlowInvoiceDisplayLabel_(projectNumber, version) {
+  return 'Invoice # ' + buildOrderFlowInvoiceDisplayNumber_(projectNumber, version);
+}
+
+function buildOrderFlowInvoiceFileLabel_(projectNumber, version) {
+  return 'Invoice ' + buildOrderFlowInvoiceDisplayNumber_(projectNumber, version);
 }
 
 function buildClientFacingDocumentLabel_(documentReference) {
@@ -24663,12 +24688,12 @@ function buildPortalDocumentFileName_(documentReference) {
   const version = Math.max(1, parseInt(String(source.version || 1), 10) || 1);
   const versionLabel = projectNumber + '.' + version;
   if (kind === PORTAL_DOCUMENT_KINDS.receipt) {
-    return 'Red Threads - Project ' + projectNumber + ' - Receipt for Invoice ' + versionLabel + '.pdf';
+    return 'Red Threads - Project ' + projectNumber + ' - Receipt for ' + buildOrderFlowInvoiceFileLabel_(projectNumber, version) + '.pdf';
   }
   if (kind === PORTAL_DOCUMENT_KINDS.estimate) {
     return 'Red Threads - Project ' + projectNumber + ' - Estimate ' + versionLabel + '.pdf';
   }
-  return 'Red Threads - Project ' + projectNumber + ' - Invoice ' + versionLabel + '.pdf';
+  return 'Red Threads - Project ' + projectNumber + ' - ' + buildOrderFlowInvoiceFileLabel_(projectNumber, version) + '.pdf';
 }
 
 function buildPortalEstimateEmailSubject_(documentReference) {
@@ -24763,6 +24788,147 @@ function deriveNextEstimateVersion_(portalState, options) {
 
 function deriveNextInvoiceVersion_(source, options) {
   return resolvePortalDocumentVersion_(source, options);
+}
+
+function normalizeOrderFlowInvoiceAttemptReferences_(value) {
+  const source = Array.isArray(value) ? value : [];
+  const seen = {};
+  const refs = [];
+  source.forEach(function(item) {
+    const ref = parsePortalDocumentReference_(item && typeof item === 'object' ? (item.documentRef || item.invoiceNumber || item) : item);
+    if (!ref || ref.documentKind !== PORTAL_DOCUMENT_KINDS.invoice || seen[ref.documentRef]) return;
+    seen[ref.documentRef] = true;
+    refs.push(ref);
+  });
+  return refs;
+}
+
+function writeOrderFlowInvoiceAttemptReferenceIntoPortalState_(portalState, documentReference) {
+  const ref = parsePortalDocumentReference_(documentReference && typeof documentReference === 'object'
+    ? (documentReference.documentRef || documentReference.invoiceNumber || documentReference)
+    : documentReference);
+  const nextState = JSON.parse(JSON.stringify(
+    (portalState && typeof portalState === 'object' && !Array.isArray(portalState))
+      ? portalState
+      : { printJobs: {} }
+  ));
+  if (!ref || ref.documentKind !== PORTAL_DOCUMENT_KINDS.invoice) return nextState;
+  const refs = normalizeOrderFlowInvoiceAttemptReferences_(nextState.invoiceAttemptReferences);
+  if (!refs.some(function(item) { return item.documentRef === ref.documentRef; })) {
+    refs.push(ref);
+  }
+  nextState.invoiceAttemptReferences = refs;
+  return nextState;
+}
+
+function collectOrderFlowInvoiceVersionCandidate_(versions, value, projectNumber) {
+  if (!value) return;
+  const ref = parsePortalDocumentReference_(value && typeof value === 'object'
+    ? (value.documentRef || value.invoiceNumber || value)
+    : value);
+  if (!ref || ref.documentKind !== PORTAL_DOCUMENT_KINDS.invoice) return;
+  if (normalizePortalDocumentProjectNumber_(ref.projectNumber) !== projectNumber) return;
+  versions.push(ref.version);
+}
+
+function collectOrderFlowInvoiceVersionsFromSource_(versions, source, projectNumber) {
+  const s = (source && typeof source === 'object') ? source : {};
+  collectOrderFlowInvoiceVersionCandidate_(versions, s.invoiceNumber || s.invoicenumber, projectNumber);
+  collectOrderFlowInvoiceVersionCandidate_(versions, s.documentRef || s.documentref, projectNumber);
+  collectOrderFlowInvoiceVersionCandidate_(versions, s.documentReference, projectNumber);
+  collectOrderFlowInvoiceVersionCandidate_(versions, s.invoiceDocumentReference, projectNumber);
+  normalizeOrderFlowInvoiceAttemptReferences_(s.invoiceAttemptReferences).forEach(function(ref) {
+    collectOrderFlowInvoiceVersionCandidate_(versions, ref, projectNumber);
+  });
+  const purchaseOrderDraft = normalizePurchaseOrderDraftState_(s.purchaseOrderDraft);
+  if (purchaseOrderDraft) {
+    collectOrderFlowInvoiceVersionCandidate_(versions, purchaseOrderDraft.invoiceNumber, projectNumber);
+    collectOrderFlowInvoiceVersionCandidate_(versions, purchaseOrderDraft.documentReference, projectNumber);
+  }
+  const parsedDraft = safeJsonParse_(s.orderdraftjson || s.orderDraftJson, null);
+  if (parsedDraft && typeof parsedDraft === 'object') {
+    collectOrderFlowInvoiceVersionsFromSource_(versions, parsedDraft, projectNumber);
+  }
+}
+
+function getExplicitOrderFlowInvoiceReference_(options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  return parsePortalDocumentReference_(
+    opts.invoiceNumber ||
+    opts.documentRef ||
+    opts.documentReference ||
+    opts.invoiceDocumentReference
+  );
+}
+
+function resolveOrderFlowInvoiceReferenceForContext_(ctx, options) {
+  const opts = (options && typeof options === 'object') ? options : {};
+  const projectNumber = normalizePortalDocumentProjectNumber_(
+    opts.projectNumber || getPortalDocumentProjectNumber_(ctx && ctx.orderDraft)
+  );
+  const explicitRef = getExplicitOrderFlowInvoiceReference_(opts);
+  if (explicitRef && normalizePortalDocumentProjectNumber_(explicitRef.projectNumber) === projectNumber) {
+    return buildPortalDocumentReference_(explicitRef);
+  }
+  const existingDraft = normalizePurchaseOrderDraftState_(opts.existingDraft)
+    || readPurchaseOrderDraftFromPortalState_(ctx && ctx.portalState);
+  if (existingDraft && opts.reuseExistingDraft !== false) {
+    const draftRef = parsePortalDocumentReference_(existingDraft.documentReference || existingDraft.invoiceNumber);
+    if (draftRef && normalizePortalDocumentProjectNumber_(draftRef.projectNumber) === projectNumber) {
+      return buildPortalDocumentReference_(draftRef);
+    }
+  }
+  const versions = [];
+  collectOrderFlowInvoiceVersionsFromSource_(versions, ctx && ctx.portalState, projectNumber);
+  collectOrderFlowInvoiceVersionsFromSource_(versions, ctx && ctx.row, projectNumber);
+  collectOrderFlowInvoiceVersionsFromSource_(versions, ctx && ctx.orderDraft, projectNumber);
+  const token = trimString_(ctx && ctx.orderDraft && ctx.orderDraft.token);
+  if (token && ctx && ctx.infra && ctx.infra.ordersSheet) {
+    listPortalOrdersByToken_(token, {
+      cfg: ctx.cfg,
+      ss: ctx.ss,
+      ordersSheet: ctx.infra.ordersSheet
+    }).forEach(function(orderInfo) {
+      collectOrderFlowInvoiceVersionsFromSource_(versions, orderInfo && orderInfo.rowObjNormalized, projectNumber);
+    });
+  }
+  const maxVersion = versions.length ? Math.max.apply(null, versions) : 0;
+  return buildPortalDocumentReference_({
+    projectNumber: projectNumber,
+    documentKind: PORTAL_DOCUMENT_KINDS.invoice,
+    version: maxVersion + 1
+  });
+}
+
+function getOrderFlowInvoiceReference_(payload) {
+  const ctx = buildOrderActionContext_(Object.assign({}, (payload && typeof payload === 'object') ? payload : {}, {
+    createAccountIfMissing: false
+  }));
+  const existingDraft = readPurchaseOrderDraftFromPortalState_(ctx.portalState);
+  const invoiceReference = resolveOrderFlowInvoiceReferenceForContext_(ctx, {
+    existingDraft: existingDraft,
+    invoiceNumber: payload && payload.invoiceNumber,
+    documentReference: payload && payload.documentReference,
+    projectNumber: payload && payload.projectNumber
+  });
+  return {
+    ok: true,
+    invoice: {
+      invoiceNumber: invoiceReference.documentRef,
+      documentRef: invoiceReference.documentRef,
+      displayLabel: invoiceReference.displayLabel,
+      documentReference: invoiceReference,
+      fileName: invoiceReference.fileName
+    }
+  };
+}
+
+function getOrderFlowInvoiceReference(payload) {
+  try {
+    return getOrderFlowInvoiceReference_(payload);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 }
 
 function getCurrentInvoiceReferenceForOrder_(orderInfo, invoiceInfo, options) {
@@ -24922,9 +25088,11 @@ function preparePurchaseOrderDraftInvoiceArtifact_(ctx, payload, options) {
   const existingReference = existingDraft && existingDraft.documentReference ? existingDraft.documentReference : null;
   const invoiceReference = existingReference && trimString_(existingReference.documentRef)
     ? buildPortalDocumentReference_(existingReference)
-    : getCurrentInvoiceReferenceForOrder_(ctx && ctx.orderDraft, {
-      invoiceNumber: trimString_(opts.invoiceNumber || (existingDraft && existingDraft.invoiceNumber))
-    }, {
+    : resolveOrderFlowInvoiceReferenceForContext_(ctx, {
+      existingDraft: existingDraft,
+      invoiceNumber: trimString_(opts.invoiceNumber || (existingDraft && existingDraft.invoiceNumber) || (payload && payload.invoiceNumber)),
+      documentReference: payload && payload.documentReference,
+      invoiceDocumentReference: payload && payload.invoiceDocumentReference,
       orderRevision: ctx && ctx.orderRevision
     });
   const invoiceNumber = invoiceReference.documentRef;
@@ -24965,6 +25133,9 @@ function buildPurchaseOrderDraftResponse_(ctx, invoiceInfo, options) {
     accountSummary: ctx.accountInfo.summary,
     invoice: {
       invoiceNumber: trimString_(invoiceInfo && invoiceInfo.invoiceNumber),
+      documentRef: trimString_(invoiceInfo && invoiceInfo.documentRef),
+      displayLabel: trimString_(invoiceInfo && invoiceInfo.displayLabel),
+      documentReference: invoiceInfo && invoiceInfo.documentReference ? invoiceInfo.documentReference : null,
       invoicePdfUrl: trimString_(invoiceInfo && invoiceInfo.invoicePdfUrl),
       fileName: trimString_(opts.fileName || (invoiceInfo && invoiceInfo.fileName))
     },
@@ -25497,6 +25668,10 @@ function ensurePurchaseOrderInvoice_(payload) {
     existingDraft: existingDraft,
     invoiceNumber: existingDraft && existingDraft.invoiceNumber
   });
+  const portalStateWithInvoiceAttempt = writeOrderFlowInvoiceAttemptReferenceIntoPortalState_(
+    ctx.portalState,
+    invoiceInfo && invoiceInfo.documentReference
+  );
   supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
     revisionReason: 'payment_method_superseded_to_purchase_order',
     notes: 'Superseded by purchase-order draft preparation.'
@@ -25512,7 +25687,7 @@ function ensurePurchaseOrderInvoice_(payload) {
   });
   lockCurrentOrderPointersToPurchaseOrderDraftState_(
     ctx,
-    ctx.portalState,
+    portalStateWithInvoiceAttempt,
     nextDraftState
   );
   return finalizeOrderActionResponse_(buildPurchaseOrderDraftResponse_(ctx, invoiceInfo, {
@@ -33932,7 +34107,10 @@ function queuePurchaseOrderInvoiceEmail_(payload) {
       invoiceSentAt: trimString_(existingJob && existingJob.rowObjNormalized.completedat) || now
     }));
   }
-  const queuedPortalState = writePurchaseOrderDraftIntoPortalState_(ctx.portalState, draftState);
+  const queuedPortalState = writePurchaseOrderDraftIntoPortalState_(
+    writeOrderFlowInvoiceAttemptReferenceIntoPortalState_(ctx.portalState, invoiceInfo && invoiceInfo.documentReference),
+    draftState
+  );
 
   supersedeCompetingUnpaidOrdersForPaymentPathSwitch_(ctx, {
     revisionReason: 'payment_method_superseded_to_purchase_order',

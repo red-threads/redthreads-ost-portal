@@ -18441,7 +18441,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 248">248</div>
+  <div class="devRevisionBadge" aria-label="Development revision 249">249</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20926,6 +20926,13 @@
       documentReferences: (parsed && parsed.documentReferences && typeof parsed.documentReferences === 'object' && !Array.isArray(parsed.documentReferences))
         ? clonePlainObject(parsed.documentReferences)
         : {},
+      invoiceAttemptReferences: Array.isArray(parsed && parsed.invoiceAttemptReferences)
+        ? parsed.invoiceAttemptReferences
+            .map(item => parseSummaryPortalDocumentReference_(
+              item && typeof item === 'object' ? (item.documentRef || item.invoiceNumber) : item
+            ))
+            .filter(Boolean)
+        : [],
       messageLog: readMessageLogFromState(parsed),
       quantities: {},
       printJobs: {}
@@ -21492,12 +21499,26 @@
       || normalized === SUMMARY_DOCUMENT_MODES.locked_invoice;
   }
 
-  function normalizeSummaryDocumentProjectNumber_(value){
-    return String(value || '').trim().replace(/[^A-Za-z0-9_-]+/g, '') || 'Project';
-  }
+	  function normalizeSummaryDocumentProjectNumber_(value){
+	    return String(value || '').trim().replace(/[^A-Za-z0-9_-]+/g, '') || 'Project';
+	  }
 
-  function parseSummaryPortalDocumentReference_(value){
-    const clean = String(value || '').trim();
+	  function buildOrderFlowInvoiceDisplayNumber_(projectNumber, version){
+	    const project = normalizeSummaryDocumentProjectNumber_(projectNumber);
+	    const parsedVersion = Math.max(1, parseInt(String(version || 1), 10) || 1);
+	    return parsedVersion <= 1 ? project : (project + '.' + (parsedVersion - 1));
+	  }
+
+	  function buildOrderFlowInvoiceDisplayLabel_(projectNumber, version){
+	    return 'Invoice # ' + buildOrderFlowInvoiceDisplayNumber_(projectNumber, version);
+	  }
+
+	  function buildOrderFlowInvoiceFileLabel_(projectNumber, version){
+	    return 'Invoice ' + buildOrderFlowInvoiceDisplayNumber_(projectNumber, version);
+	  }
+
+	  function parseSummaryPortalDocumentReference_(value){
+	    const clean = String(value || '').trim();
     const match = clean.match(/^(EST|INV)-(.+)\.(\d{1,4})$/i)
       || clean.match(/^(EST|INV)-(.+)-v(\d{1,4})$/i);
     if (!match) return null;
@@ -21515,18 +21536,20 @@
     const kind = String(documentKind || '').trim().toLowerCase() === 'estimate' ? 'estimate' : 'invoice';
     const projectNumber = normalizeSummaryDocumentProjectNumber_(opts.projectNumber || getDealNumber());
     const version = Math.max(1, parseInt(String(opts.version || 1), 10) || 1);
-    const prefix = kind === 'estimate' ? 'EST' : 'INV';
-    const versionLabel = projectNumber + '.' + version;
-    const displayLabel = (kind === 'estimate' ? 'Estimate ' : 'Invoice ') + versionLabel;
-    return {
-      projectNumber: projectNumber,
-      documentKind: kind,
-      version: version,
-      documentRef: prefix + '-' + versionLabel,
-      displayLabel: displayLabel,
-      fileName: 'Red Threads - Project ' + projectNumber + ' - ' + (kind === 'estimate' ? 'Estimate' : 'Invoice') + ' ' + versionLabel + '.pdf'
-    };
-  }
+	    const prefix = kind === 'estimate' ? 'EST' : 'INV';
+	    const versionLabel = projectNumber + '.' + version;
+	    const displayLabel = kind === 'estimate'
+	      ? ('Estimate ' + versionLabel)
+	      : buildOrderFlowInvoiceDisplayLabel_(projectNumber, version);
+	    return {
+	      projectNumber: projectNumber,
+	      documentKind: kind,
+	      version: version,
+	      documentRef: prefix + '-' + versionLabel,
+	      displayLabel: displayLabel,
+	      fileName: 'Red Threads - Project ' + projectNumber + ' - ' + (kind === 'estimate' ? ('Estimate ' + versionLabel) : buildOrderFlowInvoiceFileLabel_(projectNumber, version)) + '.pdf'
+	    };
+	  }
 
   function getSummaryCommercialDocumentFingerprint_(){
     try {
@@ -21539,12 +21562,21 @@
   }
 
   function getSummaryDocumentReference_(mode){
-    const documentMode = String(mode || getSummaryDocumentMode_()).trim().toLowerCase() || SUMMARY_DOCUMENT_MODES.estimate;
-    const isInvoice = isInvoiceSummaryDocumentMode_(documentMode);
-    if (isInvoice) {
-      const parsed = parseSummaryPortalDocumentReference_(LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.invoiceNumber);
-      if (parsed) return parsed;
-      return buildSummaryPortalDocumentReference_('invoice', {
+	    const documentMode = String(mode || getSummaryDocumentMode_()).trim().toLowerCase() || SUMMARY_DOCUMENT_MODES.estimate;
+	    const isInvoice = isInvoiceSummaryDocumentMode_(documentMode);
+	    if (isInvoice) {
+	      const purchaseOrderDraft = normalizePurchaseOrderDraftState_(
+	        (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.purchaseOrderDraft)
+	        || (PORTAL_STATE && PORTAL_STATE.purchaseOrderDraft)
+	      );
+	      const parsed = parseSummaryPortalDocumentReference_(
+	        (LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.invoiceNumber)
+	        || (LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.invoiceDocumentReference && LATEST_ORDER_SUMMARY.invoiceDocumentReference.documentRef)
+	        || (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.latestInvoiceNumber)
+	        || (purchaseOrderDraft && (purchaseOrderDraft.invoiceNumber || (purchaseOrderDraft.documentReference && purchaseOrderDraft.documentReference.documentRef)))
+	      );
+	      if (parsed) return parsed;
+	      return buildSummaryPortalDocumentReference_('invoice', {
         projectNumber: getDealNumber(),
         version: Math.max(1, parseInt(String(LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.orderRevision || 1), 10) || 1)
       });
@@ -25063,10 +25095,14 @@
   let ORDER_FLOW_PO_STATUS = { tone: '', message: '' };
   let ORDER_FLOW_PO_DRAFT_PREP_PROMISE = null;
   let ORDER_FLOW_PO_DRAFT_PREP_KEY = '';
-  let ORDER_FLOW_PO_DRAFT_READY_KEY = '';
-  let ORDER_FLOW_PO_DRAFT_READY_RESULT = null;
-  let ORDER_FLOW_PO_DRAFT_PREP_TIMER = 0;
-  let ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
+	  let ORDER_FLOW_PO_DRAFT_READY_KEY = '';
+	  let ORDER_FLOW_PO_DRAFT_READY_RESULT = null;
+	  let ORDER_FLOW_PO_DRAFT_PREP_TIMER = 0;
+	  let ORDER_FLOW_INVOICE_REFERENCE_READY_KEY = '';
+	  let ORDER_FLOW_INVOICE_REFERENCE_READY_RESULT = null;
+	  let ORDER_FLOW_INVOICE_REFERENCE_PROMISE = null;
+	  let ORDER_FLOW_INVOICE_REFERENCE_PROMISE_KEY = '';
+	  let ORDER_FLOW_PO_EMAIL_ASYNC_IN_FLIGHT = false;
   let ORDER_FLOW_PO_EMAIL_JOB_ID = '';
   let ORDER_FLOW_PO_EMAIL_STATUS_TIMER = 0;
   let ORDER_FLOW_PO_EMAIL_SENT_NOTICE_JOB_ID = '';
@@ -28750,12 +28786,15 @@
     return {
       version: String(normalized.version || '1'),
       printJobs: clonePlainObject(normalized.printJobs),
-      quantities: clonePlainObject(normalized.quantities),
-      messageLog: normalizeMessageLog(normalized.messageLog),
-      documentReferences: clonePlainObject(normalized.documentReferences || {}),
-      purchaseOrderDraft: normalized.purchaseOrderDraft
-        ? clonePlainObject(normalized.purchaseOrderDraft)
-        : null
+	      quantities: clonePlainObject(normalized.quantities),
+	      messageLog: normalizeMessageLog(normalized.messageLog),
+	      documentReferences: clonePlainObject(normalized.documentReferences || {}),
+	      invoiceAttemptReferences: Array.isArray(normalized.invoiceAttemptReferences)
+	        ? normalized.invoiceAttemptReferences.map(item => clonePlainObject(item))
+	        : [],
+	      purchaseOrderDraft: normalized.purchaseOrderDraft
+	        ? clonePlainObject(normalized.purchaseOrderDraft)
+	        : null
     };
   }
 
@@ -43896,9 +43935,9 @@
     }
   }
 
-  function buildOrderFlowPurchaseOrderDraftPrepKey_(portalState){
-    const cleanToken = String(CURRENT_TOKEN || '').trim();
-    const state = (portalState && typeof portalState === 'object') ? portalState : {};
+	  function buildOrderFlowPurchaseOrderDraftPrepKey_(portalState){
+	    const cleanToken = String(CURRENT_TOKEN || '').trim();
+	    const state = (portalState && typeof portalState === 'object') ? portalState : {};
     try {
       const comparable = String(getComparablePortalStateKey(state) || '').trim();
       if (cleanToken || comparable) return cleanToken + '|' + comparable;
@@ -43907,23 +43946,129 @@
     try {
       fallback = JSON.stringify(state);
     } catch (_) {}
-    return cleanToken + '|' + fallback;
-  }
+	    return cleanToken + '|' + fallback;
+	  }
 
-  function clearOrderFlowPurchaseOrderDraftPrepState_(){
-    ORDER_FLOW_PO_DRAFT_PREP_PROMISE = null;
-    ORDER_FLOW_PO_DRAFT_PREP_KEY = '';
-  }
+	  function buildOrderFlowInvoiceReferenceKey_(flowKind, portalState){
+	    return String(flowKind || '').trim().toLowerCase() + '|' + buildOrderFlowPurchaseOrderDraftPrepKey_(portalState);
+	  }
 
-  function normalizePreparedPurchaseOrderDraftArtifact_(value){
-    const source = (value && typeof value === 'object') ? value : {};
-    const invoicePdfUrl = String(source.invoicePdfUrl || '').trim();
-    if (!invoicePdfUrl) return null;
-    return {
-      invoicePdfUrl: invoicePdfUrl,
-      fileName: String(source.fileName || source.invoiceFileName || buildOrderFlowPurchaseOrderFileName_()).trim() || buildOrderFlowPurchaseOrderFileName_()
-    };
-  }
+	  function normalizeOrderFlowInvoiceReference_(value){
+	    const source = (value && typeof value === 'object') ? value : {};
+	    return parseSummaryPortalDocumentReference_(
+	      source.documentRef
+	      || source.invoiceNumber
+	      || (source.documentReference && source.documentReference.documentRef)
+	      || value
+	    );
+	  }
+
+		  function getCurrentOrderFlowInvoiceReference_(){
+		    const purchaseOrderDraft = getCurrentPurchaseOrderDraft_();
+		    const poDraftRef = purchaseOrderDraft
+		      ? normalizeOrderFlowInvoiceReference_(purchaseOrderDraft.documentReference || purchaseOrderDraft.invoiceNumber)
+	      : null;
+	    if (poDraftRef) return poDraftRef;
+	    const editorLifecycle = getPortalEditorLifecycleUiState_();
+	    const canReuseLatestInvoice = editorLifecycle.isPoDraftResume === true
+	      || editorLifecycle.canAccessOrderFlow !== true
+	      || isLockedSummaryInvoiceMode_();
+	    if (!canReuseLatestInvoice) return null;
+	    const latestRef = normalizeOrderFlowInvoiceReference_(
+	      (LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.invoiceDocumentReference)
+	      || (LATEST_ORDER_SUMMARY && LATEST_ORDER_SUMMARY.invoiceNumber)
+	      || (CURRENT_STATE_SUMMARY && CURRENT_STATE_SUMMARY.latestInvoiceNumber)
+	    );
+		    if (latestRef) return latestRef;
+		    return null;
+		  }
+
+		  function getOrderFlowInvoiceReferenceForCurrentViewer_(){
+		    const flowKind = isOrderFlowPurchaseOrderViewerMode_()
+		      ? 'purchase_order'
+		      : (isOrderFlowManualPaymentViewerMode_() ? 'manual_payment' : '');
+		    if (flowKind) {
+		      const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+		      const refKey = buildOrderFlowInvoiceReferenceKey_(flowKind, clickedPortalState);
+		      if (refKey && ORDER_FLOW_INVOICE_REFERENCE_READY_KEY === refKey && ORDER_FLOW_INVOICE_REFERENCE_READY_RESULT) {
+		        return normalizeOrderFlowInvoiceReference_(ORDER_FLOW_INVOICE_REFERENCE_READY_RESULT);
+		      }
+		    }
+		    return getCurrentOrderFlowInvoiceReference_();
+		  }
+
+		  function applyOrderFlowInvoiceReferenceToSummaryData_(data, invoiceReference){
+		    const ref = normalizeOrderFlowInvoiceReference_(invoiceReference);
+		    if (!ref || !data || !data.header) return data;
+	    data.header.documentReference = clonePlainObject(ref);
+	    data.header.documentRef = ref.documentRef;
+	    data.header.documentDisplayLabel = ref.displayLabel;
+	    data.header.documentVersion = ref.version;
+	    return data;
+	  }
+
+	  async function ensureOrderFlowInvoiceReferenceForViewer_(options){
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const flowKind = String(opts.flowKind || (isOrderFlowPurchaseOrderViewerMode_() ? 'purchase_order' : 'manual_payment')).trim().toLowerCase();
+	    const clickedPortalState = (opts.portalState && typeof opts.portalState === 'object')
+	      ? clonePlainObject(opts.portalState)
+	      : buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+	    const refKey = buildOrderFlowInvoiceReferenceKey_(flowKind, clickedPortalState);
+	    if (opts.force !== true && ORDER_FLOW_INVOICE_REFERENCE_READY_KEY === refKey && ORDER_FLOW_INVOICE_REFERENCE_READY_RESULT) {
+	      return normalizeOrderFlowInvoiceReference_(ORDER_FLOW_INVOICE_REFERENCE_READY_RESULT);
+	    }
+	    const existingRef = getCurrentOrderFlowInvoiceReference_();
+	    if (existingRef && opts.force !== true) {
+	      ORDER_FLOW_INVOICE_REFERENCE_READY_KEY = refKey;
+	      ORDER_FLOW_INVOICE_REFERENCE_READY_RESULT = existingRef;
+	      return existingRef;
+	    }
+	    if (opts.force !== true && ORDER_FLOW_INVOICE_REFERENCE_PROMISE && ORDER_FLOW_INVOICE_REFERENCE_PROMISE_KEY === refKey) {
+	      return ORDER_FLOW_INVOICE_REFERENCE_PROMISE;
+	    }
+	    const promise = callServer('getOrderFlowInvoiceReference', {
+	      token: CURRENT_TOKEN,
+	      paymentMethodSelected: flowKind === 'purchase_order' ? 'purchase_order' : (ORDER_FLOW_SELECTED_METHOD === PAYMENT_METHODS.cash ? PAYMENT_METHODS.cash : PAYMENT_METHODS.check),
+	      portalState: JSON.stringify(clickedPortalState),
+	      projectNumber: getDealNumber()
+	    }).then(resp => {
+	      if (!resp || resp.ok !== true) {
+	        throw new Error(normalizeUiErrorMessage_(resp && (resp.message || resp.error), 'Unable to prepare the invoice number.'));
+	      }
+	      const ref = normalizeOrderFlowInvoiceReference_(resp.invoice && (resp.invoice.documentReference || resp.invoice.invoiceNumber));
+	      if (!ref) throw new Error('Unable to prepare the invoice number.');
+	      ORDER_FLOW_INVOICE_REFERENCE_READY_KEY = refKey;
+	      ORDER_FLOW_INVOICE_REFERENCE_READY_RESULT = ref;
+	      renderOrderFlowSummaryViewer_({ forceDocumentRefresh: true });
+	      return ref;
+	    }).finally(() => {
+	      if (ORDER_FLOW_INVOICE_REFERENCE_PROMISE === promise) {
+	        ORDER_FLOW_INVOICE_REFERENCE_PROMISE = null;
+	        ORDER_FLOW_INVOICE_REFERENCE_PROMISE_KEY = '';
+	      }
+	    });
+	    ORDER_FLOW_INVOICE_REFERENCE_PROMISE = promise;
+	    ORDER_FLOW_INVOICE_REFERENCE_PROMISE_KEY = refKey;
+	    return promise;
+	  }
+
+	  function clearOrderFlowPurchaseOrderDraftPrepState_(){
+	    ORDER_FLOW_PO_DRAFT_PREP_PROMISE = null;
+	    ORDER_FLOW_PO_DRAFT_PREP_KEY = '';
+	  }
+
+	  function normalizePreparedPurchaseOrderDraftArtifact_(value){
+	    const source = (value && typeof value === 'object') ? value : {};
+	    const invoicePdfUrl = String(source.invoicePdfUrl || '').trim();
+	    if (!invoicePdfUrl) return null;
+	    const invoiceReference = normalizeOrderFlowInvoiceReference_(source.documentReference || source.invoiceReference || source.invoiceNumber);
+	    return {
+	      invoicePdfUrl: invoicePdfUrl,
+	      fileName: String(source.fileName || source.invoiceFileName || (invoiceReference && invoiceReference.fileName) || buildOrderFlowPurchaseOrderFileName_()).trim() || buildOrderFlowPurchaseOrderFileName_(),
+	      invoiceNumber: invoiceReference ? invoiceReference.documentRef : String(source.invoiceNumber || '').trim(),
+	      documentReference: invoiceReference || null
+	    };
+	  }
 
   function getPreparedPurchaseOrderDraftArtifactForPortalState_(portalState){
     const preparedDraft = getPreparedPurchaseOrderDraftArtifact_();
@@ -43979,20 +44124,37 @@
     if (opts.force !== true && ORDER_FLOW_PO_DRAFT_PREP_PROMISE && ORDER_FLOW_PO_DRAFT_PREP_KEY === prepKey) {
       return ORDER_FLOW_PO_DRAFT_PREP_PROMISE;
     }
-    const source = String(opts.source || '').trim().toLowerCase() === 'viewer' ? 'viewer' : 'summary';
-    const prepPromise = (async () => {
-      const pdfResult = source === 'viewer'
-        ? await buildOrderFlowSummaryViewerPdf_()
-        : await buildSummaryExportPdf_();
-      const base64Data = await readBlobAsBase64_(pdfResult.blob);
+	    const source = String(opts.source || '').trim().toLowerCase() === 'viewer' ? 'viewer' : 'summary';
+	    const prepPromise = (async () => {
+	      const invoiceReference = await ensureOrderFlowInvoiceReferenceForViewer_({
+	        flowKind: 'purchase_order',
+	        portalState: clickedPortalState
+	      });
+	      const invoiceData = buildOrderFlowSummaryEstimateViewData_({
+	        documentModeLabel: 'Invoice',
+	        includeShippingDetails: true,
+	        documentReference: invoiceReference
+	      });
+	      const pdfResult = source === 'viewer'
+	        ? await buildOrderFlowSummaryViewerPdf_({
+	            data: invoiceData,
+	            fileName: invoiceReference.fileName
+	          })
+	        : await buildSummaryExportPdf_({
+	            data: invoiceData,
+	            fileName: invoiceReference.fileName
+	          });
+	      const base64Data = await readBlobAsBase64_(pdfResult.blob);
       if (!base64Data) {
         throw new Error('Unable to package the invoice PDF.');
       }
       const resp = await callServer('ensurePurchaseOrderInvoice', {
         token: CURRENT_TOKEN,
         paymentMethodSelected: 'purchase_order',
-        portalState: JSON.stringify(clickedPortalState),
-        fileName: pdfResult.fileName,
+	        portalState: JSON.stringify(clickedPortalState),
+	        invoiceNumber: invoiceReference.documentRef,
+	        documentReference: invoiceReference,
+	        fileName: pdfResult.fileName,
         mimeType: 'application/pdf',
         base64Data: base64Data,
         projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || ''
@@ -44010,10 +44172,12 @@
         ACCOUNT_SUMMARY = normalizeAccountSummary(resp.accountSummary || ACCOUNT_SUMMARY);
         throw new Error(String(resp.message || 'Approved terms are required before the purchase-order flow can continue.'));
       }
-      const preparedFromResponse = normalizePreparedPurchaseOrderDraftArtifact_({
-        invoicePdfUrl: String(resp.invoice && resp.invoice.invoicePdfUrl || '').trim(),
-        fileName: String(resp.invoice && resp.invoice.fileName || pdfResult.fileName || '').trim()
-      });
+	      const preparedFromResponse = normalizePreparedPurchaseOrderDraftArtifact_({
+	        invoicePdfUrl: String(resp.invoice && resp.invoice.invoicePdfUrl || '').trim(),
+	        fileName: String(resp.invoice && resp.invoice.fileName || pdfResult.fileName || '').trim(),
+	        invoiceNumber: String(resp.invoice && resp.invoice.invoiceNumber || invoiceReference.documentRef || '').trim(),
+	        documentReference: (resp.invoice && resp.invoice.documentReference) || invoiceReference
+	      });
       ORDER_FLOW_PO_DRAFT_READY_KEY = prepKey;
       ORDER_FLOW_PO_DRAFT_READY_RESULT = preparedFromResponse;
       if (opts.applyLifecycle !== false) {
@@ -44172,21 +44336,26 @@
       portalState: JSON.stringify(clickedPortalState),
       recipients: recipients,
       projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || ''
-    };
-    try {
-      if (opts.forcePreparedInvoice === true) {
-        await ensurePreparedPurchaseOrderDraftArtifactClient_({
-          portalState: clickedPortalState,
-          source: String(opts.source || '').trim().toLowerCase() === 'viewer' ? 'viewer' : 'summary',
-          force: true
-        });
-        SUMMARY_PO_SHIPPING_ARTIFACT_DIRTY = false;
-      }
-      const preparedDraft = getPreparedPurchaseOrderDraftArtifactForPortalState_(clickedPortalState);
-      if (preparedDraft) {
-        basePayload.invoicePdfUrl = preparedDraft.invoicePdfUrl;
-        basePayload.invoiceFileName = preparedDraft.fileName;
-      }
+	    };
+	    try {
+	      let preparedDraft = getPreparedPurchaseOrderDraftArtifactForPortalState_(clickedPortalState);
+	      if (opts.forcePreparedInvoice === true || !preparedDraft) {
+	        const preparedResult = await ensurePreparedPurchaseOrderDraftArtifactClient_({
+	          portalState: clickedPortalState,
+	          source: String(opts.source || '').trim().toLowerCase() === 'viewer' ? 'viewer' : 'summary',
+	          force: opts.forcePreparedInvoice === true,
+	          applyLifecycle: false
+	        });
+	        SUMMARY_PO_SHIPPING_ARTIFACT_DIRTY = false;
+	        preparedDraft = normalizePreparedPurchaseOrderDraftArtifact_(preparedResult && preparedResult.preparedDraft)
+	          || getPreparedPurchaseOrderDraftArtifactForPortalState_(clickedPortalState);
+	      }
+		      if (preparedDraft) {
+		        basePayload.invoicePdfUrl = preparedDraft.invoicePdfUrl;
+		        basePayload.invoiceFileName = preparedDraft.fileName;
+	        basePayload.invoiceNumber = preparedDraft.invoiceNumber;
+	        basePayload.documentReference = preparedDraft.documentReference;
+	      }
       const resp = await callServer('queuePurchaseOrderInvoiceEmail', basePayload);
       if (!resp || resp.ok !== true) {
         if (resp && resp.gated) {
@@ -44341,22 +44510,39 @@
     }
   }
 
-  async function buildManualOrderInvoiceArtifactPayloadInternal_(){
-    const friendlyArtifactFailure = 'Unable to create the final invoice artifact needed to place this order. Please try again.';
-    const attemptWarnings = [];
-    const attempts = [
-      {
-        source: 'viewer',
-        build: () => buildOrderFlowSummaryViewerPdf_({
-          fallbackMessage: friendlyArtifactFailure
-        })
-      },
-      {
-        source: 'summary',
-        build: () => buildSummaryExportPdf_({
-          fallbackMessage: friendlyArtifactFailure
-        })
-      }
+	  async function buildManualOrderInvoiceArtifactPayloadInternal_(options){
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const friendlyArtifactFailure = 'Unable to create the final invoice artifact needed to place this order. Please try again.';
+	    const attemptWarnings = [];
+	    const clickedPortalState = (opts.portalState && typeof opts.portalState === 'object')
+	      ? clonePlainObject(opts.portalState)
+	      : buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+	    const invoiceReference = await ensureOrderFlowInvoiceReferenceForViewer_({
+	      flowKind: 'manual_payment',
+	      portalState: clickedPortalState
+	    });
+	    const invoiceData = buildOrderFlowSummaryEstimateViewData_({
+	      documentModeLabel: 'Invoice',
+	      includeShippingDetails: true,
+	      documentReference: invoiceReference
+	    });
+	    const attempts = [
+	      {
+	        source: 'viewer',
+	        build: () => buildOrderFlowSummaryViewerPdf_({
+	          data: invoiceData,
+	          fileName: invoiceReference.fileName,
+	          fallbackMessage: friendlyArtifactFailure
+	        })
+	      },
+	      {
+	        source: 'summary',
+	        build: () => buildSummaryExportPdf_({
+	          data: invoiceData,
+	          fileName: invoiceReference.fileName,
+	          fallbackMessage: friendlyArtifactFailure
+	        })
+	      }
     ];
     for (const attempt of attempts) {
       try {
@@ -44365,10 +44551,11 @@
         if (!base64Data) {
           throw new Error('Unable to package the generated invoice PDF.');
         }
-        return {
-          source: attempt.source,
-          payload: {
-            fileName: pdfResult.fileName,
+	        return {
+	          source: attempt.source,
+	          invoiceReference: invoiceReference,
+	          payload: {
+	            fileName: pdfResult.fileName,
             mimeType: 'application/pdf',
             base64Data: base64Data
           },
@@ -44400,7 +44587,9 @@
         return ORDER_FLOW_MANUAL_ARTIFACT_PREP_PROMISE;
       }
     }
-    const prepPromise = buildManualOrderInvoiceArtifactPayloadInternal_()
+	    const prepPromise = buildManualOrderInvoiceArtifactPayloadInternal_({
+	      portalState: clickedPortalState
+	    })
       .then(result => {
         ORDER_FLOW_MANUAL_ARTIFACT_READY_KEY = prepKey;
         ORDER_FLOW_MANUAL_ARTIFACT_READY_RESULT = result;
@@ -45275,11 +45464,12 @@
     if (!ORDER_FLOW_SUMMARY_VIEWER_OPEN && (!orderFlowSummaryViewerBackdrop || orderFlowSummaryViewerBackdrop.hidden)) return;
     const isPurchaseOrderViewer = isOrderFlowPurchaseOrderViewerMode_();
     const isManualPaymentViewer = isOrderFlowManualPaymentViewerMode_();
-    const data = buildOrderFlowSummaryEstimateViewData_({
-      documentModeLabel: 'Invoice',
-      includeShippingDetails: true,
-      useOrderFlowInvoiceNumberLabel: !isPurchaseOrderViewer && !isManualPaymentViewer
-    });
+	    const data = buildOrderFlowSummaryEstimateViewData_({
+		      documentModeLabel: 'Invoice',
+		      includeShippingDetails: true,
+		      useOrderFlowInvoiceNumberLabel: true,
+		      documentReference: (isPurchaseOrderViewer || isManualPaymentViewer) ? getOrderFlowInvoiceReferenceForCurrentViewer_() : null
+		    });
     if (orderFlowSummaryViewerModal) {
       orderFlowSummaryViewerModal.classList.toggle('isPurchaseOrderViewer', isPurchaseOrderViewer);
     }
@@ -45336,9 +45526,15 @@
   function openOrderFlowSummaryViewer(){
     if (!orderFlowSummaryViewerBackdrop) return;
     resetOrderFlowPoViewerState_();
-    ORDER_FLOW_SUMMARY_VIEWER_OPEN = true;
-    renderOrderFlowSummaryViewer_();
-    orderFlowSummaryViewerBackdrop.hidden = false;
+	    ORDER_FLOW_SUMMARY_VIEWER_OPEN = true;
+	    renderOrderFlowSummaryViewer_();
+	    ensureOrderFlowInvoiceReferenceForViewer_({
+	      flowKind: 'purchase_order',
+	      portalState: buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })
+	    }).catch(err => {
+	      console.warn('Purchase-order invoice reference preflight failed.', err);
+	    });
+	    orderFlowSummaryViewerBackdrop.hidden = false;
     requestAnimationFrame(() => {
       orderFlowSummaryViewerBackdrop.classList.add('open');
       syncOverlayScrollLock();
@@ -45355,12 +45551,18 @@
     if (!opts.preserveStatus) ORDER_FLOW_PO_STATUS = { tone: '', message: '' };
     if (!opts.preserveRecipients) ORDER_FLOW_PO_EMAIL_RECIPIENTS = '';
     syncOrderFlowPoViewerFieldsFromOrder_();
-    syncOrderFlowPoShippingStepState_({ focusEmail: false });
-    ORDER_FLOW_SUMMARY_VIEWER_OPEN = true;
-    renderOrderFlowSummaryViewer_();
-    orderFlowSummaryViewerBackdrop.hidden = false;
-    requestAnimationFrame(() => {
-      orderFlowSummaryViewerBackdrop.classList.add('open');
+	    syncOrderFlowPoShippingStepState_({ focusEmail: false });
+	    ORDER_FLOW_SUMMARY_VIEWER_OPEN = true;
+	    renderOrderFlowSummaryViewer_();
+	    ensureOrderFlowInvoiceReferenceForViewer_({
+	      flowKind: 'purchase_order',
+	      portalState: buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })
+	    }).catch(err => {
+	      console.warn('Purchase-order invoice reference preflight failed.', err);
+	    });
+	    orderFlowSummaryViewerBackdrop.hidden = false;
+	    requestAnimationFrame(() => {
+	      orderFlowSummaryViewerBackdrop.classList.add('open');
       syncOverlayScrollLock();
       if (orderFlowSummaryViewerClose) orderFlowSummaryViewerClose.focus();
     });
@@ -45370,10 +45572,16 @@
     if (!orderFlowSummaryViewerBackdrop) return;
     resetOrderFlowPoViewerState_();
     clearOrderFlowManualStatus_();
-    ORDER_FLOW_SUMMARY_VIEWER_MODE = 'manual_payment';
-    ORDER_FLOW_SUMMARY_VIEWER_OPEN = true;
-    renderOrderFlowSummaryViewer_();
-    orderFlowSummaryViewerBackdrop.hidden = false;
+	    ORDER_FLOW_SUMMARY_VIEWER_MODE = 'manual_payment';
+	    ORDER_FLOW_SUMMARY_VIEWER_OPEN = true;
+	    renderOrderFlowSummaryViewer_();
+	    ensureOrderFlowInvoiceReferenceForViewer_({
+	      flowKind: 'manual_payment',
+	      portalState: buildPortalStateFromUI({ messageLog: CHAT_MESSAGES })
+	    }).catch(err => {
+	      console.warn('Manual payment invoice reference preflight failed.', err);
+	    });
+	    orderFlowSummaryViewerBackdrop.hidden = false;
     requestAnimationFrame(() => {
       orderFlowSummaryViewerBackdrop.classList.add('open');
       syncOverlayScrollLock();
@@ -45406,10 +45614,14 @@
     return pages;
   }
 
-  async function createOrderFlowSummaryViewerExportHost_(data){
-    const exportData = (data && typeof data === 'object')
-      ? data
-      : buildOrderFlowSummaryEstimateViewData_({ documentModeLabel: 'Invoice', includeShippingDetails: true });
+	  async function createOrderFlowSummaryViewerExportHost_(data){
+	    const exportData = (data && typeof data === 'object')
+		      ? data
+		      : buildOrderFlowSummaryEstimateViewData_({
+		          documentModeLabel: 'Invoice',
+		          includeShippingDetails: true,
+		          documentReference: getOrderFlowInvoiceReferenceForCurrentViewer_()
+		        });
     const host = document.createElement('div');
     host.setAttribute('aria-hidden', 'true');
     host.style.position = 'fixed';
@@ -45515,18 +45727,28 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  async function ensureOrderFlowPoInvoice_(pdfResult){
-    const result = (pdfResult && typeof pdfResult === 'object') ? pdfResult : {};
-    const base64Data = await readBlobAsBase64_(result.blob);
-    if (!base64Data) {
-      throw new Error('Unable to package the invoice PDF.');
-    }
-    const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
-    const resp = await callServer('ensurePurchaseOrderInvoice', {
-      token: CURRENT_TOKEN,
-      paymentMethodSelected: 'purchase_order',
-      portalState: JSON.stringify(clickedPortalState),
-      fileName: result.fileName,
+	  async function ensureOrderFlowPoInvoice_(pdfResult, options){
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const result = (pdfResult && typeof pdfResult === 'object') ? pdfResult : {};
+	    const base64Data = await readBlobAsBase64_(result.blob);
+	    if (!base64Data) {
+	      throw new Error('Unable to package the invoice PDF.');
+	    }
+	    const clickedPortalState = (opts.portalState && typeof opts.portalState === 'object')
+	      ? clonePlainObject(opts.portalState)
+	      : buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+	    const invoiceReference = normalizeOrderFlowInvoiceReference_(opts.invoiceReference)
+	      || await ensureOrderFlowInvoiceReferenceForViewer_({
+	        flowKind: 'purchase_order',
+	        portalState: clickedPortalState
+	      });
+	    const resp = await callServer('ensurePurchaseOrderInvoice', {
+	      token: CURRENT_TOKEN,
+	      paymentMethodSelected: 'purchase_order',
+	      portalState: JSON.stringify(clickedPortalState),
+	      invoiceNumber: invoiceReference.documentRef,
+	      documentReference: invoiceReference,
+	      fileName: result.fileName,
       mimeType: 'application/pdf',
       base64Data: base64Data,
       projectName: metaField('projectName') || metaField('dealTitle') || rowField('projectname') || ''
@@ -45552,10 +45774,26 @@
   async function handleOrderFlowPoViewerDownload_(){
     if (ORDER_FLOW_PO_BUSY_ACTION) return;
     const stage = getOrderFlowPurchaseOrderStage_();
-    setOrderFlowPoBusyAction_('download');
-    try {
-      const pdfResult = await buildOrderFlowSummaryViewerPdf_();
-      await ensureOrderFlowPoInvoice_(pdfResult);
+	    setOrderFlowPoBusyAction_('download');
+	    try {
+	      const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
+	      const invoiceReference = await ensureOrderFlowInvoiceReferenceForViewer_({
+	        flowKind: 'purchase_order',
+	        portalState: clickedPortalState
+	      });
+	      const invoiceData = buildOrderFlowSummaryEstimateViewData_({
+	        documentModeLabel: 'Invoice',
+	        includeShippingDetails: true,
+	        documentReference: invoiceReference
+	      });
+	      const pdfResult = await buildOrderFlowSummaryViewerPdf_({
+	        data: invoiceData,
+	        fileName: invoiceReference.fileName
+	      });
+	      await ensureOrderFlowPoInvoice_(pdfResult, {
+	        portalState: clickedPortalState,
+	        invoiceReference: invoiceReference
+	      });
       triggerOrderFlowPoPdfDownload_(pdfResult.blob, pdfResult.fileName);
       if (stage === 'review') {
         closeOrderFlowSummaryViewer({ immediate: true });
@@ -45605,12 +45843,12 @@
     setActiveSummaryPanel({ render: true });
     openPurchaseOrderEmailSuccessBackdrop_();
     rerenderPurchaseOrderContinuationControls_();
-    sendPurchaseOrderInvoiceEmailInBackground_({
-      recipients: recipients,
-      portalState: clickedPortalState,
-      source: stage === 'review' ? 'summary' : 'summary'
-    }).catch(() => {});
-  }
+	    sendPurchaseOrderInvoiceEmailInBackground_({
+	      recipients: recipients,
+	      portalState: clickedPortalState,
+	      source: 'viewer'
+	    }).catch(() => {});
+	  }
 
   async function handleOrderFlowPoSubmit_(){
     if (ORDER_FLOW_PO_BUSY_ACTION) return;
@@ -46933,11 +47171,13 @@
       });
       const resp = await callServer('initiateManualPayment', {
         token: CURRENT_TOKEN,
-        paymentMethodSelected: method,
-        portalState: JSON.stringify(clickedPortalState),
-        clientArtifactStrategy: artifact.source,
-        clientArtifactWarnings: Array.isArray(artifact.warnings) ? artifact.warnings : [],
-        fileName: artifact && artifact.payload ? artifact.payload.fileName : '',
+	        paymentMethodSelected: method,
+	        portalState: JSON.stringify(clickedPortalState),
+	        clientArtifactStrategy: artifact.source,
+	        clientArtifactWarnings: Array.isArray(artifact.warnings) ? artifact.warnings : [],
+	        invoiceNumber: artifact && artifact.invoiceReference ? artifact.invoiceReference.documentRef : '',
+	        documentReference: artifact && artifact.invoiceReference ? artifact.invoiceReference : null,
+	        fileName: artifact && artifact.payload ? artifact.payload.fileName : '',
         mimeType: artifact && artifact.payload ? artifact.payload.mimeType : '',
         base64Data: artifact && artifact.payload ? artifact.payload.base64Data : ''
       });
@@ -48232,8 +48472,11 @@
     nextState.fulfillmentMethod = fulfillment.fulfillmentMethod;
     nextState.shippingChargeCents = fulfillment.shippingChargeCents;
     nextState.shippingModeLabel = fulfillment.shippingModeLabel;
-    nextState.documentReferences = clonePlainObject(currentState.documentReferences || nextState.documentReferences || {});
-    const shippingDetails = normalizeOrderFlowShippingDetails_(
+	    nextState.documentReferences = clonePlainObject(currentState.documentReferences || nextState.documentReferences || {});
+	    nextState.invoiceAttemptReferences = Array.isArray(currentState.invoiceAttemptReferences)
+	      ? currentState.invoiceAttemptReferences.map(item => clonePlainObject(item))
+	      : [];
+	    const shippingDetails = normalizeOrderFlowShippingDetails_(
       ORDER_FLOW_PO_SHIPPING_DETAILS
       || currentState.shippingDetails
       || nextState.shippingDetails
@@ -52023,23 +52266,29 @@
     });
   }
 
-  function buildOrderFlowSummaryEstimateViewData_(options){
-    const opts = (options && typeof options === 'object') ? options : {};
-    const data = buildSummaryEstimateViewDataForPresentation_(getOrderFlowSummaryPreviewPresentationState_(), {
+	  function buildOrderFlowSummaryEstimateViewData_(options){
+	    const opts = (options && typeof options === 'object') ? options : {};
+	    const data = buildSummaryEstimateViewDataForPresentation_(getOrderFlowSummaryPreviewPresentationState_(), {
       includeZeroQtyJobs: false,
       includeHiddenZeroQtyJobs: false,
       includeHiddenRemovedJobs: false,
       includeCompareTables: false,
       documentModeLabel: String(opts.documentModeLabel || '').trim() || 'Invoice',
       shipToPlacement: isOrderFlowPurchaseOrderViewerMode_() ? 'after_jobs' : '',
-      forceShowShippingLine: opts.forceShowShippingLine !== false,
-      includeShippingDetails: opts.includeShippingDetails === true
-    });
-    if (opts.useOrderFlowInvoiceNumberLabel === true && data && data.header) {
-      data.header.documentDisplayLabel = 'Invoice# ' + (normalizeSummaryDocumentProjectNumber_(getDealNumber()) || '--');
-    }
-    return data;
-  }
+	      forceShowShippingLine: opts.forceShowShippingLine !== false,
+	      includeShippingDetails: opts.includeShippingDetails === true
+	    });
+	    const invoiceReference = normalizeOrderFlowInvoiceReference_(opts.documentReference || opts.invoiceDocumentReference);
+	    if (invoiceReference) {
+	      applyOrderFlowInvoiceReferenceToSummaryData_(data, invoiceReference);
+	    } else if (opts.useOrderFlowInvoiceNumberLabel === true && data && data.header) {
+	      applyOrderFlowInvoiceReferenceToSummaryData_(data, buildSummaryPortalDocumentReference_('invoice', {
+	        projectNumber: getDealNumber(),
+	        version: 1
+	      }));
+	    }
+	    return data;
+	  }
 
   function focusSummaryPurchaseOrderField_(id){
     requestAnimationFrame(() => {
