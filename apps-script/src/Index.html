@@ -18103,7 +18103,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 231">231</div>
+  <div class="devRevisionBadge" aria-label="Development revision 232">232</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -24663,6 +24663,7 @@
   const DASHBOARD_HOME_RESPONSE_CACHE = new Map();
   const DASHBOARD_HOME_BACKGROUND_INFLIGHT = new Map();
   const PROJECT_DASHBOARD_RETURN_PREWARM_INFLIGHT = new Map();
+  const PROJECT_DASHBOARD_RETURN_READY_CACHE = new Map();
   let DASHBOARD_PROJECT_PAYLOAD_PREFETCH_SEQ = 0;
   let DASHBOARD_HOME_RESPONSE_CACHE_SEQ = 0;
   let DASHBOARD_HOME_BACKGROUND_SEQ = 0;
@@ -24697,6 +24698,7 @@
   const DASHBOARD_PROJECT_PAYLOAD_PREFETCH_TTL_MS = 30000;
   const DASHBOARD_PROJECT_OPEN_INFLIGHT_LOADER_DELAY_MS = 220;
 	  const DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS = 60000;
+  const PROJECT_DASHBOARD_RETURN_PREWARM_WAIT_MS = 900;
 	  const DASHBOARD_PROJECT_PEEK_SESSION_CACHE_TTL_MS = 5 * 60 * 1000;
 	  const DASHBOARD_PROJECT_PEEK_SESSION_CACHE_PREFIX = 'rt:dashboardFullPeek:v1:';
 	  const DASHBOARD_PROJECT_PEEK_SESSION_CACHE_VERSION = 'fullPeekSession:v1:v10';
@@ -25479,6 +25481,7 @@
     DASHBOARD_HOME_BACKGROUND_SEQ += 1;
     DASHBOARD_HOME_RESPONSE_CACHE.clear();
     DASHBOARD_HOME_BACKGROUND_INFLIGHT.clear();
+    PROJECT_DASHBOARD_RETURN_READY_CACHE.clear();
   }
 
   function requireFreshDashboardHomeReturn_(reason){
@@ -25524,6 +25527,33 @@
     const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
     if (!requestKey) return null;
     return DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(requestKey) || null;
+  }
+
+  function rememberProjectDashboardReturnReady_(requestPayload, response){
+    const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
+    if (!requestKey || !response || response.ok !== true) return false;
+    PROJECT_DASHBOARD_RETURN_READY_CACHE.set(requestKey, {
+      storedAt: Date.now(),
+      data: clonePlainObject(response)
+    });
+    return true;
+  }
+
+  function getProjectDashboardReturnReady_(requestPayload){
+    const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
+    if (!requestKey) return null;
+    const entry = PROJECT_DASHBOARD_RETURN_READY_CACHE.get(requestKey) || null;
+    if (!entry || !entry.data || Date.now() - Number(entry.storedAt || 0) > DASHBOARD_HOME_RESPONSE_CACHE_TTL_MS) {
+      PROJECT_DASHBOARD_RETURN_READY_CACHE.delete(requestKey);
+      return null;
+    }
+    return clonePlainObject(entry.data);
+  }
+
+  function getProjectDashboardReturnPrewarmInflight_(requestPayload){
+    const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
+    if (!requestKey) return null;
+    return PROJECT_DASHBOARD_RETURN_PREWARM_INFLIGHT.get(requestKey) || null;
   }
 
   function rememberDashboardHomeResponse_(requestPayload, response, cacheSeq){
@@ -25760,11 +25790,18 @@
 	        ? criticalMeta.criticalTokens.slice()
 	        : getDashboardCriticalProjectTokens_(readModelHomeData.projects);
 	      await applyDashboardCriticalThumbnailReadiness_(readModelHomeData, criticalTokens, coordinator);
-	      rememberDashboardHomeResponse_(payload, readModelHomeData);
+	      coordinator.cacheProfile = readModelHomeData.dashboardCacheProfile || coordinator.cacheProfile;
+	      const cacheStored = rememberDashboardHomeResponse_(payload, readModelHomeData);
+	      const returnCacheStored = rememberProjectDashboardReturnReady_(payload, readModelHomeData);
 	      logDashboardCoordinator_(coordinator, 'dashboard_project_return_prewarm_ready', {
 	        ok: true,
 	        routeType: 'project_dashboard_prewarm',
 	        source: String(reason || 'project-loaded'),
+	        cacheHit: false,
+	        cacheStored: cacheStored === true,
+	        returnCacheStored: returnCacheStored === true,
+	        criticalReady: isDashboardHomeCriticalReady_(readModelHomeData),
+	        cacheProfile: readModelHomeData.dashboardCacheProfile || '',
 	        projectCount: Array.isArray(readModelHomeData.projects) ? readModelHomeData.projects.length : 0,
 	        criticalCount: criticalTokens.length,
 	        thumbnailReadyCount: readModelHomeData.dashboardCritical && readModelHomeData.dashboardCritical.thumbnailReadyCount,
@@ -33818,6 +33855,75 @@
           routeType: 'project_to_dashboard',
           cacheHit: true,
           projectCount: Array.isArray(cachedDashboardHomeData.projects) ? cachedDashboardHomeData.projects.length : 0
+        });
+      }
+
+      const returnReadyDashboardHomeData = cacheBypassReason ? null : getProjectDashboardReturnReady_(dashboardRequestPayload);
+      if (returnReadyDashboardHomeData && isDashboardHomeCriticalReady_(returnReadyDashboardHomeData)) {
+        markPortalClientLoadBudget_(trace, 'prewarm_cache_render_start', 'dashboard_return_cache', {
+          routeType: 'project_to_dashboard',
+          cacheHit: true,
+          prefetchHit: true,
+          projectCount: Array.isArray(returnReadyDashboardHomeData.projects) ? returnReadyDashboardHomeData.projects.length : 0
+        });
+        await renderDashboardHomeFromProjectReturn_(returnReadyDashboardHomeData, {
+          historyMode: 'push',
+          requestPayload: dashboardRequestPayload
+        });
+        logPortalClientLoadBudget_(trace, 'prewarm_cache_rendered', 'dashboard_return_cache', {
+          routeType: 'project_to_dashboard',
+          ok: true,
+          cacheHit: true,
+          prefetchHit: true,
+          projectCount: Array.isArray(returnReadyDashboardHomeData.projects) ? returnReadyDashboardHomeData.projects.length : 0
+        });
+        logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'dashboard_return_cache', {
+          routeType: 'project_to_dashboard',
+          ok: true,
+          cacheHit: true,
+          prefetchHit: true,
+          loaderShown: false,
+          projectCount: Array.isArray(returnReadyDashboardHomeData.projects) ? returnReadyDashboardHomeData.projects.length : 0
+        });
+        return;
+      }
+
+      const prewarmInflight = cacheBypassReason ? null : getProjectDashboardReturnPrewarmInflight_(dashboardRequestPayload);
+      if (prewarmInflight) {
+        markPortalClientLoadTiming_(trace, 'prewarm_wait_start', {
+          routeType: 'project_to_dashboard',
+          prefetchHit: true
+        });
+        const prewarmDashboardHomeData = await Promise.race([
+          prewarmInflight,
+          waitMs_(PROJECT_DASHBOARD_RETURN_PREWARM_WAIT_MS).then(() => null)
+        ]);
+        if (prewarmDashboardHomeData && isDashboardHomeCriticalReady_(prewarmDashboardHomeData)) {
+          await renderDashboardHomeFromProjectReturn_(prewarmDashboardHomeData, {
+            historyMode: 'push',
+            requestPayload: dashboardRequestPayload
+          });
+          logPortalClientLoadBudget_(trace, 'prewarm_inflight_rendered', 'dashboard_return_cache', {
+            routeType: 'project_to_dashboard',
+            ok: true,
+            cacheHit: false,
+            prefetchHit: true,
+            projectCount: Array.isArray(prewarmDashboardHomeData.projects) ? prewarmDashboardHomeData.projects.length : 0
+          });
+          logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'dashboard_return_cache', {
+            routeType: 'project_to_dashboard',
+            ok: true,
+            cacheHit: false,
+            prefetchHit: true,
+            loaderShown: false,
+            projectCount: Array.isArray(prewarmDashboardHomeData.projects) ? prewarmDashboardHomeData.projects.length : 0
+          });
+          return;
+        }
+        markPortalClientLoadTiming_(trace, 'prewarm_wait_miss', {
+          routeType: 'project_to_dashboard',
+          prefetchHit: true,
+          timedOut: !prewarmDashboardHomeData
         });
       }
 
