@@ -17417,27 +17417,27 @@
     #projectView .sku-grid-head{
       color:var(--rt-muted);
     }
-	    #projectView .sku-grid-head.sizeHead{
-	      display:flex;
-	      flex-direction:column;
-	      align-items:center;
-	      justify-content:center;
+    #projectView .sku-grid-head.sizeHead{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
       gap:1px;
       text-transform:none;
-	      letter-spacing:0;
-	      position:relative;
-	      width:100%;
-	      min-width:0;
-	      overflow:visible;
-	    }
-	    #projectView .sku-grid-head.sizeHead .skuSizeLabel{
-	      display:block;
-	      font-size:1.3em;
-	      font-weight:900;
+      letter-spacing:0;
+      position:relative;
+      width:100%;
+      min-width:0;
+      overflow:visible;
+    }
+    #projectView .sku-grid-head.sizeHead .skuSizeLabel{
+      display:block;
+      font-size:1.3em;
+      font-weight:900;
       line-height:1.05;
       letter-spacing:.04em;
       text-transform:uppercase;
-      color:var(--rt-text);
+      color:rgba(255,255,255,.58);
       position:relative;
       z-index:1;
       transition:color .14s ease, text-shadow .14s ease;
@@ -17447,13 +17447,19 @@
       font-size:12px;
       font-weight:500;
       line-height:1.1;
-      color:var(--rt-muted);
+      color:rgba(255,255,255,.5);
       text-transform:none;
       letter-spacing:0;
       white-space:nowrap;
       position:relative;
       z-index:1;
       transition:color .14s ease, text-shadow .14s ease;
+    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnFilled .skuSizeLabel{
+      color:#fff;
+    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnFilled .skuSizeUnit{
+      color:rgba(255,255,255,.9);
     }
     #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeLabel,
     #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeUnit{
@@ -18169,9 +18175,6 @@
     #projectView .sku-entry-panel .sku-grid-header .sku-grid-head.sizeHead .skuSizeLabel{
       font-size:1.729em;
     }
-    #projectView .sku-entry-panel .sku-grid-header .sku-grid-head.sizeHead .skuSizeUnit{
-      color:#fff;
-    }
     .authProjectsTable th,
     .snapshotBandTitle,
     .snapshotKey,
@@ -18432,7 +18435,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 245">245</div>
+  <div class="devRevisionBadge" aria-label="Development revision 246">246</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -48790,6 +48793,23 @@
     header.classList.toggle(className, enabled === true);
   }
 
+  function syncQtyHeaderValueStateForSection_(section){
+    if (!(section instanceof HTMLElement)) return;
+    const filledHeaderKeys = new Set();
+    section.querySelectorAll('input.qty-input[data-print-job-id][data-sku-id][data-size]').forEach(input => {
+      if (parseQtyInputValue(input.value) <= 0) return;
+      const jobId = String(input.dataset.printJobId || '').trim();
+      const skuId = String(input.dataset.skuId || '').trim();
+      const size = String(input.dataset.size || '').trim();
+      if (!jobId || !skuId || !size) return;
+      filledHeaderKeys.add(makeSizeHeaderUnitKey(jobId, skuId, size));
+    });
+    section.querySelectorAll('.sku-grid-head.sizeHead[data-qty-header-key]').forEach(header => {
+      const key = String(header.dataset.qtyHeaderKey || '').trim();
+      header.classList.toggle('isQtyColumnFilled', key ? filledHeaderKeys.has(key) : false);
+    });
+  }
+
   function buildJobSection(job, isFirstVisible){
     const printJobNumber = getPrintJobDisplayNumber(job.printJobId);
     const section = createEl('section', 'pjCard printJobSection');
@@ -53952,6 +53972,7 @@
           renderSkuSummary(skuSummaryEl, skuUnits, skuTotal);
         }
       });
+      syncQtyHeaderValueStateForSection_(dom.section);
 
       const addOnData = renderAddOnsForJob(job, subtotal);
       const includeJobInTotals = jobQty > 0;
