@@ -17370,6 +17370,36 @@
       gap:1px;
       text-transform:none;
       letter-spacing:0;
+      position:relative;
+      isolation:isolate;
+      width:100%;
+      min-width:0;
+      border-radius:10px;
+      overflow:visible;
+      transition:text-shadow .14s ease;
+    }
+    #projectView .sku-grid-head.sizeHead::before{
+      content:"";
+      position:absolute;
+      inset:-2px 4px;
+      z-index:0;
+      pointer-events:none;
+      border-radius:10px;
+      opacity:0;
+      background:rgba(225,29,72,0);
+      box-shadow:none;
+      transition:opacity .14s ease, background-color .14s ease, box-shadow .14s ease, filter .14s ease;
+    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnHovered::before{
+      opacity:1;
+      background:rgba(225,29,72,.105);
+      box-shadow:0 0 0 1px rgba(225,29,72,.16), 0 0 14px rgba(225,29,72,.12);
+    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnActive::before{
+      opacity:1;
+      background:rgba(225,29,72,.16);
+      box-shadow:0 0 0 1px rgba(225,29,72,.28), 0 0 18px rgba(225,29,72,.3), 0 0 34px rgba(225,29,72,.16);
+      filter:blur(.15px);
     }
     #projectView .sku-grid-head.sizeHead .skuSizeLabel{
       display:block;
@@ -17379,6 +17409,9 @@
       letter-spacing:.04em;
       text-transform:uppercase;
       color:var(--rt-text);
+      position:relative;
+      z-index:1;
+      transition:color .14s ease, text-shadow .14s ease;
     }
     #projectView .sku-grid-head.sizeHead .skuSizeUnit{
       display:block;
@@ -17389,6 +17422,19 @@
       text-transform:none;
       letter-spacing:0;
       white-space:nowrap;
+      position:relative;
+      z-index:1;
+      transition:color .14s ease, text-shadow .14s ease;
+    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeLabel,
+    #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeUnit{
+      color:#fff;
+      text-shadow:0 1px 2px rgba(0,0,0,.42), 0 0 10px rgba(225,29,72,.22);
+    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnActive .skuSizeLabel,
+    #projectView .sku-grid-head.sizeHead.isQtyColumnActive .skuSizeUnit{
+      color:#fff;
+      text-shadow:0 1px 2px rgba(0,0,0,.58), 0 0 13px rgba(255,255,255,.16), 0 0 18px rgba(225,29,72,.34);
     }
     #projectView .sku-entry-panel .sku-grid-body{
       gap:2px;
@@ -18346,7 +18392,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 238">238</div>
+  <div class="devRevisionBadge" aria-label="Development revision 239">239</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -48676,6 +48722,26 @@
     }
   }
 
+  function getQtyHeaderForInput_(input){
+    if (!(input instanceof HTMLElement)) return null;
+    const jobId = String(input.dataset.printJobId || '').trim();
+    const skuId = String(input.dataset.skuId || '').trim();
+    const size = String(input.dataset.size || '').trim();
+    if (!jobId || !skuId || !size) return null;
+    const dom = JOB_DOM.get(jobId);
+    if (!dom || !dom.section) return null;
+    const key = makeSizeHeaderUnitKey(jobId, skuId, size);
+    return dom.section.querySelector('[data-qty-header-key="' + key + '"]');
+  }
+
+  function syncQtyHeaderInteractionState_(input, state, enabled){
+    if (!(input instanceof HTMLElement) || input.disabled) return;
+    const header = getQtyHeaderForInput_(input);
+    if (!header) return;
+    const className = state === 'active' ? 'isQtyColumnActive' : 'isQtyColumnHovered';
+    header.classList.toggle(className, enabled === true);
+  }
+
   function buildJobSection(job, isFirstVisible){
     const printJobNumber = getPrintJobDisplayNumber(job.printJobId);
     const section = createEl('section', 'pjCard printJobSection');
@@ -48913,6 +48979,10 @@
       gridHeader.appendChild(createEl('div', 'sku-grid-head colorChoiceHead', 'COLOR ENTRY'));
       sku.sizesAllowed.forEach(size => {
         const sizeHead = createEl('div', 'sku-grid-head sizeHead');
+        sizeHead.dataset.printJobId = job.printJobId;
+        sizeHead.dataset.skuId = sku.skuId;
+        sizeHead.dataset.size = size;
+        sizeHead.dataset.qtyHeaderKey = makeSizeHeaderUnitKey(job.printJobId, sku.skuId, size);
         sizeHead.appendChild(createEl('span', 'skuSizeLabel', size));
         const sizeUnit = createEl('span', 'skuSizeUnit', '-- ea');
         sizeUnit.dataset.sizeUnitKey = makeSizeHeaderUnitKey(job.printJobId, sku.skuId, size);
@@ -49107,6 +49177,19 @@
 
           inp.addEventListener('input', () => {
             applyQtyChange(parseQtyInputValue(inp.value));
+          });
+
+          inp.addEventListener('mouseenter', () => {
+            syncQtyHeaderInteractionState_(inp, 'hover', true);
+          });
+          inp.addEventListener('mouseleave', () => {
+            syncQtyHeaderInteractionState_(inp, 'hover', false);
+          });
+          inp.addEventListener('focus', () => {
+            syncQtyHeaderInteractionState_(inp, 'active', true);
+          });
+          inp.addEventListener('blur', () => {
+            syncQtyHeaderInteractionState_(inp, 'active', false);
           });
 
           inp.addEventListener('keydown', evt => {
