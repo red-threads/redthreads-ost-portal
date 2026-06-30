@@ -10505,6 +10505,27 @@ function getBlockingArtworkJobsForOrderAction_(ctx) {
     });
 }
 
+function getBlockingRoughDraftJobsForOrderAction_(ctx) {
+  if (!isArtworkDraftOrderGateEnabled_()) return [];
+  const ruleState = (ctx && typeof ctx === 'object' && Array.isArray(ctx.includedJobSelectionStates))
+    ? ctx
+    : buildOrderActionRuleState_(ctx);
+  return ruleState.includedJobSelectionStates
+    .filter(function(item) {
+      return item && item.roughDraftBlocked === true;
+    })
+    .map(function(item) {
+      const job = item.job || {};
+      const number = item.printJobNumber || getPrintJobDisplayNumberForOrder_(ruleState.printJobs, item.printJobId) || 1;
+      const name = trimString_(job.printJobName) || ('Project ' + number);
+      return {
+        printJobId: trimString_(item.printJobId || job.printJobId),
+        title: 'Print Job ' + number + ': ' + name,
+        subline: 'Final artwork is required before this job can be ordered.'
+      };
+    });
+}
+
 function validateOrderPlacementForAction_(ctx, options) {
   const opts = (options && typeof options === 'object') ? options : {};
   const ruleState = buildOrderActionRuleState_(ctx);
@@ -10522,6 +10543,14 @@ function validateOrderPlacementForAction_(ctx, options) {
       'artwork_approval_required',
       'Artwork approval is required before you can place this order.',
       { blockingJobs: blockingJobs }
+    );
+  }
+  const roughDraftBlockingJobs = getBlockingRoughDraftJobsForOrderAction_(ruleState);
+  if (roughDraftBlockingJobs.length) {
+    return buildOrderActionError_(
+      'artwork_final_draft_required',
+      'Final artwork is required before you can place this order.',
+      { blockingJobs: roughDraftBlockingJobs }
     );
   }
   const fulfillmentMethod = normalizeFulfillmentMethod_(ctx && ctx.orderDraft && ctx.orderDraft.fulfillmentMethod);
@@ -21371,6 +21400,90 @@ function normalizeSkusForOrder_(rawSkus, jobId) {
 
 /* ---------------- Order Draft Normalization + Pricing Helpers ---------------- */
 
+function normalizeArtworkDraftStateValueForOrder_(value, hint) {
+  const key = trimString_(hint).toLowerCase();
+  if (typeof value === 'boolean') {
+    if (key.indexOf('rough') >= 0) return value ? 'rough' : 'final';
+    if (key.indexOf('final') >= 0 || key.indexOf('production') >= 0 || key.indexOf('printready') >= 0 || key.indexOf('print_ready') >= 0) {
+      return value ? 'final' : 'rough';
+    }
+    return '';
+  }
+  const raw = trimString_(value);
+  if (!raw) return '';
+  const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+  if (
+    compact.indexOf('rough') >= 0 ||
+    compact.indexOf('notfinal') >= 0 ||
+    compact.indexOf('nonfinal') >= 0 ||
+    compact.indexOf('prelim') >= 0 ||
+    compact.indexOf('concept') >= 0 ||
+    compact.indexOf('workinprogress') >= 0 ||
+    compact.indexOf('wip') >= 0 ||
+    compact.indexOf('proof') >= 0 ||
+    compact.indexOf('placeholder') >= 0
+  ) {
+    return 'rough';
+  }
+  if (
+    compact.indexOf('final') >= 0 ||
+    compact.indexOf('productionready') >= 0 ||
+    compact.indexOf('printready') >= 0 ||
+    compact.indexOf('pressready') >= 0 ||
+    compact.indexOf('production') >= 0
+  ) {
+    return 'final';
+  }
+  return '';
+}
+
+function resolveArtworkDraftStateForOrder_(rawJob) {
+  const job = (rawJob && typeof rawJob === 'object') ? rawJob : {};
+  const mockups = (job.mockups && typeof job.mockups === 'object') ? job.mockups : {};
+  const artwork = (job.artwork && typeof job.artwork === 'object') ? job.artwork : {};
+  const production = (job.production && typeof job.production === 'object') ? job.production : {};
+  const candidates = [
+    { value: job.artworkDraftState, hint: 'artworkDraftState' },
+    { value: job.artworkDraftStatus, hint: 'artworkDraftStatus' },
+    { value: job.artworkDraftType, hint: 'artworkDraftType' },
+    { value: job.draftState, hint: 'draftState' },
+    { value: job.draftStatus, hint: 'draftStatus' },
+    { value: job.draftType, hint: 'draftType' },
+    { value: job.mockupDraftState, hint: 'mockupDraftState' },
+    { value: job.mockupDraftStatus, hint: 'mockupDraftStatus' },
+    { value: job.productionArtworkState, hint: 'productionArtworkState' },
+    { value: job.productionArtworkStatus, hint: 'productionArtworkStatus' },
+    { value: job.isFinalDraft, hint: 'isFinalDraft' },
+    { value: job.finalDraft, hint: 'finalDraft' },
+    { value: job.isRoughDraft, hint: 'isRoughDraft' },
+    { value: job.roughDraft, hint: 'roughDraft' },
+    { value: job.productionReady, hint: 'productionReady' },
+    { value: job.printReady, hint: 'printReady' },
+    { value: mockups.artworkDraftState, hint: 'mockups.artworkDraftState' },
+    { value: mockups.artworkDraftStatus, hint: 'mockups.artworkDraftStatus' },
+    { value: mockups.draftState, hint: 'mockups.draftState' },
+    { value: mockups.draftStatus, hint: 'mockups.draftStatus' },
+    { value: artwork.draftState, hint: 'artwork.draftState' },
+    { value: artwork.draftStatus, hint: 'artwork.draftStatus' },
+    { value: artwork.isFinalDraft, hint: 'artwork.isFinalDraft' },
+    { value: artwork.isRoughDraft, hint: 'artwork.isRoughDraft' },
+    { value: production.artworkDraftState, hint: 'production.artworkDraftState' },
+    { value: production.artworkDraftStatus, hint: 'production.artworkDraftStatus' },
+    { value: production.readyArtwork, hint: 'production.readyArtwork' },
+    { value: production.printReady, hint: 'production.printReady' }
+  ];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const state = normalizeArtworkDraftStateValueForOrder_(candidates[i].value, candidates[i].hint);
+    if (state === 'rough' || state === 'final') return state;
+  }
+  return 'final';
+}
+
+function isArtworkDraftOrderGateEnabled_() {
+  // Future Calculator rough-draft enforcement must be enabled client and server side together.
+  return false;
+}
+
 function normalizePrintJobsForOrder_(rawPrintJobs) {
   const rawList = Array.isArray(rawPrintJobs)
     ? rawPrintJobs
@@ -21391,6 +21504,7 @@ function normalizePrintJobsForOrder_(rawPrintJobs) {
         decorations: Array.isArray(rawJob.decorations) ? rawJob.decorations : [],
         addOns: Array.isArray(rawJob.addOns) ? rawJob.addOns.map((item, addOnIdx) => Object.assign({ __idx: addOnIdx }, item || {})) : [],
         skus: skus,
+        artworkDraftState: resolveArtworkDraftStateForOrder_(rawJob),
         mockups: (rawJob.mockups && typeof rawJob.mockups === 'object') ? rawJob.mockups : {},
         artworkOverridesBySlot: (rawJob.artworkOverridesBySlot && typeof rawJob.artworkOverridesBySlot === 'object')
           ? rawJob.artworkOverridesBySlot
@@ -21585,12 +21699,15 @@ function getMinimumUnitsForOrderJob_(job, portalState) {
 }
 
 function buildOrderJobSelectionStateForOrder_(job, portalState, printJobs) {
+  const artworkDraftState = normalizeArtworkDraftStateValueForOrder_(job && job.artworkDraftState, 'artworkDraftState') || 'final';
   return {
     job: job,
     printJobId: trimString_(job && job.printJobId),
     printJobNumber: getPrintJobDisplayNumberForOrder_(printJobs, job && job.printJobId),
     enteredUnits: getEnteredUnitsForOrderJob_(job, portalState),
-    minimumUnits: getMinimumUnitsForOrderJob_(job, portalState)
+    minimumUnits: getMinimumUnitsForOrderJob_(job, portalState),
+    artworkDraftState: artworkDraftState,
+    roughDraftBlocked: isArtworkDraftOrderGateEnabled_() && artworkDraftState === 'rough'
   };
 }
 

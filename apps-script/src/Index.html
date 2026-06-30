@@ -4318,6 +4318,68 @@
     }
     .mockupFrame.clickable{cursor:zoom-in}
     .mockupFrame.disabled{cursor:default; opacity:.7}
+    .mockupFrame .artDraftBadge{
+      position:absolute;
+      top:10px;
+      right:10px;
+      z-index:4;
+      border-radius:999px;
+      padding:6px 10px;
+      min-height:28px;
+      border:1px solid rgba(255,255,255,.24);
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.08em;
+      line-height:1;
+      text-transform:uppercase;
+      cursor:help;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 8px 18px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.12);
+      transition:filter .14s ease, border-color .14s ease, box-shadow .14s ease, transform .14s ease;
+    }
+    .mockupFrame .artDraftBadge.isFinal{
+      border-color:rgba(81,255,183,.82);
+      color:#032317;
+      background:linear-gradient(135deg,#51ffb7 0%, #34d399 100%);
+    }
+    .mockupFrame .artDraftBadge.isRough{
+      border-color:rgba(203,213,225,.42);
+      color:#e2e8f0;
+      background:linear-gradient(135deg,rgba(100,116,139,.94) 0%, rgba(51,65,85,.94) 100%);
+    }
+    .mockupFrame .artDraftBadge:hover,
+    .mockupFrame .artDraftBadge:focus-visible{
+      outline:none;
+      filter:brightness(1.05);
+      transform:translateY(-1px);
+      border-color:rgba(255,255,255,.48);
+      box-shadow:0 12px 24px rgba(0,0,0,.34), 0 0 0 3px rgba(81,255,183,.16), inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .artDraftTooltip{
+      position:fixed;
+      z-index:999999;
+      max-width:280px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.2);
+      background:rgba(4,7,16,.94);
+      color:var(--rt-text);
+      box-shadow:0 18px 34px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08);
+      font-size:12px;
+      font-weight:800;
+      line-height:1.35;
+      text-align:center;
+      opacity:0;
+      transform:translateY(4px);
+      pointer-events:none;
+      transition:opacity .12s ease, transform .12s ease;
+    }
+    .artDraftTooltip.isVisible{
+      opacity:1;
+      transform:translateY(0);
+    }
     .mockupImg{
       width:100%;
       height:100%;
@@ -18103,7 +18165,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 233">233</div>
+  <div class="devRevisionBadge" aria-label="Development revision 234">234</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19779,6 +19841,102 @@
       .map(key => rawPrintJobs[key]);
   }
 
+  function normalizeArtworkDraftStateValue_(value, hint){
+    const key = String(hint || '').trim().toLowerCase();
+    if (typeof value === 'boolean') {
+      if (key.indexOf('rough') >= 0) return value ? 'rough' : 'final';
+      if (key.indexOf('final') >= 0 || key.indexOf('production') >= 0 || key.indexOf('printready') >= 0 || key.indexOf('print_ready') >= 0) {
+        return value ? 'final' : 'rough';
+      }
+      return '';
+    }
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return '';
+    const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+    if (
+      compact.indexOf('rough') >= 0
+      || compact.indexOf('notfinal') >= 0
+      || compact.indexOf('nonfinal') >= 0
+      || compact.indexOf('prelim') >= 0
+      || compact.indexOf('concept') >= 0
+      || compact.indexOf('workinprogress') >= 0
+      || compact.indexOf('wip') >= 0
+      || compact.indexOf('proof') >= 0
+      || compact.indexOf('placeholder') >= 0
+    ) {
+      return 'rough';
+    }
+    if (
+      compact.indexOf('final') >= 0
+      || compact.indexOf('productionready') >= 0
+      || compact.indexOf('printready') >= 0
+      || compact.indexOf('pressready') >= 0
+      || compact.indexOf('production') >= 0
+    ) {
+      return 'final';
+    }
+    return '';
+  }
+
+  function collectArtworkDraftStateCandidates_(rawJob){
+    const job = (rawJob && typeof rawJob === 'object') ? rawJob : {};
+    const mockups = (job.mockups && typeof job.mockups === 'object') ? job.mockups : {};
+    const artwork = (job.artwork && typeof job.artwork === 'object') ? job.artwork : {};
+    const production = (job.production && typeof job.production === 'object') ? job.production : {};
+    return [
+      { value: job.artworkDraftState, hint: 'artworkDraftState' },
+      { value: job.artworkDraftStatus, hint: 'artworkDraftStatus' },
+      { value: job.artworkDraftType, hint: 'artworkDraftType' },
+      { value: job.draftState, hint: 'draftState' },
+      { value: job.draftStatus, hint: 'draftStatus' },
+      { value: job.draftType, hint: 'draftType' },
+      { value: job.mockupDraftState, hint: 'mockupDraftState' },
+      { value: job.mockupDraftStatus, hint: 'mockupDraftStatus' },
+      { value: job.productionArtworkState, hint: 'productionArtworkState' },
+      { value: job.productionArtworkStatus, hint: 'productionArtworkStatus' },
+      { value: job.isFinalDraft, hint: 'isFinalDraft' },
+      { value: job.finalDraft, hint: 'finalDraft' },
+      { value: job.isRoughDraft, hint: 'isRoughDraft' },
+      { value: job.roughDraft, hint: 'roughDraft' },
+      { value: job.productionReady, hint: 'productionReady' },
+      { value: job.printReady, hint: 'printReady' },
+      { value: mockups.artworkDraftState, hint: 'mockups.artworkDraftState' },
+      { value: mockups.artworkDraftStatus, hint: 'mockups.artworkDraftStatus' },
+      { value: mockups.draftState, hint: 'mockups.draftState' },
+      { value: mockups.draftStatus, hint: 'mockups.draftStatus' },
+      { value: artwork.draftState, hint: 'artwork.draftState' },
+      { value: artwork.draftStatus, hint: 'artwork.draftStatus' },
+      { value: artwork.isFinalDraft, hint: 'artwork.isFinalDraft' },
+      { value: artwork.isRoughDraft, hint: 'artwork.isRoughDraft' },
+      { value: production.artworkDraftState, hint: 'production.artworkDraftState' },
+      { value: production.artworkDraftStatus, hint: 'production.artworkDraftStatus' },
+      { value: production.readyArtwork, hint: 'production.readyArtwork' },
+      { value: production.printReady, hint: 'production.printReady' }
+    ];
+  }
+
+  function resolveArtworkDraftStateFromRawPrintJob_(rawJob){
+    const candidates = collectArtworkDraftStateCandidates_(rawJob);
+    for (let i = 0; i < candidates.length; i += 1) {
+      const state = normalizeArtworkDraftStateValue_(candidates[i].value, candidates[i].hint);
+      if (state === 'rough' || state === 'final') return state;
+    }
+    return 'final';
+  }
+
+  function getArtworkDraftStateForJob_(job){
+    return normalizeArtworkDraftStateValue_(job && job.artworkDraftState, 'artworkDraftState') || 'final';
+  }
+
+  function isRoughDraftArtworkJob_(job){
+    return getArtworkDraftStateForJob_(job) === 'rough';
+  }
+
+  function isArtworkDraftOrderGateEnabled_(){
+    // Future Calculator rough-draft enforcement must be enabled client and server side together.
+    return false;
+  }
+
   function normalizePrintJobs(rawPrintJobs){
     const out = [];
     const used = new Set();
@@ -19809,6 +19967,7 @@
         decorations: Array.isArray(rawJob.decorations) ? rawJob.decorations : [],
         addOns: Array.isArray(rawJob.addOns) ? rawJob.addOns.map((a, aIdx) => Object.assign({ __idx: aIdx }, a || {})) : [],
         skus: skus,
+        artworkDraftState: resolveArtworkDraftStateFromRawPrintJob_(rawJob),
         mockups: {
           previewMockupFileId: normalizeFileId(mockups.previewMockupFileId),
           artMockupFileId: normalizeFileId(mockups.artMockupFileId),
@@ -42026,6 +42185,75 @@
     return ARTWORK_APPROVED_BY_JOB_ID[id] === true;
   }
 
+  function getArtworkDraftTooltipCopy_(state){
+    return state === 'rough'
+      ? 'Artwork is not final. You can only place your order when final artwork has been uploaded and approved.'
+      : 'Artwork is in a final draft and is optimized for production. Place your order at any time.';
+  }
+
+  function getArtworkDraftTooltipElement_(){
+    let tooltip = document.querySelector('[data-artwork-draft-tooltip]');
+    if (tooltip instanceof HTMLElement) return tooltip;
+    tooltip = createEl('div', 'artDraftTooltip');
+    tooltip.dataset.artworkDraftTooltip = '1';
+    tooltip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tooltip);
+    return tooltip;
+  }
+
+  function hideArtworkDraftTooltip_(){
+    const tooltip = document.querySelector('[data-artwork-draft-tooltip]');
+    if (!(tooltip instanceof HTMLElement)) return;
+    tooltip.classList.remove('isVisible');
+    tooltip.textContent = '';
+  }
+
+  function positionArtworkDraftTooltip_(tooltip, anchorEl){
+    if (!(tooltip instanceof HTMLElement) || !(anchorEl instanceof HTMLElement)) return false;
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const viewportPad = 10;
+    const preferredLeft = anchorRect.left + ((anchorRect.width - tooltipRect.width) / 2);
+    const maxLeft = Math.max(viewportPad, window.innerWidth - tooltipRect.width - viewportPad);
+    const left = Math.max(viewportPad, Math.min(maxLeft, preferredLeft));
+    const top = Math.max(viewportPad, anchorRect.top - tooltipRect.height - 8);
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+    return true;
+  }
+
+  function showArtworkDraftTooltip_(anchorEl){
+    if (!(anchorEl instanceof HTMLElement)) return;
+    const text = String(anchorEl.dataset.artworkDraftTooltipText || '').trim();
+    if (!text) return;
+    const tooltip = getArtworkDraftTooltipElement_();
+    tooltip.textContent = text;
+    tooltip.setAttribute('aria-label', text);
+    tooltip.classList.add('isVisible');
+    positionArtworkDraftTooltip_(tooltip, anchorEl);
+  }
+
+  function buildArtworkDraftBadge_(job){
+    const state = isRoughDraftArtworkJob_(job) ? 'rough' : 'final';
+    const label = state === 'rough' ? 'Rough Draft' : 'Final Draft';
+    const tooltip = getArtworkDraftTooltipCopy_(state);
+    const badge = createEl('button', 'artDraftBadge ' + (state === 'rough' ? 'isRough' : 'isFinal'), label);
+    badge.type = 'button';
+    badge.dataset.artworkDraftBadge = '1';
+    badge.dataset.artworkDraftState = state;
+    badge.dataset.artworkDraftTooltipText = tooltip;
+    badge.setAttribute('aria-label', label + '. ' + tooltip);
+    badge.addEventListener('click', evt => {
+      evt.preventDefault();
+      evt.stopPropagation();
+    });
+    badge.addEventListener('mouseenter', () => showArtworkDraftTooltip_(badge));
+    badge.addEventListener('mouseleave', () => hideArtworkDraftTooltip_());
+    badge.addEventListener('focus', () => showArtworkDraftTooltip_(badge));
+    badge.addEventListener('blur', () => hideArtworkDraftTooltip_());
+    return badge;
+  }
+
   function setArtworkApprovedForJob(jobId, approved){
     const id = String(jobId || '').trim();
     if (!id) return;
@@ -42114,11 +42342,14 @@
   /* ---------------- Order-Flow Rule Layer ---------------- */
 
   function buildOrderFlowJobSelectionState_(job){
+    const artworkDraftState = getArtworkDraftStateForJob_(job);
     return {
       job: job,
       enteredUnits: getOrderFlowEnteredUnitsForJob_(job),
       minimumUnits: getOrderFlowMinimumUnitsForJob_(job),
-      artworkApproved: isArtworkApprovedForJob(job && job.printJobId)
+      artworkApproved: isArtworkApprovedForJob(job && job.printJobId),
+      artworkDraftState: artworkDraftState,
+      roughDraftBlocked: isArtworkDraftOrderGateEnabled_() && artworkDraftState === 'rough'
     };
   }
 
@@ -42234,6 +42465,25 @@
       });
   }
 
+  function getOrderFlowRoughDraftBlockerCandidates_(){
+    if (!isArtworkDraftOrderGateEnabled_()) return [];
+    return getOrderFlowIncludedJobSelectionStates_()
+      .filter(item => item.roughDraftBlocked)
+      .map(item => {
+        const job = item.job;
+        const number = getPrintJobDisplayNumber(job.printJobId);
+        const name = String(job.printJobName || ('Project ' + number)).trim();
+        return {
+          job: job,
+          printJobId: job.printJobId,
+          number: number,
+          name: name,
+          title: 'Print Job ' + number + ': ' + name,
+          subline: 'Final artwork is required before this job can be ordered.'
+        };
+      });
+  }
+
   function getOrderFlowMinimumBlockerCandidates_(){
     return getOrderFlowIncludedJobSelectionStates_()
       .filter(item => item.minimumUnits > 0 && item.enteredUnits < item.minimumUnits)
@@ -42315,6 +42565,19 @@
       return {
         kind: 'artwork',
         alertText: 'Order cannot be placed until all artwork is approved',
+        blockingJobs: blockingJobs
+      };
+    }
+    if (normalizedKind === 'rough_draft_artwork') {
+      const blockingJobs = getOrderFlowRoughDraftBlockerCandidates_().map(item => ({
+        printJobId: item.printJobId,
+        title: item.title,
+        subline: item.subline
+      }));
+      if (!blockingJobs.length) return null;
+      return {
+        kind: 'artwork',
+        alertText: 'Order cannot be placed until final artwork is uploaded and approved',
         blockingJobs: blockingJobs
       };
     }
@@ -45786,7 +46049,9 @@
   }
 
   function maybeBlockOrderFlow(){
-    return applyOrderFlowBlockerResult_(getOrderFlowBlockerResult_({ order: ['quantities', 'minimums', 'artwork'] }));
+    const order = ['quantities', 'minimums', 'artwork'];
+    if (isArtworkDraftOrderGateEnabled_()) order.push('rough_draft_artwork');
+    return applyOrderFlowBlockerResult_(getOrderFlowBlockerResult_({ order: order }));
   }
 
   function maybeBlockOrderFlowMinimums(){
@@ -45807,6 +46072,13 @@
     }
     if (code === 'artwork_approval_required') {
       if (setOrderFlowBlockingJobsState(resp && resp.blockingJobs)) return true;
+      return maybeBlockOrderFlow();
+    }
+    if (code === 'artwork_final_draft_required') {
+      if (setOrderFlowBlockingJobsState(resp && resp.blockingJobs, {
+        kind: 'artwork',
+        alertText: 'Order cannot be placed until final artwork is uploaded and approved'
+      })) return true;
       return maybeBlockOrderFlow();
     }
     if (opts.surface === 'checkout') {
@@ -48126,6 +48398,7 @@
     const mockupEmpty = createEl('div', 'mockupEmpty', 'Mockup unavailable');
 
     const mockupControls = createEl('div', 'mockupControls');
+    const artworkDraftBadge = buildArtworkDraftBadge_(job);
     const slotLeft = createEl('div', 'mockupSlot left');
     const prevBtn = createEl('button', 'mockupBtn', '\u25c0');
     prevBtn.type = 'button';
@@ -48158,6 +48431,7 @@
 
     mockupFrame.appendChild(mockupImg);
     mockupFrame.appendChild(mockupEmpty);
+    mockupFrame.appendChild(artworkDraftBadge);
     mockupFrame.appendChild(mockupControls);
     mockupBlock.appendChild(mockupFrame);
 
