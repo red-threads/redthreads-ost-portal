@@ -24668,9 +24668,10 @@ function buildPortalDocumentFileName_(documentReference) {
 function buildPortalEstimateEmailSubject_(documentReference) {
   const ref = buildPortalDocumentReference_(documentReference);
   const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
-  return buildPortalEmailSubject_('Estimate copy', {
-    projectNumber: projectNumber
-  }, { documentLabel: ref.displayLabel });
+  if (!isGenericPortalDocumentProjectNumber_(projectNumber)) {
+    return 'Project #' + projectNumber.replace(/^#+/, '') + ' — Estimate copy';
+  }
+  return 'Estimate copy';
 }
 
 function buildPortalEstimateEmailHeading_(documentReference) {
@@ -38500,7 +38501,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
             family: 'summary_pdf',
             recipientClass: 'client',
             attachmentCount: 1,
-            subject: buildPortalEmailSubject_('Estimate copy', subjectSource)
+            subject: buildPortalEstimateEmailSubject_(subjectSource)
           }));
         } else {
           const estimateRow = findEmailReviewEstimateRow_(fixture);
@@ -38533,7 +38534,7 @@ function sendEmailReviewUtilityExamples_(results, fixture, recipients) {
             transport: trimString_(summaryResult && summaryResult.transport),
             noReply: summaryResult && summaryResult.noReply === true
           }, {
-            subject: buildPortalEmailSubject_('Estimate copy', subjectSource)
+            subject: buildPortalEstimateEmailSubject_(subjectSource)
           }));
         }
       } else {

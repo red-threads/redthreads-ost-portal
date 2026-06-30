@@ -7379,6 +7379,10 @@
       background:transparent;
       box-shadow:none;
     }
+    .summaryEstimateToggleGroup.hasTaxTipsLink{
+      width:100%;
+      align-items:stretch;
+    }
     .summaryEstimateToggleRow{
       border:1px solid rgba(255,255,255,.12);
       border-radius:14px;
@@ -7399,6 +7403,10 @@
     }
     .summaryEstimateToggleGroup.isFlat .summaryEstimateToggleRow{
       width:100%;
+    }
+    .summaryEstimateToggleRow.isSalesTaxToggle:not(:disabled),
+    .summaryEstimateToggleRow.isSalesTaxToggle:not(:disabled) *{
+      cursor:pointer;
     }
     .summaryEstimateToggleLabel{
       color:var(--rt-text);
@@ -7464,15 +7472,20 @@
     }
     .summaryEstimateTaxTipsLink{
       appearance:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:100%;
+      margin:1px auto 0;
       border:0;
       background:transparent;
-      padding:0 2px;
+      padding:0 4px;
       color:rgba(60,232,171,.96);
       font-size:10px;
       font-weight:800;
       line-height:1.2;
       letter-spacing:.01em;
-      text-align:left;
+      text-align:center;
       text-decoration:underline;
       text-underline-offset:3px;
       cursor:pointer;
@@ -17442,24 +17455,27 @@
       z-index:1;
       transition:color .14s ease, text-shadow .14s ease;
     }
-	    #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeLabel,
-	    #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeUnit{
-	      color:#fff;
-	      text-shadow:
-	        0 1px 2px rgba(0,0,0,.5),
-	        0 0 3px rgba(225,29,72,.24),
-	        0 0 8px rgba(225,29,72,.18);
-	    }
-	    #projectView .sku-grid-head.sizeHead.isQtyColumnActive .skuSizeLabel,
-	    #projectView .sku-grid-head.sizeHead.isQtyColumnActive .skuSizeUnit{
-	      color:#fff;
-	      text-shadow:
-	        0 1px 2px rgba(0,0,0,.68),
-	        0 0 2px rgba(255,255,255,.24),
-	        0 0 4px rgba(225,29,72,.38),
-	        0 0 9px rgba(225,29,72,.34),
-	        0 0 16px rgba(225,29,72,.24);
-	    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeLabel,
+    #projectView .sku-grid-head.sizeHead.isQtyColumnHovered .skuSizeUnit{
+      color:#fff;
+      text-shadow:
+        0 1px 2px rgba(0,0,0,.62),
+        0 0 2px rgba(255,255,255,.18),
+        0 0 4px rgba(225,29,72,.38),
+        0 0 9px rgba(225,29,72,.32),
+        0 0 16px rgba(225,29,72,.2);
+    }
+    #projectView .sku-grid-head.sizeHead.isQtyColumnActive .skuSizeLabel,
+    #projectView .sku-grid-head.sizeHead.isQtyColumnActive .skuSizeUnit{
+      color:#fff;
+      text-shadow:
+        0 1px 2px rgba(0,0,0,.72),
+        0 0 2px rgba(255,255,255,.28),
+        0 0 4px rgba(255,64,101,.62),
+        0 0 10px rgba(225,29,72,.58),
+        0 0 18px rgba(225,29,72,.42),
+        0 0 28px rgba(225,29,72,.26);
+    }
     #projectView .sku-entry-panel .sku-grid-body{
       gap:2px;
     }
@@ -18416,7 +18432,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 244">244</div>
+  <div class="devRevisionBadge" aria-label="Development revision 245">245</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -52757,6 +52773,7 @@
         'isSalesTaxToggle',
         ''
       );
+      salesTaxGroup.classList.add('hasTaxTipsLink');
       const tipsLink = createEl('button', 'summaryEstimateTaxTipsLink', "View sales tax do's and don'ts");
       tipsLink.type = 'button';
       tipsLink.disabled = isBusy;
