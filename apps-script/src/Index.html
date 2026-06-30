@@ -17405,9 +17405,21 @@
       border:1px solid var(--rt-inputBorder);
       color:var(--rt-text);
     }
+    #projectView .qtyInput{
+      transition:border-color .12s ease, box-shadow .12s ease, background .12s ease, color .12s ease, text-shadow .12s ease, backdrop-filter .12s ease, -webkit-backdrop-filter .12s ease;
+    }
     #projectView .qtyInput::placeholder,
     #projectView .colorNameInput::placeholder{
       color:rgba(255,255,255,.46);
+    }
+    #projectView .qtyInput:not(:disabled):hover:not(:focus){
+      border-color:rgba(225,29,72,.6);
+      box-shadow:0 0 0 3px rgba(225,29,72,.19), inset 0 1px 0 rgba(255,255,255,.08);
+      background:var(--rt-input);
+      color:rgba(255,255,255,.96);
+      text-shadow:0 1px 0 rgba(0,0,0,.34), 0 0 10px rgba(255,255,255,.12);
+      -webkit-backdrop-filter:blur(6px);
+      backdrop-filter:blur(6px);
     }
     #projectView .qtyInput:focus,
     #projectView .colorNameInput:focus{
@@ -18260,7 +18272,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 235">235</div>
+  <div class="devRevisionBadge" aria-label="Development revision 236">236</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
