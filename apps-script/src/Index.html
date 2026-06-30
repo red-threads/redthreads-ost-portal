@@ -4828,24 +4828,22 @@
       transform:translateX(-50%);
       bottom:24px;
       height:60px;
-      min-width:380px;
+      min-width:220px;
       background:var(--c-comp-rgba-255-255-255-0p85);
       border-radius:999px;
-      display:grid;
-      grid-template-columns:1fr auto 1fr;
+      display:flex;
       align-items:center;
+      justify-content:center;
       padding:0 16px;
-      gap:12px;
+      gap:14px;
       z-index:2;
       border:2px solid var(--c-comp-hex-111111);
     }
     .lightboxControls.hidden{display:none}
-    .lightboxSlot{display:flex;align-items:center;justify-content:center}
-    .lightboxSlot.left{justify-content:flex-start}
-    .lightboxSlot.right{justify-content:flex-end}
     .lightboxSideNav{
-      position:absolute;
+      position:fixed;
       top:50%;
+      transform:translateY(-50%);
       width:48px;
       height:48px;
       border-radius:999px;
@@ -4863,11 +4861,16 @@
       box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
       transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
     }
+    .lightboxSideNav.prev{left:24px}
+    .lightboxSideNav.next{right:24px}
     .lightboxSideNav.hidden{
       display:none !important;
     }
     .lightboxImageMeta{
       position:absolute;
+      left:18px;
+      right:18px;
+      bottom:18px;
       z-index:3;
       display:flex;
       align-items:center;
@@ -13831,61 +13834,72 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      padding:30px 86px;
+      padding:72px 24px 96px;
+      box-sizing:border-box;
     }
     .artworkPreviewClose{
       position:absolute;
       top:18px;
       right:20px;
-      width:44px;
-      height:44px;
+      width:42px;
+      height:42px;
       border-radius:999px;
-      border:1px solid rgba(225,29,72,.72);
-      background:rgba(225,29,72,.2);
-      color:var(--rt-red);
-      font-size:27px;
+      border:1px solid rgba(225,29,72,.62);
+      background:rgba(225,29,72,.12);
+      color:#ff8da0;
+      font-size:18px;
       font-weight:900;
       line-height:1;
       cursor:pointer;
-      box-shadow:0 12px 22px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08);
-      transition:background-color .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease, transform .08s ease;
+      display:grid;
+      place-items:center;
+      z-index:4;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
     }
     .artworkPreviewClose:hover{
-      background:rgba(225,29,72,.3);
-      border-color:#ff6a8f;
-      color:#ffd6e2;
-      box-shadow:0 0 0 1px var(--rt-redRing), 0 14px 24px rgba(0,0,0,.34);
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
+      color:#fff;
+      transform:translateY(-1px);
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
     }
     .artworkPreviewClose:focus-visible{
       outline:none;
-      box-shadow:0 0 0 3px var(--rt-redRing), 0 12px 22px rgba(0,0,0,.34);
+      box-shadow:0 0 0 3px var(--rt-redRing), 0 16px 30px rgba(0,0,0,.36);
     }
     .artworkPreviewClose:active{
       transform:scale(0.98);
     }
     .artworkPreviewImageWrap{
       position:relative;
-      width:min(1200px, 100%);
-      height:min(86vh, 100%);
-      border-radius:16px;
-      border:1px solid var(--rt-glassBorder);
-      background:rgba(4,7,16,.74);
-      box-shadow:0 30px 58px rgba(0,0,0,.56), inset 0 1px 0 rgba(255,255,255,.08);
-      backdrop-filter:blur(18px) saturate(140%);
-      -webkit-backdrop-filter:blur(18px) saturate(140%);
+      width:100%;
+      height:100%;
+      flex:1 1 auto;
+      min-height:0;
+      max-height:100%;
+      border-radius:0;
+      border:none;
+      background:transparent;
+      box-shadow:none;
+      backdrop-filter:none;
+      -webkit-backdrop-filter:none;
       overflow:hidden;
       display:flex;
       align-items:center;
       justify-content:center;
-      padding:12px;
+      padding:0;
     }
     .artworkPreviewImage{
-      width:100%;
-      height:100%;
+      width:auto;
+      height:auto;
+      max-width:min(96vw, calc(100vw - 64px));
+      max-height:100%;
       object-fit:contain;
       user-select:none;
       -webkit-user-drag:none;
-      background:rgba(0,0,0,.18);
+      background:transparent;
+      box-shadow:0 10px 30px rgba(0,0,0,.65);
       transform:translate(0px,0px) scale(1);
       transform-origin:center center;
       touch-action:none;
@@ -13896,8 +13910,8 @@
     }
     .artworkPreviewMeta{
       position:absolute;
-      left:24px;
-      right:24px;
+      left:18px;
+      right:18px;
       bottom:18px;
       z-index:2;
       display:flex;
@@ -13930,20 +13944,21 @@
       color:rgba(203,213,225,.82);
     }
     .artworkPreviewNavBtn{
-      position:absolute;
+      position:fixed;
       top:50%;
       transform:translateY(-50%);
-      width:56px;
-      height:56px;
+      width:48px;
+      height:48px;
       border-radius:999px;
-      border:1px solid rgba(225,29,72,.72);
-      background:rgba(225,29,72,.15);
+      border:1px solid rgba(225,29,72,.62);
+      background:rgba(225,29,72,.12);
       cursor:pointer;
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      box-shadow:0 12px 24px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08);
-      transition:background-color .14s ease, border-color .14s ease, box-shadow .14s ease, transform .08s ease;
+      z-index:3;
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
     }
     .artworkPreviewNavBtn:hover{
       background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
@@ -13958,10 +13973,10 @@
       transform:translateY(-50%) scale(0.98);
     }
     .artworkPreviewNavBtn.prev{
-      left:18px;
+      left:24px;
     }
     .artworkPreviewNavBtn.next{
-      right:18px;
+      right:24px;
     }
     .artworkPreviewNavBtn[hidden]{
       display:none !important;
@@ -13973,11 +13988,11 @@
       border-bottom:11px solid transparent;
     }
     .artworkPreviewNavGlyph.left{
-      border-right:16px solid var(--rt-red);
+      border-right:16px solid #ff8da0;
       margin-left:-2px;
     }
     .artworkPreviewNavGlyph.right{
-      border-left:16px solid var(--rt-red);
+      border-left:16px solid #ff8da0;
       margin-right:-2px;
     }
     .artworkPreviewNavBtn:hover .artworkPreviewNavGlyph.left{
@@ -13988,11 +14003,11 @@
     }
     @media (max-width: 980px){
       .artworkPreviewStage{
-        padding:22px 58px;
+        padding:64px 20px 92px;
       }
       .artworkPreviewNavBtn{
-        width:48px;
-        height:48px;
+        width:44px;
+        height:44px;
       }
       .artworkPreviewNavGlyph{
         border-top-width:10px;
@@ -14004,6 +14019,65 @@
       .artworkPreviewNavGlyph.right{
         border-left-width:14px;
       }
+    }
+    .artworkPreviewControls{
+      position:absolute;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:24px;
+      height:60px;
+      min-width:220px;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:0 16px;
+      gap:14px;
+      z-index:2;
+      background:rgba(4,7,16,.82);
+      border:1px solid var(--rt-glassBorder);
+      box-shadow:0 14px 30px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.08);
+      backdrop-filter:blur(18px) saturate(140%);
+      -webkit-backdrop-filter:blur(18px) saturate(140%);
+    }
+    .artworkPreviewZoomBtn{
+      width:42px;
+      height:42px;
+      border-radius:999px;
+      border:1px solid rgba(225,29,72,.62);
+      background:rgba(225,29,72,.12);
+      color:#ff8da0;
+      text-shadow:0 1px 0 rgba(0,0,0,.35);
+      box-shadow:0 10px 20px rgba(0,0,0,.24), 0 0 0 1px rgba(225,29,72,.12);
+      font-weight:900;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      transition:background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
+    }
+    .artworkPreviewZoomBtn:hover{
+      background:linear-gradient(135deg,#fb7185 0%, #f43f5e 56%, #be123c 100%);
+      border-color:#ff8da0;
+      color:#fff;
+      box-shadow:0 12px 24px rgba(225,29,72,.34), 0 0 22px rgba(225,29,72,.2);
+    }
+    .artworkPreviewZoomBtn:active{
+      transform:scale(0.98);
+    }
+    .artworkPreviewZoomBtn:focus-visible{
+      outline:none;
+      border-color:var(--rt-red);
+      box-shadow:0 0 0 3px var(--rt-redRing);
+    }
+    .artworkPreviewZoomLabel{
+      min-width:46px;
+      padding:0 6px;
+      color:var(--rt-text);
+      font-size:14px;
+      font-weight:700;
+      text-align:center;
+      text-shadow:0 1px 0 rgba(0,0,0,.35);
     }
     .orderFlowBackdrop{
       position:fixed;
@@ -17116,7 +17190,7 @@
       transform:scale(0.98);
     }
     #projectView .lightbox .lightboxSideNav:active{
-      transform:scale(0.98);
+      transform:translateY(-50%) scale(0.98);
     }
     #projectView .lightbox .lightboxBtn:focus-visible{
       outline:none;
@@ -18389,7 +18463,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 240">240</div>
+  <div class="devRevisionBadge" aria-label="Development revision 241">241</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -18728,17 +18802,9 @@
           </div>
         </div>
         <div class="lightboxControls" id="lightboxControls">
-          <div class="lightboxSlot left">
-            <button class="lightboxBtn" id="lightboxPrevBtn" type="button" aria-label="Previous image">&#9664;</button>
-          </div>
-          <div class="lightboxSlot center">
-            <button class="lightboxBtn" id="zoomOutBtn" type="button" aria-label="Zoom out">-</button>
-            <span class="zoomLabel" id="zoomLabel">1x</span>
-            <button class="lightboxBtn" id="zoomInBtn" type="button" aria-label="Zoom in">+</button>
-          </div>
-          <div class="lightboxSlot right">
-            <button class="lightboxBtn" id="lightboxNextBtn" type="button" aria-label="Next image">&#9654;</button>
-          </div>
+          <button class="lightboxBtn" id="zoomOutBtn" type="button" aria-label="Zoom out">-</button>
+          <span class="zoomLabel" id="zoomLabel">1x</span>
+          <button class="lightboxBtn" id="zoomInBtn" type="button" aria-label="Zoom in">+</button>
         </div>
       </div>
     </div>
@@ -19375,6 +19441,11 @@
           <span class="artworkPreviewDraftStatus" id="artworkPreviewDraftStatus">Final Draft Art 1/1</span>
           <span class="artworkPreviewImageCount" id="artworkPreviewImageCount" hidden></span>
         </div>
+      </div>
+      <div class="artworkPreviewControls" id="artworkPreviewControls">
+        <button class="artworkPreviewZoomBtn" id="artworkPreviewZoomOut" type="button" aria-label="Zoom out">-</button>
+        <span class="artworkPreviewZoomLabel" id="artworkPreviewZoomLabel">1x</span>
+        <button class="artworkPreviewZoomBtn" id="artworkPreviewZoomIn" type="button" aria-label="Zoom in">+</button>
       </div>
       <button class="artworkPreviewNavBtn next" id="artworkPreviewNext" type="button" aria-label="Next image">
         <span class="artworkPreviewNavGlyph right" aria-hidden="true"></span>
@@ -24361,8 +24432,6 @@
   const lightboxEmpty = document.getElementById('lightboxEmpty');
   const lightboxClose = document.getElementById('lightboxClose');
   const lightboxControls = document.getElementById('lightboxControls');
-  const lightboxPrevBtn = document.getElementById('lightboxPrevBtn');
-  const lightboxNextBtn = document.getElementById('lightboxNextBtn');
   const lightboxSidePrevBtn = document.getElementById('lightboxSidePrevBtn');
   const lightboxSideNextBtn = document.getElementById('lightboxSideNextBtn');
   const lightboxImageMeta = document.getElementById('lightboxImageMeta');
@@ -24663,6 +24732,9 @@
   const artworkPreviewMeta = document.getElementById('artworkPreviewMeta');
   const artworkPreviewDraftStatus = document.getElementById('artworkPreviewDraftStatus');
   const artworkPreviewImageCount = document.getElementById('artworkPreviewImageCount');
+  const artworkPreviewZoomOut = document.getElementById('artworkPreviewZoomOut');
+  const artworkPreviewZoomIn = document.getElementById('artworkPreviewZoomIn');
+  const artworkPreviewZoomLabel = document.getElementById('artworkPreviewZoomLabel');
   const orderFlowBackdrop = document.getElementById('orderFlowBackdrop');
   const orderFlowModal = document.getElementById('orderFlowModal');
   const orderFlowAchDecisionModal = document.getElementById('orderFlowAchDecisionModal');
@@ -43111,6 +43183,7 @@
     artworkPreviewImage.style.transform = 'translate(' + ARTWORK_PREVIEW_PAN_X + 'px,' + ARTWORK_PREVIEW_PAN_Y + 'px) scale(' + ARTWORK_PREVIEW_ZOOM_LEVEL + ')';
     artworkPreviewImage.classList.toggle('isDragging', ARTWORK_PREVIEW_DRAGGING || ARTWORK_PREVIEW_POINTER_ACTIVE);
     artworkPreviewImage.style.cursor = (ARTWORK_PREVIEW_DRAGGING || ARTWORK_PREVIEW_POINTER_ACTIVE) ? 'grabbing' : 'zoom-in';
+    if (artworkPreviewZoomLabel) artworkPreviewZoomLabel.textContent = formatArtworkViewerZoomLabel_(ARTWORK_PREVIEW_ZOOM_LEVEL);
   }
 
   function resetArtworkPreviewPointerState_(){
@@ -54170,10 +54243,10 @@
   let startPanY = 0;
   let LIGHTBOX_UPLOAD_IN_FLIGHT = false;
 
-  const ARTWORK_VIEWER_ZOOM_STEP = 0.5;
+  const ARTWORK_VIEWER_ZOOM_STEP = 1;
   const ARTWORK_VIEWER_MIN_ZOOM = 1;
   const ARTWORK_VIEWER_MAX_ZOOM = 4;
-  const ARTWORK_VIEWER_ZOOM_CYCLE = Object.freeze([1, 1.5, 2, 2.5, 3, 3.5, 4]);
+  const ARTWORK_VIEWER_ZOOM_CYCLE = Object.freeze([1, 2, 3, 4]);
   const ARTWORK_VIEWER_CLICK_MOVE_THRESHOLD = 5;
 
   function clampArtworkViewerNumber_(value, min, max){
@@ -54239,37 +54312,10 @@
   }
 
   function updateLightboxOverlayGeometry_(){
-    if (!lightboxImgWrap) return;
-    const sourceEl = lightboxImg && lightboxImg.getAttribute('src')
-      ? lightboxImg
-      : ((lightboxEmpty && lightboxEmpty.style.display !== 'none') ? lightboxEmpty : null);
-    const wrapRect = lightboxImgWrap.getBoundingClientRect();
-    if (!sourceEl || !wrapRect.width || !wrapRect.height) return;
-    const imageRect = sourceEl.getBoundingClientRect();
-    const navSize = 48;
-    const navGap = 16;
-    const minPad = 12;
-    const maxNavLeft = Math.max(minPad, wrapRect.width - navSize - minPad);
-    const navTop = clampArtworkViewerNumber_(imageRect.top - wrapRect.top + (imageRect.height / 2) - (navSize / 2), minPad, Math.max(minPad, wrapRect.height - navSize - minPad));
-    const prevLeft = clampArtworkViewerNumber_(imageRect.left - wrapRect.left - navSize - navGap, minPad, maxNavLeft);
-    const nextLeft = clampArtworkViewerNumber_(imageRect.right - wrapRect.left + navGap, minPad, maxNavLeft);
-    if (lightboxSidePrevBtn) {
-      lightboxSidePrevBtn.style.left = Math.round(prevLeft) + 'px';
-      lightboxSidePrevBtn.style.top = Math.round(navTop) + 'px';
-    }
-    if (lightboxSideNextBtn) {
-      lightboxSideNextBtn.style.left = Math.round(nextLeft) + 'px';
-      lightboxSideNextBtn.style.top = Math.round(navTop) + 'px';
-    }
     if (lightboxImageMeta) {
-      const metaPad = 18;
-      const maxMetaLeft = Math.max(metaPad, wrapRect.width - 178);
-      const visibleLeft = clampArtworkViewerNumber_(imageRect.left - wrapRect.left + metaPad, metaPad, maxMetaLeft);
-      const visibleRight = clampArtworkViewerNumber_(imageRect.right - wrapRect.left - metaPad, visibleLeft + 160, Math.max(visibleLeft + 160, wrapRect.width - metaPad));
-      const metaTop = clampArtworkViewerNumber_(imageRect.bottom - wrapRect.top - 34, metaPad, Math.max(metaPad, wrapRect.height - 34));
-      lightboxImageMeta.style.left = Math.round(visibleLeft) + 'px';
-      lightboxImageMeta.style.top = Math.round(metaTop) + 'px';
-      lightboxImageMeta.style.width = Math.round(Math.max(160, visibleRight - visibleLeft)) + 'px';
+      lightboxImageMeta.style.removeProperty('left');
+      lightboxImageMeta.style.removeProperty('top');
+      lightboxImageMeta.style.removeProperty('width');
     }
   }
 
@@ -54364,9 +54410,6 @@
     renderLightboxUploadControls(job, slide);
 
     lightboxControls.classList.remove('hidden');
-    const showArrows = available.length > 1;
-    lightboxPrevBtn.classList.toggle('hidden', !showArrows);
-    lightboxNextBtn.classList.toggle('hidden', !showArrows);
     syncLightboxViewerOverlays_(job, available);
     if (!slide || !slide.candidates || !slide.candidates.length || (keepAllSlotsReachable && state.failed[LIGHTBOX.index])) {
       lightboxImg.removeAttribute('src');
@@ -54567,22 +54610,20 @@
     }
 
     lightboxClose.addEventListener('click', closeLightbox);
-    [lightboxPrevBtn, lightboxSidePrevBtn].forEach(btn => {
-      if (!btn) return;
-      btn.addEventListener('click', e => {
+    if (lightboxSidePrevBtn) {
+      lightboxSidePrevBtn.addEventListener('click', e => {
         e.preventDefault();
         e.stopPropagation();
         stepLightbox(-1);
       });
-    });
-    [lightboxNextBtn, lightboxSideNextBtn].forEach(btn => {
-      if (!btn) return;
-      btn.addEventListener('click', e => {
+    }
+    if (lightboxSideNextBtn) {
+      lightboxSideNextBtn.addEventListener('click', e => {
         e.preventDefault();
         e.stopPropagation();
         stepLightbox(1);
       });
-    });
+    }
     if (lightboxUploadBtn && lightboxUploadInput) {
       lightboxUploadBtn.addEventListener('click', e => {
         e.stopPropagation();
@@ -54672,6 +54713,18 @@
         if (e.key === 'ArrowRight') {
           e.preventDefault();
           stepArtworkPreview(1);
+          return;
+        }
+      }
+      if (isProjectLightboxOpen_()) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          stepLightbox(-1);
+          return;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          stepLightbox(1);
           return;
         }
       }
@@ -55094,6 +55147,20 @@
         stepArtworkPreview(1);
       });
     }
+    if (artworkPreviewZoomIn) {
+      artworkPreviewZoomIn.addEventListener('click', evt => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        cycleArtworkPreviewZoom_(1);
+      });
+    }
+    if (artworkPreviewZoomOut) {
+      artworkPreviewZoomOut.addEventListener('click', evt => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        cycleArtworkPreviewZoom_(-1);
+      });
+    }
     if (artworkPreviewImage) {
       artworkPreviewImage.addEventListener('dragstart', evt => evt.preventDefault());
       artworkPreviewImage.addEventListener('contextmenu', evt => {
@@ -55153,6 +55220,7 @@
         if (target.closest('#artworkPreviewImageWrap')) return;
         if (target.closest('#artworkPreviewPrev')) return;
         if (target.closest('#artworkPreviewNext')) return;
+        if (target.closest('#artworkPreviewControls')) return;
         if (target.closest('#artworkPreviewClose')) return;
         closeArtworkPreviewLightbox();
       });
