@@ -18416,7 +18416,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 243">243</div>
+  <div class="devRevisionBadge" aria-label="Development revision 244">244</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -43566,7 +43566,11 @@
   function renderOrderFlowSummaryCard(){
     if (!orderFlowSummaryGrid) return;
     orderFlowSummaryGrid.innerHTML = '';
-    const data = buildOrderFlowSummaryEstimateViewData_({ documentModeLabel: 'Project', includeShippingDetails: false });
+    const data = buildOrderFlowSummaryEstimateViewData_({
+      documentModeLabel: 'Project',
+      includeShippingDetails: false,
+      useOrderFlowInvoiceNumberLabel: true
+    });
     const inner = createEl('div', 'orderFlowSummaryInner');
     const preview = createEl('div', 'orderFlowSummaryPreview');
     preview.appendChild(buildSummaryEstimateCoverBlock_(data));
@@ -45132,8 +45136,13 @@
     const opts = (options && typeof options === 'object') ? options : {};
     if (!orderFlowSummaryViewerPages) return;
     if (!ORDER_FLOW_SUMMARY_VIEWER_OPEN && (!orderFlowSummaryViewerBackdrop || orderFlowSummaryViewerBackdrop.hidden)) return;
-    const data = buildOrderFlowSummaryEstimateViewData_({ documentModeLabel: 'Invoice', includeShippingDetails: true });
     const isPurchaseOrderViewer = isOrderFlowPurchaseOrderViewerMode_();
+    const isManualPaymentViewer = isOrderFlowManualPaymentViewerMode_();
+    const data = buildOrderFlowSummaryEstimateViewData_({
+      documentModeLabel: 'Invoice',
+      includeShippingDetails: true,
+      useOrderFlowInvoiceNumberLabel: !isPurchaseOrderViewer && !isManualPaymentViewer
+    });
     if (orderFlowSummaryViewerModal) {
       orderFlowSummaryViewerModal.classList.toggle('isPurchaseOrderViewer', isPurchaseOrderViewer);
     }
@@ -45142,7 +45151,7 @@
         orderFlowSummaryViewerTitle.textContent = String(ORDER_FLOW_PO_VIEW_STAGE || '').trim().toLowerCase() === 'submit'
           ? 'Submit Purchase Order'
           : 'Purchase Order Invoice';
-      } else if (isOrderFlowManualPaymentViewerMode_()) {
+      } else if (isManualPaymentViewer) {
         orderFlowSummaryViewerTitle.textContent = 'Review Manual Payment Order';
       } else {
         orderFlowSummaryViewerTitle.textContent = 'Final Order / Invoice Preview';
@@ -45153,7 +45162,7 @@
       orderFlowSummaryViewerSub.hidden = !showPreviewSub;
       if (isPurchaseOrderViewer) {
         orderFlowSummaryViewerSub.textContent = '';
-      } else if (isOrderFlowManualPaymentViewerMode_()) {
+      } else if (isManualPaymentViewer) {
         orderFlowSummaryViewerSub.textContent = 'Review the final invoice and confirm the order. Production begins only after Red Threads receives your manual payment.';
       } else if (showPreviewSub) {
         orderFlowSummaryViewerSub.textContent = 'Once your order is placed the final invoice will be emailed and production will begin.';
@@ -51820,7 +51829,7 @@
 
   function buildOrderFlowSummaryEstimateViewData_(options){
     const opts = (options && typeof options === 'object') ? options : {};
-    return buildSummaryEstimateViewDataForPresentation_(getOrderFlowSummaryPreviewPresentationState_(), {
+    const data = buildSummaryEstimateViewDataForPresentation_(getOrderFlowSummaryPreviewPresentationState_(), {
       includeZeroQtyJobs: false,
       includeHiddenZeroQtyJobs: false,
       includeHiddenRemovedJobs: false,
@@ -51830,6 +51839,10 @@
       forceShowShippingLine: opts.forceShowShippingLine !== false,
       includeShippingDetails: opts.includeShippingDetails === true
     });
+    if (opts.useOrderFlowInvoiceNumberLabel === true && data && data.header) {
+      data.header.documentDisplayLabel = 'Invoice# ' + (normalizeSummaryDocumentProjectNumber_(getDealNumber()) || '--');
+    }
+    return data;
   }
 
   function focusSummaryPurchaseOrderField_(id){
