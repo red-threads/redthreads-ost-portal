@@ -18103,7 +18103,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 229">229</div>
+  <div class="devRevisionBadge" aria-label="Development revision 231">231</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -25520,6 +25520,12 @@
     return clonePlainObject(entry.data);
   }
 
+  function getDashboardHomeBackgroundInflight_(requestPayload){
+    const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
+    if (!requestKey) return null;
+    return DASHBOARD_HOME_BACKGROUND_INFLIGHT.get(requestKey) || null;
+  }
+
   function rememberDashboardHomeResponse_(requestPayload, response, cacheSeq){
     if (typeof cacheSeq === 'number' && cacheSeq !== DASHBOARD_HOME_RESPONSE_CACHE_SEQ) return false;
     const requestKey = getDashboardHomeResponseCacheKey_(requestPayload);
@@ -29035,21 +29041,36 @@
 	      routeType: 'account_document_to_dashboard',
 	      source: routeType,
 	      cacheHit: false,
-	      loaderPolicy: 'show_global_loader'
+	      loaderPolicy: 'show_global_loader',
+	      prefetchHit: !!getDashboardHomeBackgroundInflight_(payload)
 	    });
 	    rtShowLoader('Loading dashboard', 'Finishing your account view.');
-	    loadDashboardHomeCriticalReady_({
-	      requestPayload: payload,
-	      suppressLoadingMessage: true,
-	      awaitPaint: true,
+	    const pendingBackground = getDashboardHomeBackgroundInflight_(payload);
+	    const dashboardReadyPromise = startDashboardHomeBackgroundLoad_(payload, routeType, {
 	      showPlaceholder: true,
-	      routeType: routeType
+	      preserveTransientState: true
 	    }).then(resp => {
+	      if (resp && resp.ok === true && hasDashboardProjectRows_()) return resp;
+	      const latestCached = getDashboardHomeCacheEntry_(buildDashboardHomeSummaryPayload_(payload));
+	      if (latestCached && isDashboardHomeCriticalReady_(latestCached)) {
+	        applyDashboardHomeData(latestCached);
+	        return latestCached;
+	      }
+	      return loadDashboardHomeCriticalReady_({
+	        requestPayload: payload,
+	        suppressLoadingMessage: true,
+	        awaitPaint: true,
+	        showPlaceholder: true,
+	        routeType: routeType
+	      });
+	    });
+	    dashboardReadyPromise.then(resp => {
 	      logPortalViewTransitionBudget_(transition, 'view_transition_ready', 'account_document_resume_fetch', {
 	        routeType: 'account_document_to_dashboard',
 	        source: routeType,
 	        ok: !!(resp && resp.ok === true),
 	        cacheHit: false,
+	        prefetchHit: !!pendingBackground,
 	        loaderShown: true,
 	        projectCount: resp && Array.isArray(resp.projects) ? resp.projects.length : 0
 	      });
