@@ -18441,7 +18441,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 247">247</div>
+  <div class="devRevisionBadge" aria-label="Development revision 248">248</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -45289,7 +45289,7 @@
           ? 'Submit Purchase Order'
           : 'Purchase Order Invoice';
       } else if (isManualPaymentViewer) {
-        orderFlowSummaryViewerTitle.textContent = 'Review Manual Payment Order';
+        orderFlowSummaryViewerTitle.textContent = 'Final invoice for your order';
       } else {
         orderFlowSummaryViewerTitle.textContent = 'Final Order / Invoice Preview';
       }
@@ -45300,7 +45300,7 @@
       if (isPurchaseOrderViewer) {
         orderFlowSummaryViewerSub.textContent = '';
       } else if (isManualPaymentViewer) {
-        orderFlowSummaryViewerSub.textContent = 'Review the final invoice and confirm the order. Production begins only after Red Threads receives your manual payment.';
+        orderFlowSummaryViewerSub.textContent = 'Review the final invoice for correctness and place your order. Turn time begins once Red Threads receives physical payment.';
       } else if (showPreviewSub) {
         orderFlowSummaryViewerSub.textContent = 'Once your order is placed the final invoice will be emailed and production will begin.';
       }
