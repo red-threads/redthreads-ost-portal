@@ -352,9 +352,10 @@ const PORTAL_DOCUMENT_KINDS = {
   po_submission: 'po_submission',
   summary_pdf: 'summary_pdf'
 };
-const PORTAL_DOCUMENT_REF_RE = /^(EST|INV)-(.+)-v(\d{1,4})$/i;
+const PORTAL_DOCUMENT_REF_RE = /^(EST|INV)-(.+)\.(\d{1,4})$/i;
+const PORTAL_DOCUMENT_REF_LEGACY_RE = /^(EST|INV)-(.+)-v(\d{1,4})$/i;
 const LEGACY_INVOICE_NUMBER_RE = /^INV-\d{8}-[A-Z0-9]{8}$/i;
-const PORTAL_RENDERED_INVOICE_FILE_NAME_RE = /^Red Threads(?: - Project [^-]+ - | Project(?:-[^-]+)?-)(?:Estimate|Invoice|Receipt|Receipt for Invoice|Summary)(?:\s+v\d{1,4}|-|\.)/i;
+const PORTAL_RENDERED_INVOICE_FILE_NAME_RE = /^Red Threads(?: - Project [^-]+ - | Project(?:-[^-]+)?-)(?:Estimate|Invoice|Receipt|Receipt for Invoice|Summary)(?:\s+(?:v\d{1,4}|[A-Za-z0-9_-]+\.\d{1,4})|-|\.)/i;
 const LEGACY_SERVER_INVOICE_FILE_NAME_RE = /^INV-\d{8}-[A-Z0-9]{8}\b/i;
 const CHAT_MESSAGE_DIGEST_DELAY_MS = 5 * 60 * 1000;
 const CHAT_MESSAGE_DIGEST_DIRECTIONS = {
@@ -4158,7 +4159,7 @@ function buildDashboardPeekSummaryMeta_(workflowContext, timeline, totals) {
     totalUnits: Math.max(0, parseInt(String(safeTotals.totalUnits || 0), 10) || 0),
     priceLabel: peek.productionStarted === true ? 'Final Cost' : 'Estimated Price',
     priceValue: Number.isFinite(Number(safeTotals.totalPrice)) ? Number(safeTotals.totalPrice) : null,
-    priceHelperText: peek.productionStarted === true ? '' : 'Price excludes taxes, shipping, CC fees',
+    priceHelperText: peek.productionStarted === true ? '' : 'Price excludes taxes and shipping',
     completionLabel: peek.productionStarted === true
       ? (peek.productionComplete === true ? 'Production Completed' : 'Production Will Finish')
       : 'Estimated Completion',
@@ -4340,7 +4341,7 @@ function buildDashboardProjectPeekMetaFromProjectionContextForProfile_(context, 
     totalPrice: null,
     currency: DEFAULT_STRIPE_PRICE_CURRENCY,
     priceLabel: hasDashboardPeekProductionStarted_(workflowContext) ? 'Final Cost' : 'Estimated Price',
-    priceDisclaimer: hasDashboardPeekProductionStarted_(workflowContext) ? '' : 'Price excludes taxes, shipping, CC fees'
+    priceDisclaimer: hasDashboardPeekProductionStarted_(workflowContext) ? '' : 'Price excludes taxes and shipping'
   };
 
   if (isLocked) {
@@ -4429,7 +4430,7 @@ function buildDashboardPeekTotalsFromEditableDraft_(draft, options) {
     totalPrice: roundMoney_(normalizedDraft.amountGrandTotal || 0),
     currency: trimString_(normalizedDraft.currency || DEFAULT_STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY,
     priceLabel: productionStarted ? 'Final Cost' : 'Estimated Price',
-    priceDisclaimer: productionStarted ? '' : 'Price excludes taxes, shipping, CC fees'
+    priceDisclaimer: productionStarted ? '' : 'Price excludes taxes and shipping'
   };
 }
 
@@ -4449,7 +4450,7 @@ function buildDashboardPeekTotalsFromLockedDraft_(draft, latestOrderSummary, opt
     totalPrice: paidCardChargedTotal || roundMoney_(latest.amountGrandTotal || normalizedDraft.amountGrandTotal || 0),
     currency: trimString_(latest.currency || normalizedDraft.currency || DEFAULT_STRIPE_PRICE_CURRENCY) || DEFAULT_STRIPE_PRICE_CURRENCY,
     priceLabel: productionStarted ? 'Final Cost' : 'Estimated Price',
-    priceDisclaimer: productionStarted ? '' : 'Price excludes taxes, shipping, CC fees'
+    priceDisclaimer: productionStarted ? '' : 'Price excludes taxes and shipping'
   };
 }
 
@@ -21926,6 +21927,10 @@ function computeRushAddOnAmount_(addOn, orderBasis) {
   return roundMoney_(Math.max(minAmount, orderBasis * pct));
 }
 
+function isCreditCardConvenienceFeeEnabled_() {
+  return false;
+}
+
 function normalizeSummaryOptionsForOrderDraft_(summaryOptions) {
   const source = (summaryOptions && typeof summaryOptions === 'object') ? summaryOptions : {};
   const hiddenZeroQtyJobIds = Array.isArray(source.hiddenZeroQtyJobIds)
@@ -21934,7 +21939,7 @@ function normalizeSummaryOptionsForOrderDraft_(summaryOptions) {
         .filter(Boolean)))
     : [];
   return {
-    creditCardFeeEnabled: source.creditCardFeeEnabled === true,
+    creditCardFeeEnabled: isCreditCardConvenienceFeeEnabled_() && source.creditCardFeeEnabled === true,
     salesTaxEnabled: source.salesTaxEnabled !== false,
     hiddenZeroQtyJobIds: hiddenZeroQtyJobIds
   };
@@ -24406,11 +24411,6 @@ function isGenericPortalDocumentProjectNumber_(value) {
   return !clean || clean === 'project' || clean === 'emailreview';
 }
 
-function zeroPadPortalDocumentVersion_(version) {
-  const n = Math.max(1, parseInt(String(version || 1), 10) || 1);
-  return n < 10 ? ('0' + n) : String(n);
-}
-
 function getPortalDocumentKindPrefix_(documentKind) {
   return normalizePortalDocumentKind_(documentKind) === PORTAL_DOCUMENT_KINDS.estimate ? 'EST' : 'INV';
 }
@@ -24420,7 +24420,7 @@ function parsePortalDocumentReference_(value) {
   const clean = source
     ? trimString_(source.documentRef || source.invoiceNumber || source.fileSafeRef)
     : trimString_(value);
-  const match = clean.match(PORTAL_DOCUMENT_REF_RE);
+  const match = clean.match(PORTAL_DOCUMENT_REF_RE) || clean.match(PORTAL_DOCUMENT_REF_LEGACY_RE);
   if (!match) return null;
   const prefix = trimString_(match[1]).toUpperCase();
   const projectNumber = normalizePortalDocumentProjectNumber_(match[2]);
@@ -24494,12 +24494,12 @@ function buildPortalDocumentReference_(input) {
   const invoiceKind = documentKind === PORTAL_DOCUMENT_KINDS.receipt ? PORTAL_DOCUMENT_KINDS.invoice : documentKind;
   const projectNumber = normalizePortalDocumentProjectNumber_(source.projectNumber || getPortalDocumentProjectNumber_(source));
   const version = Math.max(1, parseInt(String(source.version || 1), 10) || 1);
-  const padded = zeroPadPortalDocumentVersion_(version);
   const prefix = getPortalDocumentKindPrefix_(invoiceKind);
-  const documentRef = prefix + '-' + projectNumber + '-v' + padded;
+  const versionLabel = projectNumber + '.' + version;
+  const documentRef = prefix + '-' + versionLabel;
   const baseLabel = invoiceKind === PORTAL_DOCUMENT_KINDS.estimate
-    ? ('Estimate ' + projectNumber + '-v' + version)
-    : ('Invoice ' + projectNumber + '-v' + version);
+    ? ('Estimate ' + versionLabel)
+    : ('Invoice ' + versionLabel);
   const displayLabel = documentKind === PORTAL_DOCUMENT_KINDS.receipt
     ? ('Receipt for ' + baseLabel)
     : baseLabel;
@@ -24509,7 +24509,7 @@ function buildPortalDocumentReference_(input) {
     version: version,
     documentRef: documentRef,
     displayLabel: displayLabel,
-    fileSafeRef: prefix + '-' + projectNumber + '-v' + padded,
+    fileSafeRef: documentRef,
     fileName: buildPortalDocumentFileName_({
       projectNumber: projectNumber,
       documentKind: documentKind,
@@ -24537,14 +24537,15 @@ function buildPortalDocumentFileName_(documentReference) {
   const source = (documentReference && typeof documentReference === 'object') ? documentReference : {};
   const kind = normalizePortalDocumentKind_(source.documentKind);
   const projectNumber = normalizePortalDocumentProjectNumber_(source.projectNumber || getPortalDocumentProjectNumber_(source));
-  const padded = zeroPadPortalDocumentVersion_(source.version || 1);
+  const version = Math.max(1, parseInt(String(source.version || 1), 10) || 1);
+  const versionLabel = projectNumber + '.' + version;
   if (kind === PORTAL_DOCUMENT_KINDS.receipt) {
-    return 'Red Threads - Project ' + projectNumber + ' - Receipt for Invoice v' + padded + '.pdf';
+    return 'Red Threads - Project ' + projectNumber + ' - Receipt for Invoice ' + versionLabel + '.pdf';
   }
   if (kind === PORTAL_DOCUMENT_KINDS.estimate) {
-    return 'Red Threads - Project ' + projectNumber + ' - Estimate v' + padded + '.pdf';
+    return 'Red Threads - Project ' + projectNumber + ' - Estimate ' + versionLabel + '.pdf';
   }
-  return 'Red Threads - Project ' + projectNumber + ' - Invoice v' + padded + '.pdf';
+  return 'Red Threads - Project ' + projectNumber + ' - Invoice ' + versionLabel + '.pdf';
 }
 
 function buildPortalEstimateEmailSubject_(documentReference) {
@@ -24567,10 +24568,9 @@ function buildPortalEstimateEmailHeading_(documentReference) {
 function buildPortalEstimateEmailAttachmentSentence_(documentReference) {
   const ref = buildPortalDocumentReference_(documentReference);
   const projectNumber = normalizePortalDocumentProjectNumber_(ref.projectNumber);
-  const version = Math.max(1, parseInt(String(ref.version || 1), 10) || 1);
   const label = projectNumber && projectNumber !== 'Project'
-    ? ('Project ' + projectNumber + ' Estimate-V' + version)
-    : ('Estimate-V' + version);
+    ? ('Project ' + projectNumber + ' ' + ref.displayLabel)
+    : ref.displayLabel;
   return label + ' is attached to this email.';
 }
 
@@ -29963,7 +29963,7 @@ function deriveLifecycleEmailHeadingFromSubject_(subject) {
     return normalized.charAt(0).toUpperCase() + normalized.slice(1) + '.';
   }
   function isDocumentLabel(value) {
-    return /^(?:Receipt for\s+)?(?:Invoice|Estimate)\s+[A-Za-z0-9_-]+-v\d+$/i.test(trimString_(value));
+    return /^(?:Receipt for\s+)?(?:Invoice|Estimate)\s+[A-Za-z0-9_-]+(?:\.\d+|-v\d+)$/i.test(trimString_(value));
   }
   clean = clean.replace(/^\[EMAIL REVIEW\]\s+.+?\s+-\s+/i, '');
   clean = clean.replace(/^Red Threads\s+/i, '');
@@ -30750,7 +30750,7 @@ function buildLifecycleEmailUpdateSubheading_(heading) {
     return trimString_(part);
   }).filter(Boolean);
   const documentIndex = parts.findIndex(function(part) {
-    return /^(?:Receipt for\s+)?(?:Invoice|Estimate)\s+[A-Za-z0-9_-]+-v\d+$/i.test(part);
+    return /^(?:Receipt for\s+)?(?:Invoice|Estimate)\s+[A-Za-z0-9_-]+(?:\.\d+|-v\d+)$/i.test(part);
   });
   const documentLabel = documentIndex >= 0 ? parts[documentIndex] : '';
   let updateLabel = parts.filter(function(_, index) {
@@ -34936,7 +34936,7 @@ function generateInvoiceDocumentForOrder_(orderRowOrDraft, options) {
   body.appendParagraph('Shipping / Fees: ' + roundMoney_(draft.amountShipping));
   body.appendParagraph('Rush: ' + roundMoney_(draft.amountRush));
   body.appendParagraph('Tax: ' + roundMoney_(draft.amountTax));
-  if (roundMoney_(draft.amountCardFee) > 0) {
+  if (isCreditCardConvenienceFeeEnabled_() && roundMoney_(draft.amountCardFee) > 0) {
     body.appendParagraph('Card Fee: ' + roundMoney_(draft.amountCardFee));
   }
   const invoiceGrandTotal = roundMoney_(draft.amountChargedTotal) > 0
@@ -37301,7 +37301,7 @@ function buildEmailReviewCommunicationAssertionContract_(caseDef) {
     family: source.family,
     trigger: source.trigger || 'email_review_assertion',
     recipientClass: source.recipientClass,
-    documentLabel: source.documentLabel || 'Invoice ASSERT-v1'
+    documentLabel: source.documentLabel || 'Invoice ASSERT.1'
   });
 }
 
@@ -37348,7 +37348,7 @@ function appendEmailReviewCommunicationAssertionCases_(results) {
     dealNumber: 'ASSERT',
     projectName: 'Lifecycle communication assertion project',
     amountGrandTotal: 100,
-    invoiceNumber: 'INV-ASSERT-v1'
+    invoiceNumber: 'INV-ASSERT.1'
   };
   [
     {
@@ -39313,7 +39313,7 @@ function buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, opt
     })
     : draft;
   const fallbackItems = buildStripeCheckoutDefaultLineItems_(fallbackDraft);
-  const pricedFallbackItems = trimString_(paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.card
+  const pricedFallbackItems = isCreditCardConvenienceFeeEnabled_() && trimString_(paymentMethodSelected).toLowerCase() === PAYMENT_METHODS.card
     ? applyStripeCheckoutConvenienceFeeToLineItems_(fallbackItems, 0.03)
     : fallbackItems;
   return finalizeStripeCheckoutLineItemDescriptions_(pricedFallbackItems);
@@ -39450,7 +39450,7 @@ function buildStripeCheckoutLineItemsFromOrderDraft_(orderDraft, options) {
     return buildStripeCheckoutFallbackLineItems_(draft, paymentMethodSelected, { additionalTaxCents: additionalTaxCents });
   }
   const pricedLineItems = lineItems.map(finalizeStripeCheckoutLineItemPricing_);
-  const pricedCheckoutLineItems = paymentMethodSelected === PAYMENT_METHODS.card
+  const pricedCheckoutLineItems = isCreditCardConvenienceFeeEnabled_() && paymentMethodSelected === PAYMENT_METHODS.card
     ? applyStripeCheckoutConvenienceFeeToLineItems_(pricedLineItems, 0.03)
     : pricedLineItems;
   if (pricedCheckoutLineItems.length > 100) {
@@ -39515,7 +39515,7 @@ function summarizeStripeCheckoutChargeAmounts_(orderDraft, paymentMethodSelected
   const chargedTaxCents = (Array.isArray(checkoutLineItems) ? checkoutLineItems : [])
     .filter(isStripeCheckoutTaxLineItem_)
     .reduce((sum, item) => sum + Math.max(0, getStripeCheckoutLineItemAmountCents_(item)), 0);
-  const cardFeeCents = method === PAYMENT_METHODS.card
+  const cardFeeCents = isCreditCardConvenienceFeeEnabled_() && method === PAYMENT_METHODS.card
     ? Math.max(0, lineSubtotalCents - baseLineTotalCents)
     : 0;
   return {
@@ -39556,14 +39556,18 @@ function buildStripeCheckoutActualAmountSummary_(sessionObj, fallbackDraft) {
   if (Number.isFinite(subtotalCents) && subtotalCents >= 0) {
     summary.stripeAmountSubtotalCents = subtotalCents;
     const baseLineTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
-    summary.amountCardFee = roundMoney_(Math.max(0, subtotalCents - baseLineTotalCents) / 100);
+    summary.amountCardFee = isCreditCardConvenienceFeeEnabled_()
+      ? roundMoney_(Math.max(0, subtotalCents - baseLineTotalCents) / 100)
+      : 0;
   }
   if (Number.isFinite(totalCents) && totalCents >= 0) {
     summary.stripeAmountTotalCents = totalCents;
     summary.amountChargedTotal = roundMoney_(totalCents / 100);
     if (!Object.prototype.hasOwnProperty.call(summary, 'amountCardFee')) {
       const baseLineTotalCents = Math.max(0, Math.round(roundMoney_(draft.amountGrandTotal) * 100));
-      summary.amountCardFee = roundMoney_(Math.max(0, totalCents - baseLineTotalCents) / 100);
+      summary.amountCardFee = isCreditCardConvenienceFeeEnabled_()
+        ? roundMoney_(Math.max(0, totalCents - baseLineTotalCents) / 100)
+        : 0;
     }
   }
   if (Object.prototype.hasOwnProperty.call(draft, 'amountChargedTax')) {

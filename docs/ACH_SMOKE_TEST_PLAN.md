@@ -37,15 +37,15 @@ The second command should show only redaction, safety, or documentation referenc
 
 After the project-based document-reference runtime change is deployed, verify these customer-facing labels and filenames with disposable projects only:
 
-1. Sending a client-facing estimate/summary PDF for project `2010` shows `Estimate 2010-v1` in the email subject/body, rendered PDF label, and attachment filename `Red Threads - Project 2010 - Estimate v01.pdf`.
-2. Re-sending the same stored estimate does not increment the version; sending after a meaningful commercial content change increments to `Estimate 2010-v2`.
-3. Placing a locked order/invoice for project `2010` stores and displays `Invoice 2010-v1` / `INV-2010-v01` for new order rows while preserving legacy invoice refs as internal/historical fallbacks.
-4. ACH, card, manual/check/cash, PO, and AP payment emails reference the active `Invoice 2010-v1` instead of a long `INV-YYYYMMDD-...` customer-facing number.
-5. Receipt emails and receipt attachments reference `Receipt for Invoice 2010-v1`; payment receipt events do not increment the invoice version.
-6. PO submitted emails reference `Invoice 2010-v1` and show the client PO number separately.
-7. AP payment-link emails reference the same active `Invoice 2010-v1` and do not create a separate AP-facing customer document number.
-8. Portal-rendered Summary/Invoice PDFs keep the portal-rendered visual format and use the new `Red Threads - Project <project> - <Estimate|Invoice|Receipt for Invoice> vNN.pdf` filename convention.
-9. Existing legacy rows with old `INV-YYYYMMDD-...` values still render safely through the new display fallback and do not require historical rewrites.
+1. Sending a client-facing estimate/summary PDF for project `2010` shows `Estimate 2010.1` in the email subject/body, rendered PDF label, and attachment filename `Red Threads - Project 2010 - Estimate 2010.1.pdf`.
+2. Re-sending the same stored estimate does not increment the version; sending after a meaningful commercial content change increments to `Estimate 2010.2`.
+3. Placing a locked order/invoice for project `2010` stores and displays `Invoice 2010.1` / `INV-2010.1` for new order rows while preserving legacy invoice refs as internal/historical fallbacks.
+4. ACH, card, manual/check/cash, PO, and AP payment emails reference the active `Invoice 2010.1` instead of a long `INV-YYYYMMDD-...` customer-facing number.
+5. Receipt emails and receipt attachments reference `Receipt for Invoice 2010.1`; payment receipt events do not increment the invoice version.
+6. PO submitted emails reference `Invoice 2010.1` and show the client PO number separately.
+7. AP payment-link emails reference the same active `Invoice 2010.1` and do not create a separate AP-facing customer document number.
+8. Portal-rendered Summary/Invoice PDFs keep the portal-rendered visual format and use the new `Red Threads - Project <project> - <Estimate|Invoice|Receipt for Invoice> <project>.<version>.pdf` filename convention.
+9. Existing legacy rows with old `INV-YYYYMMDD-...` or `INV-<project>-vNN` values still render safely through the display fallback and do not require historical rewrites.
 
 ## Manual Smoke Checklist
 

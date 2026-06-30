@@ -18103,7 +18103,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 232">232</div>
+  <div class="devRevisionBadge" aria-label="Development revision 233">233</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -19119,7 +19119,7 @@
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowCardBtn" type="button" aria-pressed="false">
               <span class="orderFlowChoiceTitle">Pay now: Credit / Debit Card</span>
               <span class="orderFlowChoiceFoot is-green">Turn time begins immediately</span>
-              <span class="orderFlowChoiceBody orderFlowChoiceAccentRed" id="orderFlowCardFeeLabel">Item costs will increase by 3% ($0.00)</span>
+              <span class="orderFlowChoiceBody orderFlowChoiceAccentRed" id="orderFlowCardFeeLabel" hidden></span>
             </button>
             <button class="orderFlowChoiceBtn is-payment" id="orderFlowAchBtn" type="button" aria-pressed="false">
               <span class="orderFlowChoiceTitle">ACH Bank Payment</span>
@@ -20233,6 +20233,10 @@
     });
   }
 
+  function isCreditCardConvenienceFeeEnabled_(){
+    return false;
+  }
+
   function normalizeSummaryOptions(value){
     const source = (value && typeof value === 'object') ? value : {};
     const hiddenZeroQtyJobIds = Array.isArray(source.hiddenZeroQtyJobIds)
@@ -20241,7 +20245,7 @@
           .filter(Boolean)))
       : [];
     return {
-      creditCardFeeEnabled: source.creditCardFeeEnabled === true,
+      creditCardFeeEnabled: isCreditCardConvenienceFeeEnabled_() && source.creditCardFeeEnabled === true,
       salesTaxEnabled: source.salesTaxEnabled !== false,
       hiddenZeroQtyJobIds: hiddenZeroQtyJobIds
     };
@@ -21045,14 +21049,10 @@
     return String(value || '').trim().replace(/[^A-Za-z0-9_-]+/g, '') || 'Project';
   }
 
-  function zeroPadSummaryDocumentVersion_(version){
-    const n = Math.max(1, parseInt(String(version || 1), 10) || 1);
-    return n < 10 ? ('0' + n) : String(n);
-  }
-
   function parseSummaryPortalDocumentReference_(value){
     const clean = String(value || '').trim();
-    const match = clean.match(/^(EST|INV)-(.+)-v(\d{1,4})$/i);
+    const match = clean.match(/^(EST|INV)-(.+)\.(\d{1,4})$/i)
+      || clean.match(/^(EST|INV)-(.+)-v(\d{1,4})$/i);
     if (!match) return null;
     const prefix = String(match[1] || '').toUpperCase();
     const projectNumber = normalizeSummaryDocumentProjectNumber_(match[2]);
@@ -21068,16 +21068,16 @@
     const kind = String(documentKind || '').trim().toLowerCase() === 'estimate' ? 'estimate' : 'invoice';
     const projectNumber = normalizeSummaryDocumentProjectNumber_(opts.projectNumber || getDealNumber());
     const version = Math.max(1, parseInt(String(opts.version || 1), 10) || 1);
-    const padded = zeroPadSummaryDocumentVersion_(version);
     const prefix = kind === 'estimate' ? 'EST' : 'INV';
-    const displayLabel = (kind === 'estimate' ? 'Estimate ' : 'Invoice ') + projectNumber + '-v' + version;
+    const versionLabel = projectNumber + '.' + version;
+    const displayLabel = (kind === 'estimate' ? 'Estimate ' : 'Invoice ') + versionLabel;
     return {
       projectNumber: projectNumber,
       documentKind: kind,
       version: version,
-      documentRef: prefix + '-' + projectNumber + '-v' + padded,
+      documentRef: prefix + '-' + versionLabel,
       displayLabel: displayLabel,
-      fileName: 'Red Threads - Project ' + projectNumber + ' - ' + (kind === 'estimate' ? 'Estimate' : 'Invoice') + ' v' + padded + '.pdf'
+      fileName: 'Red Threads - Project ' + projectNumber + ' - ' + (kind === 'estimate' ? 'Estimate' : 'Invoice') + ' ' + versionLabel + '.pdf'
     };
   }
 
@@ -32211,7 +32211,7 @@
       iconTone: 'isPrice',
       label: String(summary.priceLabel || 'Estimated Price').trim() || 'Estimated Price',
       value: totalUnits > 0 ? formatDashboardPeekPriceValue_(summary.priceValue) : '--',
-      helperText: String(summary.priceHelperText || '').trim() ? 'omits tax, ship & CC fees' : ''
+      helperText: String(summary.priceHelperText || '').trim() ? 'Omits taxes & shipping' : ''
     }));
     summaryGrid.appendChild(renderDashboardPeekMetricCard_({
       iconKind: 'calendar',
@@ -45007,7 +45007,7 @@
     ORDER_FLOW_METHOD_ERROR = false;
     ORDER_FLOW_PO_UNLOCK_ERROR = false;
     if (ORDER_FLOW_SELECTED_METHOD === 'card') {
-      setSummaryOptions({ creditCardFeeEnabled: true });
+      setSummaryOptions({ creditCardFeeEnabled: isCreditCardConvenienceFeeEnabled_() });
     } else if (ORDER_FLOW_SELECTED_METHOD) {
       setSummaryOptions({ creditCardFeeEnabled: false });
     }
@@ -45322,7 +45322,11 @@
     renderOrderFlowAccountBanner_();
     if (orderFlowShipDateLabel) orderFlowShipDateLabel.textContent = readyDateLabel;
     if (orderFlowPickupDateLabel) orderFlowPickupDateLabel.textContent = readyDateLabel;
-    if (orderFlowCardFeeLabel) orderFlowCardFeeLabel.textContent = 'Item costs will increase by 3% (' + cardFee + ')';
+    if (orderFlowCardFeeLabel) {
+      const showCardFee = isCreditCardConvenienceFeeEnabled_();
+      orderFlowCardFeeLabel.hidden = !showCardFee;
+      orderFlowCardFeeLabel.textContent = showCardFee ? ('Item costs will increase by 3% (' + cardFee + ')') : '';
+    }
     if (orderFlowFulfillmentHeading) {
       orderFlowFulfillmentHeading.textContent = '1. Select a delivery method.';
       orderFlowFulfillmentHeading.classList.toggle('is-complete', !!ORDER_FLOW_SELECTED_FULFILLMENT && !ORDER_FLOW_FULFILLMENT_ERROR);
@@ -46242,7 +46246,7 @@
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       markClientCheckoutTiming_(checkoutTiming, 'checkout_loader_painted');
       markClientCheckoutTiming_(checkoutTiming, 'summary_options_update_start');
-      setSummaryOptions({ creditCardFeeEnabled: normalizedMethod === 'card' });
+      setSummaryOptions({ creditCardFeeEnabled: isCreditCardConvenienceFeeEnabled_() && normalizedMethod === 'card' });
       markClientCheckoutTiming_(checkoutTiming, 'summary_options_update_end');
       markClientCheckoutTiming_(checkoutTiming, 'client_state_capture_start');
       const clickedPortalState = buildPortalStateFromUI({ messageLog: CHAT_MESSAGES });
@@ -49508,7 +49512,7 @@
     const taxApproved = ACCOUNT_SUMMARY.taxExemptActive || ACCOUNT_SUMMARY.taxExemptApproved;
     const selectedMethod = String(ORDER_FLOW_SELECTED_METHOD || '').trim().toLowerCase();
     return normalizeSummaryOptions(Object.assign({}, base, {
-      creditCardFeeEnabled: selectedMethod === 'card',
+      creditCardFeeEnabled: isCreditCardConvenienceFeeEnabled_() && selectedMethod === 'card',
       salesTaxEnabled: taxApproved ? base.salesTaxEnabled !== false : true
     }));
   }
@@ -49528,7 +49532,7 @@
       ? Number(order.amountChargedTotal)
       : (Number(order.stripeAmountTotalCents) > 0 ? Number(order.stripeAmountTotalCents) / 100 : 0);
     const finalChargedTax = Number(order.amountChargedTax) > 0 ? Number(order.amountChargedTax) : 0;
-    const cardFee = Number(order.amountCardFee) > 0 ? Number(order.amountCardFee) : 0;
+    const cardFee = isCreditCardConvenienceFeeEnabled_() && Number(order.amountCardFee) > 0 ? Number(order.amountCardFee) : 0;
     const baseGrandTotal = Number(order.amountGrandTotal) > 0 ? Number(order.amountGrandTotal) : 0;
     const hasStripeSignal = !!String(order.stripeSessionId || order.stripePaymentIntentId || '').trim()
       || Number(order.stripeAmountTotalCents) > 0;
@@ -49538,8 +49542,10 @@
       || ''
     ).trim().toLowerCase();
     const paidAt = String(order.paidAt || (lifecycle && (lifecycle.paidAt || lifecycle.paymentReceivedAt)) || '').trim();
-    const hasCardChargeSignal = cardFee > 0
-      || (hasStripeSignal && baseGrandTotal > 0 && finalChargedTotal > baseGrandTotal);
+    const hasCardChargeSignal = isCreditCardConvenienceFeeEnabled_() && (
+      cardFee > 0
+      || (hasStripeSignal && baseGrandTotal > 0 && finalChargedTotal > baseGrandTotal)
+    );
     const isPaidByCard = lifecycle && lifecycle.paymentReceived === true
       && !!paidAt
       && finalChargedTotal > 0
@@ -49564,7 +49570,7 @@
     const hasSuccessfulPayment = lifecycle.paymentReceived === true;
     const paymentDisplayMeta = getLockedInvoicePaymentDisplayMeta_(order, lifecycle);
     return normalizeSummaryOptions(Object.assign({}, base, {
-      creditCardFeeEnabled: hasSuccessfulPayment && (paymentMethod === 'card' || paymentDisplayMeta.isPaidByCard === true),
+      creditCardFeeEnabled: isCreditCardConvenienceFeeEnabled_() && hasSuccessfulPayment && (paymentMethod === 'card' || paymentDisplayMeta.isPaidByCard === true),
       salesTaxEnabled: hasSalesTax
     }));
   }
@@ -50688,7 +50694,7 @@
       shippingCost: money(Number((totals && totals.shippingCost) || 0)),
       showShipping: !!(totals && totals.showShipping),
       creditCardFee: money(paidCardFee || Number((totals && totals.creditCardFee) || 0)),
-      showCreditCardFee: paymentDisplayMeta.isPaidByCard === true && paidCardFee > 0,
+      showCreditCardFee: isCreditCardConvenienceFeeEnabled_() && paymentDisplayMeta.isPaidByCard === true && paidCardFee > 0,
       salesTax: money(paidCardChargedTax || Number((totals && totals.salesTax) || 0)),
       totalCost: money(paidCardChargedTotal || Number((totals && totals.totalCost) || 0)),
       shippingDetails: normalizeOrderFlowShippingDetails_(opts.shippingDetails),
@@ -51971,12 +51977,14 @@
         }
 
         const paymentNote = createEl('div', 'summaryEstimatePaymentNote' + (shouldFlattenPoPaymentControls ? ' isDirect' : ''));
-        const cardLine = createEl('div', 'summaryEstimatePaymentNoteLine');
-        cardLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'Credit Card Payment: '));
-        cardLine.appendChild(document.createTextNode('Item costs & the final cost will increase by 3% ('));
-        cardLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteAccentRed', money(cardAmountDue)));
-        cardLine.appendChild(document.createTextNode('). The final invoice will be updated for your records.'));
-        paymentNote.appendChild(cardLine);
+        if (isCreditCardConvenienceFeeEnabled_()) {
+          const cardLine = createEl('div', 'summaryEstimatePaymentNoteLine');
+          cardLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteLabel', 'Credit Card Payment: '));
+          cardLine.appendChild(document.createTextNode('Item costs & the final cost will increase by 3% ('));
+          cardLine.appendChild(createEl('span', 'summaryEstimatePaymentNoteAccentRed', money(cardAmountDue)));
+          cardLine.appendChild(document.createTextNode('). The final invoice will be updated for your records.'));
+          paymentNote.appendChild(cardLine);
+        }
 
         let mailBlock = null;
         const mailCheckBtn = createEl('button', 'summaryEstimateControlPrimary isPayment summaryEstimateMailCheckBtn', 'Mail a Check');
@@ -52037,17 +52045,19 @@
       return group;
     };
 
-    card.appendChild(
-      buildToggleRow(
-        'Credit Card',
-        presentation.creditCardFeeEnabled,
-        () => setSummaryOptions({ creditCardFeeEnabled: !presentation.creditCardFeeEnabled }),
-        'ON',
-        'OFF',
-        '',
-        presentation.creditCardFeeEnabled ? ('Item costs increase 3% - ' + money(Number((data && data.totals && data.totals.creditCardFee) || 0))) : ''
-      )
-    );
+    if (isCreditCardConvenienceFeeEnabled_()) {
+      card.appendChild(
+        buildToggleRow(
+          'Credit Card',
+          presentation.creditCardFeeEnabled,
+          () => setSummaryOptions({ creditCardFeeEnabled: !presentation.creditCardFeeEnabled }),
+          'ON',
+          'OFF',
+          '',
+          presentation.creditCardFeeEnabled ? ('Item costs increase 3% - ' + money(Number((data && data.totals && data.totals.creditCardFee) || 0))) : ''
+        )
+      );
+    }
 
     if (canToggleSalesTax) {
       const salesTaxGroup = buildToggleRow(
