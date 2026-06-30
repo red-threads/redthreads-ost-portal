@@ -10,6 +10,42 @@
         if (params.get('t') || params.get('token')) {
           document.documentElement.dataset.hasToken = '1';
         }
+        var routeKeys = [
+          't',
+          'token',
+          'dashboard',
+          'dashboardAccessToken',
+          'accountId',
+          'accountAccessToken',
+          'checkoutResult',
+          'setupResult',
+          'stripeSessionId',
+          'summary',
+          'payNow',
+          'resumePo',
+          'poStage',
+          'accountDoc',
+          'accountDocAction',
+          'teamReview',
+          'teamAction',
+          'teamAccess',
+          'paymentOrigin',
+          'mode',
+          'reset',
+          'resetToken'
+        ];
+        var hasRoutedBoot = routeKeys.some(function(key){
+          return String(params.get(key) || '').trim();
+        });
+        var isEmbedded = false;
+        try {
+          isEmbedded = !!(window.parent && window.top && window.parent !== window && window.top !== window.parent);
+        } catch (_) {
+          isEmbedded = true;
+        }
+        if (isEmbedded && hasRoutedBoot) {
+          document.documentElement.dataset.routeBootAuthSuppressed = '1';
+        }
       }catch(_){}
     })();
   </script>
@@ -18044,6 +18080,12 @@
     [data-has-token="1"] #dashboardView{
       display:none !important;
     }
+    [data-route-boot-auth-suppressed="1"] #loginView,
+    [data-route-boot-auth-suppressed="1"] #resetRequestView,
+    [data-route-boot-auth-suppressed="1"] #resetConfirmView{
+      display:none !important;
+      pointer-events:none !important;
+    }
 
     /* Animations */
     @keyframes rtPopIn{
@@ -18059,7 +18101,7 @@
 </style>
 </head>
 <body>
-  <div class="devRevisionBadge" aria-label="Development revision 226">226</div>
+  <div class="devRevisionBadge" aria-label="Development revision 228">228</div>
   <div id="portalMobileBlock" class="portalMobileBlock" role="status" aria-live="polite">
     <div class="portalMobileBlockCard">
       <img class="portalMobileBlockLogo" src="https://logos.redthreads.work/CALC_PORTAL/SMALL_ICON.png" alt="Red Threads" referrerpolicy="no-referrer">
@@ -20531,6 +20573,7 @@
   let TAX_DOC_CLIENT_VIEW_APPROVED_ARTIFACT = null;
   let TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = null;
   let TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_ARTIFACT = null;
+  let TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_KEY = '';
   let TAX_DOC_CLIENT_VIEW_TIPS_PRELOAD_PROMISE = null;
   let TAX_DOC_CLIENT_VIEW_TIPS_READY = false;
   let TAX_DOC_CLIENT_VIEW_TIPS_PRELOAD_ERROR = null;
@@ -20539,6 +20582,11 @@
   let TAX_DOC_CLIENT_VIEW_TIPS_ONLY = false;
   let TAX_DOC_CLIENT_VIEW_TIPS_IN_FLIGHT = false;
   let TAX_DOC_CLIENT_VIEW_CACHE = Object.create(null);
+  let DASHBOARD_TAX_TIPS_PREWARM_KEY = '';
+  let DASHBOARD_TAX_TIPS_PREWARM_PROMISE = null;
+  let DASHBOARD_TAX_TIPS_PREWARM_ERROR = null;
+  let DASHBOARD_TAX_TIPS_PREWARM_HANDLE = 0;
+  let DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = '';
   let TAX_DOC_REPLACEMENT_CONFIRM_OPEN = false;
   let TAX_DOC_REPLACEMENT_CLEAR_IN_FLIGHT = false;
   let TAX_DOC_REPLACEMENT_ERROR = '';
@@ -21795,6 +21843,116 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function isDashboardSalesTaxTipsPrewarmEligible_(summary){
+    const account = normalizeAccountSummary(summary);
+    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', account);
+    return !!(
+      account.taxExemptActive === true ||
+      account.taxExemptApproved === true ||
+      workflow.approved === true ||
+      workflow.active === true ||
+      getAccountDocumentStatusValue_(workflow) === 'approved'
+    );
+  }
+
+  function buildDashboardSalesTaxTipsPrewarmKey_(summary, requestPayload){
+    const account = normalizeAccountSummary(summary);
+    const workflow = getAccountDocumentWorkflowByType_('tax_exempt', account);
+    const payload = (requestPayload && typeof requestPayload === 'object') ? requestPayload : {};
+    const contextKey = getDashboardContextKey_(payload);
+    if (!contextKey) return '';
+    return stableStringify({
+      context: contextKey,
+      accountId: String(account.accountId || '').trim(),
+      orgId: String(account.orgId || '').trim(),
+      orgName: String(account.orgName || '').trim(),
+      primaryEmail: String(account.primaryEmail || '').trim(),
+      workflowStatus: getAccountDocumentStatusValue_(workflow),
+      workflowApproved: workflow.approved === true,
+      workflowActive: workflow.active === true,
+      certificateUrl: String(account.taxExemptCertificateUrl || workflow.uploadedDocumentUrl || '').trim(),
+      submittedAt: String(account.taxExemptSubmittedAt || workflow.submittedAt || '').trim()
+    });
+  }
+
+  function clearDashboardSalesTaxTipsPrewarmTimer_(){
+    if (!DASHBOARD_TAX_TIPS_PREWARM_HANDLE) return;
+    if (DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND === 'idle' && typeof window.cancelIdleCallback === 'function') {
+      window.cancelIdleCallback(DASHBOARD_TAX_TIPS_PREWARM_HANDLE);
+    } else {
+      window.clearTimeout(DASHBOARD_TAX_TIPS_PREWARM_HANDLE);
+    }
+    DASHBOARD_TAX_TIPS_PREWARM_HANDLE = 0;
+    DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = '';
+  }
+
+  function startDashboardSalesTaxTipsPrewarm_(requestPayload, prewarmKey){
+    const key = String(prewarmKey || '').trim();
+    if (!key) return Promise.resolve(null);
+    if (TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_ARTIFACT && TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_KEY === key) {
+      return Promise.resolve(TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_ARTIFACT);
+    }
+    if (DASHBOARD_TAX_TIPS_PREWARM_PROMISE && DASHBOARD_TAX_TIPS_PREWARM_KEY === key) {
+      return DASHBOARD_TAX_TIPS_PREWARM_PROMISE;
+    }
+    DASHBOARD_TAX_TIPS_PREWARM_KEY = key;
+    DASHBOARD_TAX_TIPS_PREWARM_ERROR = null;
+    DASHBOARD_TAX_TIPS_PREWARM_PROMISE = fetchPreparedSalesTaxTipsViewerArtifact_(requestPayload)
+      .then(result => {
+        const artifact = result && result.artifact ? result.artifact : null;
+        if (!artifact) throw new Error('The sales tax tips document is unavailable.');
+        if (DASHBOARD_TAX_TIPS_PREWARM_KEY !== key) return artifact;
+        TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_ARTIFACT = artifact;
+        TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_KEY = key;
+        DASHBOARD_TAX_TIPS_PREWARM_ERROR = null;
+        if (isTaxClientViewMode_() && TAX_DOC_CLIENT_VIEW_DISPLAY_MODE !== 'approved') {
+          TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = artifact;
+          TAX_DOC_CLIENT_VIEW_TIPS_READY = true;
+          TAX_DOC_CLIENT_VIEW_TIPS_PRELOAD_ERROR = null;
+          renderTaxReplacementAction_();
+        }
+        return artifact;
+      })
+      .catch(err => {
+        if (DASHBOARD_TAX_TIPS_PREWARM_KEY === key) {
+          DASHBOARD_TAX_TIPS_PREWARM_ERROR = err;
+          DASHBOARD_TAX_TIPS_PREWARM_PROMISE = null;
+        }
+        throw err;
+      });
+    return DASHBOARD_TAX_TIPS_PREWARM_PROMISE;
+  }
+
+  function scheduleDashboardSalesTaxTipsPrewarm_(summary){
+    const account = normalizeAccountSummary(summary);
+    if (!isDashboardSalesTaxTipsPrewarmEligible_(account)) return;
+    const requestPayload = getDashboardContextRequestPayload_();
+    if (!requestPayload) return;
+    const prewarmKey = buildDashboardSalesTaxTipsPrewarmKey_(account, requestPayload);
+    if (!prewarmKey) return;
+    if (
+      prewarmKey === DASHBOARD_TAX_TIPS_PREWARM_KEY &&
+      (TAX_DOC_CLIENT_VIEW_TIPS_GLOBAL_ARTIFACT || DASHBOARD_TAX_TIPS_PREWARM_PROMISE || DASHBOARD_TAX_TIPS_PREWARM_ERROR)
+    ) {
+      return;
+    }
+    clearDashboardSalesTaxTipsPrewarmTimer_();
+    DASHBOARD_TAX_TIPS_PREWARM_KEY = prewarmKey;
+    DASHBOARD_TAX_TIPS_PREWARM_ERROR = null;
+    const run = () => {
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE = 0;
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = '';
+      startDashboardSalesTaxTipsPrewarm_(requestPayload, prewarmKey).catch(() => {});
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = 'idle';
+      DASHBOARD_TAX_TIPS_PREWARM_HANDLE = window.requestIdleCallback(run, { timeout: 900 });
+      return;
+    }
+    DASHBOARD_TAX_TIPS_PREWARM_HANDLE_KIND = 'timeout';
+    DASHBOARD_TAX_TIPS_PREWARM_HANDLE = window.setTimeout(run, 180);
   }
 
   function bindDashboardDocumentCard_(node, documentType){
@@ -23213,6 +23371,7 @@
     const termsApproved = account.termsApproved === true || !!approvedTermsLabel || termsWorkflow.approved === true;
     if (taxApproved) {
       appendBullet('Sales tax exemption document on file, you can toggle sales tax on and off orders.');
+      scheduleDashboardSalesTaxTipsPrewarm_(account);
     }
     if (termsApproved) {
       appendBullet('Credit terms are on file for your organization. You can now submit orders via purchase orders.');
@@ -26653,6 +26812,38 @@
     }
   }
 
+  function isRouteBootAuthShellSuppressionActive_(){
+    try {
+      return document.documentElement.dataset.routeBootAuthSuppressed === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function activateRouteBootAuthShellSuppression_(){
+    try {
+      if (!isEmbeddedPortalContext_()) return;
+      if (!hasInitialParentWrapperRouteParams_()) return;
+      document.documentElement.dataset.routeBootAuthSuppressed = '1';
+    } catch (_) {}
+  }
+
+  function releaseRouteBootAuthShellSuppression_(){
+    try {
+      delete document.documentElement.dataset.routeBootAuthSuppressed;
+    } catch (_) {}
+  }
+
+  function shouldReleaseRouteBootAuthShellSuppressionForReadyReason_(reason){
+    const normalized = String(reason || '').trim();
+    return normalized === DASHBOARD_CRITICAL_READY_REASON ||
+      normalized === DASHBOARD_CRITICAL_FALLBACK_REASON ||
+      normalized === 'account-document-upload-ready' ||
+      normalized === 'snapshot-ready' ||
+      normalized === 'auth-shell-ready' ||
+      normalized === 'dashboard-load-failed';
+  }
+
   function releaseParentWrapperLoaderSuppression_(options){
     const opts = (options && typeof options === 'object') ? options : {};
     PARENT_WRAPPER_LOADER_SUPPRESSION_ACTIVE = false;
@@ -26753,6 +26944,7 @@
 
   function notifyPortalReady(options){
     const opts = (options && typeof options === 'object') ? options : {};
+    const readyReason = String(opts.readyStage || opts.reason || '').trim();
     if (PORTAL_CLIENT_BOOT_TRACE) {
       markPortalClientLoadTiming_(PORTAL_CLIENT_BOOT_TRACE, 'portal_ready', {
         reason: String(opts.reason || '').trim(),
@@ -26768,6 +26960,9 @@
           routeType: HAS_PORTAL_TOKEN ? 'token' : (DASHBOARD_DEEPLINK_REQUEST ? 'dashboard' : 'auth_shell')
         });
       }
+    }
+    if (shouldReleaseRouteBootAuthShellSuppressionForReadyReason_(readyReason)) {
+      releaseRouteBootAuthShellSuppression_();
     }
     postPortalMessageToTop_(buildPortalReadyMessage_(options));
     scheduleParentWrapperLoaderSuppressionRelease_();
@@ -27035,6 +27230,15 @@
     const opts = (options && typeof options === 'object') ? options : {};
     const target = String(viewName || VIEW_LOGIN).trim();
     CURRENT_VIEW = target;
+    if (
+      target === VIEW_DASHBOARD ||
+      target === VIEW_SNAPSHOT ||
+      target === VIEW_LOGIN ||
+      target === VIEW_RESET_REQUEST ||
+      target === VIEW_RESET_CONFIRM
+    ) {
+      releaseRouteBootAuthShellSuppression_();
+    }
     if (target === VIEW_DASHBOARD) {
       DASHBOARD_VIEW_VISIBLE_AT = Date.now();
       DASHBOARD_OPEN_ARMED_BTN = null;
@@ -39068,7 +39272,18 @@
     const opts = (options && typeof options === 'object') ? options : {};
     const prepared = getPreparedSalesTaxTipsViewerArtifact_();
     if (prepared && opts.force !== true) return prepared;
-    const shouldRetry = TAX_DOC_CLIENT_VIEW_TIPS_PRELOAD_ERROR || opts.force === true;
+    if (opts.force !== true && DASHBOARD_TAX_TIPS_PREWARM_PROMISE) {
+      try {
+        const warmed = await DASHBOARD_TAX_TIPS_PREWARM_PROMISE;
+        if (warmed && typeof warmed === 'object') {
+          TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = warmed;
+          TAX_DOC_CLIENT_VIEW_TIPS_READY = true;
+          TAX_DOC_CLIENT_VIEW_TIPS_PRELOAD_ERROR = null;
+          return warmed;
+        }
+      } catch (_) {}
+    }
+    const shouldRetry = TAX_DOC_CLIENT_VIEW_TIPS_PRELOAD_ERROR || DASHBOARD_TAX_TIPS_PREWARM_ERROR || opts.force === true;
     const promise = shouldRetry
       ? startSalesTaxTipsViewerPreload_(opts.requestPayload, { force: true })
       : startSalesTaxTipsViewerPreload_(opts.requestPayload);
@@ -39076,6 +39291,7 @@
     TAX_DOC_CLIENT_VIEW_TIPS_ARTIFACT = artifact;
     TAX_DOC_CLIENT_VIEW_TIPS_READY = true;
     TAX_DOC_CLIENT_VIEW_TIPS_PRELOAD_ERROR = null;
+    DASHBOARD_TAX_TIPS_PREWARM_ERROR = null;
     return artifact;
   }
 
@@ -54370,6 +54586,7 @@
     });
     initPortalParentBridge();
     activateParentWrapperLoaderSuppression_();
+    activateRouteBootAuthShellSuppression_();
     ensureGlobalOverlayMounts_();
     ensureAuthShellBindings();
     const dashboardRouteToken = getDashboardRouteTokenForBoot_();
